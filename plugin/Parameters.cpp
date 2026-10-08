@@ -1,5 +1,7 @@
 #include "Parameters.h"
 
+#include "eq1/Settings.h"
+
 #include <cmath>
 
 namespace eq1::parameters
@@ -8,13 +10,21 @@ namespace eq1::parameters
 namespace
 {
 
-// A range that moves evenly in log space, as Frequency and Q are heard.
+juce::String slotId (int slot, const char* control) { return "band" + juce::String (slot) + "_" + control; }
+juce::String slotName (int slot, const char* control) { return "Band " + juce::String (slot) + " " + control; }
+
+// A range that moves evenly in log space, as Frequency and Q are heard. The maths runs in double
+// so a value set by the host survives save and reload exactly.
 juce::NormalisableRange<float> logRange (float minimum, float maximum)
 {
     return { minimum,
              maximum,
-             [] (float start, float end, float normalised) { return start * std::pow (end / start, normalised); },
-             [] (float start, float end, float value) { return std::log (value / start) / std::log (end / start); },
+             [] (float start, float end, float normalised) {
+                 return static_cast<float> (start * std::pow (double { end } / start, double { normalised }));
+             },
+             [] (float start, float end, float value) {
+                 return static_cast<float> (std::log (double { value } / start) / std::log (double { end } / start));
+             },
              [] (float, float, float value) { return value; } };
 }
 
@@ -29,26 +39,41 @@ juce::AudioParameterFloatAttributes withText (int decimals, const juce::String& 
 
 } // namespace
 
+juce::String frequencyId (int slot) { return slotId (slot, "frequency"); }
+juce::String gainId (int slot) { return slotId (slot, "gain"); }
+juce::String qId (int slot) { return slotId (slot, "q"); }
+juce::String inUseId (int slot) { return slotId (slot, "in_use"); }
+juce::String bypassId (int slot) { return slotId (slot, "bypass"); }
+
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
     // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40.
-    return {
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { band1Frequency, 1 },
-                                                     "Band 1 Frequency",
-                                                     logRange (10.0f, 30000.0f),
-                                                     1000.0f,
-                                                     withText (1, "Hz")),
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { band1Gain, 1 },
-                                                     "Band 1 Gain",
-                                                     juce::NormalisableRange<float> (-30.0f, 30.0f),
-                                                     0.0f,
-                                                     withText (2, "dB")),
-        std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { band1Q, 1 },
-                                                     "Band 1 Q",
-                                                     logRange (0.025f, 40.0f),
-                                                     1.0f,
-                                                     withText (3)),
-    };
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { frequencyId (slot), 1 },
+                                                                 slotName (slot, "Frequency"),
+                                                                 logRange (10.0f, 30000.0f),
+                                                                 1000.0f,
+                                                                 withText (1, "Hz")),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { gainId (slot), 1 },
+                                                                 slotName (slot, "Gain"),
+                                                                 juce::NormalisableRange<float> (-30.0f, 30.0f),
+                                                                 0.0f,
+                                                                 withText (2, "dB")),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { qId (slot), 1 },
+                                                                 slotName (slot, "Q"),
+                                                                 logRange (0.025f, 40.0f),
+                                                                 1.0f,
+                                                                 withText (3)),
+                    std::make_unique<juce::AudioParameterBool> (juce::ParameterID { inUseId (slot), 1 },
+                                                                slotName (slot, "In Use"),
+                                                                false),
+                    std::make_unique<juce::AudioParameterBool> (juce::ParameterID { bypassId (slot), 1 },
+                                                                slotName (slot, "Bypass"),
+                                                                false));
+    }
+    return layout;
 }
 
 } // namespace eq1::parameters

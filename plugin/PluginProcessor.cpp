@@ -9,11 +9,14 @@ PluginProcessor::PluginProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters (*this, nullptr, "eq1", parameters::createLayout()),
-      frequency (*parameters.getRawParameterValue (parameters::band1Frequency)),
-      gain (*parameters.getRawParameterValue (parameters::band1Gain)),
-      q (*parameters.getRawParameterValue (parameters::band1Q))
+      parameters (*this, nullptr, "eq1", parameters::createLayout())
 {
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        slots[static_cast<size_t> (slot - 1)] = { parameters.getRawParameterValue (parameters::frequencyId (slot)),
+                                                  parameters.getRawParameterValue (parameters::gainId (slot)),
+                                                  parameters.getRawParameterValue (parameters::qId (slot)),
+                                                  parameters.getRawParameterValue (parameters::inUseId (slot)),
+                                                  parameters.getRawParameterValue (parameters::bypassId (slot)) };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -31,13 +34,18 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 {
     juce::ScopedNoDenormals noDenormals;
 
-    // Settings are read from the host parameters on the audio thread, so the Engine needs no handoff yet.
+    // Host Automation arrives on the audio thread, so the snapshot is taken here, once per block.
     Settings settings;
-    settings.bands[0] = { .inUse = true,
-                          .shape = Shape::Bell,
-                          .frequency = frequency.load(),
-                          .gain = gain.load(),
-                          .q = q.load() };
+    for (size_t slot = 0; slot < slots.size(); ++slot)
+    {
+        const auto& p = slots[slot];
+        settings.bands[slot] = { .inUse = p.inUse->load() >= 0.5f,
+                                 .bypass = p.bypass->load() >= 0.5f,
+                                 .shape = Shape::Bell,
+                                 .frequency = p.frequency->load(),
+                                 .gain = p.gain->load(),
+                                 .q = p.q->load() };
+    }
     engine.setSettings (settings);
     engine.process ({ buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples() });
 }

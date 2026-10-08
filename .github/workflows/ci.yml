@@ -56,6 +56,16 @@ jobs:
       - name: Engine and Plugin Shell tests
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Engine tests under ThreadSanitizer
+        # Catches data races in the lock-free settings handoff and the analysis taps.
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build-tsan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_BUILD_PLUGIN=OFF \
+            "-DFETCHCONTENT_BASE_DIR=$FETCHCONTENT_BASE_DIR" \
+            -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+          cmake --build build-tsan --parallel
+          TSAN_OPTIONS=halt_on_error=1 ctest --test-dir build-tsan --output-on-failure
+
       - name: Download validators
         run: |
           mkdir -p validators && cd validators

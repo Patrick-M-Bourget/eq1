@@ -1,8 +1,8 @@
 #include "eq1/Engine.h"
 
 #include "AnalysisFifo.h"
-#include "BellDesign.h"
-#include "Biquad.h"
+#include "Band.h"
+#include "LatestValue.h"
 
 #include <algorithm>
 #include <array>
@@ -13,12 +13,15 @@ namespace eq1
 
 struct Engine::Impl
 {
-    double sampleRate = 44100.0;
     int numChannels = 0;
-    Settings settings;
 
-    std::array<BiquadCoefficients, numBandSlots> coefficients {};
-    std::vector<std::array<BiquadState, numBandSlots>> states; // per channel
+    LatestValue<Settings> handoff;
+    Settings settings;          // the newest settings the audio thread has taken
+    bool settingsChanged = false;
+    bool snapToSettings = true; // after prepare, settings apply at once instead of gliding
+
+    std::array<Band, numBandSlots> bands;
+    std::vector<float*> subBlock; // per channel
 
     // About 1.4 s at 48 kHz: enough for the Analyzer to read at display rate.
     static constexpr int analysisCapacity = 1 << 16;
@@ -37,13 +40,19 @@ struct Engine::Impl
         });
     }
 
-    void updateCoefficients()
+    void applySettings()
     {
-        for (size_t band = 0; band < settings.bands.size(); ++band)
+        if (const auto* latest = handoff.takeLatest())
         {
-            const auto& b = settings.bands[band];
-            coefficients[band] = b.inUse ? designBell (sampleRate, b.frequency, b.gain, b.q) : BiquadCoefficients {};
+            settings = *latest;
+            settingsChanged = true;
         }
+        if (! settingsChanged)
+            return;
+        for (size_t band = 0; band < bands.size(); ++band)
+            bands[band].setSettings (settings.bands[band], snapToSettings);
+        settingsChanged = false;
+        snapToSettings = false;
     }
 };
 
@@ -52,43 +61,38 @@ Engine::~Engine() = default;
 
 void Engine::prepare (double sampleRate, int, int numChannels)
 {
-    impl->sampleRate = sampleRate;
     impl->numChannels = numChannels;
-    impl->states.assign (static_cast<size_t> (numChannels), {});
+    for (auto& band : impl->bands)
+        band.prepare (sampleRate, numChannels);
+    impl->subBlock.assign (static_cast<size_t> (numChannels), nullptr);
+    impl->settingsChanged = true;
+    impl->snapToSettings = true;
     impl->preEq.allocate (Impl::analysisCapacity);
     impl->postEq.allocate (Impl::analysisCapacity);
     impl->sidechain.allocate (Impl::analysisCapacity);
-    impl->updateCoefficients();
 }
 
 void Engine::setSettings (const Settings& settings)
 {
-    if (settings == impl->settings)
-        return;
-    impl->settings = settings;
-    impl->updateCoefficients();
+    impl->handoff.publish (settings);
 }
 
 void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
 {
+    impl->applySettings();
+
     const int channels = std::min (main.numChannels, impl->numChannels);
     Impl::pushMonoMix (impl->preEq, main.channels, channels, main.numSamples);
     if (sidechain != nullptr)
         Impl::pushMonoMix (impl->sidechain, sidechain->channels, sidechain->numChannels, sidechain->numSamples);
 
-    for (int ch = 0; ch < channels; ++ch)
+    for (int start = 0; start < main.numSamples; start += Band::maxSubBlock)
     {
-        float* samples = main.channels[ch];
-        auto& channelStates = impl->states[static_cast<size_t> (ch)];
-        for (size_t band = 0; band < channelStates.size(); ++band)
-        {
-            if (! impl->settings.bands[band].inUse)
-                continue;
-            const auto& c = impl->coefficients[band];
-            auto& state = channelStates[band];
-            for (int i = 0; i < main.numSamples; ++i)
-                samples[i] = state.process (c, samples[i]);
-        }
+        const int count = std::min (Band::maxSubBlock, main.numSamples - start);
+        for (int ch = 0; ch < channels; ++ch)
+            impl->subBlock[static_cast<size_t> (ch)] = main.channels[ch] + start;
+        for (auto& band : impl->bands)
+            band.process (impl->subBlock.data(), channels, count);
     }
 
     Impl::pushMonoMix (impl->postEq, main.channels, channels, main.numSamples);

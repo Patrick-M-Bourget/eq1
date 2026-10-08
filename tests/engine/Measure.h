@@ -14,10 +14,16 @@
 namespace eq1::test
 {
 
+inline BandSettings bellBand (double frequency, double gain, double q)
+{
+    return { .inUse = true, .shape = Shape::Bell, .frequency = frequency, .gain = gain, .q = q };
+}
+
+// Settings with one Bell in the first Band slot.
 inline Settings bell (double frequency, double gain, double q)
 {
     Settings settings;
-    settings.bands[0] = { .inUse = true, .shape = Shape::Bell, .frequency = frequency, .gain = gain, .q = q };
+    settings.bands[0] = bellBand (frequency, gain, q);
     return settings;
 }
 

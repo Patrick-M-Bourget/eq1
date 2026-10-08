@@ -10,9 +10,12 @@ include(Catch)
 add_executable(eq1_engine_tests
     engine/AllocationGuard.cpp
     engine/AnalysisTapTest.cpp
+    engine/BandSlotTest.cpp
     engine/BellResponseTest.cpp
     engine/BellStabilityTest.cpp
+    engine/ClickFreeTest.cpp
     engine/RealtimeSafetyTest.cpp
+    engine/SettingsHandoffTest.cpp
 )
 target_link_libraries(eq1_engine_tests PRIVATE eq1::engine Catch2::Catch2WithMain)
 catch_discover_tests(eq1_engine_tests)

@@ -10,9 +10,11 @@ enum class Shape
     Bell,
 };
 
+// One Band slot. A slot not in use, or a Bypassed Band, has no effect but keeps its settings.
 struct BandSettings
 {
     bool inUse = false;
+    bool bypass = false;
     Shape shape = Shape::Bell;
     double frequency = 1000.0; // Hz
     double gain = 0.0;         // dB
@@ -21,7 +23,7 @@ struct BandSettings
     bool operator== (const BandSettings&) const = default;
 };
 
-inline constexpr int numBandSlots = 1;
+inline constexpr int numBandSlots = 24;
 
 // The full settings snapshot the Engine processes with.
 struct Settings

@@ -57,7 +57,7 @@ TEST_CASE ("Bell stays finite when its settings jump at random between blocks")
         }
         engine.process ({ main, 2, 64 });
 
-        // Unsmoothed jumps may ring hard, but never blow up.
+        // Random jumps every 64 samples may ring hard, but never blow up.
         const bool bounded = std::all_of (left.begin(), left.end(), [] (float s) { return std::isfinite (s) && std::abs (s) < 1.0e6f; });
         CAPTURE (block, frequency, gain, q);
         REQUIRE (bounded);

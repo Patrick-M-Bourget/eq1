@@ -8,7 +8,7 @@
 
 using namespace eq1;
 
-TEST_CASE ("Engine does not allocate while processing or taking new settings")
+TEST_CASE ("Engine does not allocate while processing or taking new settings, with all 24 Bands in use")
 {
     constexpr int blockSize = 512;
     Engine engine;
@@ -21,13 +21,21 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings")
     std::vector<float> analysis (blockSize);
 
     Settings settings;
-    settings.bands[0] = { .inUse = true, .shape = Shape::Bell, .frequency = 1000.0, .gain = 6.0, .q = 1.0 };
+    for (auto& band : settings.bands)
+        band = { .inUse = true, .shape = Shape::Bell, .frequency = 1000.0, .gain = 6.0, .q = 1.0 };
 
     test::AllocationGuard guard;
     for (int block = 0; block < 64; ++block)
     {
-        settings.bands[0].frequency = 100.0 + 200.0 * block;
-        settings.bands[0].gain = block % 2 == 0 ? 12.0 : -12.0;
+        // Glides, crossfades and slots coming in and out of use, all at once.
+        for (size_t slot = 0; slot < settings.bands.size(); ++slot)
+        {
+            auto& band = settings.bands[slot];
+            band.frequency = 100.0 + 200.0 * block + 10.0 * static_cast<double> (slot);
+            band.gain = block % 2 == 0 ? 12.0 : -12.0;
+            band.bypass = (block + static_cast<int> (slot)) % 5 == 0;
+            band.inUse = (block + static_cast<int> (slot)) % 7 != 0;
+        }
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize }, block % 2 == 0 ? &sidechainBlock : nullptr);
         engine.readAnalysis (AnalysisTap::PostEq, analysis.data(), blockSize);

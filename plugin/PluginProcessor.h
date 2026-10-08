@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <array>
+
 namespace eq1
 {
 
@@ -37,10 +39,18 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
 private:
+    // The host parameters of one Band slot, read on the audio thread.
+    struct SlotParameters
+    {
+        std::atomic<float>* frequency;
+        std::atomic<float>* gain;
+        std::atomic<float>* q;
+        std::atomic<float>* inUse;
+        std::atomic<float>* bypass;
+    };
+
     juce::AudioProcessorValueTreeState parameters;
-    std::atomic<float>& frequency;
-    std::atomic<float>& gain;
-    std::atomic<float>& q;
+    std::array<SlotParameters, numBandSlots> slots;
 
     Engine engine;
 

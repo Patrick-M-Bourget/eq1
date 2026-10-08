@@ -31,6 +31,10 @@ enum class AnalysisTap
 
 // The DSP Engine. prepare() may allocate; setSettings(), process() and
 // readAnalysis() never allocate, lock or do I/O.
+//
+// Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
+// one thread at a time may call it; the newest settings are taken at the start of each process().
+// readAnalysis() may run on one reader thread.
 class Engine
 {
 public:

@@ -9,6 +9,12 @@ struct BiquadCoefficients
     double a1 = 0.0, a2 = 0.0; // a0 normalised to 1
 };
 
+inline BiquadCoefficients interpolate (const BiquadCoefficients& from, const BiquadCoefficients& to, double amount)
+{
+    const auto mix = [amount] (double a, double b) { return a + amount * (b - a); };
+    return { mix (from.b0, to.b0), mix (from.b1, to.b1), mix (from.b2, to.b2), mix (from.a1, to.a1), mix (from.a2, to.a2) };
+}
+
 // One channel of a biquad, transposed direct form II.
 struct BiquadState
 {
