@@ -48,4 +48,5 @@ The Engine tests (`tests/engine/BellResponseTest.cpp`, `tests/engine/ShapeRespon
 
 - **#17, resonant shelf accuracy:** splitting a resonant section into a sharp-pole biquad and a sharp-zero biquad brought shelves below 0.45 × Nyquist within 9% in the #4 prototype.
 - **#18, fractional Slopes.**
+- **#19, Bell Slope:** every Bell is 12 dB/oct for now, while Pro-Q 4 goes up to 96. A known difference (ADR 0003).
 - **The Bell near Nyquist:** a correction section, or an optimised fit.

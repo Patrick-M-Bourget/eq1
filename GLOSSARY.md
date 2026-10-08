@@ -5,8 +5,12 @@ A real-time equalizer plugin for musicians and producers, modeled on the feature
 ## Bands
 
 **Band**:
-One independently controlled filter in the EQ, defined by its Shape, Frequency, Gain, Q and Slope.
+One independently controlled filter in the EQ, defined by its Shape, Frequency, Gain, Q and Slope; a Band Slot that is in use.
 _Avoid_: Node, point, filter (when meaning the whole band)
+
+**Band Slot**:
+One of the 24 fixed positions a Band can occupy. Deleting a Band frees its slot but keeps the slot's settings.
+_Avoid_: Band index, channel
 
 **Shape**:
 The kind of filter a Band applies, such as Bell, Notch, Low Shelf, High Shelf, Low Cut, High Cut, Band Pass, Tilt Shelf, Flat Tilt or All Pass.
@@ -17,16 +21,20 @@ The center or corner frequency of a Band, in Hz.
 _Avoid_: Freq, cutoff (except informally for Cut shapes)
 
 **Gain**:
-How much a Band boosts or cuts at its Frequency, in dB.
+The size of a Band's boost or cut, in dB.
 _Avoid_: Level, amount, boost
 
 **Q**:
-How narrow or wide a Band's effect is around its Frequency.
-_Avoid_: Bandwidth, width, resonance
+How sharply a Band's curve bends around its Frequency: its width on a Bell, its resonance at the corner of a Shelf or Cut.
+_Avoid_: Bandwidth, width, resonance (as the control's name)
 
 **Slope**:
-How steeply a Cut or Shelf Band rolls off, in dB per octave.
+How steeply a Band's curve rolls off beyond its Frequency, in dB per octave.
 _Avoid_: Order, steepness, poles
+
+**Brickwall**:
+The steepest Slope, available only on Low Cut and High Cut, removing everything beyond Frequency.
+_Avoid_: Infinite slope, wall
 
 **Stereo Placement**:
 Which part of the stereo signal a Band processes: Stereo, Left, Right, Mid or Side.
