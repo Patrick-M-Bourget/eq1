@@ -53,6 +53,11 @@ public:
     void setSolo (int slot) { heldSoloSlot = slot; }
     int soloSlot() const { return heldSoloSlot.load(); }
 
+    // Detection Audition, while the editor holds it: the Band Slot (1 to 24) whose detection signal
+    // plays instead of the output, or 0. Like Solo: not a host parameter, not saved, let go on restore.
+    void setDetectionAudition (int slot) { heldAuditionSlot = slot; }
+    int detectionAuditionSlot() const { return heldAuditionSlot.load(); }
+
     // A Band Slot's Live Gain in dB, for the display: from any thread.
     double liveGainDb (int slot) const { return engine.liveGainDb (slot); }
 
@@ -74,6 +79,7 @@ private:
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
     std::atomic<int> heldSoloSlot { 0 };
+    std::atomic<int> heldAuditionSlot { 0 };
     AnalyzerSettings analyzer;
     mutable juce::SpinLock analyzerLock; // the editor sets it while a host may be saving
 

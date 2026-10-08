@@ -29,22 +29,34 @@ struct Engine::Impl
     std::array<std::atomic<double>, numBandSlots> liveGains {}; // for the display, after each block
     static_assert (std::atomic<double>::is_always_lock_free, "process() never locks");
     std::vector<float*> subBlock; // per channel
+    std::array<const float*, 2> sidechainSubBlock {}; // the Sidechain's first two channels
 
-    // Solo: the region filter, run on the part of the input the Soloed Band processes, and the
-    // crossfade between the EQ's output (0) and the region (1).
-    static constexpr double soloFadeTimeConstantSeconds = 0.007; // as a Band's crossfades: about 50 ms
+    // What plays instead of the EQ's output while the editor holds it: a Band's Solo, or its Detection
+    // Audition. Changing any of it fades the old one out before the new one fades in.
+    struct Held
+    {
+        int slot = 0; // 0 for none
+        bool audition = false;
+        StereoPlacement placement = StereoPlacement::Stereo;
+        DetectionSource source = DetectionSource::Internal; // Detection Audition only
+
+        bool operator== (const Held&) const = default;
+    };
+
+    // Solo: the region filter, run on the part of the input the Soloed Band processes. Detection
+    // Audition: the auditioned Band's detection signal. heldMix crossfades between the EQ's output
+    // (0) and them (1).
+    static constexpr double heldFadeTimeConstantSeconds = 0.007; // as a Band's crossfades: about 50 ms
     Band soloRegion;
-    Smoother soloMix;
-    int soloSlot = 0; // the slot soloRegion is set up for
-    StereoPlacement soloPlacement = StereoPlacement::Stereo;
-    // The Solo the settings ask for. A different one than is playing waits for that one to fade out.
-    int wantedSoloSlot = 0;
-    StereoPlacement wantedSoloPlacement = StereoPlacement::Stereo;
+    Smoother heldMix;
+    Held playing; // what heldMix fades in, and soloRegion is set up for
+    // What the settings ask for. A different one than is playing waits for that one to fade out.
+    Held wanted;
     BandSettings wantedSoloRegion;
     std::vector<std::array<float, Band::maxSubBlock>> soloPart; // per channel
     std::vector<float*> soloPartChannels;
 
-    bool soloAudible() const { return soloMix.value() > 0.0 || soloMix.isMoving(); }
+    bool heldAudible() const { return heldMix.value() > 0.0 || heldMix.isMoving(); }
 
     // The part of the sub-block the Soloed Band processes, into soloPart. Returns how many channels
     // it has: all of them for Stereo, one for Left, Right, Mid and Side, none for Side on mono.
@@ -53,12 +65,12 @@ struct Engine::Impl
         const auto copy = [&] (const float* from) { std::copy (from, from + count, soloPart[0].data()); };
         if (channelCount < 2)
         {
-            if (soloPlacement == StereoPlacement::Side)
+            if (playing.placement == StereoPlacement::Side)
                 return 0;
             copy (channels[0]);
             return 1;
         }
-        switch (soloPlacement)
+        switch (playing.placement)
         {
             case StereoPlacement::Stereo:
                 for (int ch = 0; ch < channelCount; ++ch)
@@ -69,7 +81,7 @@ struct Engine::Impl
             case StereoPlacement::Mid:
             case StereoPlacement::Side:
             {
-                const float sign = soloPlacement == StereoPlacement::Mid ? 1.0f : -1.0f;
+                const float sign = playing.placement == StereoPlacement::Mid ? 1.0f : -1.0f;
                 for (int i = 0; i < count; ++i)
                     soloPart[0][static_cast<size_t> (i)] = 0.5f * (channels[0][i] + sign * channels[1][i]);
                 return 1;
@@ -78,13 +90,16 @@ struct Engine::Impl
         return 0;
     }
 
-    // What Solo plays on output channel ch at sample i: the region, decoded back to where it came from.
-    float soloSample (int partChannels, int ch, int i) const
+    // What plays on output channel ch at sample i: for Solo, the region, decoded back to where it came
+    // from; for Detection Audition, the detection signal.
+    float heldSample (int partChannels, int ch, int i) const
     {
+        if (playing.audition)
+            return dynamics[static_cast<size_t> (playing.slot - 1)].auditionSample (numChannels, ch, i);
         const auto at = [&] (int c) { return soloPart[static_cast<size_t> (c)][static_cast<size_t> (i)]; };
         if (partChannels == 0)
             return 0.0f;
-        switch (soloPlacement)
+        switch (playing.placement)
         {
             case StereoPlacement::Stereo: return at (ch);
             case StereoPlacement::Left: return numChannels < 2 || ch == 0 ? at (0) : 0.0f;
@@ -127,53 +142,61 @@ struct Engine::Impl
             dynamics[band].setSettings (settings.bands[band], snapToSettings);
         }
 
-        const int slot = settings.soloSlot;
-        wantedSoloSlot = slot >= 1 && slot <= numBandSlots && settings.bands[static_cast<size_t> (slot - 1)].inUse ? slot : 0;
-        if (wantedSoloSlot != 0)
+        const auto bandIn = [&] (int slot) -> const BandSettings* {
+            const bool valid = slot >= 1 && slot <= numBandSlots && settings.bands[static_cast<size_t> (slot - 1)].inUse;
+            return valid ? &settings.bands[static_cast<size_t> (slot - 1)] : nullptr;
+        };
+        wanted = {};
+        if (const auto* band = bandIn (settings.auditionSlot); band != nullptr && hasDynamics (band->shape))
         {
-            const auto& band = settings.bands[static_cast<size_t> (wantedSoloSlot - 1)];
-            wantedSoloPlacement = band.placement;
-            wantedSoloRegion = soloRegionOf (band);
+            wanted = { .slot = settings.auditionSlot, .audition = true, .placement = band->placement, .source = band->detectionSource };
+        }
+        else if (const auto* soloed = bandIn (settings.soloSlot))
+        {
+            wanted = { .slot = settings.soloSlot, .placement = soloed->placement };
+            wantedSoloRegion = soloRegionOf (*soloed);
             // The playing Solo follows its Band's edits.
-            if (isPlayingWantedSolo() && ! snapToSettings)
+            if (playing == wanted && ! snapToSettings)
                 soloRegion.setSettings (wantedSoloRegion, false);
         }
         if (snapToSettings)
         {
-            soloMix.reset (0.0);
-            startWantedSolo (true);
+            heldMix.reset (0.0);
+            startWantedHeld (true);
         }
         settingsChanged = false;
         snapToSettings = false;
     }
 
-    bool isPlayingWantedSolo() const { return wantedSoloSlot == soloSlot && wantedSoloPlacement == soloPlacement; }
-
-    // Starts playing the wanted Solo, once nothing else is audible; with snap, at full level at once.
-    void startWantedSolo (bool snap)
+    // Starts playing the wanted Solo or Detection Audition, once nothing else is audible; with snap,
+    // at full level at once.
+    void startWantedHeld (bool snap)
     {
-        soloSlot = wantedSoloSlot;
-        soloPlacement = wantedSoloPlacement;
-        if (soloSlot == 0)
+        playing = wanted;
+        if (playing.slot == 0)
             return;
-        // A newly Soloed Band's region starts at once; the crossfade to it is soloMix's.
-        soloRegion.setSettings (wantedSoloRegion, true);
+        // A newly Soloed Band's region starts at once; the crossfade to it is heldMix's.
+        if (! playing.audition)
+            soloRegion.setSettings (wantedSoloRegion, true);
         if (snap)
-            soloMix.reset (1.0);
+            heldMix.reset (1.0);
         else
-            soloMix.setTarget (1.0);
+            heldMix.setTarget (1.0);
     }
 
-    // Once a block: fades in the wanted Solo, or fades out a different one first, so moving Solo to
-    // another Band, or changing the Soloed Band's Stereo Placement, crossfades through the EQ's output.
-    void updateSolo()
+    // Once a block: fades in the wanted Solo or Detection Audition, or fades out a different one
+    // first, so moving Solo to another Band, or changing the Soloed Band's Stereo Placement,
+    // crossfades through the EQ's output. An auditioned Band's detector runs until it has faded out.
+    void updateHeld()
     {
-        if (wantedSoloSlot != 0 && isPlayingWantedSolo())
-            soloMix.setTarget (1.0);
-        else if (soloAudible())
-            soloMix.setTarget (0.0);
+        if (wanted.slot != 0 && playing == wanted)
+            heldMix.setTarget (1.0);
+        else if (heldAudible())
+            heldMix.setTarget (0.0);
         else
-            startWantedSolo (false);
+            startWantedHeld (false);
+        for (size_t band = 0; band < dynamics.size(); ++band)
+            dynamics[band].setAuditioned (playing.audition && playing.slot == static_cast<int> (band) + 1 && heldAudible());
     }
 };
 
@@ -189,8 +212,8 @@ void Engine::prepare (double sampleRate, int, int numChannels)
         dynamics.prepare (sampleRate);
     impl->subBlock.assign (static_cast<size_t> (numChannels), nullptr);
     impl->soloRegion.prepare (sampleRate, numChannels);
-    impl->soloMix.configure (Impl::soloFadeTimeConstantSeconds * sampleRate, 1.0e-6);
-    impl->soloMix.reset (0.0);
+    impl->heldMix.configure (Impl::heldFadeTimeConstantSeconds * sampleRate, 1.0e-6);
+    impl->heldMix.reset (0.0);
     impl->soloPart.assign (static_cast<size_t> (std::max (numChannels, 1)), {});
     impl->soloPartChannels.clear();
     for (auto& part : impl->soloPart)
@@ -210,35 +233,41 @@ void Engine::setSettings (const Settings& settings)
 void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
 {
     impl->applySettings();
-    impl->updateSolo();
+    impl->updateHeld();
 
     const int channels = std::min (main.numChannels, impl->numChannels);
     Impl::pushMonoMix (impl->preEq, main.channels, channels, main.numSamples);
-    if (sidechain != nullptr)
-        Impl::pushMonoMix (impl->sidechain, sidechain->channels, sidechain->numChannels, sidechain->numSamples);
+    // A Sidechain without channels, or shorter than the block, counts as none connected.
+    const bool sidechainConnected = sidechain != nullptr && sidechain->numChannels > 0 && sidechain->numSamples >= main.numSamples;
+    if (sidechainConnected)
+        Impl::pushMonoMix (impl->sidechain, sidechain->channels, sidechain->numChannels, main.numSamples);
+    const int sidechainChannels = sidechainConnected ? std::min (sidechain->numChannels, 2) : 0;
 
     for (int start = 0; start < main.numSamples; start += Band::maxSubBlock)
     {
         const int count = std::min (Band::maxSubBlock, main.numSamples - start);
         for (int ch = 0; ch < channels; ++ch)
             impl->subBlock[static_cast<size_t> (ch)] = main.channels[ch] + start;
+        for (int ch = 0; ch < sidechainChannels; ++ch)
+            impl->sidechainSubBlock[static_cast<size_t> (ch)] = sidechain->channels[ch] + start;
 
-        const bool soloing = impl->soloAudible();
-        const int partChannels = soloing ? impl->takeSoloPart (impl->subBlock.data(), channels, count) : 0;
+        const bool holding = impl->heldAudible();
+        const int partChannels = holding && ! impl->playing.audition ? impl->takeSoloPart (impl->subBlock.data(), channels, count) : 0;
 
-        // Detection hears the main input before the EQ, so every Band's detector runs first.
+        // Detection hears the main input before the EQ (or the Sidechain), so every Band's detector runs first.
         for (size_t band = 0; band < impl->bands.size(); ++band)
-            impl->bands[band].setDynamicOffset (impl->dynamics[band].process (impl->subBlock.data(), channels, count));
+            impl->bands[band].setDynamicOffset (impl->dynamics[band].process (impl->subBlock.data(), channels,
+                                                                              impl->sidechainSubBlock.data(), sidechainChannels, count));
         for (auto& band : impl->bands)
             band.process (impl->subBlock.data(), channels, count);
 
-        if (soloing)
+        if (holding)
         {
             if (partChannels > 0)
                 impl->soloRegion.process (impl->soloPartChannels.data(), partChannels, count);
             std::array<double, Band::maxSubBlock> mixes;
             for (size_t i = 0; i < static_cast<size_t> (count); ++i)
-                mixes[i] = impl->soloMix.next();
+                mixes[i] = impl->heldMix.next();
             for (int ch = 0; ch < channels; ++ch)
             {
                 float* samples = impl->subBlock[static_cast<size_t> (ch)];
@@ -246,7 +275,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
                 {
                     // In double, so a full mix plays the region exactly.
                     const double dry = samples[i];
-                    samples[i] = static_cast<float> (dry + mixes[static_cast<size_t> (i)] * (impl->soloSample (partChannels, ch, i) - dry));
+                    samples[i] = static_cast<float> (dry + mixes[static_cast<size_t> (i)] * (impl->heldSample (partChannels, ch, i) - dry));
                 }
             }
         }

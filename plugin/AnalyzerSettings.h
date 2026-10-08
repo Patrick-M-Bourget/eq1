@@ -10,6 +10,7 @@ struct AnalyzerSettings
 {
     bool showPreEq = true;
     bool showPostEq = true;
+    bool showSidechain = false; // off until asked for: most sessions have nothing on it
     int rangeDb = 90; // 60, 90 or 120 dB shown below the top of the display
     AnalyzerSpeed speed = AnalyzerSpeed::medium;
     AnalyzerResolution resolution = AnalyzerResolution::medium;

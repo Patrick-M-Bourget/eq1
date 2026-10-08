@@ -21,25 +21,47 @@ public:
     // With snap, the new settings take effect at once and detection starts afresh.
     void setSettings (const BandSettings& settings, bool snap);
 
-    // Listens to a run of at most Band::maxSubBlock samples of the main input. Returns the offset in
-    // dB to add to the Band's Gain at the end of the run.
-    double process (const float* const* input, int numChannels, int numSamples);
+    // While auditioned, the detector runs even if the Band isn't a Dynamic Band, so its detection
+    // signal can be heard.
+    void setAuditioned (bool auditioned);
+
+    // Listens to a run of at most Band::maxSubBlock samples of the main input, or of the Sidechain
+    // (sidechainChannels 0 when none is connected). Returns the offset in dB to add to the Band's Gain
+    // at the end of the run.
+    double process (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int numSamples);
+
+    // The detection signal of the last process() on output channel ch at sample i: the one detection
+    // channel on every output channel, or each channel's own when there are two; silence when the
+    // detector heard nothing.
+    // A mono main output (outputChannels 1) hears the mean of two detection channels.
+    float auditionSample (int outputChannels, int ch, int i) const;
 
 private:
-    // The detection signal: one channel, or two for a Stereo Band on a stereo track. 0 when the Band
-    // has nothing to listen to: a Side Band on mono.
-    int takeDetectionSignal (const float* const* input, int numChannels, int numSamples);
+    bool running() const { return active.value() > 0.0 || active.isMoving() || auditioned; }
+    // Clears the detector, so it starts listening afresh.
+    void startAfresh();
+
+    // The detection signal: one channel, or two for a Stereo Band on a stereo source. 0 when the Band
+    // has nothing to listen to: a Side Band on a mono main input, or External with no Sidechain.
+    int takeDetectionSignal (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels,
+                             int numSamples);
     double autoAttackSeconds (double overshootDb) const;
     double autoReleaseSeconds() const;
 
     double sampleRate = 44100.0;
     StereoPlacement placement = StereoPlacement::Stereo;
+    DetectionSource source = DetectionSource::Internal;
     double dynamicRange = 0.0;
     double threshold = -30.0;
     bool thresholdAuto = true;
     double attackScale = 1.0, releaseScale = 1.0; // times the Auto timing
 
-    Band region; // the detection region's filter
+    // The Detection Range's filters: rangeFilter is the Band's region, or the Free range's low limit;
+    // highLimit is the Free range's high limit, not in use for a Band Detection Range.
+    Band rangeFilter, highLimit;
+    BandSettings rangeFilterSettings, highLimitSettings;
+    bool auditioned = false;
+    int detectionChannelCount = 0; // in the last process()
     std::vector<std::array<float, Band::maxSubBlock>> detection;
     std::vector<float*> detectionChannels;
 

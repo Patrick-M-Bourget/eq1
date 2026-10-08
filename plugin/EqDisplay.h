@@ -16,7 +16,7 @@ namespace eq1
 
 class PluginProcessor;
 
-// The EQ curve with a handle per Band, over the Analyzer's pre-EQ and post-EQ spectra. Double-click
+// The EQ curve with a handle per Band, over the Analyzer's pre-EQ, post-EQ and Sidechain spectra. Double-click
 // adds a Band; drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box
 // around them); the wheel changes Q; Delete removes the selected Bands. Holding a handle still Solos
 // its Band until the mouse is released. Pressing on the spectrum, away from the handles, grabs its
@@ -67,7 +67,7 @@ private:
     PluginProcessor& processor;
     BandEditing& editing;
 
-    AnalyzerSpectrum preEq, postEq;
+    AnalyzerSpectrum preEq, postEq, sidechain;
     AnalyzerSettings analyzer; // taken once a frame
     std::vector<float> tapSamples; // read from the taps each frame
     juce::uint32 lastFrame = 0;

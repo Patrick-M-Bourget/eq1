@@ -13,6 +13,21 @@ namespace
 constexpr double thresholdAutoPosition = 3.0;
 } // namespace
 
+
+std::array<std::pair<juce::Slider*, juce::Label*>, 10> BandPanel::rotaries()
+{
+    return { { { &frequency, &frequencyLabel },
+               { &gain, &gainLabel },
+               { &q, &qLabel },
+               { &slope, &slopeLabel },
+               { &dynamicRange, &dynamicRangeLabel },
+               { &threshold, &thresholdLabel },
+               { &attack, &attackLabel },
+               { &release, &releaseLabel },
+               { &detectionLow, &detectionLowLabel },
+               { &detectionHigh, &detectionHighLabel } } };
+}
+
 BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
 {
     title.setFont (juce::FontOptions (15.0f, juce::Font::bold));
@@ -20,14 +35,14 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
 
     shape.addItemList (parameters::shapeNames(), 1);
     placement.addItemList (parameters::placementNames(), 1);
-    for (auto* combo : { &shape, &placement })
+    detectionSource.addItemList (parameters::detectionSourceNames(), 1);
+    detectionRange.addItemList (parameters::detectionRangeNames(), 1);
+    for (auto* combo : { &shape, &placement, &detectionSource, &detectionRange })
         addAndMakeVisible (*combo);
 
-    const std::pair<juce::Slider*, juce::Label*> controls[] = {
-        { &frequency, &frequencyLabel },       { &gain, &gainLabel },           { &q, &qLabel },         { &slope, &slopeLabel },
-        { &dynamicRange, &dynamicRangeLabel }, { &threshold, &thresholdLabel }, { &attack, &attackLabel }, { &release, &releaseLabel }
-    };
-    const char* names[] = { "Frequency", "Gain", "Q", "Slope", "Dynamic Range", "Threshold", "Attack", "Release" };
+    const auto controls = rotaries();
+    const char* names[] = { "Frequency", "Gain", "Q", "Slope", "Dynamic Range", "Threshold", "Attack", "Release", "Detection Low", "Detection High" };
+    static_assert (std::size (names) == std::tuple_size_v<decltype (controls)>);
     for (size_t i = 0; i < std::size (controls); ++i)
     {
         auto [slider, label] = controls[i];
@@ -65,19 +80,41 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
             editing.deleteBand (slot);
     };
     addAndMakeVisible (deleteButton);
+    // Detection Audition lasts while the button is held.
+    audition.onStateChange = [this] {
+        if (audition.isDown() && slot != 0)
+            processor.setDetectionAudition (slot);
+        else
+            releaseAudition();
+    };
+    addAndMakeVisible (audition);
 
     show (0);
     startTimerHz (10);
 }
 
-BandPanel::~BandPanel() = default;
+BandPanel::~BandPanel()
+{
+    releaseAudition();
+}
+
+void BandPanel::releaseAudition()
+{
+    if (processor.detectionAuditionSlot() != 0)
+        processor.setDetectionAudition (0);
+}
 
 void BandPanel::show (int newSlot)
 {
+    releaseAudition();
     slot = newSlot;
     // Attachments are rebuilt for the new slot; the old ones go first so they let go of the controls.
     shapeAttachment.reset();
     placementAttachment.reset();
+    detectionSourceAttachment.reset();
+    detectionRangeAttachment.reset();
+    detectionLowAttachment.reset();
+    detectionHighAttachment.reset();
     frequencyAttachment.reset();
     gainAttachment.reset();
     qAttachment.reset();
@@ -113,6 +150,10 @@ void BandPanel::show (int newSlot)
     attackAttachment = std::make_unique<SliderAttachment> (state, parameters::attackId (slot), attack);
     releaseAttachment = std::make_unique<SliderAttachment> (state, parameters::releaseId (slot), release);
     dynamicsBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::dynamicsBypassId (slot), dynamicsBypass);
+    detectionSourceAttachment = std::make_unique<ComboBoxAttachment> (state, parameters::detectionSourceId (slot), detectionSource);
+    detectionRangeAttachment = std::make_unique<ComboBoxAttachment> (state, parameters::detectionRangeId (slot), detectionRange);
+    detectionLowAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionLowId (slot), detectionLow);
+    detectionHighAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionHighId (slot), detectionHigh);
     thresholdAttachment = std::make_unique<juce::ParameterAttachment> (*state.getParameter (parameters::thresholdId (slot)),
                                                                        [this] (float) { showThreshold(); });
     thresholdAutoAttachment = std::make_unique<juce::ParameterAttachment> (*state.getParameter (parameters::thresholdAutoId (slot)),
@@ -164,8 +205,14 @@ void BandPanel::updateVisibility()
         c->setVisible (hasGain (band.shape));
     // Cut, Notch, Band Pass and All Pass keep their dynamics settings but don't offer them.
     for (auto* c : std::initializer_list<juce::Component*> { &dynamicRange, &dynamicRangeLabel, &threshold, &thresholdLabel, &attack,
-                                                             &attackLabel, &release, &releaseLabel, &dynamicsBypass })
+                                                             &attackLabel, &release, &releaseLabel, &dynamicsBypass, &detectionSource,
+                                                             &detectionRange, &audition })
         c->setVisible (hasDynamics (band.shape));
+    for (auto* c : std::initializer_list<juce::Component*> { &detectionLow, &detectionLowLabel, &detectionHigh, &detectionHighLabel })
+        c->setVisible (hasDynamics (band.shape) && band.detectionRange == DetectionRange::Free);
+    // A Shape without dynamics has no detection signal to audition.
+    if (! hasDynamics (band.shape))
+        releaseAudition();
     brickwall.setVisible (isCut (band.shape));
     // Brickwall overrides a Cut's Slope.
     const bool usesSlope = hasSlope (band.shape) && ! (isCut (band.shape) && band.brickwall);
@@ -191,6 +238,8 @@ void BandPanel::resized()
     title.setBounds (top.removeFromLeft (260));
     deleteButton.setBounds (top.removeFromRight (70));
     top.removeFromRight (8);
+    audition.setBounds (top.removeFromRight (140));
+    top.removeFromRight (8);
     bypass.setBounds (top.removeFromRight (80));
     top.removeFromRight (8);
     dynamicsBypass.setBounds (top.removeFromRight (140));
@@ -202,11 +251,12 @@ void BandPanel::resized()
     shape.setBounds (left.removeFromTop (24));
     left.removeFromTop (8);
     placement.setBounds (left.removeFromTop (24));
+    left.removeFromTop (8);
+    detectionSource.setBounds (left.removeFromTop (24));
+    left.removeFromTop (8);
+    detectionRange.setBounds (left.removeFromTop (24));
 
-    const std::pair<juce::Slider*, juce::Label*> controls[] = {
-        { &frequency, &frequencyLabel },       { &gain, &gainLabel },           { &q, &qLabel },         { &slope, &slopeLabel },
-        { &dynamicRange, &dynamicRangeLabel }, { &threshold, &thresholdLabel }, { &attack, &attackLabel }, { &release, &releaseLabel }
-    };
+    const auto controls = rotaries();
     const int width = area.getWidth() / static_cast<int> (std::size (controls));
     for (auto [slider, label] : controls)
     {
