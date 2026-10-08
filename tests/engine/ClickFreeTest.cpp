@@ -150,9 +150,11 @@ TEST_CASE ("Changing Shape does not click")
     const auto host = anyHost();
     CAPTURE (host.sampleRate, host.blockSize);
     const auto output = playTone (host, [] (double time, Settings& s) {
-        constexpr Shape shapes[] = { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt, Shape::Bell };
+        // Every Shape, including those not built yet, which pass the signal unchanged.
+        constexpr Shape shapes[] = { Shape::LowShelf, Shape::LowCut,   Shape::HighShelf, Shape::HighCut, Shape::Notch,
+                                     Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt, Shape::AllPass, Shape::Bell };
         s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
-        s.bands[0].shape = time < onsetSeconds ? Shape::Bell : shapes[1 + static_cast<int> ((time - onsetSeconds) / 0.05) % 5];
+        s.bands[0].shape = time < onsetSeconds ? Shape::Bell : shapes[static_cast<int> ((time - onsetSeconds) / 0.05) % 10];
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
 }

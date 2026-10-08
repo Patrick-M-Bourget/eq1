@@ -18,7 +18,8 @@ PluginProcessor::PluginProcessor()
                                                   parameters.getRawParameterValue (parameters::inUseId (slot)),
                                                   parameters.getRawParameterValue (parameters::bypassId (slot)),
                                                   parameters.getRawParameterValue (parameters::shapeId (slot)),
-                                                  parameters.getRawParameterValue (parameters::slopeId (slot)) };
+                                                  parameters.getRawParameterValue (parameters::slopeId (slot)),
+                                                  parameters.getRawParameterValue (parameters::brickwallId (slot)) };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -47,7 +48,8 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
                                  .frequency = p.frequency->load(),
                                  .gain = p.gain->load(),
                                  .q = p.q->load(),
-                                 .slope = p.slope->load() };
+                                 .slope = p.slope->load(),
+                                 .brickwall = p.brickwall->load() >= 0.5f };
     }
     engine.setSettings (settings);
     engine.process ({ buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples() });

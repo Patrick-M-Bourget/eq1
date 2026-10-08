@@ -1,6 +1,7 @@
 #include "Measure.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
@@ -130,4 +131,67 @@ TEST_CASE ("Changing Shape keeps the Band's Frequency, Gain and Q")
         CHECK_THAT (test::magnitudeDb (asShelf, f, sampleRate), WithinAbs (test::magnitudeDb (shelf, f, sampleRate), 0.001));
         CHECK_THAT (test::magnitudeDb (backToBell, f, sampleRate), WithinAbs (test::magnitudeDb (bell, f, sampleRate), 0.001));
     }
+}
+
+namespace
+{
+// Plays settingsInTurn one after another, settling after each, and returns the final response.
+std::vector<float> responseAfter (std::initializer_list<Settings> settingsInTurn)
+{
+    Engine engine;
+    engine.prepare (sampleRate, 4096, 1);
+    for (const auto& settings : settingsInTurn)
+    {
+        engine.setSettings (settings);
+        settle (engine);
+    }
+    return test::impulseResponse (engine);
+}
+
+Settings withBand (Shape shape, double gain, double slope)
+{
+    Settings settings;
+    settings.bands[0] = { .inUse = true, .shape = shape, .frequency = 1000.0, .gain = gain, .q = 1.0, .slope = slope };
+    return settings;
+}
+
+void checkSameResponse (const std::vector<float>& actual, const std::vector<float>& expected)
+{
+    for (double f : test::frequenciesUpToNyquist (sampleRate, 32))
+    {
+        CAPTURE (f);
+        CHECK_THAT (test::magnitudeDb (actual, f, sampleRate), WithinAbs (test::magnitudeDb (expected, f, sampleRate), 0.001));
+    }
+}
+} // namespace
+
+TEST_CASE ("A Slope below the Shape's minimum is raised to it")
+{
+    // Bell's minimum is 12 dB/oct, a shelf's 6 (ADR 0003). Bell ignores Slope until Bell Slope (#19).
+    checkSameResponse (responseOf (withBand (Shape::Bell, 6.0, 0.0)), responseOf (withBand (Shape::Bell, 6.0, 12.0)));
+    checkSameResponse (responseOf (withBand (Shape::LowShelf, 6.0, 0.0)), responseOf (withBand (Shape::LowShelf, 6.0, 6.0)));
+}
+
+TEST_CASE ("A Slope between whole orders is rounded to the nearest one")
+{
+    checkSameResponse (responseOf (withBand (Shape::HighShelf, 9.0, 8.9)), responseOf (withBand (Shape::HighShelf, 9.0, 6.0)));
+    checkSameResponse (responseOf (withBand (Shape::HighShelf, 9.0, 9.1)), responseOf (withBand (Shape::HighShelf, 9.0, 12.0)));
+}
+
+TEST_CASE ("Switching Shape and back restores a Slope below the other Shape's minimum")
+{
+    // The stored Slope of 6 stays 6 while the Bell raises it to 12.
+    checkSameResponse (responseAfter ({ withBand (Shape::LowShelf, 6.0, 6.0), withBand (Shape::Bell, 6.0, 6.0), withBand (Shape::LowShelf, 6.0, 6.0) }),
+                       responseOf (withBand (Shape::LowShelf, 6.0, 6.0)));
+}
+
+TEST_CASE ("A Shape not built yet passes the signal unchanged, and switching back restores the Gain")
+{
+    const Shape unbuilt = GENERATE (Shape::LowCut, Shape::HighCut, Shape::Notch, Shape::BandPass, Shape::AllPass);
+    CAPTURE (static_cast<int> (unbuilt));
+
+    CHECK (isUnitImpulse (responseOf (withBand (unbuilt, 6.0, 12.0))));
+    const auto restored = responseAfter ({ withBand (Shape::Bell, 6.0, 12.0), withBand (unbuilt, 6.0, 12.0), withBand (Shape::Bell, 6.0, 12.0) });
+    CHECK_THAT (test::magnitudeDb (restored, 1000.0, sampleRate), WithinAbs (6.0, 0.01));
+    checkSameResponse (restored, responseOf (withBand (Shape::Bell, 6.0, 12.0)));
 }

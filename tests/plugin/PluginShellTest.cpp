@@ -12,6 +12,10 @@ using Catch::Matchers::WithinAbs;
 namespace
 {
 
+// The Shapes in Pro-Q 4's order (ADR 0003).
+const juce::StringArray shapeNames { "Bell",      "Low Shelf", "Low Cut",    "High Shelf", "High Cut",
+                                     "Notch",     "Band Pass", "Tilt Shelf", "Flat Tilt",  "All Pass" };
+
 constexpr double sampleRate = 48000.0;
 constexpr int blockSize = 512;
 
@@ -82,7 +86,7 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
 {
     // Hosts store parameter IDs in sessions and automation as normalised (0 to 1) values, so after
     // release every field below is frozen: changing one remaps users' saved automation. A change
-    // here must be deliberate and say so in its commit.
+    // here must be deliberate and say so in its commit. Shape and Slope are frozen by ADR 0003.
     struct Control
     {
         const char* suffix;
@@ -99,8 +103,9 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         { "q", "Q", "", 0.025f, 40.0f, 0.0f, 1.0f, 1.0f, {} },
         { "in_use", "In Use", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
         { "bypass", "Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
-        { "shape", "Shape", "", 0.0f, 4.0f, 1.0f, 0.0f, 2.0f, { "Bell", "Low Shelf", "High Shelf", "Tilt Shelf", "Flat Tilt" } },
-        { "slope", "Slope", "dB/oct", 6.0f, 96.0f, 6.0f, 12.0f, 54.0f, {} },
+        { "shape", "Shape", "", 0.0f, 9.0f, 1.0f, 0.0f, 4.0f, shapeNames },
+        { "slope", "Slope", "dB/oct", 0.0f, 96.0f, 0.0f, 12.0f, 48.0f, {} },
+        { "brickwall", "Brickwall", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
     };
 
     juce::ScopedJuceInitialiser_GUI juce;
@@ -132,7 +137,16 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
             auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter);
             CHECK ((choice != nullptr) == ! control.choices.isEmpty());
             if (choice != nullptr)
+            {
                 CHECK (choice->choices == control.choices);
+                for (int index = 0; index < control.choices.size(); ++index)
+                    CHECK_THAT (parameter->convertTo0to1 (static_cast<float> (index)), WithinAbs (index / 9.0, 1.0e-6));
+            }
+            if (juce::String (control.suffix) == "slope")
+            {
+                CHECK (parameter->convertTo0to1 (0.0f) == 0.0f);
+                CHECK (parameter->convertTo0to1 (96.0f) == 1.0f);
+            }
         }
 }
 
@@ -167,7 +181,7 @@ TEST_CASE ("A producer can pick any Shape for a Band")
         if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter); choice != nullptr && choice->getParameterID() == "band5_shape")
             shape = choice;
     REQUIRE (shape != nullptr);
-    CHECK (shape->choices == juce::StringArray { "Bell", "Low Shelf", "High Shelf", "Tilt Shelf", "Flat Tilt" });
+    CHECK (shape->choices == shapeNames);
 
     setParameter (processor, "band5_in_use", 1.0f);
     setParameter (processor, "band5_frequency", 1000.0f);
@@ -191,4 +205,45 @@ TEST_CASE ("A producer can pick any Shape for a Band")
     pick ("Flat Tilt");
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.1));
     CHECK_THAT (sineGainDb (processor, 2000.0), WithinAbs (1.2, 0.1));
+}
+
+TEST_CASE ("Saved state restores every Band setting, including Brickwall")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    setParameter (saved, "band7_in_use", 1.0f);
+    setParameter (saved, "band7_shape", 4.0f); // High Cut
+    setParameter (saved, "band7_frequency", 8000.0f);
+    setParameter (saved, "band7_gain", -4.5f);
+    setParameter (saved, "band7_q", 2.5f);
+    setParameter (saved, "band7_slope", 37.5f);
+    setParameter (saved, "band7_brickwall", 1.0f);
+    setParameter (saved, "band24_bypass", 1.0f);
+
+    juce::MemoryBlock state;
+    saved.getStateInformation (state);
+    eq1::PluginProcessor restored;
+    restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+
+    const auto savedParameters = saved.getParameters();
+    const auto restoredParameters = restored.getParameters();
+    REQUIRE (savedParameters.size() == restoredParameters.size());
+    for (int i = 0; i < savedParameters.size(); ++i)
+    {
+        auto* parameter = dynamic_cast<juce::RangedAudioParameter*> (restoredParameters[i]);
+        REQUIRE (parameter != nullptr);
+        CAPTURE (parameter->getParameterID());
+        CHECK (parameter->getValue() == savedParameters[i]->getValue());
+    }
+
+    const auto value = [&] (const juce::String& id) {
+        for (auto* parameter : restoredParameters)
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter); ranged->getParameterID() == id)
+                return ranged->convertFrom0to1 (ranged->getValue());
+        FAIL ("No parameter " << id);
+        return 0.0f;
+    };
+    CHECK (value ("band7_brickwall") == 1.0f);
+    CHECK (value ("band7_shape") == 4.0f);
+    CHECK_THAT (value ("band7_slope"), WithinAbs (37.5, 1.0e-4));
 }

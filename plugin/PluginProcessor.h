@@ -49,6 +49,7 @@ private:
         std::atomic<float>* bypass;
         std::atomic<float>* shape;
         std::atomic<float>* slope;
+        std::atomic<float>* brickwall;
     };
 
     juce::AudioProcessorValueTreeState parameters;

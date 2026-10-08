@@ -46,17 +46,19 @@ juce::String inUseId (int slot) { return slotId (slot, "in_use"); }
 juce::String bypassId (int slot) { return slotId (slot, "bypass"); }
 juce::String shapeId (int slot) { return slotId (slot, "shape"); }
 juce::String slopeId (int slot) { return slotId (slot, "slope"); }
+juce::String brickwallId (int slot) { return slotId (slot, "brickwall"); }
 
 const juce::StringArray& shapeNames()
 {
-    static const juce::StringArray names { "Bell", "Low Shelf", "High Shelf", "Tilt Shelf", "Flat Tilt" };
+    static const juce::StringArray names { "Bell",      "Low Shelf", "Low Cut",    "High Shelf", "High Cut",
+                                           "Notch",     "Band Pass", "Tilt Shelf", "Flat Tilt",  "All Pass" };
     return names;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
-    // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40, Slope up to 96 dB/oct
-    // (in whole 6 dB/oct steps for now).
+    // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40. Slope is one continuous
+    // 0 to 96 dB/oct range shared by every Shape, and Brickwall a separate switch (ADR 0003).
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
@@ -87,9 +89,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                   0),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { slopeId (slot), 1 },
                                                                  slotName (slot, "Slope"),
-                                                                 juce::NormalisableRange<float> (6.0f, 96.0f, 6.0f),
+                                                                 juce::NormalisableRange<float> (0.0f, 96.0f),
                                                                  12.0f,
-                                                                 withText (0, "dB/oct")));
+                                                                 withText (1, "dB/oct")),
+                    std::make_unique<juce::AudioParameterBool> (juce::ParameterID { brickwallId (slot), 1 },
+                                                                slotName (slot, "Brickwall"),
+                                                                false));
     }
     return layout;
 }

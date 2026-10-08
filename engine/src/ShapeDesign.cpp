@@ -135,6 +135,25 @@ Cascade designFlatTilt (const ShapeParameters& p, double sampleRate)
     return cascade;
 }
 
+// The lowest Slope each Shape plays, in dB/oct (ADR 0003).
+double minimumSlope (Shape shape)
+{
+    switch (shape)
+    {
+        case Shape::LowCut:
+        case Shape::HighCut:
+        case Shape::BandPass: return 0.0;
+        case Shape::Bell:
+        case Shape::Notch: return 12.0;
+        case Shape::LowShelf:
+        case Shape::HighShelf:
+        case Shape::TiltShelf:
+        case Shape::FlatTilt:
+        case Shape::AllPass: return 6.0;
+    }
+    return 6.0;
+}
+
 } // namespace
 
 Cascade interpolate (const Cascade& from, const Cascade& to, double amount)
@@ -148,10 +167,16 @@ Cascade interpolate (const Cascade& from, const Cascade& to, double amount)
 
 Structure structureOf (const BandSettings& settings)
 {
+    // Only the shelves' filters depend on Slope so far; Bell Slope is #19, the Cuts #21 and #22.
     const bool usesSlope = settings.shape == Shape::LowShelf || settings.shape == Shape::HighShelf
                            || settings.shape == Shape::TiltShelf;
-    const int order = usesSlope ? std::clamp (static_cast<int> (std::lround (settings.slope / 6.0)), 1, maxShelfOrder) : 0;
-    return { settings.shape, order };
+    if (! usesSlope)
+        return { settings.shape, 0 };
+
+    // The stored Slope is raised to the Shape's minimum and rounded to the nearest whole order
+    // (ADR 0003; docs/dsp/filter-design.md, "Slopes between whole orders").
+    const double slope = std::clamp (settings.slope, minimumSlope (settings.shape), 6.0 * maxShelfOrder);
+    return { settings.shape, static_cast<int> (std::lround (slope / 6.0)) };
 }
 
 Cascade designShape (const ShapeParameters& p, double sampleRate)
@@ -163,6 +188,12 @@ Cascade designShape (const ShapeParameters& p, double sampleRate)
         case Shape::HighShelf: return designHighShelf (p, sampleRate);
         case Shape::TiltShelf: return designTiltShelf (p, sampleRate);
         case Shape::FlatTilt: return designFlatTilt (p, sampleRate);
+        // Not built yet: no sections, so the signal passes unchanged.
+        case Shape::LowCut:
+        case Shape::HighCut:
+        case Shape::Notch:
+        case Shape::BandPass:
+        case Shape::AllPass: return {};
     }
     return {};
 }

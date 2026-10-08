@@ -35,8 +35,9 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
             band.gain = block % 2 == 0 ? 12.0 : -12.0;
             band.bypass = (block + static_cast<int> (slot)) % 5 == 0;
             band.inUse = (block + static_cast<int> (slot)) % 7 != 0;
-            constexpr Shape shapes[] = { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt };
-            band.shape = shapes[(static_cast<size_t> (block / 8) + slot) % 5];
+            constexpr Shape shapes[] = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
+                                         Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
+            band.shape = shapes[(static_cast<size_t> (block / 8) + slot) % 10];
             band.slope = 6.0 * static_cast<double> (1 + (static_cast<size_t> (block) + slot) % 16);
         }
         engine.setSettings (settings);
