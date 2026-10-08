@@ -1,0 +1,7 @@
+# Decramped filter designs instead of oversampling for Zero Latency
+
+In Zero Latency mode, Bands must match their analog response all the way up to Nyquist, so a high Bell or air Shelf at 44.1/48 kHz sounds like the curve the display draws instead of cramping near 20 kHz. We get this from decramped (matched-response) filter designs rather than oversampling, because oversampling adds latency and CPU cost and "Zero Latency" must mean zero.
+
+## Consequences
+
+Every Shape needs its own decramped coefficient design rather than textbook bilinear-transform biquads; a contributor "simplifying" to standard RBJ cookbook filters would reintroduce cramping.
