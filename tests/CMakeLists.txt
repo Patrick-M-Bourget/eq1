@@ -19,6 +19,7 @@ add_executable(eq1_engine_tests
     engine/SettingsHandoffTest.cpp
     engine/StereoPlacementTest.cpp
     engine/ShapeResponseTest.cpp
+    engine/SoloTest.cpp
 )
 target_link_libraries(eq1_engine_tests PRIVATE eq1::engine Catch2::Catch2WithMain)
 catch_discover_tests(eq1_engine_tests ADD_TAGS_AS_LABELS)

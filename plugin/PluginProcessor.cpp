@@ -37,6 +37,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     Settings settings;
     for (size_t slot = 0; slot < slots.size(); ++slot)
         settings.bands[slot] = slots[slot].read();
+    settings.soloSlot = heldSoloSlot.load();
     engine.setSettings (settings);
     engine.process ({ buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples() });
 }
@@ -109,6 +110,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (parameters.state.getType()))
     {
+        setSolo (0);
         auto state = juce::ValueTree::fromXml (*xml);
         setDisplayRangeDb (state.getProperty (displayRangeProperty, 12));
         state.removeProperty (displayRangeProperty, nullptr);

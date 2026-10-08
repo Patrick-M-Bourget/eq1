@@ -87,8 +87,33 @@ const AnalyzerSpectrum* EqDisplay::spectrumToGrab() const
     return analyzer.showPostEq ? &postEq : analyzer.showPreEq ? &preEq : nullptr;
 }
 
+EqDisplay::~EqDisplay()
+{
+    releaseSolo();
+}
+
+void EqDisplay::releaseSolo()
+{
+    if (soloedSlot == 0)
+        return;
+    soloedSlot = 0;
+    processor.setSolo (0);
+    repaint();
+}
+
 void EqDisplay::timerCallback()
 {
+    if (heldSlot != 0 && juce::Time::getMillisecondCounter() - heldSince >= soloHoldMilliseconds)
+    {
+        soloedSlot = heldSlot;
+        heldSlot = 0;
+        processor.setSolo (soloedSlot);
+        repaint();
+    }
+    // A Band deleted, or taken out of use by automation, while Soloed lets go of its Solo for good.
+    if (soloedSlot != 0 && ! editing.band (soloedSlot).inUse)
+        releaseSolo();
+
     if (updateAnalyzer())
     {
         // The spectra move every frame.
@@ -289,6 +314,12 @@ void EqDisplay::paint (juce::Graphics& g)
         }
         g.setColour (juce::Colours::black);
         g.drawText (juce::String (slot), circle, juce::Justification::centred);
+        if (slot == soloedSlot)
+        {
+            g.setColour (juce::Colours::yellow);
+            g.drawEllipse (circle.expanded (5.0f), 2.0f);
+            g.drawText ("Solo", circle.withY (circle.getY() - 22.0f).expanded (20.0f, 0.0f), juce::Justification::centred);
+        }
     }
 
     // Values beside the Bands being dragged.
@@ -368,13 +399,21 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
     {
         select ({ slot });
     }
+    if (! adding)
+    {
+        heldSlot = slot;
+        heldSince = juce::Time::getMillisecondCounter();
+    }
     editing.beginDrag (std::vector<int> (selected.begin(), selected.end()));
     dragging = true;
 }
 
 void EqDisplay::mouseDrag (const juce::MouseEvent& e)
 {
-    if (grabFrequency && e.getDistanceFromDragStart() > 3)
+    // Moving before the hold Solos makes it a drag; once Soloed, the Band can be dragged while heard.
+    if (heldSlot != 0 && e.getDistanceFromDragStart() > dragThreshold)
+        heldSlot = 0;
+    if (grabFrequency && e.getDistanceFromDragStart() > dragThreshold)
     {
         if (const auto grabbed = editing.grab (*grabFrequency))
         {
@@ -414,6 +453,8 @@ void EqDisplay::mouseUp (const juce::MouseEvent&)
     if (dragging)
         editing.endDrag();
     dragging = grabbing = false;
+    heldSlot = 0;
+    releaseSolo();
     grabFrequency.reset();
     marquee.reset();
     repaint();

@@ -48,6 +48,11 @@ public:
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
 
+    // Solo, while the editor holds a Band: its Band Slot (1 to 24), or 0. Not a host parameter, not
+    // saved, not undoable; restoring a session lets go of it.
+    void setSolo (int slot) { heldSoloSlot = slot; }
+    int soloSlot() const { return heldSoloSlot.load(); }
+
     AnalyzerSettings analyzerSettings() const;
     void setAnalyzerSettings (const AnalyzerSettings& settings);
 
@@ -65,6 +70,7 @@ private:
     // Kept out of the parameter state, which a host may save from another thread, and written into
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
+    std::atomic<int> heldSoloSlot { 0 };
     AnalyzerSettings analyzer;
     mutable juce::SpinLock analyzerLock; // the editor sets it while a host may be saving
 

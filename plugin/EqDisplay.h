@@ -17,13 +17,15 @@ class PluginProcessor;
 
 // The EQ curve with a handle per Band, over the Analyzer's pre-EQ and post-EQ spectra. Double-click
 // adds a Band; drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box
-// around them); the wheel changes Q; Delete removes the selected Bands. Pressing on the spectrum, away
-// from the handles, grabs its peak there (Spectrum Grab). The curve comes from the Engine's own
+// around them); the wheel changes Q; Delete removes the selected Bands. Holding a handle still Solos
+// its Band until the mouse is released. Pressing on the spectrum, away from the handles, grabs its
+// peak there (Spectrum Grab). The curve comes from the Engine's own
 // response maths (eq1/Response.h).
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
     EqDisplay (PluginProcessor& processor, BandEditing& editing);
+    ~EqDisplay() override;
 
     // Called with the Band Slot to show in the Band panel, or 0 when none is selected.
     std::function<void (int)> onSelectionChanged;
@@ -74,6 +76,15 @@ private:
     // double-click on the spectrum doesn't.
     std::optional<double> grabFrequency;
     bool grabbing = false; // the drag sets only the grabbed Band's Gain
+
+    // Solo: a handle held still this long Solos its Band until the mouse is released.
+    static constexpr juce::uint32 soloHoldMilliseconds = 350;
+    int heldSlot = 0; // the handle being held, before it Solos or the mouse moves
+    juce::uint32 heldSince = 0;
+    int soloedSlot = 0;
+    void releaseSolo();
+    // How far the mouse moves before a press counts as a drag, in pixels.
+    static constexpr int dragThreshold = 3;
     std::optional<juce::Rectangle<float>> marquee;
     juce::Point<float> dragStart;
     int shownRangeDb = 0;

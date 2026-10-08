@@ -265,3 +265,42 @@ TEST_CASE ("Changing Stereo Placement does not click")
     CHECK (discontinuity (output[0], host.sampleRate) < threshold);
     CHECK (discontinuity (output[1], host.sampleRate) < threshold);
 }
+
+TEST_CASE ("Engaging and releasing Solo does not click")
+{
+    const auto host = anyHost();
+    const auto placement = GENERATE (StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Side);
+    CAPTURE (host.sampleRate, host.blockSize, static_cast<int> (placement));
+    // A High Shelf boosting the tone, Soloed on and off: Solo plays the region above 2 kHz, so the
+    // tone at 200 Hz drops away and comes back.
+    const auto output = playStereoTone (host, [placement] (double time, Settings& s) {
+        s.bands[0] = bellBand (2000.0, 12.0, 1.0);
+        s.bands[0].shape = Shape::HighShelf;
+        s.bands[0].placement = placement;
+        s.soloSlot = alternating (time) ? 1 : 0;
+    });
+    CHECK (discontinuity (output[0], host.sampleRate) < threshold);
+    CHECK (discontinuity (output[1], host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Moving Solo to another Band, or changing the Soloed Band's Stereo Placement, does not click")
+{
+    const auto host = anyHost();
+    const bool movePlacement = GENERATE (false, true);
+    CAPTURE (host.sampleRate, host.blockSize, movePlacement);
+    const auto output = playStereoTone (host, [movePlacement] (double time, Settings& s) {
+        s.bands[0] = bellBand (toneFrequency, 6.0, 1.0);
+        s.bands[1] = bellBand (toneFrequency * 4.0, 6.0, 1.0); // its region barely has the tone
+        if (movePlacement)
+        {
+            s.bands[0].placement = alternating (time) ? StereoPlacement::Left : StereoPlacement::Side;
+            s.soloSlot = time < onsetSeconds ? 0 : 1;
+        }
+        else
+        {
+            s.soloSlot = time < onsetSeconds ? 0 : alternating (time) ? 1 : 2;
+        }
+    });
+    CHECK (discontinuity (output[0], host.sampleRate) < threshold);
+    CHECK (discontinuity (output[1], host.sampleRate) < threshold);
+}

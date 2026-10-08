@@ -323,3 +323,42 @@ TEST_CASE ("On a mono track a Side Band has no effect, and its Stereo Placement 
     CHECK_THAT (sineGainDb (processor, 1000.0, Content::side), WithinAbs (12.0, 0.1));
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 }
+
+TEST_CASE ("Holding Solo plays only the Band's region, and letting go restores the EQ")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    setParameter (processor, "band3_in_use", 1.0f);
+    setParameter (processor, "band3_frequency", 1000.0f);
+    setParameter (processor, "band3_gain", 12.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (12.0, 0.1));
+
+    processor.setSolo (3);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.1));
+    CHECK (sineGainDb (processor, 100.0) < -15.0);
+
+    processor.setSolo (0);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (12.0, 0.1));
+}
+
+TEST_CASE ("Solo is not a host parameter and is not saved with the session")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    for (auto* parameter : saved.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
+            CHECK_FALSE (ranged->getParameterID().containsIgnoreCase ("solo"));
+
+    setParameter (saved, "band3_in_use", 1.0f);
+    saved.setSolo (3);
+    juce::MemoryBlock state;
+    saved.getStateInformation (state);
+    CHECK_FALSE (state.toString().containsIgnoreCase ("solo"));
+
+    eq1::PluginProcessor restored;
+    restored.setSolo (5);
+    restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    // Restoring a session lets go of any Solo.
+    CHECK (restored.soloSlot() == 0);
+}

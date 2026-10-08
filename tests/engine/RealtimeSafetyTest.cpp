@@ -43,6 +43,8 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
                                                        StereoPlacement::Mid, StereoPlacement::Side };
             band.placement = placements[(static_cast<size_t> (block / 4) + slot) % 5];
         }
+        // Solo moving from Band to Band, and off.
+        settings.soloSlot = block % 6 == 5 ? 0 : 1 + block % numBandSlots;
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize }, block % 2 == 0 ? &sidechainBlock : nullptr);
         engine.readAnalysis (AnalysisTap::PostEq, analysis.data(), blockSize);

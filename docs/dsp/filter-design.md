@@ -59,44 +59,11 @@ When Detection Range is Band, a Dynamic Band's detector hears only the region it
 
 Live Gain never goes beyond ±30 dB, whatever the Gain, Dynamic Range and Gain Scale.
 
-## Test tolerances
+**Solo** plays the main input, before the EQ, through a filter for the Band's region above (`engine/src/Solo.h`), so you hear what the Band works on, not its Gain:
 
-The Engine tests (`tests/engine/BellResponseTest.cpp`, `tests/engine/ShapeResponseTest.cpp`) bound the error by where Frequency sits relative to Nyquist, at 44.1, 48 and 96 kHz. Above 0.91 × Nyquist a Shape is only required to stay stable.
-
-| Shape | Up to 0.45 × Nyquist | Up to 0.73 × Nyquist | Up to 0.91 × Nyquist |
-| --- | --- | --- | --- |
-| Bell (share of \|Gain\|) | 10% | 20% | 35% |
-| Shelves, Q ≤ 2 (share of the curve's span in dB) | 12% | 12% | 45% + 0.6 dB |
-| Shelves, Q > 2 (share of the curve's span in dB) | 75% | 75% | 75% + 0.6 dB |
-
-- **Flat Tilt:** within 0.05 dB + 3% of |Gain| of the line, from 20 Hz to 30 kHz or 0.9 × Nyquist, whichever is lower.
-- **Low Cut, High Cut:** a Cut's span in dB is unbounded and its corner too steep for a dB error to mean much, so they are bounded in dB above and below the target, which may shift by 1/12 octave either way. Above: never louder than the target, or than −60 dB where the target is below it. Below: only where the target is above −24 dB, since cutting deeper in the stopband is harmless. Every whole-order Slope and Brickwall, Q 0.1 to 40.
-
-| Cut (dB above / below) | Up to 0.45 × Nyquist | Up to 0.73 × Nyquist | Up to 0.91 × Nyquist |
-| --- | --- | --- | --- |
-| Low Cut, Q ≤ 2 | 1.5 / 3 | 2 / 3 | 4 / 3 |
-| Low Cut, Q > 2 | 4.5 / 1 | 6 / 1 | 6 / 9 |
-| High Cut | 0.5 / 1 | 1 / 5 | 1 / 12 |
-
-- **Resonant Low Cuts (Q above 2):** the resonance's slow fall above Frequency still slopes at Nyquist, where a biquad is flat.
-- **High Cuts near Nyquist:** they roll off early, up to 11 dB below the target just under Frequency at 0.91 × Nyquist (see "High Cut sections").
-- **Band Pass, Notch:** measured as Cuts are, at every whole order and Q 0.1 to 40.
-
-| Band Pass, Notch (dB above / below) | Up to 0.45 × Nyquist | Up to 0.73 × Nyquist | Up to 0.91 × Nyquist |
-| --- | --- | --- | --- |
-| Band Pass, up to 24 dB/oct | 0.5 / 1 | 2 / 2.5 | 5 / 2 |
-| Band Pass, steeper | 2.5 / 5.5 | 6 / 9 | 18 / 9 |
-| Notch | 0.1 / 6 | 0.1 / 6.5 | 0.1 / 6.5 |
-
-- **Steep Band Passes near Nyquist:** at 96 dB/oct the upper skirt's poles sit above Nyquist, and the bump grows with the order: about 6 dB at 0.73 × Nyquist and 18 dB at 0.91. Open work (#23).
-- **Wide Notches:** cut up to 6.5 dB deeper than the target on their skirts; they are never louder than it.
-- **All Pass:** magnitude flat within 0.01 dB; phase within 0.1° of −90° × order at Frequency. Below Frequency the phase error, wrapped to ±180°, stays within 6° × order + 6° up to 0.45 × Nyquist, 20° × order + 10° up to 0.73 and 50° × order + 10° up to 0.91, tested where that bound is under 180°. Above Frequency only the flat magnitude is tested.
-- **Resonant shelves (Q above 2):** the bound is loose because a single matched biquad cannot follow a section whose zeros and poles are both sharp.
-
-## Open work
-
-- **#17, resonant shelf accuracy:** splitting a resonant section into a sharp-pole biquad and a sharp-zero biquad brought shelves below 0.45 × Nyquist within 9% in the #4 prototype.
-- **#18, fractional Slopes.**
-- **#19, Bell Slope:** every Bell is 12 dB/oct for now, while Pro-Q 4 goes up to 96. A known difference (ADR 0003).
-- **The Bell near Nyquist:** a correction section, or an optimised fit.
-- **#23, steep Band Passes near Nyquist.**
+- **Bell, Notch, Band Pass, All Pass:** a second-order Band Pass at Frequency, its −3 dB points 1/Q of Frequency apart.
+- **Low Shelf:** a 12 dB/oct High Cut at Frequency. **High Shelf:** a 12 dB/oct Low Cut.
+- **Tilt Shelf, Flat Tilt:** the input unfiltered.
+- **Low Cut, High Cut:** the opposite Cut at the same Slope and Brickwall, at least 6 dB/oct, with Q 0.71 whatever the Cut's own Q.
+- **Stereo Placement:** the region of the part the Band processes, decoded back to where it came from; the rest is silent. A Left Band's Solo is the left channel's region and a silent right; a Side Band's Solo on mono is silent.
+- **Moving Solo** to another Band, or changing the Soloed Band's Stereo Placement, fades the old Solo out before the new one fades in. A Bypassed Band still Solos its region.

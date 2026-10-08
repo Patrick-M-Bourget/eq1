@@ -69,6 +69,11 @@ struct Settings
 {
     std::array<BandSettings, numBandSlots> bands {};
 
+    // The Band Slot (1 to 24) being Soloed, or 0. Solo lasts while the editor holds it: it is not a
+    // host parameter and is never saved. The output is then only the region of the input that Band
+    // works on, on the part of the signal it processes.
+    int soloSlot = 0;
+
     bool operator== (const Settings&) const = default;
 };
 
