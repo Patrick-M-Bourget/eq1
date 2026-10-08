@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -50,6 +51,45 @@ double tiltShelfDb (double f, double frequency, double gain, int order, double q
 double flatTiltDb (double f, double frequency, double gain)
 {
     return gain / std::log2 (20000.0 / 20.0) * std::log2 (f / frequency);
+}
+
+// Low Cut and High Cut: Butterworth of the given order with Frequency at -3 dB, each second-order
+// section's Q scaled by (Q / 0.71)^(1 / sections) as for shelves. Order 32 is Brickwall.
+double cutDb (double f, double frequency, int order, double q, bool lowCut)
+{
+    const int pairs = order / 2;
+    const double resonance = pairs > 0 ? std::pow (q / std::sqrt (0.5), 1.0 / pairs) : 1.0;
+    const std::complex<double> s = lowCut ? std::complex<double> { 0.0, -frequency / f } : std::complex<double> { 0.0, f / frequency };
+
+    std::complex<double> h = 1.0;
+    for (int k = 1; k <= pairs; ++k)
+    {
+        const double sectionQ = resonance / (2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)));
+        h /= s * s + s / sectionQ + 1.0;
+    }
+    if (order % 2 == 1)
+        h /= s + 1.0;
+    return 20.0 * std::log10 (std::abs (h));
+}
+
+// Allowed Cut error in dB, above and below the target, by where Frequency sits relative to Nyquist
+// (docs/dsp/filter-design.md, "Test tolerances"). A steep Cut's dB error at its corner says little,
+// so the target may shift by a twelfth of an octave either way.
+struct CutTolerance
+{
+    double above, below;
+};
+
+CutTolerance cutTolerance (Shape s, double sampleRate, double frequency, double q)
+{
+    const double position = frequency / (sampleRate / 2.0);
+    const int region = position <= 0.45 ? 0 : position <= 0.73 ? 1 : 2;
+    constexpr CutTolerance lowCut[] = { { 1.5, 3.0 }, { 2.0, 3.0 }, { 4.0, 3.0 } };
+    constexpr CutTolerance resonantLowCut[] = { { 4.5, 1.0 }, { 6.0, 1.0 }, { 6.0, 9.0 } };
+    constexpr CutTolerance highCut[] = { { 0.5, 1.0 }, { 1.0, 5.0 }, { 1.0, 12.0 } };
+    if (s == Shape::HighCut)
+        return highCut[region];
+    return q > 2.0 ? resonantLowCut[region] : lowCut[region];
 }
 
 Settings shape (Shape s, double frequency, double gain, double q, double slope)
@@ -147,4 +187,82 @@ TEST_CASE ("Flat Tilt is a straight line in dB per octave through Frequency", "[
         const double error = test::magnitudeDb (response, f, sampleRate) - flatTiltDb (f, frequency, gain);
         REQUIRE (std::abs (error) <= 0.05 + 0.03 * std::abs (gain));
     }
+}
+
+TEST_CASE ("Low Cut and High Cut match their analog targets up to Nyquist at every Slope and Brickwall", "[response]")
+{
+    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
+    const double frequency = GENERATE (20.0, 200.0, 2000.0, 9000.0, 15000.0, 20000.0);
+    const int order = GENERATE (range (1, 17), 32);
+    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0, 10.0, 40.0);
+    const Shape s = GENERATE (Shape::LowCut, Shape::HighCut);
+    if (frequency > 0.91 * sampleRate / 2.0)
+        return;
+
+    // Cuts ignore Gain, so a stored Gain must not show.
+    auto settings = shape (s, frequency, 9.0, q, order == 32 ? 96.0 : 6.0 * order);
+    settings.bands[0].brickwall = order == 32;
+    const auto response = responseOf (sampleRate, settings);
+    const auto tolerance = cutTolerance (s, sampleRate, frequency, q);
+    const double twelfth = std::exp2 (1.0 / 12.0);
+
+    for (double f : test::frequenciesUpToNyquist (sampleRate, 64))
+    {
+        const auto target = [&] (double at) { return cutDb (at, frequency, order, q, s == Shape::LowCut); };
+        const double lowest = std::min ({ target (f / twelfth), target (f), target (f * twelfth) });
+        const double highest = std::max ({ target (f / twelfth), target (f), target (f * twelfth) });
+        const double measured = test::magnitudeDb (response, f, sampleRate);
+
+        CAPTURE (sampleRate, frequency, order, q, static_cast<int> (s), f, target (f), measured);
+        // Never louder than the curve; below -60 dB anything quieter will do.
+        REQUIRE (measured <= std::max (highest, -60.0) + tolerance.above);
+        // Never quieter than the curve while it is still within 24 dB of the passband.
+        if (lowest > -24.0)
+            REQUIRE (measured >= lowest - tolerance.below);
+    }
+}
+
+TEST_CASE ("A Cut at a Slope of 0 passes the signal unchanged")
+{
+    const Shape s = GENERATE (Shape::LowCut, Shape::HighCut);
+    const double slope = GENERATE (0.0, 2.9);
+    const auto response = responseOf (48000.0, shape (s, 1000.0, 12.0, 1.0, slope));
+
+    CAPTURE (static_cast<int> (s), slope);
+    for (size_t i = 0; i < response.size(); ++i)
+        REQUIRE (response[i] == (i == 0 ? 1.0f : 0.0f));
+}
+
+TEST_CASE ("Brickwall has no effect on Shapes other than the Cuts")
+{
+    const Shape s = GENERATE (Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::Notch, Shape::BandPass, Shape::TiltShelf,
+                              Shape::FlatTilt, Shape::AllPass);
+    auto brickwall = shape (s, 1000.0, 9.0, 1.0, 24.0);
+    brickwall.bands[0].brickwall = true;
+
+    const auto with = responseOf (48000.0, brickwall);
+    const auto without = responseOf (48000.0, shape (s, 1000.0, 9.0, 1.0, 24.0));
+
+    CAPTURE (static_cast<int> (s));
+    REQUIRE (with == without);
+}
+
+TEST_CASE ("Cuts stay stable across their whole range, including Frequency above Nyquist")
+{
+    const double sampleRate = GENERATE (44100.0, 96000.0);
+    const double frequency = GENERATE (10.0, 1000.0, 20000.0, 22000.0, 30000.0);
+    const double q = GENERATE (0.025, 0.71, 40.0);
+    const int order = GENERATE (1, 2, 16, 32);
+    const Shape s = GENERATE (Shape::LowCut, Shape::HighCut);
+
+    auto settings = shape (s, frequency, 0.0, q, order == 32 ? 96.0 : 6.0 * order);
+    settings.bands[0].brickwall = order == 32;
+    const auto response = responseOf (sampleRate, settings);
+
+    CAPTURE (sampleRate, frequency, q, order, static_cast<int> (s));
+    REQUIRE (std::all_of (response.begin(), response.end(), [] (float x) { return std::isfinite (x); }));
+    float tailPeak = 0.0f;
+    for (size_t i = response.size() - 4096; i < response.size(); ++i)
+        tailPeak = std::max (tailPeak, std::abs (response[i]));
+    REQUIRE (tailPeak < 1.0e-4f);
 }

@@ -7,6 +7,7 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
 
     python3 tools/filter-lab/filterlab.py bell
     python3 tools/filter-lab/filterlab.py low-shelf --orders 1 2 16 --q 0.71 40
+    python3 tools/filter-lab/filterlab.py high-cut --orders 1 2 16 32 --q 0.71 10
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report().
@@ -101,6 +102,16 @@ def match_section(a: Analog, reference_hz, fs, match_hz=None):
     return c
 
 
+def match_high_pass(a: Analog, reference_hz, fs):
+    """Poles as match_section's, zeros exactly at DC, magnitude matched at the reference."""
+    w = min(2 * PI * reference_hz / fs, 0.98 * PI)
+    c = match_section(Analog(0, 0, 1, a.d2, a.d1, a.d0), reference_hz, fs)
+    c.b0, c.b1, c.b2 = (1, -2, 1) if a.d2 else (1, -1, 0)
+    k = math.sqrt(a.squared(w / (2 * PI) * fs / reference_hz)) / abs(c.response(w))
+    c.b0, c.b1, c.b2 = c.b0 * k, c.b1 * k, c.b2 * k
+    return c
+
+
 def inverse(c: Biquad):
     g = 1 / c.b0
     return Biquad(g, c.a1 * g, c.a2 * g, c.b1 * g, c.b2 * g)
@@ -187,8 +198,40 @@ def flat_tilt(fs, frequency, gain, q=None, order=None, lowest=5.0, highest=40000
     return sections, lambda f: gain / math.log2(1000) * math.log2(f / frequency)
 
 
+def _butterworth_sections(order, q):
+    """Butterworth low-pass, -3 dB at s = 1, Q scaling each second-order section as for shelves."""
+    pairs = order // 2
+    resonance = (q / math.sqrt(0.5)) ** (1 / pairs) if pairs else 1
+    for k in range(1, pairs + 1):
+        sq = resonance / (2 * math.sin((2 * k - 1) * PI / (2 * order)))
+        yield Analog(0, 0, 1, 1, 1 / sq, 1)
+    if order % 2:
+        yield Analog(0, 0, 1, 0, 1, 1)
+
+
+def high_cut(fs, frequency, gain=None, q=0.71, order=2):
+    """Each section matched at its damped natural frequency, held at or below half Nyquist."""
+    sections = []
+    for a in _butterworth_sections(order, q):
+        if a.d2 == 0:
+            sections.append(match_section(a, frequency, fs))
+            continue
+        damped = frequency * math.sqrt(max(1 - a.d1 * a.d1 / 4, 0.01))
+        sections.append(match_section(a, frequency, fs, match_hz=min(damped, fs / 4)))
+    target = list(_butterworth_sections(order, q))
+    return sections, lambda f: _analog_db(target, f, frequency)
+
+
+def low_cut(fs, frequency, gain=None, q=0.71, order=2):
+    """The High Cut mirrored in frequency (s -> 1/s), zeros exactly at DC."""
+    highs = [Analog(0, 1, 0, 0, 1, 1) if a.d2 == 0 else Analog(1, 0, 0, 1, a.d1, 1)
+             for a in _butterworth_sections(order, q)]
+    return [match_high_pass(a, frequency, fs) for a in highs], lambda f: _analog_db(highs, f, frequency)
+
+
 SHAPES = {"bell": bell, "low-shelf": low_shelf, "high-shelf": high_shelf, "tilt-shelf": tilt_shelf,
-          "flat-tilt": flat_tilt}
+          "flat-tilt": flat_tilt, "low-cut": low_cut, "high-cut": high_cut}
+CUTS = {"low-cut", "high-cut"}
 
 
 # --- Report (the Engine tests' error measure) ----------------------------------------------------
@@ -227,10 +270,40 @@ def report(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {q:>6}  {share:6.1%} {error:6.2f}   fs={fs} F={frequency} G={gain} order={order}")
 
 
+def report_cut(shape, sample_rates=(44100, 48000, 96000),
+               frequencies=(20, 200, 2000, 9000, 15000, 20000), qs=(0.71,), orders=(2,), points=200):
+    """Worst error per (position band, Q) in dB, against the target shifted up to 1/12 octave either
+    way: above it (louder, or above -60 dB where the target is below) and below it (where the target
+    is above -24 dB). Order 32 is Brickwall."""
+    worst = {}
+    r = 2 ** (1 / 12)
+    for fs in sample_rates:
+        for frequency in frequencies:
+            if frequency > 0.91 * fs / 2:
+                continue
+            for q in qs:
+                for order in orders:
+                    sections, target = shape(fs, frequency, None, q, order)
+                    for i in range(points + 1):
+                        f = 10 * (fs / 2 / 10) ** (i / points)
+                        near = [target(f / r), target(f), target(f * r)]
+                        h = 1
+                        for s in sections:
+                            h *= s.response(2 * PI * f / fs)
+                        measured = 20 * math.log10(max(abs(h), 1e-30))
+                        above = measured - max(max(near), -60)
+                        below = min(near) - measured if min(near) > -24 else 0
+                        w = worst.setdefault((position_band(frequency, fs), q), [0, 0])
+                        w[0], w[1] = max(w[0], above), max(w[1], below)
+    print(f"{'band':>7} {'Q':>6}  {'above':>6} {'below':>6}")
+    for (band, q), (above, below) in sorted(worst.items()):
+        print(f"{band:>7} {q:>6}  {above:6.2f} {below:6.2f}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("shape", choices=SHAPES)
     parser.add_argument("--q", type=float, nargs="+", default=[0.71])
     parser.add_argument("--orders", type=int, nargs="+", default=[2])
     args = parser.parse_args()
-    report(SHAPES[args.shape], qs=args.q, orders=args.orders)
+    (report_cut if args.shape in CUTS else report)(SHAPES[args.shape], qs=args.q, orders=args.orders)

@@ -11,6 +11,8 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
   - A first-order section matches at DC and Nyquist only.
   - Above 0.98 × Nyquist, the pole frequency and the match point are held just below Nyquist.
 - **Design direction:** each section is designed in the direction whose poles sit at or below Frequency, where the matched z-transform is accurate, and inverted for the other direction. Bells and Low Shelves are designed as boosts; High Shelves as cuts.
+- **Low Cut sections:** the three-point match can't place a double zero exactly at DC, which leaves the stopband tens of dB too loud. So a Low Cut section keeps the matched poles, fixes its zeros at DC, (1 − z⁻¹)² or (1 − z⁻¹), and is scaled to the analog magnitude at Frequency.
+- **High Cut sections:** each is matched at its damped natural frequency, Frequency × √(1 − 1/(4Q²)) (at least 0.1 × Frequency, for sections with Q below 0.5), held at or below half Nyquist. Matching at Frequency instead bulges the passband by up to 35 dB near Nyquist at Brickwall; this way a High Cut rolls off early there instead of boosting.
 - **Why one biquad can't be exact:** a biquad's response is flat at Nyquist, while a high or wide analog curve is still sloping there. A single section cannot match it exactly near Nyquist. RBJ bilinear Bells miss by 85–100% on the Bell test's grid.
 
 ## Analog targets
@@ -65,6 +67,16 @@ The Engine tests (`tests/engine/BellResponseTest.cpp`, `tests/engine/ShapeRespon
 | Shelves, Q > 2 (share of the curve's span in dB) | 75% | 75% | 75% + 0.6 dB |
 
 - **Flat Tilt:** within 0.05 dB + 3% of |Gain| of the line, from 20 Hz to 30 kHz or 0.9 × Nyquist, whichever is lower.
+- **Low Cut, High Cut:** a Cut's span in dB is unbounded and its corner too steep for a dB error to mean much, so they are bounded in dB above and below the target, which may shift by 1/12 octave either way. Above: never louder than the target, or than −60 dB where the target is below it. Below: only where the target is above −24 dB, since cutting deeper in the stopband is harmless. Every whole-order Slope and Brickwall, Q 0.1 to 40.
+
+| Cut (dB above / below) | Up to 0.45 × Nyquist | Up to 0.73 × Nyquist | Up to 0.91 × Nyquist |
+| --- | --- | --- | --- |
+| Low Cut, Q ≤ 2 | 1.5 / 3 | 2 / 3 | 4 / 3 |
+| Low Cut, Q > 2 | 4.5 / 1 | 6 / 1 | 6 / 9 |
+| High Cut | 0.5 / 1 | 1 / 5 | 1 / 12 |
+
+- **Resonant Low Cuts (Q above 2):** the resonance's slow fall above Frequency still slopes at Nyquist, where a biquad is flat.
+- **High Cuts near Nyquist:** they roll off early, up to 11 dB below the target just under Frequency at 0.91 × Nyquist (see "High Cut sections").
 - **Resonant shelves (Q above 2):** the bound is loose because a single matched biquad cannot follow a section whose zeros and poles are both sharp.
 
 ## Open work

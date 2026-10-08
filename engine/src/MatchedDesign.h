@@ -14,9 +14,14 @@ struct AnalogSection
 };
 
 // The decramped digital section (ADR 0001): poles by the matched z-transform of the analog poles,
-// numerator chosen so the magnitude equals the analog section's at DC, at the reference frequency
-// and at Nyquist (first-order sections: at DC and Nyquist).
+// numerator chosen so the magnitude equals the analog section's at DC, at matchFrequency (by default
+// the reference frequency) and at Nyquist (first-order sections: at DC and Nyquist).
 BiquadCoefficients matchSection (const AnalogSection& section, double referenceFrequency, double sampleRate);
+BiquadCoefficients matchSection (const AnalogSection& section, double referenceFrequency, double sampleRate, double matchFrequency);
+
+// A high-pass section, s^2 / (d2 s^2 + d1 s + d0) or s / (d1 s + d0): the poles as matchSection's,
+// the zeros exactly at DC, and the magnitude equal to the analog section's at the reference frequency.
+BiquadCoefficients matchHighPass (const AnalogSection& section, double referenceFrequency, double sampleRate);
 
 // The section with its poles and zeros swapped, so its magnitude is the reciprocal.
 BiquadCoefficients inverse (const BiquadCoefficients& c);

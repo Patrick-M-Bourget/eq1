@@ -148,13 +148,15 @@ TEST_CASE ("Putting a Band slot in and out of use does not click")
 TEST_CASE ("Changing Shape does not click")
 {
     const auto host = anyHost();
-    CAPTURE (host.sampleRate, host.blockSize);
-    const auto output = playTone (host, [] (double time, Settings& s) {
+    const bool brickwall = GENERATE (false, true);
+    CAPTURE (host.sampleRate, host.blockSize, brickwall);
+    const auto output = playTone (host, [brickwall] (double time, Settings& s) {
         // Every Shape, including those not built yet, which pass the signal unchanged.
         constexpr Shape shapes[] = { Shape::LowShelf, Shape::LowCut,   Shape::HighShelf, Shape::HighCut, Shape::Notch,
                                      Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt, Shape::AllPass, Shape::Bell };
         s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
         s.bands[0].shape = time < onsetSeconds ? Shape::Bell : shapes[static_cast<int> ((time - onsetSeconds) / 0.05) % 10];
+        s.bands[0].brickwall = brickwall;
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
 }
@@ -167,6 +169,39 @@ TEST_CASE ("Changing Slope does not click")
         s.bands[0] = bellBand (toneFrequency, -18.0, 1.0);
         s.bands[0].shape = Shape::LowShelf;
         s.bands[0].slope = alternating (time) ? 96.0 : 6.0;
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("A Cut swept block by block does not zipper")
+{
+    const auto host = anyHost();
+    const Shape cut = GENERATE (Shape::LowCut, Shape::HighCut);
+    const bool brickwall = GENERATE (false, true);
+    CAPTURE (host.sampleRate, host.blockSize, static_cast<int> (cut), brickwall);
+    // A 192 dB/oct Brickwall swept through the tone as fast as the Bell sweep reshapes it faster than
+    // a sine turns, even with settings changed every sample, so it is swept a third as fast.
+    const double speed = brickwall ? 5.0 : 15.0;
+    const auto output = playTone (host, [&] (double time, Settings& s) {
+        const double position = 0.5 + 0.5 * std::sin (time * speed);
+        s.bands[0] = bellBand (50.0 * std::pow (40.0, position), 0.0, 0.3 * std::pow (30.0, position));
+        s.bands[0].shape = cut;
+        s.bands[0].slope = 6.0 + 90.0 * position;
+        s.bands[0].brickwall = brickwall;
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Switching a Cut's Brickwall does not click")
+{
+    const auto host = anyHost();
+    const Shape cut = GENERATE (Shape::LowCut, Shape::HighCut);
+    CAPTURE (host.sampleRate, host.blockSize, static_cast<int> (cut));
+    const auto output = playTone (host, [&] (double time, Settings& s) {
+        s.bands[0] = bellBand (cut == Shape::LowCut ? 100.0 : 400.0, 0.0, 1.0);
+        s.bands[0].shape = cut;
+        s.bands[0].slope = 12.0;
+        s.bands[0].brickwall = alternating (time);
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
 }

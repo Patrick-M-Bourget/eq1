@@ -17,8 +17,10 @@ namespace
 constexpr double tiltLowest = 5.0, tiltHighest = 40000.0;
 constexpr int tiltSections = 13;
 static_assert (tiltSections <= maxSections);
-constexpr int maxShelfOrder = 16; // 96 dB/oct
-static_assert (maxShelfOrder / 2 + maxShelfOrder % 2 <= maxSections);
+constexpr int maxSlopeOrder = 16;    // 96 dB/oct
+constexpr int brickwallOrder = 32; // about 192 dB/oct: the most the section limit allows
+static_assert (maxSlopeOrder / 2 + maxSlopeOrder % 2 <= maxSections);
+static_assert (brickwallOrder / 2 <= maxSections);
 
 double decibelsToGain (double db) { return std::pow (10.0, db / 20.0); }
 
@@ -85,6 +87,54 @@ Cascade designHighShelf (const ShapeParameters& p, double sampleRate)
         const AnalogSection cut { boost.d2, boost.d1, boost.d0, boost.n2, boost.n1, boost.n0 };
         const auto designed = matchSection (cut, p.frequency, sampleRate);
         add (cascade, p.gain >= 0.0 ? inverse (designed) : designed);
+    });
+    return cascade;
+}
+
+// The analog sections of a Butterworth low-pass of the given order, -3 dB at s = 1. Q scales each
+// second-order section's Q as for shelves.
+template <typename Use>
+void butterworthSections (int order, double q, Use use)
+{
+    const int pairs = order / 2;
+    const double resonance = pairs > 0 ? std::pow (q / std::sqrt (0.5), 1.0 / pairs) : 1.0;
+    for (int k = 1; k <= pairs; ++k)
+    {
+        const double sectionQ = resonance / (2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)));
+        use (AnalogSection { 0.0, 0.0, 1.0, 1.0, 1.0 / sectionQ, 1.0 });
+    }
+    if (order % 2 == 1)
+        use (AnalogSection { 0.0, 0.0, 1.0, 0.0, 1.0, 1.0 });
+}
+
+// High Cut: each section matched at its damped natural frequency, which keeps the passband from
+// bulging near Nyquist (at least 0.1 x Frequency, for sections with Q below 0.5). The match point is
+// held at or below half Nyquist, where a High Cut would otherwise boost before it cuts: it rolls off
+// early instead.
+Cascade designHighCut (const ShapeParameters& p, double sampleRate)
+{
+    Cascade cascade;
+    butterworthSections (p.structure.order, p.q, [&] (const AnalogSection& section) {
+        if (section.d2 == 0.0)
+        {
+            add (cascade, matchSection (section, p.frequency, sampleRate));
+            return;
+        }
+        const double sectionQ = 1.0 / section.d1;
+        const double damped = p.frequency * std::sqrt (std::max (1.0 - 1.0 / (4.0 * sectionQ * sectionQ), 0.01));
+        add (cascade, matchSection (section, p.frequency, sampleRate, std::min (damped, sampleRate / 4.0)));
+    });
+    return cascade;
+}
+
+// Low Cut: the High Cut mirrored in frequency (s -> 1/s), with its zeros exactly at DC.
+Cascade designLowCut (const ShapeParameters& p, double sampleRate)
+{
+    Cascade cascade;
+    butterworthSections (p.structure.order, p.q, [&] (const AnalogSection& low) {
+        const AnalogSection high = low.d2 == 0.0 ? AnalogSection { 0.0, 1.0, 0.0, 0.0, 1.0, 1.0 }
+                                                 : AnalogSection { 1.0, 0.0, 0.0, 1.0, low.d1, 1.0 };
+        add (cascade, matchHighPass (high, p.frequency, sampleRate));
     });
     return cascade;
 }
@@ -167,15 +217,18 @@ Cascade interpolate (const Cascade& from, const Cascade& to, double amount)
 
 Structure structureOf (const BandSettings& settings)
 {
-    // Only the shelves' filters depend on Slope so far; Bell Slope is #19, the Cuts #21 and #22.
-    const bool usesSlope = settings.shape == Shape::LowShelf || settings.shape == Shape::HighShelf
+    // Only the shelves' and Cuts' filters depend on Slope so far; Bell Slope is #19, the rest #22.
+    const bool cut = settings.shape == Shape::LowCut || settings.shape == Shape::HighCut;
+    const bool usesSlope = cut || settings.shape == Shape::LowShelf || settings.shape == Shape::HighShelf
                            || settings.shape == Shape::TiltShelf;
     if (! usesSlope)
         return { settings.shape, 0 };
+    if (cut && settings.brickwall)
+        return { settings.shape, brickwallOrder };
 
     // The stored Slope is raised to the Shape's minimum and rounded to the nearest whole order
     // (ADR 0003; docs/dsp/filter-design.md, "Slopes between whole orders").
-    const double slope = std::clamp (settings.slope, minimumSlope (settings.shape), 6.0 * maxShelfOrder);
+    const double slope = std::clamp (settings.slope, minimumSlope (settings.shape), 6.0 * maxSlopeOrder);
     return { settings.shape, static_cast<int> (std::lround (slope / 6.0)) };
 }
 
@@ -188,9 +241,9 @@ Cascade designShape (const ShapeParameters& p, double sampleRate)
         case Shape::HighShelf: return designHighShelf (p, sampleRate);
         case Shape::TiltShelf: return designTiltShelf (p, sampleRate);
         case Shape::FlatTilt: return designFlatTilt (p, sampleRate);
+        case Shape::LowCut: return designLowCut (p, sampleRate);
+        case Shape::HighCut: return designHighCut (p, sampleRate);
         // Not built yet: no sections, so the signal passes unchanged.
-        case Shape::LowCut:
-        case Shape::HighCut:
         case Shape::Notch:
         case Shape::BandPass:
         case Shape::AllPass: return {};

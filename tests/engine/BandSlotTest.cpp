@@ -185,13 +185,20 @@ TEST_CASE ("Switching Shape and back restores a Slope below the other Shape's mi
                        responseOf (withBand (Shape::LowShelf, 6.0, 6.0)));
 }
 
-TEST_CASE ("A Shape not built yet passes the signal unchanged, and switching back restores the Gain")
+TEST_CASE ("A Shape not built yet passes the signal unchanged")
 {
-    const Shape unbuilt = GENERATE (Shape::LowCut, Shape::HighCut, Shape::Notch, Shape::BandPass, Shape::AllPass);
+    const Shape unbuilt = GENERATE (Shape::Notch, Shape::BandPass, Shape::AllPass);
     CAPTURE (static_cast<int> (unbuilt));
 
     CHECK (isUnitImpulse (responseOf (withBand (unbuilt, 6.0, 12.0))));
-    const auto restored = responseAfter ({ withBand (Shape::Bell, 6.0, 12.0), withBand (unbuilt, 6.0, 12.0), withBand (Shape::Bell, 6.0, 12.0) });
+}
+
+TEST_CASE ("Switching to a Shape without Gain and back restores the Gain")
+{
+    const Shape withoutGain = GENERATE (Shape::LowCut, Shape::HighCut, Shape::Notch, Shape::BandPass, Shape::AllPass);
+    CAPTURE (static_cast<int> (withoutGain));
+
+    const auto restored = responseAfter ({ withBand (Shape::Bell, 6.0, 12.0), withBand (withoutGain, 6.0, 12.0), withBand (Shape::Bell, 6.0, 12.0) });
     CHECK_THAT (test::magnitudeDb (restored, 1000.0, sampleRate), WithinAbs (6.0, 0.01));
     checkSameResponse (restored, responseOf (withBand (Shape::Bell, 6.0, 12.0)));
 }

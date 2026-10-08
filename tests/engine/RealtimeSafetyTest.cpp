@@ -47,3 +47,31 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
 
     REQUIRE (guard.allocations() == 0);
 }
+
+TEST_CASE ("Engine does not allocate with 24 Brickwall Bands")
+{
+    constexpr int blockSize = 512;
+    Engine engine;
+    engine.prepare (48000.0, blockSize, 2);
+
+    std::vector<float> left (blockSize, 0.5f), right (blockSize, -0.5f);
+    float* main[] = { left.data(), right.data() };
+
+    Settings settings;
+    test::AllocationGuard guard;
+    for (int block = 0; block < 64; ++block)
+    {
+        // Gliding Frequency and Q, and Brickwall switching on and off, on both Cuts.
+        for (size_t slot = 0; slot < settings.bands.size(); ++slot)
+            settings.bands[slot] = { .inUse = true,
+                                     .shape = slot % 2 == 0 ? Shape::LowCut : Shape::HighCut,
+                                     .frequency = 100.0 + 300.0 * block + 10.0 * static_cast<double> (slot),
+                                     .q = 0.5 + 0.1 * block,
+                                     .slope = 96.0,
+                                     .brickwall = block % 16 != 15 };
+        engine.setSettings (settings);
+        engine.process ({ main, 2, blockSize });
+    }
+
+    REQUIRE (guard.allocations() == 0);
+}
