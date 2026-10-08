@@ -10,16 +10,14 @@ Real-time EQ plugin (VST3, AU, AAX, CLAP and Standalone) for macOS Universal and
 
 ## Build and test
 
-Dependencies (JUCE, clap-juce-extensions, Catch2) are fetched by CMake.
+`scripts/check.sh` runs everything CI runs:
+- builds every format (macOS Universal or Windows x64);
+- runs the Engine and Plugin Shell tests;
+- runs the Engine tests under ThreadSanitizer (macOS only);
+- validates the plugins with pluginval, auval and clap-validator.
 
-```sh
-# macOS Universal
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-# Windows x64
-cmake -S . -B build -A x64
+Run one part with `scripts/check.sh build|test|tsan|validate`. CMake fetches the dependencies (JUCE, clap-juce-extensions, Catch2) into `.deps/`. The validators are fetched there too, with an authenticated `gh`.
 
-cmake --build build --config Release --parallel
-ctest --test-dir build -C Release --output-on-failure
-```
+Plugins land in `build/plugin/eq1_artefacts/Release/`. AAX is built unsigned and can only be loaded in Pro Tools Developer.
 
-Plugins land in `build/plugin/eq1_artefacts/Release/`. CI (`.github/workflows/ci.yml`) also runs pluginval on VST3 and AU and clap-validator on CLAP. AAX is built unsigned and can only be loaded in Pro Tools Developer.
+Filter design notes are in `docs/dsp/filter-design.md`, with a Python lab for trying designs in `tools/filter-lab/`.

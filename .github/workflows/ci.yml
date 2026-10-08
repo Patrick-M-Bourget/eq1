@@ -9,11 +9,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PLUGINVAL_VERSION: v1.0.4
-  CLAP_VALIDATOR_VERSION: 0.4.1
-  ARTEFACTS: build/plugin/eq1_artefacts/Release
-
+# Each step runs one part of scripts/check.sh, so a local run of the script checks what CI checks.
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -24,15 +20,14 @@ jobs:
         include:
           - name: macOS Universal
             os: macos-latest
-            configure: -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
           - name: Windows x64
             os: windows-latest
-            configure: -A x64
     defaults:
       run:
         shell: bash
     env:
       FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.deps
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,82 +36,31 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja
 
-      - name: Cache dependencies
+      - name: Cache dependencies and validators
         uses: actions/cache@v4
         with:
           path: .deps
-          key: deps-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
-
-      - name: Configure
-        run: cmake -S . -B build ${{ matrix.configure }} "-DFETCHCONTENT_BASE_DIR=$FETCHCONTENT_BASE_DIR"
+          key: deps-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**', 'scripts/check.sh') }}
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: scripts/check.sh build
 
       - name: Engine and Plugin Shell tests
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: scripts/check.sh test
 
       - name: Engine tests under ThreadSanitizer
-        # Catches data races in the lock-free settings handoff and the analysis taps. The frequency
-        # response grids ([response]) run single-threaded, so they are left to the normal run.
         if: runner.os == 'macOS'
-        run: |
-          cmake -S . -B build-tsan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_BUILD_PLUGIN=OFF \
-            "-DFETCHCONTENT_BASE_DIR=$FETCHCONTENT_BASE_DIR" \
-            -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
-          cmake --build build-tsan --parallel
-          TSAN_OPTIONS=halt_on_error=1 ctest --test-dir build-tsan --output-on-failure -LE response
+        run: scripts/check.sh tsan
 
-      - name: Download validators
-        run: |
-          mkdir -p validators && cd validators
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            gh release download "$PLUGINVAL_VERSION" -R Tracktion/pluginval -p pluginval_macOS.zip
-            unzip -q pluginval_macOS.zip
-            echo "PLUGINVAL=$PWD/pluginval.app/Contents/MacOS/pluginval" >> "$GITHUB_ENV"
-            gh release download "$CLAP_VALIDATOR_VERSION" -R free-audio/clap-validator -p '*macos-universal.zip'
-            unzip -q ./*macos-universal.zip && tar xzf ./*.tar.gz
-            echo "CLAP_VALIDATOR=$PWD/binaries/clap-validator" >> "$GITHUB_ENV"
-          else
-            gh release download "$PLUGINVAL_VERSION" -R Tracktion/pluginval -p pluginval_Windows.zip
-            unzip -q pluginval_Windows.zip
-            echo "PLUGINVAL=$PWD/pluginval.exe" >> "$GITHUB_ENV"
-            gh release download "$CLAP_VALIDATOR_VERSION" -R free-audio/clap-validator -p '*windows.zip'
-            unzip -q ./*windows.zip
-            echo "CLAP_VALIDATOR=$PWD/clap-validator.exe" >> "$GITHUB_ENV"
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: pluginval VST3
-        run: '"$PLUGINVAL" --strictness-level 10 --validate-in-process --validate "$ARTEFACTS/VST3/eq1.vst3"'
-
-      - name: pluginval AU
-        if: runner.os == 'macOS'
-        run: |
-          # macOS only finds an AU once it is installed and registered.
-          mkdir -p ~/Library/Audio/Plug-Ins/Components
-          cp -R "$ARTEFACTS/AU/eq1.component" ~/Library/Audio/Plug-Ins/Components/
-          killall -9 AudioComponentRegistrar || true
-          auval -v aufx Eq01 Pmbg
-          "$PLUGINVAL" --strictness-level 10 --validate-in-process --validate ~/Library/Audio/Plug-Ins/Components/eq1.component
-
-      - name: clap-validator CLAP
-        run: '"$CLAP_VALIDATOR" validate --only-failed "$ARTEFACTS/CLAP/eq1.clap"'
-
-      - name: AAX and Standalone built
-        # AAX can only be hosted by Pro Tools, and Avid's validator needs a developer account (#16),
-        # so CI checks the unsigned AAX builds.
-        run: |
-          test -d "$ARTEFACTS/AAX/eq1.aaxplugin"
-          if [ "$RUNNER_OS" = "macOS" ]; then test -d "$ARTEFACTS/Standalone/eq1.app"; else test -f "$ARTEFACTS/Standalone/eq1.exe"; fi
+      - name: Validate plugins (pluginval, auval, clap-validator, AAX and Standalone built)
+        run: scripts/check.sh validate
 
       - uses: actions/upload-artifact@v4
         with:
           name: eq1-${{ runner.os }}
           path: |
-            ${{ env.ARTEFACTS }}/VST3
-            ${{ env.ARTEFACTS }}/AU
-            ${{ env.ARTEFACTS }}/AAX
-            ${{ env.ARTEFACTS }}/CLAP
-            ${{ env.ARTEFACTS }}/Standalone
+            build/plugin/eq1_artefacts/Release/VST3
+            build/plugin/eq1_artefacts/Release/AU
+            build/plugin/eq1_artefacts/Release/AAX
+            build/plugin/eq1_artefacts/Release/CLAP
+            build/plugin/eq1_artefacts/Release/Standalone

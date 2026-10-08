@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <map>
-#include <utility>
 #include <numbers>
 
 using Catch::Matchers::WithinAbs;
@@ -79,30 +78,61 @@ TEST_CASE ("Moving the Bell's Gain changes the sound at its Frequency")
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (-9.0, 0.1));
 }
 
-TEST_CASE ("All 24 Band slots are exposed to the host with stable IDs and readable names")
+TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defaults and choices")
 {
+    // Hosts store parameter IDs in sessions and automation as normalised (0 to 1) values, so after
+    // release every field below is frozen: changing one remaps users' saved automation. A change
+    // here must be deliberate and say so in its commit.
+    struct Control
+    {
+        const char* suffix;
+        const char* name;
+        const char* label;
+        float start, end, interval;
+        float defaultValue;
+        float valueAtHalfway; // pins the mapping between normalised and plain values
+        juce::StringArray choices;
+    };
+    const Control controls[] = {
+        { "frequency", "Frequency", "Hz", 10.0f, 30000.0f, 0.0f, 1000.0f, 547.7226f, {} },
+        { "gain", "Gain", "dB", -30.0f, 30.0f, 0.0f, 0.0f, 0.0f, {} },
+        { "q", "Q", "", 0.025f, 40.0f, 0.0f, 1.0f, 1.0f, {} },
+        { "in_use", "In Use", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
+        { "bypass", "Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
+        { "shape", "Shape", "", 0.0f, 4.0f, 1.0f, 0.0f, 2.0f, { "Bell", "Low Shelf", "High Shelf", "Tilt Shelf", "Flat Tilt" } },
+        { "slope", "Slope", "dB/oct", 6.0f, 96.0f, 6.0f, 12.0f, 54.0f, {} },
+    };
+
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
 
-    // These IDs are stored in hosts' sessions and automation: they must never change.
-    const std::pair<const char*, const char*> controls[] = {
-        { "frequency", "Frequency" }, { "gain", "Gain" }, { "q", "Q" },          { "in_use", "In Use" },
-        { "bypass", "Bypass" },       { "shape", "Shape" }, { "slope", "Slope" },
-    };
-
-    std::map<juce::String, juce::String> names;
+    std::map<juce::String, juce::RangedAudioParameter*> parameters;
     for (auto* parameter : processor.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
-            names[ranged->getParameterID()] = ranged->getName (100);
+            parameters[ranged->getParameterID()] = ranged;
 
-    CHECK (names.size() == 24 * std::size (controls));
+    CHECK (parameters.size() == 24 * std::size (controls));
     for (int slot = 1; slot <= 24; ++slot)
-        for (const auto& [suffix, name] : controls)
+        for (const auto& control : controls)
         {
-            const auto id = "band" + juce::String (slot) + "_" + suffix;
+            const auto id = "band" + juce::String (slot) + "_" + control.suffix;
             CAPTURE (id);
-            REQUIRE (names.contains (id));
-            CHECK (names[id] == "Band " + juce::String (slot) + " " + name);
+            REQUIRE (parameters.contains (id));
+            auto* parameter = parameters[id];
+            const auto& range = parameter->getNormalisableRange();
+
+            CHECK (parameter->getName (100) == "Band " + juce::String (slot) + " " + control.name);
+            CHECK (parameter->getLabel() == control.label);
+            CHECK (range.start == control.start);
+            CHECK (range.end == control.end);
+            CHECK (range.interval == control.interval);
+            CHECK_THAT (parameter->convertFrom0to1 (parameter->getDefaultValue()), WithinAbs (control.defaultValue, 1.0e-4));
+            CHECK_THAT (parameter->convertFrom0to1 (0.5f), WithinAbs (control.valueAtHalfway, 1.0e-3));
+
+            auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter);
+            CHECK ((choice != nullptr) == ! control.choices.isEmpty());
+            if (choice != nullptr)
+                CHECK (choice->choices == control.choices);
         }
 }
 

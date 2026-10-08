@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
+#
+#   scripts/check.sh            build, test, tsan and validate
+#   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64)
+#   scripts/check.sh test       Engine and Plugin Shell tests
+#   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
+#   scripts/check.sh validate   pluginval (VST3, AU), auval, clap-validator, AAX and Standalone built
+#
+# BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden. Validators
+# are downloaded into the dependencies folder with gh, which needs to be authenticated (GH_TOKEN in CI).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+BUILD_DIR=${BUILD_DIR:-build}
+DEPS=${FETCHCONTENT_BASE_DIR:-$PWD/.deps}
+PLUGINVAL_VERSION=v1.0.4
+CLAP_VALIDATOR_VERSION=0.4.1
+ARTEFACTS=$BUILD_DIR/plugin/eq1_artefacts/Release
+
+case "$(uname -s)" in
+    Darwin) os=macos ;;
+    MINGW* | MSYS* | CYGWIN*) os=windows; DEPS=$(cygpath -m "$DEPS") ;;
+    *) echo "eq1 builds on macOS and Windows only" >&2; exit 1 ;;
+esac
+
+step() { printf '\n== %s\n' "$*"; }
+
+build() {
+    step "Build ($os)"
+    if [ "$os" = macos ]; then
+        cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+            "-DFETCHCONTENT_BASE_DIR=$DEPS"
+    else
+        cmake -S . -B "$BUILD_DIR" -A x64 "-DFETCHCONTENT_BASE_DIR=$DEPS"
+    fi
+    cmake --build "$BUILD_DIR" --config Release --parallel
+}
+
+run_tests() {
+    step "Engine and Plugin Shell tests"
+    ctest --test-dir "$BUILD_DIR" -C Release --output-on-failure
+}
+
+tsan() {
+    if [ "$os" != macos ]; then
+        echo "ThreadSanitizer runs on macOS only; skipped"
+        return
+    fi
+    # Catches data races in the lock-free settings handoff and the analysis taps. The frequency
+    # response grids ([response]) run single-threaded, so they are left to the normal run.
+    step "Engine tests under ThreadSanitizer"
+    cmake -S . -B "$BUILD_DIR-tsan" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_BUILD_PLUGIN=OFF \
+        "-DFETCHCONTENT_BASE_DIR=$DEPS" -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+    cmake --build "$BUILD_DIR-tsan" --parallel
+    TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE response
+}
+
+fetch_validators() {
+    local dir="$DEPS/validators/$os-$PLUGINVAL_VERSION-$CLAP_VALIDATOR_VERSION"
+    if [ ! -d "$dir" ]; then
+        mkdir -p "$dir.partial"
+        (
+            cd "$dir.partial"
+            if [ "$os" = macos ]; then
+                gh release download "$PLUGINVAL_VERSION" -R Tracktion/pluginval -p pluginval_macOS.zip
+                gh release download "$CLAP_VALIDATOR_VERSION" -R free-audio/clap-validator -p '*macos-universal.zip'
+                unzip -q pluginval_macOS.zip
+                unzip -q ./*macos-universal.zip && tar xzf ./*.tar.gz
+            else
+                gh release download "$PLUGINVAL_VERSION" -R Tracktion/pluginval -p pluginval_Windows.zip
+                gh release download "$CLAP_VALIDATOR_VERSION" -R free-audio/clap-validator -p '*windows.zip'
+                unzip -q pluginval_Windows.zip
+                unzip -q ./*windows.zip
+            fi
+        )
+        mv "$dir.partial" "$dir"
+    fi
+    if [ "$os" = macos ]; then
+        PLUGINVAL="$dir/pluginval.app/Contents/MacOS/pluginval"
+        CLAP_VALIDATOR="$dir/binaries/clap-validator"
+    else
+        PLUGINVAL="$dir/pluginval.exe"
+        CLAP_VALIDATOR="$dir/clap-validator.exe"
+    fi
+}
+
+pluginval() { "$PLUGINVAL" --strictness-level 10 --validate-in-process --validate "$1"; }
+
+# macOS only finds an AU once it is installed and registered: install it for the check, and remove
+# it on the way out whether or not the check passes (a subshell, so the EXIT trap stays local).
+validate_au() (
+    components="$HOME/Library/Audio/Plug-Ins/Components"
+    if [ -e "$components/eq1.component" ]; then
+        echo "$components/eq1.component already exists; remove it to validate the AU" >&2
+        exit 1
+    fi
+    mkdir -p "$components"
+    trap 'rm -rf "$components/eq1.component"; killall -9 AudioComponentRegistrar 2>/dev/null || true' EXIT
+    cp -R "$ARTEFACTS/AU/eq1.component" "$components/"
+    killall -9 AudioComponentRegistrar 2>/dev/null || true
+    auval -v aufx Eq01 Pmbg
+    pluginval "$components/eq1.component"
+)
+
+validate() {
+    fetch_validators
+    step "pluginval VST3"
+    pluginval "$ARTEFACTS/VST3/eq1.vst3"
+    if [ "$os" = macos ]; then
+        step "auval and pluginval AU"
+        validate_au
+    fi
+    step "clap-validator CLAP"
+    "$CLAP_VALIDATOR" validate --only-failed "$ARTEFACTS/CLAP/eq1.clap"
+    # AAX can only be hosted by Pro Tools, and Avid's validator needs a developer account (#16),
+    # so the unsigned AAX build is only checked to exist.
+    step "AAX and Standalone built"
+    test -d "$ARTEFACTS/AAX/eq1.aaxplugin"
+    if [ "$os" = macos ]; then test -d "$ARTEFACTS/Standalone/eq1.app"; else test -f "$ARTEFACTS/Standalone/eq1.exe"; fi
+    echo "AAX and Standalone present"
+}
+
+case "${1:-all}" in
+    build) build ;;
+    test) run_tests ;;
+    tsan) tsan ;;
+    validate) validate ;;
+    all) build; run_tests; tsan; validate ;;
+    *) sed -n '2,10p' "$0" >&2; exit 2 ;;
+esac
