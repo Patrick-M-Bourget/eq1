@@ -2,7 +2,8 @@
 add_library(eq1_engine STATIC
     src/Engine.cpp
     src/Band.cpp
-    src/BellDesign.cpp
+    src/MatchedDesign.cpp
+    src/ShapeDesign.cpp
 )
 add_library(eq1::engine ALIAS eq1_engine)
 

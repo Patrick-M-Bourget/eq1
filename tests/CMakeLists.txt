@@ -16,9 +16,10 @@ add_executable(eq1_engine_tests
     engine/ClickFreeTest.cpp
     engine/RealtimeSafetyTest.cpp
     engine/SettingsHandoffTest.cpp
+    engine/ShapeResponseTest.cpp
 )
 target_link_libraries(eq1_engine_tests PRIVATE eq1::engine Catch2::Catch2WithMain)
-catch_discover_tests(eq1_engine_tests)
+catch_discover_tests(eq1_engine_tests ADD_TAGS_AS_LABELS)
 
 if(EQ1_BUILD_PLUGIN)
     # Host-level checks drive the Plugin Shell the way a host does.

@@ -103,3 +103,31 @@ TEST_CASE ("Bypass removes a Band's effect without discarding its settings")
     CHECK_THAT (test::magnitudeDb (restored, 100.0, sampleRate),
                 WithinAbs (test::magnitudeDb (responseOf (active), 100.0, sampleRate), 0.001));
 }
+
+TEST_CASE ("Changing Shape keeps the Band's Frequency, Gain and Q")
+{
+    Settings bellSettings;
+    bellSettings.bands[2] = bellBand (700.0, -8.0, 3.0);
+    Settings shelfSettings = bellSettings;
+    shelfSettings.bands[2].shape = Shape::HighShelf;
+
+    Engine engine;
+    engine.prepare (sampleRate, 4096, 1);
+    engine.setSettings (bellSettings);
+    settle (engine);
+    engine.setSettings (shelfSettings);
+    settle (engine);
+    const auto asShelf = test::impulseResponse (engine);
+    engine.setSettings (bellSettings);
+    settle (engine);
+    const auto backToBell = test::impulseResponse (engine);
+
+    const auto shelf = responseOf (shelfSettings);
+    const auto bell = responseOf (bellSettings);
+    for (double f : test::frequenciesUpToNyquist (sampleRate, 32))
+    {
+        CAPTURE (f);
+        CHECK_THAT (test::magnitudeDb (asShelf, f, sampleRate), WithinAbs (test::magnitudeDb (shelf, f, sampleRate), 0.001));
+        CHECK_THAT (test::magnitudeDb (backToBell, f, sampleRate), WithinAbs (test::magnitudeDb (bell, f, sampleRate), 0.001));
+    }
+}

@@ -27,7 +27,7 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
     test::AllocationGuard guard;
     for (int block = 0; block < 64; ++block)
     {
-        // Glides, crossfades and slots coming in and out of use, all at once.
+        // Glides, crossfades, Shape and Slope changes and slots coming in and out of use, all at once.
         for (size_t slot = 0; slot < settings.bands.size(); ++slot)
         {
             auto& band = settings.bands[slot];
@@ -35,6 +35,9 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
             band.gain = block % 2 == 0 ? 12.0 : -12.0;
             band.bypass = (block + static_cast<int> (slot)) % 5 == 0;
             band.inUse = (block + static_cast<int> (slot)) % 7 != 0;
+            constexpr Shape shapes[] = { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt };
+            band.shape = shapes[(static_cast<size_t> (block / 8) + slot) % 5];
+            band.slope = 6.0 * static_cast<double> (1 + (static_cast<size_t> (block) + slot) % 16);
         }
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize }, block % 2 == 0 ? &sidechainBlock : nullptr);

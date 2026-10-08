@@ -18,6 +18,7 @@ using test::bellBand;
 
 constexpr double toneFrequency = 200.0;
 constexpr double toneSeconds = 2.0;
+constexpr double onsetSeconds = 0.1;
 
 struct Host
 {
@@ -54,10 +55,12 @@ std::vector<float> playTone (Host host, const std::function<void (double, Settin
 
 // How much sharper the output's sharpest corner is than a pure sine of the same peak level would
 // allow: a sine A sin(wn) has a second difference of at most A w^2. Clicks show up far above 1.
+// The onset is skipped: the tone itself starts abruptly, and steep filters ring as it does. Every
+// change a test makes comes after it.
 double discontinuity (const std::vector<float>& output, double sampleRate)
 {
     double peak = 0.0, sharpest = 0.0;
-    for (size_t i = 2; i < output.size(); ++i)
+    for (auto i = static_cast<size_t> (onsetSeconds * sampleRate); i < output.size(); ++i)
     {
         peak = std::max (peak, static_cast<double> (std::abs (output[i])));
         sharpest = std::max (sharpest, std::abs (static_cast<double> (output[i]) - 2.0 * output[i - 1] + output[i - 2]));
@@ -68,8 +71,8 @@ double discontinuity (const std::vector<float>& output, double sampleRate)
 
 constexpr double threshold = 2.0;
 
-// Flips between false and true every 50 ms.
-bool alternating (double seconds) { return static_cast<int> (seconds / 0.05) % 2 == 1; }
+// False until the onset has passed, then flips every 50 ms.
+bool alternating (double seconds) { return seconds >= onsetSeconds && static_cast<int> ((seconds - onsetSeconds) / 0.05) % 2 == 0; }
 
 // Odd and large blocks, at the common sample rates.
 Host anyHost()
@@ -138,6 +141,30 @@ TEST_CASE ("Putting a Band slot in and out of use does not click")
     const auto output = playTone (host, [] (double time, Settings& s) {
         s.bands[7] = bellBand (toneFrequency, -18.0, 1.0);
         s.bands[7].inUse = alternating (time);
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Changing Shape does not click")
+{
+    const auto host = anyHost();
+    CAPTURE (host.sampleRate, host.blockSize);
+    const auto output = playTone (host, [] (double time, Settings& s) {
+        constexpr Shape shapes[] = { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt, Shape::Bell };
+        s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
+        s.bands[0].shape = time < onsetSeconds ? Shape::Bell : shapes[1 + static_cast<int> ((time - onsetSeconds) / 0.05) % 5];
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Changing Slope does not click")
+{
+    const auto host = anyHost();
+    CAPTURE (host.sampleRate, host.blockSize);
+    const auto output = playTone (host, [] (double time, Settings& s) {
+        s.bands[0] = bellBand (toneFrequency, -18.0, 1.0);
+        s.bands[0].shape = Shape::LowShelf;
+        s.bands[0].slope = alternating (time) ? 96.0 : 6.0;
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
 }

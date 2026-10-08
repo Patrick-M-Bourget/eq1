@@ -86,7 +86,8 @@ TEST_CASE ("All 24 Band slots are exposed to the host with stable IDs and readab
 
     // These IDs are stored in hosts' sessions and automation: they must never change.
     const std::pair<const char*, const char*> controls[] = {
-        { "frequency", "Frequency" }, { "gain", "Gain" }, { "q", "Q" }, { "in_use", "In Use" }, { "bypass", "Bypass" },
+        { "frequency", "Frequency" }, { "gain", "Gain" }, { "q", "Q" },          { "in_use", "In Use" },
+        { "bypass", "Bypass" },       { "shape", "Shape" }, { "slope", "Slope" },
     };
 
     std::map<juce::String, juce::String> names;
@@ -123,4 +124,41 @@ TEST_CASE ("A Band slot shapes the sound only when in use and not Bypassed")
 
     setParameter (processor, "band24_bypass", 0.0f);
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (12.0, 0.1));
+}
+
+TEST_CASE ("A producer can pick any Shape for a Band")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+
+    juce::AudioParameterChoice* shape = nullptr;
+    for (auto* parameter : processor.getParameters())
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter); choice != nullptr && choice->getParameterID() == "band5_shape")
+            shape = choice;
+    REQUIRE (shape != nullptr);
+    CHECK (shape->choices == juce::StringArray { "Bell", "Low Shelf", "High Shelf", "Tilt Shelf", "Flat Tilt" });
+
+    setParameter (processor, "band5_in_use", 1.0f);
+    setParameter (processor, "band5_frequency", 1000.0f);
+    setParameter (processor, "band5_gain", 12.0f);
+    setParameter (processor, "band5_slope", 24.0f);
+
+    const auto pick = [&] (const char* name) { *shape = shape->choices.indexOf (name); };
+
+    pick ("Low Shelf");
+    CHECK_THAT (sineGainDb (processor, 100.0), WithinAbs (12.0, 0.1));
+    CHECK_THAT (sineGainDb (processor, 10000.0), WithinAbs (0.0, 0.1));
+
+    pick ("High Shelf");
+    CHECK_THAT (sineGainDb (processor, 100.0), WithinAbs (0.0, 0.1));
+    CHECK_THAT (sineGainDb (processor, 10000.0), WithinAbs (12.0, 0.1));
+
+    pick ("Tilt Shelf");
+    CHECK_THAT (sineGainDb (processor, 100.0), WithinAbs (-6.0, 0.1));
+    CHECK_THAT (sineGainDb (processor, 10000.0), WithinAbs (6.0, 0.1));
+
+    pick ("Flat Tilt");
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.1));
+    CHECK_THAT (sineGainDb (processor, 2000.0), WithinAbs (1.2, 0.1));
 }

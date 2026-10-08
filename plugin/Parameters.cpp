@@ -44,10 +44,19 @@ juce::String gainId (int slot) { return slotId (slot, "gain"); }
 juce::String qId (int slot) { return slotId (slot, "q"); }
 juce::String inUseId (int slot) { return slotId (slot, "in_use"); }
 juce::String bypassId (int slot) { return slotId (slot, "bypass"); }
+juce::String shapeId (int slot) { return slotId (slot, "shape"); }
+juce::String slopeId (int slot) { return slotId (slot, "slope"); }
+
+const juce::StringArray& shapeNames()
+{
+    static const juce::StringArray names { "Bell", "Low Shelf", "High Shelf", "Tilt Shelf", "Flat Tilt" };
+    return names;
+}
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
-    // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40.
+    // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40, Slope up to 96 dB/oct
+    // (in whole 6 dB/oct steps for now).
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
@@ -71,7 +80,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                 false),
                     std::make_unique<juce::AudioParameterBool> (juce::ParameterID { bypassId (slot), 1 },
                                                                 slotName (slot, "Bypass"),
-                                                                false));
+                                                                false),
+                    std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { shapeId (slot), 1 },
+                                                                  slotName (slot, "Shape"),
+                                                                  shapeNames(),
+                                                                  0),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { slopeId (slot), 1 },
+                                                                 slotName (slot, "Slope"),
+                                                                 juce::NormalisableRange<float> (6.0f, 96.0f, 6.0f),
+                                                                 12.0f,
+                                                                 withText (0, "dB/oct")));
     }
     return layout;
 }

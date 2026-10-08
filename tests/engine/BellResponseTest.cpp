@@ -31,7 +31,7 @@ double toleranceDb (double sampleRate, double frequency, double gain)
 
 } // namespace
 
-TEST_CASE ("Bell magnitude response matches the analog Bell up to Nyquist")
+TEST_CASE ("Bell magnitude response matches the analog Bell up to Nyquist", "[response]")
 {
     const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
     const double frequency = GENERATE (10.0, 40.0, 200.0, 1000.0, 4000.0, 8000.0, 10000.0, 13000.0, 16000.0, 18000.0, 20000.0, 24000.0, 30000.0);

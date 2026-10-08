@@ -16,7 +16,9 @@ PluginProcessor::PluginProcessor()
                                                   parameters.getRawParameterValue (parameters::gainId (slot)),
                                                   parameters.getRawParameterValue (parameters::qId (slot)),
                                                   parameters.getRawParameterValue (parameters::inUseId (slot)),
-                                                  parameters.getRawParameterValue (parameters::bypassId (slot)) };
+                                                  parameters.getRawParameterValue (parameters::bypassId (slot)),
+                                                  parameters.getRawParameterValue (parameters::shapeId (slot)),
+                                                  parameters.getRawParameterValue (parameters::slopeId (slot)) };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -41,10 +43,11 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         const auto& p = slots[slot];
         settings.bands[slot] = { .inUse = p.inUse->load() >= 0.5f,
                                  .bypass = p.bypass->load() >= 0.5f,
-                                 .shape = Shape::Bell,
+                                 .shape = static_cast<Shape> (juce::roundToInt (p.shape->load())),
                                  .frequency = p.frequency->load(),
                                  .gain = p.gain->load(),
-                                 .q = p.q->load() };
+                                 .q = p.q->load(),
+                                 .slope = p.slope->load() };
     }
     engine.setSettings (settings);
     engine.process ({ buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples() });
