@@ -194,3 +194,16 @@ TEST_CASE ("Switching to a Shape without Gain and back restores the Gain")
     CHECK_THAT (test::magnitudeDb (restored, 1000.0, sampleRate), WithinAbs (6.0, 0.01));
     checkSameResponse (restored, responseOf (withBand (Shape::Bell, 6.0, 12.0)));
 }
+
+TEST_CASE ("Cuts, Notch, Band Pass and All Pass have no Gain; Bell and Flat Tilt have no Slope; Brickwall is for Cuts")
+{
+    for (auto shape : { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt })
+        CHECK (hasGain (shape));
+    for (auto shape : { Shape::LowCut, Shape::HighCut, Shape::Notch, Shape::BandPass, Shape::AllPass })
+        CHECK_FALSE (hasGain (shape));
+    for (auto shape : { Shape::Bell, Shape::FlatTilt })
+        CHECK_FALSE (hasSlope (shape));
+    CHECK (isCut (Shape::LowCut));
+    CHECK (isCut (Shape::HighCut));
+    CHECK_FALSE (isCut (Shape::BandPass));
+}

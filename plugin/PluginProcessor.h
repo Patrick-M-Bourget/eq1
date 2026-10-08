@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Parameters.h"
 #include "eq1/Engine.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -39,28 +40,24 @@ public:
     // Stereo Placement there, and the sound follows what a mono signal has: all Mid, Left and Right the same.
     bool isStereoPlacementAvailable() const { return getMainBusNumOutputChannels() > 1; }
 
+    // The host parameters and the editor's settings, saved with the plugin.
+    juce::AudioProcessorValueTreeState& parameterState() { return parameters; }
+
+    // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
+    int displayRangeDb() const { return displayRange.load(); }
+    void setDisplayRangeDb (int rangeDb);
+
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
 private:
-    // The host parameters of one Band slot, read on the audio thread.
-    struct SlotParameters
-    {
-        std::atomic<float>* frequency;
-        std::atomic<float>* gain;
-        std::atomic<float>* q;
-        std::atomic<float>* inUse;
-        std::atomic<float>* bypass;
-        std::atomic<float>* shape;
-        std::atomic<float>* slope;
-        std::atomic<float>* brickwall;
-        std::atomic<float>* placement;
-    };
-
     juce::AudioProcessorValueTreeState parameters;
-    std::array<SlotParameters, numBandSlots> slots;
+    std::array<eq1::parameters::SlotValues, numBandSlots> slots; // read on the audio thread
 
     Engine engine;
+    // Kept out of the parameter state, which a host may save from another thread, and written into
+    // a copy of it when saving.
+    std::atomic<int> displayRange { 12 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };

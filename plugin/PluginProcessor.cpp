@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 
 #include "Parameters.h"
+#include "PluginEditor.h"
 
 namespace eq1
 {
@@ -12,15 +13,7 @@ PluginProcessor::PluginProcessor()
       parameters (*this, nullptr, "eq1", parameters::createLayout())
 {
     for (int slot = 1; slot <= numBandSlots; ++slot)
-        slots[static_cast<size_t> (slot - 1)] = { parameters.getRawParameterValue (parameters::frequencyId (slot)),
-                                                  parameters.getRawParameterValue (parameters::gainId (slot)),
-                                                  parameters.getRawParameterValue (parameters::qId (slot)),
-                                                  parameters.getRawParameterValue (parameters::inUseId (slot)),
-                                                  parameters.getRawParameterValue (parameters::bypassId (slot)),
-                                                  parameters.getRawParameterValue (parameters::shapeId (slot)),
-                                                  parameters.getRawParameterValue (parameters::slopeId (slot)),
-                                                  parameters.getRawParameterValue (parameters::brickwallId (slot)),
-                                                  parameters.getRawParameterValue (parameters::placementId (slot)) };
+        slots[static_cast<size_t> (slot - 1)] = eq1::parameters::SlotValues::of (parameters, slot);
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -43,37 +36,43 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     // Host Automation arrives on the audio thread, so the snapshot is taken here, once per block.
     Settings settings;
     for (size_t slot = 0; slot < slots.size(); ++slot)
-    {
-        const auto& p = slots[slot];
-        settings.bands[slot] = { .inUse = p.inUse->load() >= 0.5f,
-                                 .bypass = p.bypass->load() >= 0.5f,
-                                 .shape = static_cast<Shape> (juce::roundToInt (p.shape->load())),
-                                 .frequency = p.frequency->load(),
-                                 .gain = p.gain->load(),
-                                 .q = p.q->load(),
-                                 .slope = p.slope->load(),
-                                 .brickwall = p.brickwall->load() >= 0.5f,
-                                 .placement = static_cast<StereoPlacement> (juce::roundToInt (p.placement->load())) };
-    }
+        settings.bands[slot] = slots[slot].read();
     engine.setSettings (settings);
     engine.process ({ buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples() });
 }
 
 juce::AudioProcessorEditor* PluginProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor (*this);
+    return new PluginEditor (*this);
+}
+
+namespace
+{
+const juce::Identifier displayRangeProperty { "displayRangeDb" };
+}
+
+void PluginProcessor::setDisplayRangeDb (int rangeDb)
+{
+    displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
 }
 
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = parameters.copyState().createXml())
+    auto state = parameters.copyState();
+    state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
 void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (parameters.state.getType()))
-        parameters.replaceState (juce::ValueTree::fromXml (*xml));
+    {
+        auto state = juce::ValueTree::fromXml (*xml);
+        setDisplayRangeDb (state.getProperty (displayRangeProperty, 12));
+        state.removeProperty (displayRangeProperty, nullptr);
+        parameters.replaceState (state);
+    }
 }
 
 } // namespace eq1

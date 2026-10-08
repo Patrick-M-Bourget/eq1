@@ -1,5 +1,7 @@
 #pragma once
 
+#include "eq1/Settings.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace eq1::parameters
@@ -26,5 +28,22 @@ const juce::StringArray& shapeNames();
 const juce::StringArray& placementNames();
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+
+// The host parameters of one Band slot, readable from any thread.
+struct SlotValues
+{
+    std::atomic<float>* frequency;
+    std::atomic<float>* gain;
+    std::atomic<float>* q;
+    std::atomic<float>* inUse;
+    std::atomic<float>* bypass;
+    std::atomic<float>* shape;
+    std::atomic<float>* slope;
+    std::atomic<float>* brickwall;
+    std::atomic<float>* placement;
+
+    static SlotValues of (juce::AudioProcessorValueTreeState& parameters, int slot);
+    BandSettings read() const;
+};
 
 } // namespace eq1::parameters

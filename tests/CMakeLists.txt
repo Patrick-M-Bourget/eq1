@@ -15,6 +15,7 @@ add_executable(eq1_engine_tests
     engine/BellStabilityTest.cpp
     engine/ClickFreeTest.cpp
     engine/RealtimeSafetyTest.cpp
+    engine/ResponseTest.cpp
     engine/SettingsHandoffTest.cpp
     engine/StereoPlacementTest.cpp
     engine/ShapeResponseTest.cpp
@@ -24,7 +25,7 @@ catch_discover_tests(eq1_engine_tests ADD_TAGS_AS_LABELS)
 
 if(EQ1_BUILD_PLUGIN)
     # Host-level checks drive the Plugin Shell the way a host does.
-    add_executable(eq1_plugin_tests plugin/PluginShellTest.cpp)
+    add_executable(eq1_plugin_tests plugin/PluginShellTest.cpp plugin/BandEditingTest.cpp)
     target_include_directories(eq1_plugin_tests PRIVATE
         ${PROJECT_SOURCE_DIR}/plugin
         $<TARGET_PROPERTY:eq1,INCLUDE_DIRECTORIES>)

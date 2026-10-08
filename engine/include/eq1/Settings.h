@@ -20,6 +20,19 @@ enum class Shape
     AllPass,
 };
 
+// Cuts, Notch, Band Pass and All Pass have no Gain: a Band with one of them keeps its stored Gain
+// and ignores it, until its Shape changes back.
+inline bool hasGain (Shape shape)
+{
+    return shape == Shape::Bell || shape == Shape::LowShelf || shape == Shape::HighShelf || shape == Shape::TiltShelf
+           || shape == Shape::FlatTilt;
+}
+
+inline bool isCut (Shape shape) { return shape == Shape::LowCut || shape == Shape::HighCut; }
+
+// Bell ignores Slope until Bell Slope (#19); Flat Tilt has none.
+inline bool hasSlope (Shape shape) { return shape != Shape::Bell && shape != Shape::FlatTilt; }
+
 // Which part of the stereo signal a Band processes. On a mono track the signal is all Mid, and Left
 // and Right are the same signal, so a Side Band has no effect and the others process it.
 enum class StereoPlacement

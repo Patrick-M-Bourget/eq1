@@ -110,4 +110,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     return layout;
 }
 
+SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int slot)
+{
+    return { parameters.getRawParameterValue (frequencyId (slot)), parameters.getRawParameterValue (gainId (slot)),
+             parameters.getRawParameterValue (qId (slot)),         parameters.getRawParameterValue (inUseId (slot)),
+             parameters.getRawParameterValue (bypassId (slot)),    parameters.getRawParameterValue (shapeId (slot)),
+             parameters.getRawParameterValue (slopeId (slot)),     parameters.getRawParameterValue (brickwallId (slot)),
+             parameters.getRawParameterValue (placementId (slot)) };
+}
+
+BandSettings SlotValues::read() const
+{
+    return { .inUse = inUse->load() >= 0.5f,
+             .bypass = bypass->load() >= 0.5f,
+             .shape = static_cast<Shape> (juce::roundToInt (shape->load())),
+             .frequency = frequency->load(),
+             .gain = gain->load(),
+             .q = q->load(),
+             .slope = slope->load(),
+             .brickwall = brickwall->load() >= 0.5f,
+             .placement = static_cast<StereoPlacement> (juce::roundToInt (placement->load())) };
+}
+
 } // namespace eq1::parameters

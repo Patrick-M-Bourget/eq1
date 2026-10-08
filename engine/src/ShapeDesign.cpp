@@ -336,11 +336,9 @@ Cascade interpolate (const Cascade& from, const Cascade& to, double amount)
 
 Structure structureOf (const BandSettings& settings)
 {
-    // Bell ignores Slope until Bell Slope (#19); Flat Tilt has none.
-    const bool cut = settings.shape == Shape::LowCut || settings.shape == Shape::HighCut;
-    if (settings.shape == Shape::Bell || settings.shape == Shape::FlatTilt)
+    if (! hasSlope (settings.shape))
         return { settings.shape, 0 };
-    if (cut && settings.brickwall)
+    if (isCut (settings.shape) && settings.brickwall)
         return { settings.shape, brickwallOrder };
 
     // The stored Slope is raised to the Shape's minimum and rounded to the nearest whole order
