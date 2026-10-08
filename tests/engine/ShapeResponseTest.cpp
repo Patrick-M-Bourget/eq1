@@ -92,6 +92,69 @@ CutTolerance cutTolerance (Shape s, double sampleRate, double frequency, double 
     return q > 2.0 ? resonantLowCut[region] : lowCut[region];
 }
 
+// Butterworth low-pass of the given order (plain, Q 0.71), evaluated at the complex s given.
+std::complex<double> butterworth (std::complex<double> s, int order)
+{
+    std::complex<double> h = 1.0;
+    for (int k = 1; k <= order / 2; ++k)
+        h /= s * s + s * 2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)) + 1.0;
+    if (order % 2 == 1)
+        h /= s + 1.0;
+    return h;
+}
+
+// Band Pass: the Butterworth low-pass of order Slope / 6 at s -> Q (s + 1/s).
+double bandPassDb (double f, double frequency, int order, double q)
+{
+    const double x = f / frequency;
+    return 20.0 * std::log10 (std::abs (butterworth ({ 0.0, q * (x - 1.0 / x) }, order)));
+}
+
+// Notch: the Butterworth low-pass of order Slope / 12 at s -> 1 / (Q (s + 1/s)), silent at Frequency.
+double notchDb (double f, double frequency, int order, double q)
+{
+    const double x = f / frequency;
+    if (std::abs (x - 1.0) < 1.0e-12)
+        return -400.0;
+    return 20.0 * std::log10 (std::abs (butterworth (1.0 / std::complex<double> { 0.0, q * (x - 1.0 / x) }, order)));
+}
+
+// All Pass: Butterworth poles of order Slope / 6, Q scaled as for Cuts, with mirrored zeros. Its
+// phase in radians, unwrapped: -pi/2 x order at Frequency.
+double allPassPhase (double f, double frequency, int order, double q)
+{
+    const double x = f / frequency;
+    const int pairs = order / 2;
+    const double resonance = pairs > 0 ? std::pow (q / std::sqrt (0.5), 1.0 / pairs) : 1.0;
+    double phase = order % 2 == 1 ? -2.0 * std::atan (x) : 0.0;
+    for (int k = 1; k <= pairs; ++k)
+    {
+        const double sectionQ = resonance / (2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)));
+        phase -= 2.0 * std::atan2 (x / sectionQ, 1.0 - x * x);
+    }
+    return phase;
+}
+
+// Allowed Band Pass and Notch error in dB, read as for Cuts (docs/dsp/filter-design.md).
+CutTolerance bandTolerance (Shape s, double sampleRate, double frequency, int order)
+{
+    const double position = frequency / (sampleRate / 2.0);
+    const int region = position <= 0.45 ? 0 : position <= 0.73 ? 1 : 2;
+    constexpr CutTolerance bandPass[] = { { 0.5, 1.0 }, { 2.0, 2.5 }, { 5.0, 2.0 } };
+    constexpr CutTolerance steepBandPass[] = { { 2.5, 5.5 }, { 6.0, 9.0 }, { 18.0, 9.0 } };
+    constexpr CutTolerance notch[] = { { 0.1, 6.0 }, { 0.1, 6.5 }, { 0.1, 6.5 } };
+    if (s == Shape::Notch)
+        return notch[region];
+    return order > 4 ? steepBandPass[region] : bandPass[region];
+}
+
+// Allowed All Pass phase error in degrees below Frequency.
+double allPassToleranceDegrees (double sampleRate, double frequency, int order)
+{
+    const double position = frequency / (sampleRate / 2.0);
+    return position <= 0.45 ? 6.0 * order + 6.0 : position <= 0.73 ? 20.0 * order + 10.0 : 50.0 * order + 10.0;
+}
+
 Settings shape (Shape s, double frequency, double gain, double q, double slope)
 {
     Settings settings;
@@ -222,9 +285,9 @@ TEST_CASE ("Low Cut and High Cut match their analog targets up to Nyquist at eve
     }
 }
 
-TEST_CASE ("A Cut at a Slope of 0 passes the signal unchanged")
+TEST_CASE ("A Cut or Band Pass at a Slope of 0 passes the signal unchanged")
 {
-    const Shape s = GENERATE (Shape::LowCut, Shape::HighCut);
+    const Shape s = GENERATE (Shape::LowCut, Shape::HighCut, Shape::BandPass);
     const double slope = GENERATE (0.0, 2.9);
     const auto response = responseOf (48000.0, shape (s, 1000.0, 12.0, 1.0, slope));
 
@@ -247,13 +310,13 @@ TEST_CASE ("Brickwall has no effect on Shapes other than the Cuts")
     REQUIRE (with == without);
 }
 
-TEST_CASE ("Cuts stay stable across their whole range, including Frequency above Nyquist")
+TEST_CASE ("Cuts, Notch, Band Pass and All Pass stay stable across their whole range, including Frequency above Nyquist")
 {
     const double sampleRate = GENERATE (44100.0, 96000.0);
     const double frequency = GENERATE (10.0, 1000.0, 20000.0, 22000.0, 30000.0);
     const double q = GENERATE (0.025, 0.71, 40.0);
     const int order = GENERATE (1, 2, 16, 32);
-    const Shape s = GENERATE (Shape::LowCut, Shape::HighCut);
+    const Shape s = GENERATE (Shape::LowCut, Shape::HighCut, Shape::Notch, Shape::BandPass, Shape::AllPass);
 
     auto settings = shape (s, frequency, 0.0, q, order == 32 ? 96.0 : 6.0 * order);
     settings.bands[0].brickwall = order == 32;
@@ -261,8 +324,67 @@ TEST_CASE ("Cuts stay stable across their whole range, including Frequency above
 
     CAPTURE (sampleRate, frequency, q, order, static_cast<int> (s));
     REQUIRE (std::all_of (response.begin(), response.end(), [] (float x) { return std::isfinite (x); }));
-    float tailPeak = 0.0f;
-    for (size_t i = response.size() - 4096; i < response.size(); ++i)
-        tailPeak = std::max (tailPeak, std::abs (response[i]));
-    REQUIRE (tailPeak < 1.0e-4f);
+    const auto tail = response.end() - 4096;
+    const auto magnitude = [] (float a, float b) { return std::abs (a) < std::abs (b); };
+    const float peak = std::abs (*std::max_element (response.begin(), tail, magnitude));
+    const float tailPeak = std::abs (*std::max_element (tail, response.end(), magnitude));
+    // A Q 40 Band Pass or Notch at 10 Hz rings for longer than the response is measured: it need only be decaying.
+    const bool ringsOn = frequency == 10.0 && q == 40.0 && (s == Shape::Notch || s == Shape::BandPass);
+    REQUIRE (tailPeak < (ringsOn ? 0.1f * peak : 1.0e-4f));
+}
+
+TEST_CASE ("Band Pass and Notch match their analog targets up to Nyquist at every whole-order Slope", "[response]")
+{
+    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
+    const double frequency = GENERATE (20.0, 200.0, 2000.0, 9000.0, 15000.0, 20000.0);
+    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0, 10.0, 40.0);
+    const Shape s = GENERATE (Shape::BandPass, Shape::Notch);
+    // Band Pass is of order Slope / 6, Notch of order Slope / 12.
+    const int order = GENERATE (range (1, 17));
+    if (frequency > 0.91 * sampleRate / 2.0 || (s == Shape::Notch && order > 8))
+        return;
+
+    // Neither has Gain, so a stored Gain must not show.
+    const double slope = (s == Shape::Notch ? 12.0 : 6.0) * order;
+    const auto response = responseOf (sampleRate, shape (s, frequency, 9.0, q, slope));
+    const auto tolerance = bandTolerance (s, sampleRate, frequency, order);
+    const double twelfth = std::exp2 (1.0 / 12.0);
+    const auto target = [&] (double at) { return s == Shape::Notch ? notchDb (at, frequency, order, q) : bandPassDb (at, frequency, order, q); };
+
+    for (double f : test::frequenciesUpToNyquist (sampleRate, 64))
+    {
+        const double lowest = std::min ({ target (f / twelfth), target (f), target (f * twelfth) });
+        const double highest = std::max ({ target (f / twelfth), target (f), target (f * twelfth) });
+        const double measured = test::magnitudeDb (response, f, sampleRate);
+
+        CAPTURE (sampleRate, frequency, order, q, static_cast<int> (s), f, target (f), measured);
+        REQUIRE (measured <= std::max (highest, -60.0) + tolerance.above);
+        if (lowest > -24.0)
+            REQUIRE (measured >= lowest - tolerance.below);
+    }
+}
+
+TEST_CASE ("All Pass is flat and turns the phase by 90 degrees per order at Frequency, matching the analog phase below it", "[response]")
+{
+    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
+    const double frequency = GENERATE (20.0, 200.0, 2000.0, 9000.0, 15000.0, 20000.0);
+    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0, 10.0, 40.0);
+    const int order = GENERATE (range (1, 17));
+    if (frequency > 0.91 * sampleRate / 2.0)
+        return;
+
+    const auto response = responseOf (sampleRate, shape (Shape::AllPass, frequency, 9.0, q, 6.0 * order));
+    const auto wrappedDegrees = [] (double radians) { return std::remainder (radians, 2.0 * std::numbers::pi) * 180.0 / std::numbers::pi; };
+    const double tolerance = allPassToleranceDegrees (sampleRate, frequency, order);
+    CAPTURE (sampleRate, frequency, order, q);
+
+    CHECK (std::abs (wrappedDegrees (test::phase (response, frequency, sampleRate) - allPassPhase (frequency, frequency, order, q))) < 0.1);
+    for (double f : test::frequenciesUpToNyquist (sampleRate, 64))
+    {
+        CAPTURE (f);
+        REQUIRE (std::abs (test::magnitudeDb (response, f, sampleRate)) < 0.01);
+        // Wrapped phase can't show an error beyond 180 degrees, so the bound holds where it is smaller.
+        if (f <= frequency && tolerance < 180.0)
+            REQUIRE (std::abs (wrappedDegrees (test::phase (response, f, sampleRate) - allPassPhase (f, frequency, order, q))) <= tolerance);
+    }
 }

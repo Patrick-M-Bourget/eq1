@@ -132,7 +132,7 @@ BiquadCoefficients matchSection (const AnalogSection& section, double referenceF
 
 // The three-point match can't place two zeros exactly at DC, so a high-pass section fixes them
 // there, (1 - z^-1)^2 or (1 - z^-1), and scales to the analog magnitude at the reference.
-BiquadCoefficients matchHighPass (const AnalogSection& section, double referenceFrequency, double sampleRate)
+BiquadCoefficients matchHighPass (const AnalogSection& section, double referenceFrequency, double sampleRate, HighPassGain gain)
 {
     const double w = digitalFrequency (referenceFrequency, sampleRate);
 
@@ -144,7 +144,29 @@ BiquadCoefficients matchHighPass (const AnalogSection& section, double reference
 
     const Phi atReference (w);
     const double digitalSquared = SquaredMagnitude (c.b0, c.b1, c.b2).at (atReference) / SquaredMagnitude (1.0, c.a1, c.a2).at (atReference);
-    const double k = std::sqrt (analogSquared (section, w / (2.0 * std::numbers::pi) * sampleRate / referenceFrequency) / digitalSquared);
+    double k = std::sqrt (analogSquared (section, w / (2.0 * std::numbers::pi) * sampleRate / referenceFrequency) / digitalSquared);
+    if (gain == HighPassGain::betweenReferenceAndNyquist)
+    {
+        const double digitalAtNyquist = SquaredMagnitude (c.b0, c.b1, c.b2).p1 / SquaredMagnitude (1.0, c.a1, c.a2).p1;
+        k = std::sqrt (k * std::sqrt (analogSquared (section, 0.5 * sampleRate / referenceFrequency) / digitalAtNyquist));
+    }
+    c.b0 *= k;
+    c.b1 *= k;
+    c.b2 *= k;
+    return c;
+}
+
+// The three-point match can't place a zero exactly on the unit circle, so a notch section fixes its
+// zeros at zeroFrequency and scales to the analog magnitude at DC.
+BiquadCoefficients matchNotch (const AnalogSection& section, double referenceFrequency, double sampleRate, double zeroFrequency)
+{
+    BiquadCoefficients c;
+    matchPoles (section, digitalFrequency (referenceFrequency, sampleRate), c);
+    c.b0 = 1.0;
+    c.b1 = -2.0 * std::cos (digitalFrequency (zeroFrequency, sampleRate));
+    c.b2 = 1.0;
+
+    const double k = std::sqrt (analogSquared (section, 0.0) * SquaredMagnitude (1.0, c.a1, c.a2).p0 / SquaredMagnitude (c.b0, c.b1, c.b2).p0);
     c.b0 *= k;
     c.b1 *= k;
     c.b2 *= k;

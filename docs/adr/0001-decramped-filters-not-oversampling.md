@@ -6,4 +6,6 @@ In Zero Latency mode, Bands must match their analog response all the way up to N
 
 Every Shape needs its own decramped coefficient design rather than textbook bilinear-transform biquads; a contributor "simplifying" to standard RBJ cookbook filters would reintroduce cramping.
 
+The rule is about magnitude, so the All Pass is exempt: its magnitude is flat by construction, and a bilinear all-pass prewarped at Frequency gets the phase exactly right there, which matched poles don't.
+
 Matching near Nyquist has limits: a biquad's response is flat at Nyquist, while a high or wide analog curve still slopes there. Each Shape's analog target, its design and the accuracy its tests enforce are in `docs/dsp/filter-design.md`.

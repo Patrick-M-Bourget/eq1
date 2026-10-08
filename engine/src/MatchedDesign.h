@@ -19,9 +19,24 @@ struct AnalogSection
 BiquadCoefficients matchSection (const AnalogSection& section, double referenceFrequency, double sampleRate);
 BiquadCoefficients matchSection (const AnalogSection& section, double referenceFrequency, double sampleRate, double matchFrequency);
 
+// Where a high-pass section's gain is matched to the analog section's.
+enum class HighPassGain
+{
+    atReference,
+    // The geometric mean of the gains matching at the reference frequency and at Nyquist.
+    betweenReferenceAndNyquist,
+};
+
 // A high-pass section, s^2 / (d2 s^2 + d1 s + d0) or s / (d1 s + d0): the poles as matchSection's,
-// the zeros exactly at DC, and the magnitude equal to the analog section's at the reference frequency.
-BiquadCoefficients matchHighPass (const AnalogSection& section, double referenceFrequency, double sampleRate);
+// the zeros exactly at DC, and the magnitude equal to the analog section's where gain says.
+BiquadCoefficients matchHighPass (const AnalogSection& section,
+                                  double referenceFrequency,
+                                  double sampleRate,
+                                  HighPassGain gain = HighPassGain::atReference);
+
+// A notch section, (n2 s^2 + n0) / (d2 s^2 + d1 s + d0): the poles as matchSection's, the zeros on the
+// unit circle exactly at zeroFrequency, and the magnitude equal to the analog section's at DC.
+BiquadCoefficients matchNotch (const AnalogSection& section, double referenceFrequency, double sampleRate, double zeroFrequency);
 
 // The section with its poles and zeros swapped, so its magnitude is the reciprocal.
 BiquadCoefficients inverse (const BiquadCoefficients& c);

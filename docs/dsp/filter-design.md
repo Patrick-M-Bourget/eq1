@@ -13,6 +13,9 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
 - **Design direction:** each section is designed in the direction whose poles sit at or below Frequency, where the matched z-transform is accurate, and inverted for the other direction. Bells and Low Shelves are designed as boosts; High Shelves as cuts.
 - **Low Cut sections:** the three-point match can't place a double zero exactly at DC, which leaves the stopband tens of dB too loud. So a Low Cut section keeps the matched poles, fixes its zeros at DC, (1 − z⁻¹)² or (1 − z⁻¹), and is scaled to the analog magnitude at Frequency.
 - **High Cut sections:** each is matched at its damped natural frequency, Frequency × √(1 − 1/(4Q²)) (at least 0.1 × Frequency, for sections with Q below 0.5), held at or below half Nyquist. Matching at Frequency instead bulges the passband by up to 35 dB near Nyquist at Brickwall; this way a High Cut rolls off early there instead of boosting.
+- **Band Pass sections:** each Butterworth pole pair becomes a lower and an upper pole pair. The lower one is designed as a Low Cut section (zeros at DC), with its gain the geometric mean of the gains matching at its own natural frequency and at Nyquist. The upper one is designed as a High Cut section, matched at no more than 0.9 of its natural frequency: matched right at the peak of a very sharp section, the poles' tiny error shows up as tens of dB of gain. Plain band-pass sections fail wide Band Passes, whose two pole pairs sit far apart. Every section is designed around its own natural frequency, so poles above Nyquist are held just below it.
+- **Notch sections:** the zeros are fixed on the unit circle exactly at Frequency, and the gain matches the analog section at DC.
+- **All Pass:** bilinear, prewarped at Frequency: the one Shape that isn't matched. Its magnitude is flat by construction, so it can't cramp (ADR 0001), and the bilinear phase is exact at Frequency, where matched poles were 16° off at order 1 by 0.45 × Nyquist. A digital all-pass reaches −180° × order at Nyquist while the analog one only gets there at infinity, so near Nyquist its phase runs ahead.
 - **Why one biquad can't be exact:** a biquad's response is flat at Nyquist, while a high or wide analog curve is still sloping there. A single section cannot match it exactly near Nyquist. RBJ bilinear Bells miss by 85–100% on the Bell test's grid.
 
 ## Analog targets
@@ -37,7 +40,7 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
   - Q scales each second-order section's Q as for Shelves: (Q / 0.71)^(1 / sections).
   - 0 dB/oct passes the signal unchanged.
   - **Brickwall** is Butterworth of order 32 (16 second-order sections, about 192 dB/oct), the most the 16-section limit allows. Elliptic designs were rejected because their stopband zeros can't be matched near Nyquist; linear-phase FIRs because they add latency (ADR 0001).
-- **Band Pass:** a band-pass transform (s → Q·(s + 1/s)) of a Butterworth low-pass of order Slope / 6 (one second-order section per order, so 16 at 96 dB/oct), so each skirt falls at Slope dB/oct. Q sets the width. 0 dB/oct passes the signal unchanged.
+- **Band Pass:** a band-pass transform (s → Q·(s + 1/s)) of a Butterworth low-pass of order Slope / 6 (one second-order section per order, so 16 at 96 dB/oct), so each skirt falls at Slope dB/oct. Q sets the width: 1/Q of Frequency between the −3 dB points. 0 dB/oct passes the signal unchanged.
 - **Notch:** a band-stop transform of a Butterworth low-pass of order Slope / 12 (one second-order section per order), so 12 dB/oct is the standard second-order notch. Q sets the width.
 - **All Pass:** Butterworth poles of order Slope / 6, with zeros mirrored across the jω axis, so the phase at Frequency is −90° × order. Q scales the sections as for Cuts. Magnitude is flat; it is tested on phase.
 - **Bell:** always one second-order section (12 dB/oct) until #19 decides a steeper target.
@@ -77,6 +80,17 @@ The Engine tests (`tests/engine/BellResponseTest.cpp`, `tests/engine/ShapeRespon
 
 - **Resonant Low Cuts (Q above 2):** the resonance's slow fall above Frequency still slopes at Nyquist, where a biquad is flat.
 - **High Cuts near Nyquist:** they roll off early, up to 11 dB below the target just under Frequency at 0.91 × Nyquist (see "High Cut sections").
+- **Band Pass, Notch:** measured as Cuts are, at every whole order and Q 0.1 to 40.
+
+| Band Pass, Notch (dB above / below) | Up to 0.45 × Nyquist | Up to 0.73 × Nyquist | Up to 0.91 × Nyquist |
+| --- | --- | --- | --- |
+| Band Pass, up to 24 dB/oct | 0.5 / 1 | 2 / 2.5 | 5 / 2 |
+| Band Pass, steeper | 2.5 / 5.5 | 6 / 9 | 18 / 9 |
+| Notch | 0.1 / 6 | 0.1 / 6.5 | 0.1 / 6.5 |
+
+- **Steep Band Passes near Nyquist:** at 96 dB/oct the upper skirt's poles sit above Nyquist, and the bump grows with the order: about 6 dB at 0.73 × Nyquist and 18 dB at 0.91. Open work (#23).
+- **Wide Notches:** cut up to 6.5 dB deeper than the target on their skirts; they are never louder than it.
+- **All Pass:** magnitude flat within 0.01 dB; phase within 0.1° of −90° × order at Frequency. Below Frequency the phase error, wrapped to ±180°, stays within 6° × order + 6° up to 0.45 × Nyquist, 20° × order + 10° up to 0.73 and 50° × order + 10° up to 0.91, tested where that bound is under 180°. Above Frequency only the flat magnitude is tested.
 - **Resonant shelves (Q above 2):** the bound is loose because a single matched biquad cannot follow a section whose zeros and poles are both sharp.
 
 ## Open work
@@ -85,3 +99,4 @@ The Engine tests (`tests/engine/BellResponseTest.cpp`, `tests/engine/ShapeRespon
 - **#18, fractional Slopes.**
 - **#19, Bell Slope:** every Bell is 12 dB/oct for now, while Pro-Q 4 goes up to 96. A known difference (ADR 0003).
 - **The Bell near Nyquist:** a correction section, or an optimised fit.
+- **#23, steep Band Passes near Nyquist.**

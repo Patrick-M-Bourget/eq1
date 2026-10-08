@@ -8,6 +8,8 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py bell
     python3 tools/filter-lab/filterlab.py low-shelf --orders 1 2 16 --q 0.71 40
     python3 tools/filter-lab/filterlab.py high-cut --orders 1 2 16 32 --q 0.71 10
+    python3 tools/filter-lab/filterlab.py band-pass --orders 1 4 16 --q 0.1 2 40
+    python3 tools/filter-lab/filterlab.py all-pass --orders 1 2 8 --q 0.71
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report().
@@ -102,14 +104,33 @@ def match_section(a: Analog, reference_hz, fs, match_hz=None):
     return c
 
 
-def match_high_pass(a: Analog, reference_hz, fs):
-    """Poles as match_section's, zeros exactly at DC, magnitude matched at the reference."""
+def match_high_pass(a: Analog, reference_hz, fs, and_nyquist=False):
+    """Poles as match_section's, zeros exactly at DC, magnitude matched at the reference (and_nyquist:
+    the geometric mean of the gains matching at the reference and at Nyquist)."""
     w = min(2 * PI * reference_hz / fs, 0.98 * PI)
     c = match_section(Analog(0, 0, 1, a.d2, a.d1, a.d0), reference_hz, fs)
     c.b0, c.b1, c.b2 = (1, -2, 1) if a.d2 else (1, -1, 0)
     k = math.sqrt(a.squared(w / (2 * PI) * fs / reference_hz)) / abs(c.response(w))
+    if and_nyquist:
+        k = math.sqrt(k * math.sqrt(a.squared(fs / 2 / reference_hz)) / abs(c.response(PI)))
     c.b0, c.b1, c.b2 = c.b0 * k, c.b1 * k, c.b2 * k
     return c
+
+
+def match_notch(a: Analog, reference_hz, fs, zero_hz):
+    """Poles as match_section's, zeros on the unit circle at zero_hz, magnitude matched at DC."""
+    c = match_section(Analog(0, 0, 1, a.d2, a.d1, a.d0), reference_hz, fs)
+    wz = min(2 * PI * zero_hz / fs, 0.98 * PI)
+    c.b0, c.b1, c.b2 = 1, -2 * math.cos(wz), 1
+    k = math.sqrt(a.squared(0)) / abs(c.response(0))
+    c.b0, c.b1, c.b2 = c.b0 * k, c.b1 * k, c.b2 * k
+    return c
+
+
+def normalised(a: Analog):
+    """The second-order section with s rescaled to its own natural frequency w0: (section, w0)."""
+    w0 = math.sqrt(a.d0 / a.d2)
+    return Analog(a.n2, a.n1 / w0, a.n0 / (w0 * w0), 1, a.d1 / w0, 1), w0
 
 
 def inverse(c: Biquad):
@@ -229,9 +250,88 @@ def low_cut(fs, frequency, gain=None, q=0.71, order=2):
     return [match_high_pass(a, frequency, fs) for a in highs], lambda f: _analog_db(highs, f, frequency)
 
 
+def _reciprocal_roots(b):
+    """Roots of s^2 - b s + 1."""
+    d = cmath.sqrt(b * b - 4)
+    return [(b + d) / 2, (b - d) / 2]
+
+
+def _transformed_quadratics(order, roots_of):
+    """Each upper-half-plane Butterworth low-pass pole p becomes two poles roots_of(p); each of those
+    pairs with its conjugate into a real s^2 + d1 s + d0, returned as (d1, d0). The odd pole -1 is
+    returned as None."""
+    for a in _butterworth_sections(order, math.sqrt(0.5)):
+        if a.d2 == 0:
+            yield None
+            continue
+        p = complex(-a.d1 / 2, math.sqrt(max(1 - a.d1 * a.d1 / 4, 0)))
+        yield [(-2 * x.real, abs(x) ** 2) for x in roots_of(p)]
+
+
+def band_pass(fs, frequency, gain=None, q=0.71, order=2):
+    """s -> Q (s + 1/s) of a Butterworth low-pass. Each low-pass pole pair gives a lower pair, designed as
+    a Low Cut section, and an upper pair, designed as a High Cut section matched at most 0.9 of its
+    natural frequency; the odd pole gives one band-pass section."""
+    analog, sections = [], []
+    for quads in _transformed_quadratics(order, lambda p: _reciprocal_roots(p / q)):
+        if quads is None:
+            a = Analog(0, 1 / q, 0, 1, 1 / q, 1)
+            analog.append(a)
+            sections.append(match_section(a, frequency, fs))
+            continue
+        low, high = sorted(quads, key=lambda d: d[1])
+        lower, w_low = normalised(Analog(1, 0, 0, 1, *low))
+        upper, w_high = normalised(Analog(0, 0, 1 / (q * q), 1, *high))
+        analog += [Analog(1, 0, 0, 1, *low), Analog(0, 0, 1 / (q * q), 1, *high)]
+        sections.append(match_high_pass(lower, frequency * w_low, fs, and_nyquist=True))
+        damped = math.sqrt(max(1 - upper.d1 * upper.d1 / 4, 0.01))
+        sections.append(match_section(upper, frequency * w_high, fs, match_hz=min(frequency * w_high * min(damped, 0.9), fs / 4)))
+    return sections, lambda f: _analog_db(analog, f, frequency)
+
+
+def notch(fs, frequency, gain=None, q=0.71, order=1):
+    """s -> 1 / (Q (s + 1/s)) of a Butterworth low-pass of order Slope / 12: every section's zeros sit
+    exactly at Frequency."""
+    analog, sections = [], []
+    for quads in _transformed_quadratics(order, lambda p: _reciprocal_roots(1 / (p * q))):
+        for d1, d0 in quads if quads is not None else [(1 / q, 1)]:
+            a = Analog(1, 0, 1, 1, d1, d0)
+            b, w0 = normalised(a)
+            analog.append(a)
+            sections.append(match_notch(b, frequency * w0, fs, frequency))
+    return sections, lambda f: _analog_db(analog, f, frequency)
+
+
+def _all_pass_sections(order, q):
+    for a in _butterworth_sections(order, q):
+        yield Analog(1, -a.d1, 1, 1, a.d1, 1) if a.d2 else Analog(0, -1, 1, 0, 1, 1)
+
+
+def all_pass(fs, frequency, gain=None, q=0.71, order=1):
+    """Bilinear, prewarped at Frequency: flat magnitude can't cramp, and the phase at Frequency is exact.
+    Returns (sections, analog phase(f) in radians)."""
+    k = math.tan(min(PI * frequency / fs, 0.49 * PI))
+    sections, analog = [], list(_all_pass_sections(order, q))
+    for a in analog:
+        if a.d2:
+            a0 = 1 + a.d1 * k + k * k
+            a1, a2 = 2 * (k * k - 1) / a0, (1 - a.d1 * k + k * k) / a0
+            sections.append(Biquad(a2, a1, 1, a1, a2))
+        else:
+            a1 = (k - 1) / (1 + k)
+            sections.append(Biquad(a1, 1, 0, a1, 0))
+
+    def phase(f):
+        s = 1j * f / frequency
+        return sum(cmath.phase((a.n2 * s * s + a.n1 * s + a.n0) / (a.d2 * s * s + a.d1 * s + a.d0)) for a in analog)
+
+    return sections, phase
+
+
 SHAPES = {"bell": bell, "low-shelf": low_shelf, "high-shelf": high_shelf, "tilt-shelf": tilt_shelf,
-          "flat-tilt": flat_tilt, "low-cut": low_cut, "high-cut": high_cut}
-CUTS = {"low-cut", "high-cut"}
+          "flat-tilt": flat_tilt, "low-cut": low_cut, "high-cut": high_cut, "band-pass": band_pass,
+          "notch": notch, "all-pass": all_pass}
+CUTS = {"low-cut", "high-cut", "band-pass", "notch"}
 
 
 # --- Report (the Engine tests' error measure) ----------------------------------------------------
@@ -300,10 +400,38 @@ def report_cut(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {q:>6}  {above:6.2f} {below:6.2f}")
 
 
+def report_phase(shape, sample_rates=(44100, 48000, 96000),
+                 frequencies=(20, 200, 2000, 9000, 15000, 20000), qs=(0.71,), orders=(1,), points=200):
+    """All Pass: worst phase error in degrees, wrapped to +/-180, from 10 Hz up to Frequency, per
+    (position band, order); and the worst magnitude error in dB anywhere."""
+    worst, flat = {}, 0.0
+    for fs in sample_rates:
+        for frequency in frequencies:
+            if frequency > 0.91 * fs / 2:
+                continue
+            for q in qs:
+                for order in orders:
+                    sections, phase = shape(fs, frequency, None, q, order)
+                    for i in range(points + 1):
+                        f = 10 * (frequency / 10) ** (i / points) if i < points else frequency
+                        h = 1
+                        for s in sections:
+                            h *= s.response(2 * PI * f / fs)
+                        flat = max(flat, abs(20 * math.log10(abs(h))))
+                        error = abs(math.degrees((cmath.phase(h) - phase(f) + PI) % (2 * PI) - PI))
+                        key = (position_band(frequency, fs), order)
+                        worst[key] = max(worst.get(key, 0), error)
+    print(f"magnitude flat within {flat:.2e} dB")
+    print(f"{'band':>7} {'order':>5}  {'degrees':>7}")
+    for (band, order), error in sorted(worst.items()):
+        print(f"{band:>7} {order:>5}  {error:7.2f}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("shape", choices=SHAPES)
     parser.add_argument("--q", type=float, nargs="+", default=[0.71])
     parser.add_argument("--orders", type=int, nargs="+", default=[2])
     args = parser.parse_args()
-    (report_cut if args.shape in CUTS else report)(SHAPES[args.shape], qs=args.q, orders=args.orders)
+    reporter = report_phase if args.shape == "all-pass" else report_cut if args.shape in CUTS else report
+    reporter(SHAPES[args.shape], qs=args.q, orders=args.orders)

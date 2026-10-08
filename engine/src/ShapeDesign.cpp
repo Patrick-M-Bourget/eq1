@@ -3,9 +3,11 @@
 #include "MatchedDesign.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <numbers>
+#include <utility>
 
 namespace eq1
 {
@@ -107,6 +109,14 @@ void butterworthSections (int order, double q, Use use)
         use (AnalogSection { 0.0, 0.0, 1.0, 0.0, 1.0, 1.0 });
 }
 
+// Where a High Cut section is matched: its damped natural frequency, naturalFrequency x sqrt (1 - 1/(4 Q^2))
+// with d1 = 1/Q (at least 0.1 x naturalFrequency, and at most atMost x it), held at or below half Nyquist.
+double dampedMatchFrequency (double naturalFrequency, double d1, double sampleRate, double atMost = 1.0)
+{
+    const double damped = std::min (std::sqrt (std::max (1.0 - d1 * d1 / 4.0, 0.01)), atMost);
+    return std::min (naturalFrequency * damped, sampleRate / 4.0);
+}
+
 // High Cut: each section matched at its damped natural frequency, which keeps the passband from
 // bulging near Nyquist (at least 0.1 x Frequency, for sections with Q below 0.5). The match point is
 // held at or below half Nyquist, where a High Cut would otherwise boost before it cuts: it rolls off
@@ -120,9 +130,7 @@ Cascade designHighCut (const ShapeParameters& p, double sampleRate)
             add (cascade, matchSection (section, p.frequency, sampleRate));
             return;
         }
-        const double sectionQ = 1.0 / section.d1;
-        const double damped = p.frequency * std::sqrt (std::max (1.0 - 1.0 / (4.0 * sectionQ * sectionQ), 0.01));
-        add (cascade, matchSection (section, p.frequency, sampleRate, std::min (damped, sampleRate / 4.0)));
+        add (cascade, matchSection (section, p.frequency, sampleRate, dampedMatchFrequency (p.frequency, section.d1, sampleRate)));
     });
     return cascade;
 }
@@ -135,6 +143,117 @@ Cascade designLowCut (const ShapeParameters& p, double sampleRate)
         const AnalogSection high = low.d2 == 0.0 ? AnalogSection { 0.0, 1.0, 0.0, 0.0, 1.0, 1.0 }
                                                  : AnalogSection { 1.0, 0.0, 0.0, 1.0, low.d1, 1.0 };
         add (cascade, matchHighPass (high, p.frequency, sampleRate));
+    });
+    return cascade;
+}
+
+// A second-order section rescaled to its own natural frequency w0 (s -> w0 s), so it is designed
+// around w0 x Frequency, where its poles are, and held below Nyquist there if need be.
+struct Normalised
+{
+    AnalogSection section;
+    double naturalFrequency; // w0, as a multiple of Frequency
+};
+
+Normalised normalise (const AnalogSection& a)
+{
+    const double w0 = std::sqrt (a.d0 / a.d2);
+    return { { a.n2 / a.d2, a.n1 / (a.d2 * w0), a.n0 / a.d0, 1.0, a.d1 / (a.d2 * w0), 1.0 }, w0 };
+}
+
+// The Butterworth low-pass of the given order (plain, Q 0.71) transformed pole by pole: each
+// upper-half-plane pole p becomes the two poles roots (p); use ({ first, second }) gets them, each to be
+// paired with its conjugate into a real s^2 + d1 s + d0. oddPole () is called for the real pole.
+template <typename Roots, typename Use, typename OddPole>
+void transformedButterworth (int order, Roots roots, Use use, OddPole oddPole)
+{
+    butterworthSections (order, std::sqrt (0.5), [&] (const AnalogSection& lowPass) {
+        if (lowPass.d2 == 0.0)
+        {
+            oddPole();
+            return;
+        }
+        const std::complex<double> pole { -lowPass.d1 / 2.0, std::sqrt (std::max (1.0 - lowPass.d1 * lowPass.d1 / 4.0, 0.0)) };
+        const auto [first, second] = roots (pole);
+        use (std::array { first, second });
+    });
+}
+
+// Roots of s^2 - b s + 1.
+std::pair<std::complex<double>, std::complex<double>> reciprocalRoots (std::complex<double> b)
+{
+    const auto d = std::sqrt (b * b - 4.0);
+    return { (b + d) / 2.0, (b - d) / 2.0 };
+}
+
+// Band Pass: s -> Q (s + 1/s) of a Butterworth low-pass of order Slope / 6. Each low-pass pole pair
+// becomes a lower and an upper pole pair, with s / Q for each. Together they are designed as a Low
+// Cut section on the lower pair (s^2) and a High Cut section on the upper one (1 / Q^2): split this
+// way a wide Band Pass stays accurate. The odd pole gives one band-pass section.
+Cascade designBandPass (const ShapeParameters& p, double sampleRate)
+{
+    Cascade cascade;
+    const double q = p.q;
+    transformedButterworth (
+        p.structure.order,
+        [q] (std::complex<double> pole) { return reciprocalRoots (pole / q); },
+        [&] (const std::array<std::complex<double>, 2>& roots) {
+            auto lowerRoot = roots[0], upperRoot = roots[1];
+            if (std::norm (lowerRoot) > std::norm (upperRoot))
+                std::swap (lowerRoot, upperRoot);
+
+            const auto lower = normalise ({ 1.0, 0.0, 0.0, 1.0, -2.0 * lowerRoot.real(), std::norm (lowerRoot) });
+            add (cascade,
+                 matchHighPass (lower.section, p.frequency * lower.naturalFrequency, sampleRate, HighPassGain::betweenReferenceAndNyquist));
+
+            // Matched as a High Cut section, but at most 0.9 of its natural frequency: a very sharp
+            // section matched at its peak takes the poles' tiny error as gain.
+            const auto upper = normalise ({ 0.0, 0.0, 1.0 / (q * q), 1.0, -2.0 * upperRoot.real(), std::norm (upperRoot) });
+            const double reference = p.frequency * upper.naturalFrequency;
+            add (cascade, matchSection (upper.section, reference, sampleRate, dampedMatchFrequency (reference, upper.section.d1, sampleRate, 0.9)));
+        },
+        [&] { add (cascade, matchSection ({ 0.0, 1.0 / q, 0.0, 1.0, 1.0 / q, 1.0 }, p.frequency, sampleRate)); });
+    return cascade;
+}
+
+// Notch: s -> 1 / (Q (s + 1/s)) of a Butterworth low-pass of order Slope / 12. Every section's zeros
+// sit exactly at Frequency; each is designed around its own poles.
+Cascade designNotch (const ShapeParameters& p, double sampleRate)
+{
+    Cascade cascade;
+    const auto addSection = [&] (double d1, double d0) {
+        const auto section = normalise ({ 1.0, 0.0, 1.0, 1.0, d1, d0 });
+        add (cascade, matchNotch (section.section, p.frequency * section.naturalFrequency, sampleRate, p.frequency));
+    };
+    const double q = p.q;
+    transformedButterworth (
+        p.structure.order,
+        [q] (std::complex<double> pole) { return reciprocalRoots (1.0 / (pole * q)); },
+        [&] (const std::array<std::complex<double>, 2>& roots) {
+            for (const auto& root : roots)
+                addSection (-2.0 * root.real(), std::norm (root));
+        },
+        [&] { addSection (1.0 / q, 1.0); });
+    return cascade;
+}
+
+// All Pass: Butterworth poles of order Slope / 6, Q scaled as for Cuts, with zeros mirrored. Bilinear,
+// prewarped at Frequency, so its phase there is exactly -90 degrees per order. ADR 0001 rules out
+// bilinear designs because they cramp magnitude; an all-pass's magnitude is flat by construction.
+Cascade designAllPass (const ShapeParameters& p, double sampleRate)
+{
+    const double k = std::tan (std::min (std::numbers::pi * p.frequency / sampleRate, 0.49 * std::numbers::pi));
+    Cascade cascade;
+    butterworthSections (p.structure.order, p.q, [&] (const AnalogSection& section) {
+        if (section.d2 == 0.0)
+        {
+            const double a1 = (k - 1.0) / (k + 1.0);
+            add (cascade, { a1, 1.0, 0.0, a1, 0.0 });
+            return;
+        }
+        const double a0 = 1.0 + section.d1 * k + k * k;
+        const double a1 = 2.0 * (k * k - 1.0) / a0, a2 = (1.0 - section.d1 * k + k * k) / a0;
+        add (cascade, { a2, a1, 1.0, a1, a2 });
     });
     return cascade;
 }
@@ -217,19 +336,19 @@ Cascade interpolate (const Cascade& from, const Cascade& to, double amount)
 
 Structure structureOf (const BandSettings& settings)
 {
-    // Only the shelves' and Cuts' filters depend on Slope so far; Bell Slope is #19, the rest #22.
+    // Bell ignores Slope until Bell Slope (#19); Flat Tilt has none.
     const bool cut = settings.shape == Shape::LowCut || settings.shape == Shape::HighCut;
-    const bool usesSlope = cut || settings.shape == Shape::LowShelf || settings.shape == Shape::HighShelf
-                           || settings.shape == Shape::TiltShelf;
-    if (! usesSlope)
+    if (settings.shape == Shape::Bell || settings.shape == Shape::FlatTilt)
         return { settings.shape, 0 };
     if (cut && settings.brickwall)
         return { settings.shape, brickwallOrder };
 
     // The stored Slope is raised to the Shape's minimum and rounded to the nearest whole order
     // (ADR 0003; docs/dsp/filter-design.md, "Slopes between whole orders").
+    // A Notch's order counts 12 dB/oct steps.
     const double slope = std::clamp (settings.slope, minimumSlope (settings.shape), 6.0 * maxSlopeOrder);
-    return { settings.shape, static_cast<int> (std::lround (slope / 6.0)) };
+    const double step = settings.shape == Shape::Notch ? 12.0 : 6.0;
+    return { settings.shape, static_cast<int> (std::lround (slope / step)) };
 }
 
 Cascade designShape (const ShapeParameters& p, double sampleRate)
@@ -243,10 +362,9 @@ Cascade designShape (const ShapeParameters& p, double sampleRate)
         case Shape::FlatTilt: return designFlatTilt (p, sampleRate);
         case Shape::LowCut: return designLowCut (p, sampleRate);
         case Shape::HighCut: return designHighCut (p, sampleRate);
-        // Not built yet: no sections, so the signal passes unchanged.
-        case Shape::Notch:
-        case Shape::BandPass:
-        case Shape::AllPass: return {};
+        case Shape::Notch: return designNotch (p, sampleRate);
+        case Shape::BandPass: return designBandPass (p, sampleRate);
+        case Shape::AllPass: return designAllPass (p, sampleRate);
     }
     return {};
 }

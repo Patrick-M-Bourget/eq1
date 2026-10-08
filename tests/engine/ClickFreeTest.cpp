@@ -151,7 +151,6 @@ TEST_CASE ("Changing Shape does not click")
     const bool brickwall = GENERATE (false, true);
     CAPTURE (host.sampleRate, host.blockSize, brickwall);
     const auto output = playTone (host, [brickwall] (double time, Settings& s) {
-        // Every Shape, including those not built yet, which pass the signal unchanged.
         constexpr Shape shapes[] = { Shape::LowShelf, Shape::LowCut,   Shape::HighShelf, Shape::HighCut, Shape::Notch,
                                      Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt, Shape::AllPass, Shape::Bell };
         s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
@@ -202,6 +201,20 @@ TEST_CASE ("Switching a Cut's Brickwall does not click")
         s.bands[0].shape = cut;
         s.bands[0].slope = 12.0;
         s.bands[0].brickwall = alternating (time);
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("A Notch, Band Pass or All Pass swept block by block does not zipper")
+{
+    const auto host = anyHost();
+    const Shape shape = GENERATE (Shape::Notch, Shape::BandPass, Shape::AllPass);
+    CAPTURE (host.sampleRate, host.blockSize, static_cast<int> (shape));
+    const auto output = playTone (host, [&] (double time, Settings& s) {
+        const double position = 0.5 + 0.5 * std::sin (time * 15.0);
+        s.bands[0] = bellBand (50.0 * std::pow (40.0, position), 0.0, 0.3 * std::pow (30.0, position));
+        s.bands[0].shape = shape;
+        s.bands[0].slope = 6.0 + 90.0 * position;
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
 }

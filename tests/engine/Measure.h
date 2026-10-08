@@ -73,6 +73,21 @@ inline double magnitudeDb (const std::vector<float>& response, double frequency,
     return 20.0 * std::log10 (std::abs (sum));
 }
 
+// Phase in radians, wrapped to +/-pi, of an impulse response at frequency (Hz), by direct DFT.
+inline double phase (const std::vector<float>& response, double frequency, double sampleRate)
+{
+    const double w = 2.0 * std::numbers::pi * frequency / sampleRate;
+    const std::complex<double> step = std::polar (1.0, -w);
+    std::complex<double> rotation = 1.0;
+    std::complex<double> sum = 0.0;
+    for (float s : response)
+    {
+        sum += static_cast<double> (s) * rotation;
+        rotation *= step;
+    }
+    return std::arg (sum);
+}
+
 // Log-spaced frequencies from 10 Hz up to and including Nyquist.
 inline std::vector<double> frequenciesUpToNyquist (double sampleRate, int count)
 {

@@ -19,7 +19,8 @@ struct Cascade
 
 Cascade interpolate (const Cascade& from, const Cascade& to, double amount);
 
-// What sets a Band's number of sections: its Shape and, for shelves and Cuts, the order (Slope / 6, or 32 for Brickwall).
+// What sets a Band's number of sections: its Shape and, for Shapes with a Slope, the order (Slope / 6,
+// Slope / 12 for Notch, or 32 for Brickwall).
 // Settings with the same structure can glide into each other; a new structure crossfades.
 struct Structure
 {
