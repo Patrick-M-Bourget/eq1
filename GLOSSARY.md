@@ -21,7 +21,7 @@ The center or corner frequency of a Band, in Hz.
 _Avoid_: Freq, cutoff (except informally for Cut shapes)
 
 **Gain**:
-The size of a Band's boost or cut, in dB.
+The size of a Band's boost or cut, in dB, as the user sets it.
 _Avoid_: Level, amount, boost
 
 **Q**:
@@ -51,12 +51,16 @@ _Avoid_: Listen, audition (for Bands)
 ## Dynamics
 
 **Dynamic Band**:
-A Band whose Gain moves with the level of its detection signal instead of staying fixed.
+A Band whose Shape allows dynamics and whose Dynamic Range is not zero, so its Live Gain moves with the level of its detection signal.
 _Avoid_: Dynamic filter, compressor band
 
 **Dynamic Range**:
-The signed amount, in dB, by which a Dynamic Band's Gain can move away from its static Gain.
+The signed amount, in dB, by which a Dynamic Band's Live Gain can move away from its Gain.
 _Avoid_: Depth, range, ratio
+
+**Live Gain**:
+The Gain a Dynamic Band is applying at this moment, between its Gain and its Gain plus Dynamic Range.
+_Avoid_: Current gain, dynamic gain, Gain (when meaning the moving value)
 
 **Threshold**:
 The detection level above which a Dynamic Band starts moving its Gain; it can be set to Auto.
@@ -80,6 +84,14 @@ _Avoid_: Trigger, key
 The part of the spectrum a Dynamic Band's detector listens to: Band (follows the Band's own Frequency and Q) or Free (a user-set low and high limit).
 _Avoid_: Sidechain filter, trigger range, key filter
 
+**Dynamics Bypass**:
+Temporarily disabling a Dynamic Band's movement while keeping its settings; its Live Gain stays at its Gain.
+_Avoid_: Bypass (unqualified) for dynamics
+
+**Detection Audition**:
+Listening to the signal a Dynamic Band's detector hears instead of the plugin's output.
+_Avoid_: Sidechain solo, listen, Solo (for detection)
+
 ## Whole-plugin
 
 **Processing Mode**:
@@ -90,21 +102,33 @@ _Avoid_: Phase mode, quality
 The real-time spectrum display behind the EQ curve, showing the signal before and after processing.
 _Avoid_: Spectrum, FFT display, meter
 
+**Analyzer Tilt**:
+A display-only slope applied to the Analyzer's spectra so that typical music looks level; it doesn't change the sound.
+_Avoid_: Tilt (unqualified) for the Analyzer
+
 **Spectrum Grab**:
 Grabbing a peak in the Analyzer to create or adjust a Band at that spot.
 _Avoid_: Peak grab, click-to-EQ
 
 **Preset**:
-A saved, named set of all plugin settings: Factory (shipped with eq1) or User (saved by the user).
+A saved, named set of every setting that affects the sound: Factory (shipped with eq1) or User (saved by the user).
 _Avoid_: Patch, program, snapshot
 
 **A/B Compare**:
-Switching between two independent sets of settings in one plugin instance to compare them.
+Switching between two independent sets of the settings a Preset holds, in one plugin instance, to compare them.
 _Avoid_: Snapshot, compare slots
 
 **Auto Gain**:
 Automatic compensation of output level, estimated from the EQ settings rather than measured, so that EQ changes are heard without a loudness bias.
 _Avoid_: Gain compensation, make-up gain
+
+**Global Bypass**:
+eq1's own click-free switch that passes the input through unprocessed, separate from the host's bypass.
+_Avoid_: Bypass (unqualified) for the whole plugin
+
+**Output Gain**:
+The gain applied to the whole plugin's output, after every Band, in dB.
+_Avoid_: Master gain, output level, Gain (unqualified)
 
 **Gain Scale**:
 A single control that scales every Band's Gain and Dynamic Range at once.

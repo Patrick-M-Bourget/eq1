@@ -11,3 +11,7 @@ Hosts store automation as normalised 0–1 values, so the meaning of every value
 - **Adding the new Shapes after the existing five.** We rejected it because the host's parameter list and Pro-Q's order would no longer match, and nothing released yet depended on the old order.
 - **Brickwall as the top of the Slope range.** We rejected it because sweeping Slope automation on a Cut would jump to a different filter at the end. Every other Shape would also have a stretch at the top of the range that does nothing.
 - **A Slope parameter per Shape.** We rejected it because it multiplies the host parameter count across 24 Band Slots, for no audible gain.
+
+## Consequences
+
+The same rule applies to any setting that Pro-Q shows as a special position at the end of a range: it becomes a separate switch. Auto Threshold is therefore `band<n>_threshold_auto`, not the top of `band<n>_threshold`. Auto Attack and Auto Release are not affected, because they are the centre of their ranges, not an end.

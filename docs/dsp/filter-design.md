@@ -31,6 +31,17 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
   - It is set to 0 dB at Frequency on the digital response.
   - It ignores Slope and Q.
 
+## Detection
+
+When Detection Range is Band, a Dynamic Band's detector hears only the region its Shape works on. Pro-Q 4 doesn't document this, so these regions are eq1's own:
+
+- **Bell:** around Frequency, as wide as Q.
+- **Low Shelf:** below Frequency.
+- **High Shelf:** above Frequency.
+- **Tilt Shelf and Flat Tilt:** the whole spectrum, unfiltered, because they affect all of it. Free Detection Range narrows it.
+
+Live Gain never goes beyond ±30 dB, whatever the Gain, Dynamic Range and Gain Scale.
+
 ## Test tolerances
 
 The Engine tests (`tests/engine/BellResponseTest.cpp`, `tests/engine/ShapeResponseTest.cpp`) bound the error by where Frequency sits relative to Nyquist, at 44.1, 48 and 96 kHz. Above 0.91 × Nyquist a Shape is only required to stay stable.
