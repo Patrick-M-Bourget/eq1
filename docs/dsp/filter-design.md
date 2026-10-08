@@ -30,15 +30,27 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
   - It is built from 13 first-order shelves, one per octave from 5 Hz to 40 kHz.
   - It is set to 0 dB at Frequency on the digital response.
   - It ignores Slope and Q.
+- **Low Cut, High Cut:**
+  - Butterworth of order Slope / 6, so 96 dB/oct is order 16 (8 second-order sections). Frequency is the −3 dB point.
+  - Q scales each second-order section's Q as for Shelves: (Q / 0.71)^(1 / sections).
+  - 0 dB/oct passes the signal unchanged.
+  - **Brickwall** is Butterworth of order 32 (16 second-order sections, about 192 dB/oct), the most the 16-section limit allows. Elliptic designs were rejected because their stopband zeros can't be matched near Nyquist; linear-phase FIRs because they add latency (ADR 0001).
+- **Band Pass:** a band-pass transform (s → Q·(s + 1/s)) of a Butterworth low-pass of order Slope / 6 (one second-order section per order, so 16 at 96 dB/oct), so each skirt falls at Slope dB/oct. Q sets the width. 0 dB/oct passes the signal unchanged.
+- **Notch:** a band-stop transform of a Butterworth low-pass of order Slope / 12 (one second-order section per order), so 12 dB/oct is the standard second-order notch. Q sets the width.
+- **All Pass:** Butterworth poles of order Slope / 6, with zeros mirrored across the jω axis, so the phase at Frequency is −90° × order. Q scales the sections as for Cuts. Magnitude is flat; it is tested on phase.
+- **Bell:** always one second-order section (12 dB/oct) until #19 decides a steeper target.
+- **Slopes between whole orders:** until #18 decides a fractional target, a Slope is rounded to the nearest whole order (to the nearest 6 dB/oct, or 12 dB/oct for Notch). So a Cut or Band Pass below 3 dB/oct passes the signal unchanged. This rule is temporary.
 
 ## Detection
 
-When Detection Range is Band, a Dynamic Band's detector hears only the region its Shape works on. Pro-Q 4 doesn't document this, so these regions are eq1's own:
+When Detection Range is Band, a Dynamic Band's detector hears only the region its Shape works on. Solo plays the same region. Pro-Q 4 doesn't document this, so these regions are eq1's own:
 
 - **Bell:** around Frequency, as wide as Q.
 - **Low Shelf:** below Frequency.
 - **High Shelf:** above Frequency.
 - **Tilt Shelf and Flat Tilt:** the whole spectrum, unfiltered, because they affect all of it. Free Detection Range narrows it.
+- **Low Cut, High Cut (Solo only):** the content being removed.
+- **Notch, Band Pass, All Pass (Solo only):** around Frequency, as wide as Q.
 
 Live Gain never goes beyond ±30 dB, whatever the Gain, Dynamic Range and Gain Scale.
 
