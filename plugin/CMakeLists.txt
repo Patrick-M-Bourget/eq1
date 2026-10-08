@@ -55,4 +55,4 @@ target_link_libraries(eq1
 
 clap_juce_extensions_plugin(TARGET eq1
     CLAP_ID "com.pbourget.eq1"
-    CLAP_FEATURES audio-effect equalizer stereo)
+    CLAP_FEATURES audio-effect equalizer mono stereo)

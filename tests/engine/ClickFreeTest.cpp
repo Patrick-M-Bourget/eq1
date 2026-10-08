@@ -4,6 +4,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <numbers>
@@ -49,6 +50,38 @@ std::vector<float> playTone (Host host, const std::function<void (double, Settin
             s = static_cast<float> (0.25 * std::sin (2.0 * std::numbers::pi * toneFrequency * n++ / sampleRate));
         engine.process ({ channels, 1, blockSize });
         output.insert (output.end(), block.begin(), block.end());
+    }
+    return output;
+}
+
+// As playTone, in stereo: the tone at different levels and phases on the left and right, so it has both
+// Mid and Side. Returns the left and right outputs.
+std::array<std::vector<float>, 2> playStereoTone (Host host, const std::function<void (double, Settings&)>& change)
+{
+    const auto [sampleRate, blockSize] = host;
+    const int numBlocks = static_cast<int> (toneSeconds * sampleRate / blockSize);
+
+    Engine engine;
+    engine.prepare (sampleRate, blockSize, 2);
+
+    Settings settings;
+    std::array<std::vector<float>, 2> output;
+    std::vector<float> left (static_cast<size_t> (blockSize)), right (static_cast<size_t> (blockSize));
+    float* channels[] = { left.data(), right.data() };
+    int n = 0;
+    for (int b = 0; b < numBlocks; ++b)
+    {
+        change (static_cast<double> (n) / sampleRate, settings);
+        engine.setSettings (settings);
+        for (size_t i = 0; i < left.size(); ++i, ++n)
+        {
+            const double phase = 2.0 * std::numbers::pi * toneFrequency * n / sampleRate;
+            left[i] = static_cast<float> (0.25 * std::sin (phase));
+            right[i] = static_cast<float> (0.15 * std::sin (phase + 1.0));
+        }
+        engine.process ({ channels, 2, blockSize });
+        output[0].insert (output[0].end(), left.begin(), left.end());
+        output[1].insert (output[1].end(), right.begin(), right.end());
     }
     return output;
 }
@@ -217,4 +250,18 @@ TEST_CASE ("A Notch, Band Pass or All Pass swept block by block does not zipper"
         s.bands[0].slope = 6.0 + 90.0 * position;
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Changing Stereo Placement does not click")
+{
+    const auto host = anyHost();
+    CAPTURE (host.sampleRate, host.blockSize);
+    const auto output = playStereoTone (host, [] (double time, Settings& s) {
+        constexpr StereoPlacement placements[] = { StereoPlacement::Left, StereoPlacement::Right, StereoPlacement::Mid,
+                                                   StereoPlacement::Side, StereoPlacement::Stereo };
+        s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
+        s.bands[0].placement = time < onsetSeconds ? StereoPlacement::Stereo : placements[static_cast<int> ((time - onsetSeconds) / 0.05) % 5];
+    });
+    CHECK (discontinuity (output[0], host.sampleRate) < threshold);
+    CHECK (discontinuity (output[1], host.sampleRate) < threshold);
 }

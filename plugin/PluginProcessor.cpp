@@ -19,7 +19,8 @@ PluginProcessor::PluginProcessor()
                                                   parameters.getRawParameterValue (parameters::bypassId (slot)),
                                                   parameters.getRawParameterValue (parameters::shapeId (slot)),
                                                   parameters.getRawParameterValue (parameters::slopeId (slot)),
-                                                  parameters.getRawParameterValue (parameters::brickwallId (slot)) };
+                                                  parameters.getRawParameterValue (parameters::brickwallId (slot)),
+                                                  parameters.getRawParameterValue (parameters::placementId (slot)) };
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -29,8 +30,10 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo()
-           && layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+    // Mono and stereo tracks, the same in and out.
+    const auto& main = layouts.getMainOutputChannelSet();
+    return layouts.getMainInputChannelSet() == main
+           && (main == juce::AudioChannelSet::mono() || main == juce::AudioChannelSet::stereo());
 }
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -49,7 +52,8 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
                                  .gain = p.gain->load(),
                                  .q = p.q->load(),
                                  .slope = p.slope->load(),
-                                 .brickwall = p.brickwall->load() >= 0.5f };
+                                 .brickwall = p.brickwall->load() >= 0.5f,
+                                 .placement = static_cast<StereoPlacement> (juce::roundToInt (p.placement->load())) };
     }
     engine.setSettings (settings);
     engine.process ({ buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples() });

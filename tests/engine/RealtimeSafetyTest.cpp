@@ -39,6 +39,9 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
                                          Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
             band.shape = shapes[(static_cast<size_t> (block / 8) + slot) % 10];
             band.slope = 6.0 * static_cast<double> (1 + (static_cast<size_t> (block) + slot) % 16);
+            constexpr StereoPlacement placements[] = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
+                                                       StereoPlacement::Mid, StereoPlacement::Side };
+            band.placement = placements[(static_cast<size_t> (block / 4) + slot) % 5];
         }
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize }, block % 2 == 0 ? &sidechainBlock : nullptr);

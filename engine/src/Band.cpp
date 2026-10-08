@@ -38,6 +38,54 @@ void Band::Chain::run (size_t channel, float* samples, int numSamples, const Cas
     }
 }
 
+void Band::Chain::runPlaced (float* const* channels, int numChannels, int numSamples, const Cascade* from)
+{
+    switch (setup.placement)
+    {
+        case StereoPlacement::Stereo:
+            for (int ch = 0; ch < numChannels; ++ch)
+                run (static_cast<size_t> (ch), channels[ch], numSamples, from);
+            return;
+        case StereoPlacement::Left: run (0, channels[0], numSamples, from); return;
+        case StereoPlacement::Right:
+        {
+            // On mono, Left and Right are the same signal.
+            const int right = numChannels > 1 ? 1 : 0;
+            run (static_cast<size_t> (right), channels[right], numSamples, from);
+            return;
+        }
+        // On mono the signal is all Mid: a Mid Band processes it and a Side Band has nothing to process.
+        case StereoPlacement::Mid:
+            if (numChannels > 1)
+                runMidSide (channels, numSamples, from, true);
+            else
+                run (0, channels[0], numSamples, from);
+            return;
+        case StereoPlacement::Side:
+            if (numChannels > 1)
+                runMidSide (channels, numSamples, from, false);
+            return;
+    }
+}
+
+void Band::Chain::runMidSide (float* const* channels, int numSamples, const Cascade* from, bool mid)
+{
+    std::array<float, maxSubBlock> midSamples, sideSamples;
+    float* left = channels[0];
+    float* right = channels[1];
+    for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
+    {
+        midSamples[i] = 0.5f * (left[i] + right[i]);
+        sideSamples[i] = 0.5f * (left[i] - right[i]);
+    }
+    run (0, mid ? midSamples.data() : sideSamples.data(), numSamples, from);
+    for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
+    {
+        left[i] = midSamples[i] + sideSamples[i];
+        right[i] = midSamples[i] - sideSamples[i];
+    }
+}
+
 void Band::prepare (double newSampleRate, int numChannels)
 {
     sampleRate = newSampleRate;
@@ -50,6 +98,15 @@ void Band::prepare (double newSampleRate, int numChannels)
     shapeCrossfade.configure (timeConstant, 1.0e-6);
     for (auto* chain : { &current, &previous })
         chain->states.assign (static_cast<size_t> (numChannels), {});
+    wet.assign (static_cast<size_t> (numChannels), {});
+    previousWet.assign (static_cast<size_t> (numChannels), {});
+    wetChannels.clear();
+    previousWetChannels.clear();
+    for (size_t ch = 0; ch < wet.size(); ++ch)
+    {
+        wetChannels.push_back (wet[ch].data());
+        previousWetChannels.push_back (previousWet[ch].data());
+    }
     mix.reset (0.0);
     shapeCrossfade.reset (1.0);
 }
@@ -57,7 +114,7 @@ void Band::prepare (double newSampleRate, int numChannels)
 void Band::setSettings (const BandSettings& settings, bool snap)
 {
     const double audible = settings.inUse && ! settings.bypass ? 1.0 : 0.0;
-    const auto structure = structureOf (settings);
+    const Setup setup { structureOf (settings), settings.placement };
 
     // A silent Band has nothing to glide or crossfade from: it takes its new settings at once and fades in.
     if (snap || isSilent())
@@ -65,7 +122,7 @@ void Band::setSettings (const BandSettings& settings, bool snap)
         logFrequency.reset (std::log (settings.frequency));
         gain.reset (settings.gain);
         logQ.reset (std::log (settings.q));
-        current.structure = structure;
+        current.setup = setup;
         current.clear();
         shapeCrossfade.reset (1.0);
         pending.reset();
@@ -77,15 +134,15 @@ void Band::setSettings (const BandSettings& settings, bool snap)
         gain.setTarget (settings.gain);
         logQ.setTarget (std::log (settings.q));
         pending.reset();
-        if (structure != current.structure)
+        if (setup != current.setup)
         {
             if (shapeCrossfade.isMoving())
             {
-                pending = structure;
+                pending = setup;
             }
             else
             {
-                crossfadeTo (structure);
+                crossfadeTo (setup);
             }
         }
     }
@@ -98,10 +155,10 @@ void Band::setSettings (const BandSettings& settings, bool snap)
 
 // The old filter keeps playing while the new one fades in. (Swapping moves the per-channel state
 // without allocating.)
-void Band::crossfadeTo (const Structure& structure)
+void Band::crossfadeTo (const Setup& setup)
 {
     std::swap (current, previous);
-    current.structure = structure;
+    current.setup = setup;
     current.clear();
     design();
     shapeCrossfade.reset (0.0);
@@ -110,7 +167,7 @@ void Band::crossfadeTo (const Structure& structure)
 
 void Band::design()
 {
-    current.cascade = designShape ({ current.structure, std::exp (logFrequency.value()), gain.value(), std::exp (logQ.value()) },
+    current.cascade = designShape ({ current.setup.structure, std::exp (logFrequency.value()), gain.value(), std::exp (logQ.value()) },
                                    sampleRate);
 }
 
@@ -140,8 +197,7 @@ void Band::process (float* const* channels, int numChannels, int numSamples)
 
     if (! fading && ! crossfading && mix.value() == 1.0)
     {
-        for (int ch = 0; ch < numChannels; ++ch)
-            current.run (static_cast<size_t> (ch), channels[ch], numSamples, gliding ? &from : nullptr);
+        current.runPlaced (channels, numChannels, numSamples, gliding ? &from : nullptr);
         return;
     }
 
@@ -152,22 +208,29 @@ void Band::process (float* const* channels, int numChannels, int numSamples)
         crossfades[i] = crossfading ? shapeCrossfade.next() : shapeCrossfade.value();
     }
 
+    // A channel the chains leave alone comes out of the mix exactly as it went in.
+    const auto copyInput = [&] (std::vector<float*>& to) {
+        for (int ch = 0; ch < numChannels; ++ch)
+            std::copy (channels[ch], channels[ch] + numSamples, to[static_cast<size_t> (ch)]);
+    };
+    copyInput (wetChannels);
+    current.runPlaced (wetChannels.data(), numChannels, numSamples, gliding ? &from : nullptr);
+    if (crossfading)
+    {
+        copyInput (previousWetChannels);
+        previous.runPlaced (previousWetChannels.data(), numChannels, numSamples, nullptr);
+    }
     for (int ch = 0; ch < numChannels; ++ch)
     {
-        const auto channel = static_cast<size_t> (ch);
         float* samples = channels[ch];
-        std::array<float, maxSubBlock> wet, old;
-        std::copy (samples, samples + numSamples, wet.begin());
-        current.run (channel, wet.data(), numSamples, gliding ? &from : nullptr);
-        if (crossfading)
-        {
-            std::copy (samples, samples + numSamples, old.begin());
-            previous.run (channel, old.data(), numSamples, nullptr);
-            for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
-                wet[i] = static_cast<float> (old[i] + crossfades[i] * (wet[i] - old[i]));
-        }
+        auto& wetSamples = wet[static_cast<size_t> (ch)];
+        const auto& previousSamples = previousWet[static_cast<size_t> (ch)];
         for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
-            samples[i] = static_cast<float> (samples[i] + mixes[i] * (wet[i] - samples[i]));
+        {
+            if (crossfading)
+                wetSamples[i] = static_cast<float> (previousSamples[i] + crossfades[i] * (wetSamples[i] - previousSamples[i]));
+            samples[i] = static_cast<float> (samples[i] + mixes[i] * (wetSamples[i] - samples[i]));
+        }
     }
 
     // Faded out: start clean when the Band next fades in.

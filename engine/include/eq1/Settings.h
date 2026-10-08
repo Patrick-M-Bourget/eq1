@@ -20,6 +20,17 @@ enum class Shape
     AllPass,
 };
 
+// Which part of the stereo signal a Band processes. On a mono track the signal is all Mid, and Left
+// and Right are the same signal, so a Side Band has no effect and the others process it.
+enum class StereoPlacement
+{
+    Stereo,
+    Left,
+    Right,
+    Mid,
+    Side,
+};
+
 // One Band slot. A slot not in use, or a Bypassed Band, has no effect but keeps its settings.
 struct BandSettings
 {
@@ -33,6 +44,7 @@ struct BandSettings
     // whole order, so switching Shape and back restores it (ADR 0003).
     double slope = 12.0;
     bool brickwall = false; // Low Cut and High Cut only: overrides Slope
+    StereoPlacement placement = StereoPlacement::Stereo;
 
     bool operator== (const BandSettings&) const = default;
 };

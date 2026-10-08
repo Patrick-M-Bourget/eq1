@@ -47,11 +47,18 @@ juce::String bypassId (int slot) { return slotId (slot, "bypass"); }
 juce::String shapeId (int slot) { return slotId (slot, "shape"); }
 juce::String slopeId (int slot) { return slotId (slot, "slope"); }
 juce::String brickwallId (int slot) { return slotId (slot, "brickwall"); }
+juce::String placementId (int slot) { return slotId (slot, "placement"); }
 
 const juce::StringArray& shapeNames()
 {
     static const juce::StringArray names { "Bell",      "Low Shelf", "Low Cut",    "High Shelf", "High Cut",
                                            "Notch",     "Band Pass", "Tilt Shelf", "Flat Tilt",  "All Pass" };
+    return names;
+}
+
+const juce::StringArray& placementNames()
+{
+    static const juce::StringArray names { "Stereo", "Left", "Right", "Mid", "Side" };
     return names;
 }
 
@@ -94,7 +101,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                  withText (1, "dB/oct")),
                     std::make_unique<juce::AudioParameterBool> (juce::ParameterID { brickwallId (slot), 1 },
                                                                 slotName (slot, "Brickwall"),
-                                                                false));
+                                                                false),
+                    std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { placementId (slot), 1 },
+                                                                  slotName (slot, "Stereo Placement"),
+                                                                  placementNames(),
+                                                                  0));
     }
     return layout;
 }

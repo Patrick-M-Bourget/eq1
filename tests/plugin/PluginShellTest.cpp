@@ -27,10 +27,18 @@ void setParameter (juce::AudioProcessor& processor, const juce::String& id, floa
     FAIL ("No parameter " << id);
 }
 
-// Level change in dB of a steady sine through the processor.
-double sineGainDb (juce::AudioProcessor& processor, double frequency)
+// Which part of a stereo signal the sine is in: the same on both channels, or inverted on the right.
+enum class Content
 {
-    juce::AudioBuffer<float> buffer (2, blockSize);
+    mid,
+    side,
+};
+
+// Level change in dB of a steady sine through the processor, measured on the first channel.
+double sineGainDb (juce::AudioProcessor& processor, double frequency, Content content = Content::mid)
+{
+    const int numChannels = processor.getTotalNumInputChannels();
+    juce::AudioBuffer<float> buffer (numChannels, blockSize);
     juce::MidiBuffer midi;
     double inputPower = 0.0, outputPower = 0.0;
     int n = 0;
@@ -40,7 +48,8 @@ double sineGainDb (juce::AudioProcessor& processor, double frequency)
         {
             const auto s = static_cast<float> (std::sin (2.0 * std::numbers::pi * frequency * n / sampleRate));
             buffer.setSample (0, i, s);
-            buffer.setSample (1, i, s);
+            if (numChannels > 1)
+                buffer.setSample (1, i, content == Content::side ? -s : s);
             if (block >= 32)
                 inputPower += s * s;
         }
@@ -50,6 +59,16 @@ double sineGainDb (juce::AudioProcessor& processor, double frequency)
                 outputPower += buffer.getSample (0, i) * buffer.getSample (0, i);
     }
     return 10.0 * std::log10 (outputPower / inputPower);
+}
+
+// Switches the main input and output to the given layout, as a host does, and prepares to play.
+void useLayout (juce::AudioProcessor& processor, const juce::AudioChannelSet& channels)
+{
+    juce::AudioProcessor::BusesLayout layout;
+    layout.inputBuses.add (channels);
+    layout.outputBuses.add (channels);
+    REQUIRE (processor.setBusesLayout (layout));
+    processor.prepareToPlay (sampleRate, blockSize);
 }
 
 } // namespace
@@ -106,6 +125,7 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         { "shape", "Shape", "", 0.0f, 9.0f, 1.0f, 0.0f, 4.0f, shapeNames },
         { "slope", "Slope", "dB/oct", 0.0f, 96.0f, 0.0f, 12.0f, 48.0f, {} },
         { "brickwall", "Brickwall", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
+        { "placement", "Stereo Placement", "", 0.0f, 4.0f, 1.0f, 0.0f, 2.0f, { "Stereo", "Left", "Right", "Mid", "Side" } },
     };
 
     juce::ScopedJuceInitialiser_GUI juce;
@@ -140,7 +160,8 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
             {
                 CHECK (choice->choices == control.choices);
                 for (int index = 0; index < control.choices.size(); ++index)
-                    CHECK_THAT (parameter->convertTo0to1 (static_cast<float> (index)), WithinAbs (index / 9.0, 1.0e-6));
+                    CHECK_THAT (parameter->convertTo0to1 (static_cast<float> (index)),
+                                WithinAbs (index / (control.choices.size() - 1.0), 1.0e-6));
             }
             if (juce::String (control.suffix) == "slope")
             {
@@ -218,6 +239,7 @@ TEST_CASE ("Saved state restores every Band setting, including Brickwall")
     setParameter (saved, "band7_q", 2.5f);
     setParameter (saved, "band7_slope", 37.5f);
     setParameter (saved, "band7_brickwall", 1.0f);
+    setParameter (saved, "band7_placement", 3.0f); // Mid
     setParameter (saved, "band24_bypass", 1.0f);
 
     juce::MemoryBlock state;
@@ -244,6 +266,60 @@ TEST_CASE ("Saved state restores every Band setting, including Brickwall")
         return 0.0f;
     };
     CHECK (value ("band7_brickwall") == 1.0f);
+    CHECK (value ("band7_placement") == 3.0f);
     CHECK (value ("band7_shape") == 4.0f);
     CHECK_THAT (value ("band7_slope"), WithinAbs (37.5, 1.0e-4));
+}
+
+TEST_CASE ("Hosts can use the plugin on mono and stereo tracks")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    const auto mono = juce::AudioChannelSet::mono(), stereo = juce::AudioChannelSet::stereo();
+
+    const auto supports = [&] (const juce::AudioChannelSet& in, const juce::AudioChannelSet& out) {
+        juce::AudioProcessor::BusesLayout layout;
+        layout.inputBuses.add (in);
+        layout.outputBuses.add (out);
+        return processor.checkBusesLayoutSupported (layout);
+    };
+    CHECK (supports (mono, mono));
+    CHECK (supports (stereo, stereo));
+    CHECK_FALSE (supports (mono, stereo));
+    CHECK_FALSE (supports (stereo, mono));
+}
+
+TEST_CASE ("Stereo Placement is available on stereo tracks only")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+
+    useLayout (processor, juce::AudioChannelSet::stereo());
+    CHECK (processor.isStereoPlacementAvailable());
+    useLayout (processor, juce::AudioChannelSet::mono());
+    CHECK_FALSE (processor.isStereoPlacementAvailable());
+}
+
+TEST_CASE ("On a mono track a Side Band has no effect, and its Stereo Placement comes back on stereo")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo());
+
+    setParameter (processor, "band3_in_use", 1.0f);
+    setParameter (processor, "band3_frequency", 1000.0f);
+    setParameter (processor, "band3_gain", 12.0f);
+    setParameter (processor, "band3_placement", 4.0f); // Side
+    CHECK_THAT (sineGainDb (processor, 1000.0, Content::side), WithinAbs (12.0, 0.1));
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
+
+    useLayout (processor, juce::AudioChannelSet::mono());
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
+    setParameter (processor, "band3_placement", 3.0f); // Mid
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (12.0, 0.1));
+    setParameter (processor, "band3_placement", 4.0f);
+
+    useLayout (processor, juce::AudioChannelSet::stereo());
+    CHECK_THAT (sineGainDb (processor, 1000.0, Content::side), WithinAbs (12.0, 0.1));
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 }

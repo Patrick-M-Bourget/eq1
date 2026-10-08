@@ -16,6 +16,7 @@ add_executable(eq1_engine_tests
     engine/ClickFreeTest.cpp
     engine/RealtimeSafetyTest.cpp
     engine/SettingsHandoffTest.cpp
+    engine/StereoPlacementTest.cpp
     engine/ShapeResponseTest.cpp
 )
 target_link_libraries(eq1_engine_tests PRIVATE eq1::engine Catch2::Catch2WithMain)

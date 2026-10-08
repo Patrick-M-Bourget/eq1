@@ -35,6 +35,10 @@ public:
     const juce::String getProgramName (int) override { return {}; }
     void changeProgramName (int, const juce::String&) override {}
 
+    // False on a mono track, where the editor offers no Stereo Placement. Each Band keeps its stored
+    // Stereo Placement there, and the sound follows what a mono signal has: all Mid, Left and Right the same.
+    bool isStereoPlacementAvailable() const { return getMainBusNumOutputChannels() > 1; }
+
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
@@ -50,6 +54,7 @@ private:
         std::atomic<float>* shape;
         std::atomic<float>* slope;
         std::atomic<float>* brickwall;
+        std::atomic<float>* placement;
     };
 
     juce::AudioProcessorValueTreeState parameters;
