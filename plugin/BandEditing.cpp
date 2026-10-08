@@ -80,6 +80,14 @@ std::optional<int> BandEditing::add (double frequency, double gain)
     return std::nullopt;
 }
 
+std::optional<int> BandEditing::grab (double frequency)
+{
+    const auto slot = add (frequency, 0.0);
+    if (slot)
+        beginDrag ({ *slot });
+    return slot;
+}
+
 void BandEditing::deleteBand (int slot)
 {
     set (parameters::inUseId (slot), 0.0);

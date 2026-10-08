@@ -30,6 +30,14 @@ private:
     EqDisplay display;
     BandPanel panel;
     juce::ComboBox displayRange;
+
+    // The Analyzer's controls, above the display.
+    juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" };
+    juce::ComboBox analyzerRange, analyzerSpeed, analyzerResolution;
+    juce::Label analyzerTiltLabel;
+    juce::Slider analyzerTilt;
+    void showAnalyzerSettings();
+    void storeAnalyzerSettings();
 };
 
 } // namespace eq1

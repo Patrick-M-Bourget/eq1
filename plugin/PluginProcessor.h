@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnalyzerSettings.h"
 #include "Parameters.h"
 #include "eq1/Engine.h"
 
@@ -47,6 +48,12 @@ public:
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
 
+    AnalyzerSettings analyzerSettings() const;
+    void setAnalyzerSettings (const AnalyzerSettings& settings);
+
+    // The Engine's analysis taps, for the Analyzer: from one reader thread, the message thread.
+    int readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return engine.readAnalysis (tap, destination, maxSamples); }
+
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
@@ -58,6 +65,8 @@ private:
     // Kept out of the parameter state, which a host may save from another thread, and written into
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
+    AnalyzerSettings analyzer;
+    mutable juce::SpinLock analyzerLock; // the editor sets it while a host may be saving
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };

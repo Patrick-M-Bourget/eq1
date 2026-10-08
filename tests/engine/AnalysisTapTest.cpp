@@ -3,7 +3,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <atomic>
 #include <cmath>
+#include <thread>
 #include <vector>
 
 using namespace eq1;
@@ -84,4 +86,30 @@ TEST_CASE ("Sidechain tap stays empty when no Sidechain is connected")
 
     CHECK (readAll (engine, AnalysisTap::PreEq).size() == 64);
     CHECK (readAll (engine, AnalysisTap::Sidechain).empty());
+}
+
+TEST_CASE ("The Analyzer can keep reading the taps while the host prepares the Engine again")
+{
+    // Hosts call prepare when the sample rate or block size changes, while the editor goes on reading.
+    Engine engine;
+    engine.prepare (48000.0, 256, 2);
+    std::atomic<bool> done { false };
+    std::thread reader ([&] {
+        std::vector<float> samples (4096);
+        while (! done)
+            for (auto tap : { AnalysisTap::PreEq, AnalysisTap::PostEq, AnalysisTap::Sidechain })
+                engine.readAnalysis (tap, samples.data(), static_cast<int> (samples.size()));
+    });
+
+    std::vector<float> left (256, 0.25f), right (256, -0.25f);
+    float* main[] = { left.data(), right.data() };
+    for (int round = 0; round < 50; ++round)
+    {
+        engine.prepare (round % 2 == 0 ? 44100.0 : 96000.0, 256, 2);
+        for (int block = 0; block < 4; ++block)
+            engine.process ({ main, 2, 256 });
+    }
+    done = true;
+    reader.join();
+    SUCCEED();
 }

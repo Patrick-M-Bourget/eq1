@@ -46,11 +46,58 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editi
 {
     setWantsKeyboardFocus (true);
     shown = editing.settings();
-    startTimerHz (30);
+    tapSamples.resize (1 << 16);
+    startTimerHz (60);
+}
+
+bool EqDisplay::updateAnalyzer()
+{
+    analyzer = processor.analyzerSettings();
+    const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
+    const auto now = juce::Time::getMillisecondCounter();
+    const double seconds = lastFrame == 0 ? 1.0 / 60.0 : juce::jlimit (0.001, 0.25, (now - lastFrame) / 1000.0);
+    lastFrame = now;
+
+    const std::pair<AnalysisTap, AnalyzerSpectrum*> taps[] = { { AnalysisTap::PreEq, &preEq }, { AnalysisTap::PostEq, &postEq } };
+    const bool showing[] = { analyzer.showPreEq, analyzer.showPostEq };
+    for (size_t i = 0; i < std::size (taps); ++i)
+    {
+        auto [tap, spectrum] = taps[i];
+        if (! spectrum->isPrepared() || ! juce::exactlyEqual (spectrum->getSampleRate(), sampleRate)
+            || spectrum->getResolution() != analyzer.resolution)
+            spectrum->prepare (sampleRate, analyzer.resolution);
+        // Always drained, so the taps hold only the newest samples when a spectrum is shown again;
+        // analysed only when shown.
+        const int count = processor.readAnalysis (tap, tapSamples.data(), static_cast<int> (tapSamples.size()));
+        spectrum->push (tapSamples.data(), count);
+        if (showing[i])
+            spectrum->update (seconds, analyzer.speed);
+    }
+    return analyzer.showPreEq || analyzer.showPostEq;
+}
+
+float EqDisplay::spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const
+{
+    const double level = spectrum.levelDb (frequencyAt (x), analyzer.tiltDbPerOctave);
+    return static_cast<float> (juce::jlimit (0.0, 1.0, -level / analyzer.rangeDb) * getHeight());
+}
+
+const AnalyzerSpectrum* EqDisplay::spectrumToGrab() const
+{
+    return analyzer.showPostEq ? &postEq : analyzer.showPreEq ? &preEq : nullptr;
 }
 
 void EqDisplay::timerCallback()
 {
+    if (updateAnalyzer())
+    {
+        // The spectra move every frame.
+        shown = editing.settings();
+        shownRangeDb = processor.displayRangeDb();
+        repaint();
+        return;
+    }
+
     const bool messageExpired = allInUseMessageUntil != 0 && juce::Time::getMillisecondCounter() > allInUseMessageUntil;
     if (messageExpired)
         allInUseMessageUntil = 0;
@@ -152,6 +199,39 @@ void EqDisplay::paint (juce::Graphics& g)
         g.drawText (f >= 1000.0 ? juce::String (juce::roundToInt (f / 1000.0)) + "k" : juce::String (juce::roundToInt (f)),
                     juce::Rectangle<float> (x + 3.0f, static_cast<float> (getHeight()) - 16.0f, 40.0f, 14.0f), juce::Justification::left);
     }
+    // The Analyzer behind everything: pre-EQ filled, post-EQ filled and outlined.
+    const auto spectrumLine = [&] (const AnalyzerSpectrum& spectrum) {
+        juce::Path line;
+        for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
+        {
+            const juce::Point<float> point { x, spectrumYAt (spectrum, x) };
+            if (x == 0.0f)
+                line.startNewSubPath (point);
+            else
+                line.lineTo (point);
+        }
+        return line;
+    };
+    const auto areaUnder = [&] (juce::Path line) {
+        line.lineTo (line.getCurrentPosition().withY (static_cast<float> (getHeight())));
+        line.lineTo (0.0f, static_cast<float> (getHeight()));
+        line.closeSubPath();
+        return line;
+    };
+    if (analyzer.showPreEq)
+    {
+        g.setColour (juce::Colour (0x302f8fd0));
+        g.fillPath (areaUnder (spectrumLine (preEq)));
+    }
+    if (analyzer.showPostEq)
+    {
+        const auto line = spectrumLine (postEq);
+        g.setColour (juce::Colour (0x18ffffff));
+        g.fillPath (areaUnder (line));
+        g.setColour (juce::Colour (0x70a0d8ff));
+        g.strokePath (line, juce::PathStrokeType (1.0f));
+    }
+
     const int range = processor.displayRangeDb();
     for (int step = -2; step <= 2; ++step)
     {
@@ -256,6 +336,16 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
     dragStart = e.position;
     const bool adding = e.mods.isShiftDown() || e.mods.isCommandDown();
     const int slot = slotAt (e.position);
+    if (slot == 0 && ! adding)
+    {
+        // Spectrum Grab: pressing on the spectrum, near its drawn line, grabs the peak there once the
+        // mouse moves.
+        if (const auto* spectrum = spectrumToGrab(); spectrum != nullptr && std::abs (spectrumYAt (*spectrum, e.position.x) - e.position.y) <= 12.0f)
+        {
+            grabFrequency = spectrum->peakNear (frequencyAt (e.position.x));
+            return;
+        }
+    }
     if (slot == 0)
     {
         selectedBeforeMarquee = adding ? selected : std::set<int> {};
@@ -284,6 +374,19 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
 
 void EqDisplay::mouseDrag (const juce::MouseEvent& e)
 {
+    if (grabFrequency && e.getDistanceFromDragStart() > 3)
+    {
+        if (const auto grabbed = editing.grab (*grabFrequency))
+        {
+            select ({ *grabbed });
+            dragging = grabbing = true;
+        }
+        else
+        {
+            allInUseMessageUntil = juce::Time::getMillisecondCounter() + 2500;
+        }
+        grabFrequency.reset();
+    }
     if (marquee)
     {
         marquee = juce::Rectangle<float> (dragStart, e.position);
@@ -299,7 +402,9 @@ void EqDisplay::mouseDrag (const juce::MouseEvent& e)
     }
     if (! dragging)
         return;
-    editing.dragBy (frequencyAt (e.position.x) / frequencyAt (dragStart.x), dbAt (e.position.y) - dbAt (dragStart.y));
+    // A grabbed Band stays on its peak: the drag sets its Gain.
+    const double frequencyRatio = grabbing ? 1.0 : frequencyAt (e.position.x) / frequencyAt (dragStart.x);
+    editing.dragBy (frequencyRatio, dbAt (e.position.y) - dbAt (dragStart.y));
     shown = editing.settings();
     repaint();
 }
@@ -308,7 +413,8 @@ void EqDisplay::mouseUp (const juce::MouseEvent&)
 {
     if (dragging)
         editing.endDrag();
-    dragging = false;
+    dragging = grabbing = false;
+    grabFrequency.reset();
     marquee.reset();
     repaint();
 }

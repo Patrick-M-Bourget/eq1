@@ -25,6 +25,10 @@ public:
     // are in use.
     std::optional<int> add (double frequency, double gain);
 
+    // Spectrum Grab on a peak with no Band nearby: a Bell at frequency, Gain 0, added as add() does,
+    // and a drag of it begun, which then sets its Gain. Nothing when all 24 slots are in use.
+    std::optional<int> grab (double frequency);
+
     // Deletes a Band: its slot becomes free and keeps its settings. Other Bands keep their numbers.
     void deleteBand (int slot);
 

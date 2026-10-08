@@ -1,6 +1,8 @@
 #pragma once
 
+#include "AnalyzerSettings.h"
 #include "BandEditing.h"
+#include "AnalyzerSpectrum.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -13,9 +15,11 @@ namespace eq1
 
 class PluginProcessor;
 
-// The EQ curve with a handle per Band. Double-click adds a Band; drag moves the selected Bands (Shift
-// or Cmd-click to select several, or drag a box around them); the wheel changes Q; Delete removes
-// the selected Bands. The curve comes from the Engine's own response maths (eq1/Response.h).
+// The EQ curve with a handle per Band, over the Analyzer's pre-EQ and post-EQ spectra. Double-click
+// adds a Band; drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box
+// around them); the wheel changes Q; Delete removes the selected Bands. Pressing on the spectrum, away
+// from the handles, grabs its peak there (Spectrum Grab). The curve comes from the Engine's own
+// response maths (eq1/Response.h).
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
@@ -34,6 +38,13 @@ public:
 
 private:
     void timerCallback() override;
+    // Reads the analysis taps into the spectra; false when the Analyzer shows nothing.
+    bool updateAnalyzer();
+    // Where a spectrum is drawn at x, with Analyzer Tilt: the top of the display is 0 dB, the bottom
+    // the Analyzer's range below.
+    float spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const;
+    // The spectrum Spectrum Grab reads peaks from: post-EQ when shown, else pre-EQ, else none.
+    const AnalyzerSpectrum* spectrumToGrab() const;
 
     // Frequency runs on a log scale from 10 Hz to 30 kHz; dB over +/- the display range.
     float xOf (double frequency) const;
@@ -49,11 +60,20 @@ private:
 
     PluginProcessor& processor;
     BandEditing& editing;
+
+    AnalyzerSpectrum preEq, postEq;
+    AnalyzerSettings analyzer; // taken once a frame
+    std::vector<float> tapSamples; // read from the taps each frame
+    juce::uint32 lastFrame = 0;
     Settings shown; // what was drawn last, refreshed on the timer
 
     std::set<int> selected;
     std::set<int> selectedBeforeMarquee; // Shift or Cmd adds the marquee to it
     bool dragging = false;
+    // Spectrum Grab, from the press until the mouse moves: only a drag makes the Bell, so a click or a
+    // double-click on the spectrum doesn't.
+    std::optional<double> grabFrequency;
+    bool grabbing = false; // the drag sets only the grabbed Band's Gain
     std::optional<juce::Rectangle<float>> marquee;
     juce::Point<float> dragStart;
     int shownRangeDb = 0;

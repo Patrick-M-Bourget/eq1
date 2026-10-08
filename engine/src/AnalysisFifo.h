@@ -12,8 +12,12 @@ namespace eq1
 class AnalysisFifo
 {
 public:
+    // Allocates once: the reader may go on popping while the host prepares the Engine again, so a
+    // later call with the same capacity leaves the ring, and what it holds, alone.
     void allocate (int capacity)
     {
+        if (buffer.size() == static_cast<size_t> (capacity))
+            return;
         buffer.assign (static_cast<size_t> (capacity), 0.0f);
         writeIndex.store (0);
         readIndex.store (0);

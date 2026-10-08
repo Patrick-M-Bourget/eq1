@@ -41,7 +41,8 @@ target_sources(eq1 PRIVATE
     BandEditing.cpp
     BandPanel.cpp
     EqDisplay.cpp
-    PluginEditor.cpp)
+    PluginEditor.cpp
+    AnalyzerSpectrum.cpp)
 
 target_compile_definitions(eq1 PUBLIC
     JUCE_WEB_BROWSER=0
@@ -52,6 +53,7 @@ target_link_libraries(eq1
     PRIVATE
         eq1::engine
         juce::juce_audio_utils
+        juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

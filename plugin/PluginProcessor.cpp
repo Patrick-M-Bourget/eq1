@@ -49,6 +49,46 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 namespace
 {
 const juce::Identifier displayRangeProperty { "displayRangeDb" };
+const juce::Identifier analyzerType { "Analyzer" }, showPreEqProperty { "showPreEq" }, showPostEqProperty { "showPostEq" },
+    rangeProperty { "rangeDb" }, speedProperty { "speed" }, resolutionProperty { "resolution" }, analyzerTiltProperty { "tiltDbPerOctave" };
+
+juce::ValueTree toTree (const AnalyzerSettings& a)
+{
+    return juce::ValueTree (analyzerType)
+        .setProperty (showPreEqProperty, a.showPreEq, nullptr)
+        .setProperty (showPostEqProperty, a.showPostEq, nullptr)
+        .setProperty (rangeProperty, a.rangeDb, nullptr)
+        .setProperty (speedProperty, static_cast<int> (a.speed), nullptr)
+        .setProperty (resolutionProperty, static_cast<int> (a.resolution), nullptr)
+        .setProperty (analyzerTiltProperty, a.tiltDbPerOctave, nullptr);
+}
+
+AnalyzerSettings fromTree (const juce::ValueTree& tree)
+{
+    const AnalyzerSettings defaults;
+    const int range = tree.getProperty (rangeProperty, defaults.rangeDb);
+    return { .showPreEq = tree.getProperty (showPreEqProperty, defaults.showPreEq),
+             .showPostEq = tree.getProperty (showPostEqProperty, defaults.showPostEq),
+             .rangeDb = range == 60 || range == 120 ? range : 90,
+             .speed = static_cast<AnalyzerSpeed> (juce::jlimit (static_cast<int> (AnalyzerSpeed::verySlow), static_cast<int> (AnalyzerSpeed::veryFast),
+                                                                static_cast<int> (tree.getProperty (speedProperty, static_cast<int> (defaults.speed))))),
+             .resolution = static_cast<AnalyzerResolution> (
+                 juce::jlimit (static_cast<int> (AnalyzerResolution::low), static_cast<int> (AnalyzerResolution::maximum),
+                               static_cast<int> (tree.getProperty (resolutionProperty, static_cast<int> (defaults.resolution))))),
+             .tiltDbPerOctave = juce::jlimit (0.0, 6.0, static_cast<double> (tree.getProperty (analyzerTiltProperty, defaults.tiltDbPerOctave))) };
+}
+} // namespace
+
+AnalyzerSettings PluginProcessor::analyzerSettings() const
+{
+    const juce::SpinLock::ScopedLockType lock (analyzerLock);
+    return analyzer;
+}
+
+void PluginProcessor::setAnalyzerSettings (const AnalyzerSettings& settings)
+{
+    const juce::SpinLock::ScopedLockType lock (analyzerLock);
+    analyzer = settings;
 }
 
 void PluginProcessor::setDisplayRangeDb (int rangeDb)
@@ -60,6 +100,7 @@ void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = parameters.copyState();
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
+    state.appendChild (toTree (analyzerSettings()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -71,6 +112,11 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         auto state = juce::ValueTree::fromXml (*xml);
         setDisplayRangeDb (state.getProperty (displayRangeProperty, 12));
         state.removeProperty (displayRangeProperty, nullptr);
+        if (auto saved = state.getChildWithName (analyzerType); saved.isValid())
+        {
+            setAnalyzerSettings (fromTree (saved));
+            state.removeChild (saved, nullptr);
+        }
         parameters.replaceState (state);
     }
 }

@@ -227,3 +227,57 @@ TEST_CASE ("An editor closed in the middle of a drag still ends its gestures")
     CHECK (log.ends[indexOf (host.processor, "band1_frequency")] == 1);
     host.processor.removeListener (&log);
 }
+
+TEST_CASE ("Spectrum Grab makes a Bell at the peak, Gain 0, in the lowest free slot, and the drag sets its Gain")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    host.set (2, "shape", 6.0f); // what slot 2 held before must not come back
+
+    REQUIRE (host.editing.grab (1234.0) == 2);
+    CHECK (host.value (2, "in_use") == 1.0f);
+    CHECK (host.value (2, "shape") == 0.0f); // Bell
+    CHECK_THAT (host.value (2, "frequency"), WithinRel (1234.0f, 1.0e-4f));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (0.0, 1.0e-4));
+
+    host.editing.dragBy (1.0, -5.5);
+    host.editing.endDrag();
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-5.5, 1.0e-4));
+    CHECK_THAT (host.value (2, "frequency"), WithinRel (1234.0f, 1.0e-4f));
+}
+
+TEST_CASE ("Spectrum Grab with all 24 Band Slots in use is refused")
+{
+    Host host;
+    for (int slot = 1; slot <= 24; ++slot)
+        host.addBand (slot, 1000.0f, 0.0f);
+    CHECK_FALSE (host.editing.grab (500.0).has_value());
+}
+
+TEST_CASE ("Analyzer settings are saved with the session")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    const eq1::AnalyzerSettings defaults;
+    CHECK (saved.analyzerSettings() == defaults);
+    CHECK (defaults.showPreEq);
+    CHECK (defaults.showPostEq);
+    CHECK (defaults.rangeDb == 90);
+    CHECK (defaults.speed == eq1::AnalyzerSpeed::medium);
+    CHECK (defaults.resolution == eq1::AnalyzerResolution::medium);
+    CHECK_THAT (defaults.tiltDbPerOctave, WithinAbs (4.5, 1.0e-9));
+
+    const eq1::AnalyzerSettings changed { .showPreEq = false,
+                                          .showPostEq = true,
+                                          .rangeDb = 120,
+                                          .speed = eq1::AnalyzerSpeed::veryFast,
+                                          .resolution = eq1::AnalyzerResolution::maximum,
+                                          .tiltDbPerOctave = 1.5 };
+    saved.setAnalyzerSettings (changed);
+
+    juce::MemoryBlock state;
+    saved.getStateInformation (state);
+    eq1::PluginProcessor restored;
+    restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    CHECK (restored.analyzerSettings() == changed);
+}
