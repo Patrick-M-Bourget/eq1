@@ -606,3 +606,30 @@ TEST_CASE ("Detection Audition needs a Band in use with a Shape that has dynamic
     const auto signal = [] (int, int n) { return sine (300.0, -12.0, n) + sine (1000.0, -12.0, n); };
     CHECK (play (2, 0.5, auditioned, signal).output == play (2, 0.5, withBand (band), signal).output);
 }
+
+TEST_CASE ("With a mono Sidechain, an External Side Band ducks on every kick and recovers between them")
+{
+    // A kick at 120 bpm: a 60 Hz thump decaying over about 80 ms, on each beat.
+    constexpr double beat = 0.5;
+    const Sidechain kick { 1, [] (int, int n) {
+                              const double t = std::fmod (n / sampleRate, beat);
+                              return std::exp (-t / 0.08) * sine (60.0, -3.0, n);
+                          } };
+    auto band = externalBell();
+    band.shape = Shape::LowShelf;
+    band.frequency = 150.0;
+    band.placement = StereoPlacement::Side;
+    // The bass, wide in the stereo field.
+    const auto bass = [] (int ch, int n) { return (ch == 0 ? 1.0 : -1.0) * sine (80.0, -20.0, n); };
+    const auto run = play (2, 4.0, withBand (band), bass, {}, timingBlock, &kick);
+
+    for (double hit = 1.0; hit + beat <= 4.0; hit += beat)
+    {
+        CAPTURE (hit);
+        double deepest = 0.0;
+        for (size_t b = blockAt (hit); b < blockAt (hit + 0.1); ++b)
+            deepest = std::min (deepest, run.liveGain[b]);
+        CHECK (deepest < -6.0);
+        CHECK (run.liveGain[blockAt (hit + beat) - 1] > -3.0);
+    }
+}

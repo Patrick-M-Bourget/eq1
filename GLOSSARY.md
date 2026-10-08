@@ -99,7 +99,7 @@ How the whole EQ trades latency against phase behavior: Zero Latency, Natural Ph
 _Avoid_: Phase mode, quality
 
 **Analyzer**:
-The real-time spectrum display behind the EQ curve, showing the signal before and after processing.
+The real-time spectrum display behind the EQ curve, showing the signal before and after processing, and the Sidechain.
 _Avoid_: Spectrum, FFT display, meter
 
 **Analyzer Tilt**:

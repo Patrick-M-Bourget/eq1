@@ -5,7 +5,8 @@
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64)
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
-#   scripts/check.sh validate   pluginval (VST3, AU), auval, clap-validator, AAX and Standalone built
+#   scripts/check.sh validate   pluginval (VST3, AU), auval, Sidechain routing (VST3, AU), clap-validator,
+#                               AAX and Standalone built
 #
 # BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden. Validators
 # are downloaded into the dependencies folder with gh, which needs to be authenticated (GH_TOKEN in CI).
@@ -17,6 +18,7 @@ DEPS=${FETCHCONTENT_BASE_DIR:-$PWD/.deps}
 PLUGINVAL_VERSION=v1.0.4
 CLAP_VALIDATOR_VERSION=0.4.1
 ARTEFACTS=$BUILD_DIR/plugin/eq1_artefacts/Release
+ROUTING_CHECK=$BUILD_DIR/tests/eq1_sidechain_routing_check_artefacts/Release/eq1_sidechain_routing_check
 
 case "$(uname -s)" in
     Darwin) os=macos ;;
@@ -101,12 +103,14 @@ validate_au() (
     killall -9 AudioComponentRegistrar 2>/dev/null || true
     auval -v aufx Eq01 Pmbg
     pluginval "$components/eq1.component"
+    "$ROUTING_CHECK" AU
 )
 
 validate() {
     fetch_validators
     step "pluginval VST3"
     pluginval "$ARTEFACTS/VST3/eq1.vst3"
+    "$ROUTING_CHECK" "$ARTEFACTS/VST3/eq1.vst3"
     if [ "$os" = macos ]; then
         step "auval and pluginval AU"
         validate_au
