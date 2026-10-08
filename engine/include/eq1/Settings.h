@@ -28,6 +28,10 @@ inline bool hasGain (Shape shape)
            || shape == Shape::FlatTilt;
 }
 
+// The Shapes that can be dynamic: those with a Gain to move. A Band with another Shape keeps its
+// dynamics settings and ignores them, until its Shape changes back.
+inline bool hasDynamics (Shape shape) { return hasGain (shape); }
+
 inline bool isCut (Shape shape) { return shape == Shape::LowCut || shape == Shape::HighCut; }
 
 // Bell ignores Slope until Bell Slope (#19); Flat Tilt has none.
@@ -59,8 +63,25 @@ struct BandSettings
     bool brickwall = false; // Low Cut and High Cut only: overrides Slope
     StereoPlacement placement = StereoPlacement::Stereo;
 
+    // Dynamics. A Band is a Dynamic Band when its Shape has dynamics and dynamicRange is not 0: its
+    // Live Gain then moves from Gain towards Gain + dynamicRange as its detection signal rises above
+    // Threshold, never beyond +/-30 dB. Detection is on the main input, in the Band's region
+    // (docs/dsp/filter-design.md, "Detection"), on the part of the signal the Band processes.
+    double dynamicRange = 0.0;  // dB, -30 to 30
+    double threshold = -30.0;   // dB, where a full-scale sine reads 0; ignored when thresholdAuto
+    bool thresholdAuto = true;  // Threshold keeps adapting to the level of the Band's region
+    double attack = 50.0;       // %, 0 to 100: 50 is Auto, lower is faster, higher slower
+    double release = 50.0;      // %, as attack
+    bool dynamicsBypass = false; // holds Live Gain at Gain, keeping every setting
+
     bool operator== (const BandSettings&) const = default;
 };
+
+// Live Gain never goes beyond +/- this many dB, whatever Gain and Dynamic Range are.
+inline constexpr double liveGainLimitDb = 30.0;
+
+// True when the Band's Live Gain moves with its detection signal.
+inline bool isDynamic (const BandSettings& band) { return hasDynamics (band.shape) && band.dynamicRange != 0.0; }
 
 inline constexpr int numBandSlots = 24;
 

@@ -7,6 +7,12 @@
 namespace eq1
 {
 
+namespace
+{
+// Threshold's slider runs from -60 dB to 0 dB, then one more step at the top for Auto.
+constexpr double thresholdAutoPosition = 3.0;
+} // namespace
+
 BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
 {
     title.setFont (juce::FontOptions (15.0f, juce::Font::bold));
@@ -18,9 +24,10 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
         addAndMakeVisible (*combo);
 
     const std::pair<juce::Slider*, juce::Label*> controls[] = {
-        { &frequency, &frequencyLabel }, { &gain, &gainLabel }, { &q, &qLabel }, { &slope, &slopeLabel }
+        { &frequency, &frequencyLabel },       { &gain, &gainLabel },           { &q, &qLabel },         { &slope, &slopeLabel },
+        { &dynamicRange, &dynamicRangeLabel }, { &threshold, &thresholdLabel }, { &attack, &attackLabel }, { &release, &releaseLabel }
     };
-    const char* names[] = { "Frequency", "Gain", "Q", "Slope" };
+    const char* names[] = { "Frequency", "Gain", "Q", "Slope", "Dynamic Range", "Threshold", "Attack", "Release" };
     for (size_t i = 0; i < std::size (controls); ++i)
     {
         auto [slider, label] = controls[i];
@@ -32,7 +39,26 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
         addAndMakeVisible (*label);
     }
 
-    for (auto* button : { &brickwall, &bypass })
+    threshold.setRange (-60.0, thresholdAutoPosition, 0.1);
+    threshold.textFromValueFunction = [] (double value) {
+        return value > 0.0 ? juce::String ("Auto") : juce::String (value, 1) + " dB";
+    };
+    threshold.valueFromTextFunction = [] (const juce::String& text) {
+        return text.trim().equalsIgnoreCase ("Auto") ? thresholdAutoPosition : juce::jmin (0.0, text.getDoubleValue());
+    };
+    threshold.onDragStart = [this] {
+        thresholdDragging = true;
+        thresholdAttachment->beginGesture();
+        thresholdAutoAttachment->beginGesture();
+    };
+    threshold.onDragEnd = [this] {
+        thresholdAttachment->endGesture();
+        thresholdAutoAttachment->endGesture();
+        thresholdDragging = false;
+    };
+    threshold.onValueChange = [this] { storeThreshold(); };
+
+    for (auto* button : { &brickwall, &bypass, &dynamicsBypass })
         addAndMakeVisible (*button);
     deleteButton.onClick = [this] {
         if (slot != 0)
@@ -58,6 +84,12 @@ void BandPanel::show (int newSlot)
     slopeAttachment.reset();
     brickwallAttachment.reset();
     bypassAttachment.reset();
+    dynamicRangeAttachment.reset();
+    attackAttachment.reset();
+    releaseAttachment.reset();
+    dynamicsBypassAttachment.reset();
+    thresholdAttachment.reset();
+    thresholdAutoAttachment.reset();
 
     for (int i = 0; i < getNumChildComponents(); ++i)
         getChildComponent (i)->setVisible (slot != 0 || getChildComponent (i) == &title);
@@ -77,7 +109,45 @@ void BandPanel::show (int newSlot)
     slopeAttachment = std::make_unique<SliderAttachment> (state, parameters::slopeId (slot), slope);
     brickwallAttachment = std::make_unique<ButtonAttachment> (state, parameters::brickwallId (slot), brickwall);
     bypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::bypassId (slot), bypass);
+    dynamicRangeAttachment = std::make_unique<SliderAttachment> (state, parameters::dynamicRangeId (slot), dynamicRange);
+    attackAttachment = std::make_unique<SliderAttachment> (state, parameters::attackId (slot), attack);
+    releaseAttachment = std::make_unique<SliderAttachment> (state, parameters::releaseId (slot), release);
+    dynamicsBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::dynamicsBypassId (slot), dynamicsBypass);
+    thresholdAttachment = std::make_unique<juce::ParameterAttachment> (*state.getParameter (parameters::thresholdId (slot)),
+                                                                       [this] (float) { showThreshold(); });
+    thresholdAutoAttachment = std::make_unique<juce::ParameterAttachment> (*state.getParameter (parameters::thresholdAutoId (slot)),
+                                                                           [this] (float) { showThreshold(); });
+    showThreshold();
     updateVisibility();
+}
+
+void BandPanel::showThreshold()
+{
+    if (slot == 0)
+        return;
+    const auto band = editing.band (slot);
+    threshold.setValue (band.thresholdAuto ? thresholdAutoPosition : band.threshold, juce::dontSendNotification);
+}
+
+void BandPanel::storeThreshold()
+{
+    if (slot == 0 || thresholdAttachment == nullptr)
+        return;
+    const double value = threshold.getValue();
+    const bool automatic = value > 0.0;
+    // A drag is one gesture on both parameters; a typed value is a gesture of its own.
+    if (thresholdDragging)
+    {
+        thresholdAutoAttachment->setValueAsPartOfGesture (automatic ? 1.0f : 0.0f);
+        if (! automatic)
+            thresholdAttachment->setValueAsPartOfGesture (static_cast<float> (value));
+    }
+    else
+    {
+        thresholdAutoAttachment->setValueAsCompleteGesture (automatic ? 1.0f : 0.0f);
+        if (! automatic)
+            thresholdAttachment->setValueAsCompleteGesture (static_cast<float> (value));
+    }
 }
 
 void BandPanel::updateVisibility()
@@ -92,6 +162,10 @@ void BandPanel::updateVisibility()
     }
     for (auto* c : std::initializer_list<juce::Component*> { &gain, &gainLabel })
         c->setVisible (hasGain (band.shape));
+    // Cut, Notch, Band Pass and All Pass keep their dynamics settings but don't offer them.
+    for (auto* c : std::initializer_list<juce::Component*> { &dynamicRange, &dynamicRangeLabel, &threshold, &thresholdLabel, &attack,
+                                                             &attackLabel, &release, &releaseLabel, &dynamicsBypass })
+        c->setVisible (hasDynamics (band.shape));
     brickwall.setVisible (isCut (band.shape));
     // Brickwall overrides a Cut's Slope.
     const bool usesSlope = hasSlope (band.shape) && ! (isCut (band.shape) && band.brickwall);
@@ -119,6 +193,8 @@ void BandPanel::resized()
     top.removeFromRight (8);
     bypass.setBounds (top.removeFromRight (80));
     top.removeFromRight (8);
+    dynamicsBypass.setBounds (top.removeFromRight (140));
+    top.removeFromRight (8);
     brickwall.setBounds (top.removeFromRight (100));
     area.removeFromTop (6);
 
@@ -128,7 +204,8 @@ void BandPanel::resized()
     placement.setBounds (left.removeFromTop (24));
 
     const std::pair<juce::Slider*, juce::Label*> controls[] = {
-        { &frequency, &frequencyLabel }, { &gain, &gainLabel }, { &q, &qLabel }, { &slope, &slopeLabel }
+        { &frequency, &frequencyLabel },       { &gain, &gainLabel },           { &q, &qLabel },         { &slope, &slopeLabel },
+        { &dynamicRange, &dynamicRangeLabel }, { &threshold, &thresholdLabel }, { &attack, &attackLabel }, { &release, &releaseLabel }
     };
     const int width = area.getWidth() / static_cast<int> (std::size (controls));
     for (auto [slider, label] : controls)

@@ -73,6 +73,12 @@ std::optional<int> BandEditing::add (double frequency, double gain)
         set (parameters::slopeId (slot), defaults.slope);
         set (parameters::brickwallId (slot), static_cast<double> (defaults.brickwall));
         set (parameters::placementId (slot), static_cast<double> (defaults.placement));
+        set (parameters::dynamicRangeId (slot), defaults.dynamicRange);
+        set (parameters::thresholdId (slot), defaults.threshold);
+        set (parameters::thresholdAutoId (slot), static_cast<double> (defaults.thresholdAuto));
+        set (parameters::attackId (slot), defaults.attack);
+        set (parameters::releaseId (slot), defaults.release);
+        set (parameters::dynamicsBypassId (slot), static_cast<double> (defaults.dynamicsBypass));
         set (parameters::bypassId (slot), 0.0);
         set (parameters::inUseId (slot), 1.0);
         return slot;

@@ -29,8 +29,8 @@ enum class AnalysisTap
     Sidechain,
 };
 
-// The DSP Engine. prepare() may allocate; setSettings(), process() and
-// readAnalysis() never allocate, lock or do I/O.
+// The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis() and
+// liveGainDb() never allocate, lock or do I/O.
 //
 // Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
 // one thread at a time may call it; the newest settings are taken at the start of each process().
@@ -50,6 +50,10 @@ public:
     // Copies up to maxSamples of the tap's mono signal, oldest first, and returns how many were copied.
     // Called from one reader thread while process() runs on the audio thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples);
+
+    // The Live Gain in dB a Band Slot (1 to 24) applied at the end of the last process(): its Gain,
+    // moved by its dynamics, held to +/-30 dB. Safe to call from any thread, for the display.
+    double liveGainDb (int slot) const;
 
 private:
     struct Impl;

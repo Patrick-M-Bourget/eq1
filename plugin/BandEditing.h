@@ -21,7 +21,8 @@ public:
     ~BandEditing();
 
     // Adds a Band at the lowest free Band Slot, at frequency and gain, with the defaults for the rest:
-    // Bell, Q 1, Slope 12, Stereo, not Bypassed. Returns its slot (1 to 24), or nothing when all 24
+    // Bell, Q 1, Slope 12, Stereo, not Bypassed, no dynamics (Dynamic Range 0, Threshold Auto, Attack
+    // and Release Auto, no Dynamics Bypass). Returns its slot (1 to 24), or nothing when all 24
     // are in use.
     std::optional<int> add (double frequency, double gain);
 

@@ -37,6 +37,17 @@ juce::AudioParameterFloatAttributes withText (int decimals, const juce::String& 
         .withValueFromStringFunction ([] (const juce::String& text) { return text.getFloatValue(); });
 }
 
+// Attack and Release in %, with their centre shown as Auto.
+juce::AudioParameterFloatAttributes timingText()
+{
+    return juce::AudioParameterFloatAttributes()
+        .withLabel ("%")
+        .withStringFromValueFunction ([] (float value, int) { return juce::exactlyEqual (value, 50.0f) ? juce::String ("Auto") : juce::String (value, 1); })
+        .withValueFromStringFunction ([] (const juce::String& text) {
+            return text.trim().equalsIgnoreCase ("Auto") ? 50.0f : text.getFloatValue();
+        });
+}
+
 } // namespace
 
 juce::String frequencyId (int slot) { return slotId (slot, "frequency"); }
@@ -48,6 +59,12 @@ juce::String shapeId (int slot) { return slotId (slot, "shape"); }
 juce::String slopeId (int slot) { return slotId (slot, "slope"); }
 juce::String brickwallId (int slot) { return slotId (slot, "brickwall"); }
 juce::String placementId (int slot) { return slotId (slot, "placement"); }
+juce::String dynamicRangeId (int slot) { return slotId (slot, "dynamic_range"); }
+juce::String thresholdId (int slot) { return slotId (slot, "threshold"); }
+juce::String thresholdAutoId (int slot) { return slotId (slot, "threshold_auto"); }
+juce::String attackId (int slot) { return slotId (slot, "attack"); }
+juce::String releaseId (int slot) { return slotId (slot, "release"); }
+juce::String dynamicsBypassId (int slot) { return slotId (slot, "dynamics_bypass"); }
 
 const juce::StringArray& shapeNames()
 {
@@ -66,6 +83,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
     // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40. Slope is one continuous
     // 0 to 96 dB/oct range shared by every Shape, and Brickwall a separate switch (ADR 0003).
+    // Dynamic Range is +/-30 dB as in Pro-Q 4; Threshold -60 to 0 dB, with Auto a separate switch
+    // (ADR 0003, Consequences), on by default; Attack and Release 0 to 100%, Auto at 50%.
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
@@ -105,7 +124,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                     std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { placementId (slot), 1 },
                                                                   slotName (slot, "Stereo Placement"),
                                                                   placementNames(),
-                                                                  0));
+                                                                  0),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { dynamicRangeId (slot), 1 },
+                                                                 slotName (slot, "Dynamic Range"),
+                                                                 juce::NormalisableRange<float> (-30.0f, 30.0f),
+                                                                 0.0f,
+                                                                 withText (2, "dB")),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { thresholdId (slot), 1 },
+                                                                 slotName (slot, "Threshold"),
+                                                                 juce::NormalisableRange<float> (-60.0f, 0.0f),
+                                                                 -30.0f,
+                                                                 withText (1, "dB")),
+                    std::make_unique<juce::AudioParameterBool> (juce::ParameterID { thresholdAutoId (slot), 1 },
+                                                                slotName (slot, "Auto Threshold"),
+                                                                true),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { attackId (slot), 1 },
+                                                                 slotName (slot, "Attack"),
+                                                                 juce::NormalisableRange<float> (0.0f, 100.0f),
+                                                                 50.0f,
+                                                                 timingText()),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { releaseId (slot), 1 },
+                                                                 slotName (slot, "Release"),
+                                                                 juce::NormalisableRange<float> (0.0f, 100.0f),
+                                                                 50.0f,
+                                                                 timingText()),
+                    std::make_unique<juce::AudioParameterBool> (juce::ParameterID { dynamicsBypassId (slot), 1 },
+                                                                slotName (slot, "Dynamics Bypass"),
+                                                                false));
     }
     return layout;
 }
@@ -116,7 +161,13 @@ SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int s
              parameters.getRawParameterValue (qId (slot)),         parameters.getRawParameterValue (inUseId (slot)),
              parameters.getRawParameterValue (bypassId (slot)),    parameters.getRawParameterValue (shapeId (slot)),
              parameters.getRawParameterValue (slopeId (slot)),     parameters.getRawParameterValue (brickwallId (slot)),
-             parameters.getRawParameterValue (placementId (slot)) };
+             parameters.getRawParameterValue (placementId (slot)),
+             parameters.getRawParameterValue (dynamicRangeId (slot)),
+             parameters.getRawParameterValue (thresholdId (slot)),
+             parameters.getRawParameterValue (thresholdAutoId (slot)),
+             parameters.getRawParameterValue (attackId (slot)),
+             parameters.getRawParameterValue (releaseId (slot)),
+             parameters.getRawParameterValue (dynamicsBypassId (slot)) };
 }
 
 BandSettings SlotValues::read() const
@@ -129,7 +180,13 @@ BandSettings SlotValues::read() const
              .q = q->load(),
              .slope = slope->load(),
              .brickwall = brickwall->load() >= 0.5f,
-             .placement = static_cast<StereoPlacement> (juce::roundToInt (placement->load())) };
+             .placement = static_cast<StereoPlacement> (juce::roundToInt (placement->load())),
+             .dynamicRange = dynamicRange->load(),
+             .threshold = threshold->load(),
+             .thresholdAuto = thresholdAuto->load() >= 0.5f,
+             .attack = attack->load(),
+             .release = release->load(),
+             .dynamicsBypass = dynamicsBypass->load() >= 0.5f };
 }
 
 } // namespace eq1::parameters

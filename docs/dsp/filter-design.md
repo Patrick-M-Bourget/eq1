@@ -59,6 +59,19 @@ When Detection Range is Band, a Dynamic Band's detector hears only the region it
 
 Live Gain never goes beyond ±30 dB, whatever the Gain, Dynamic Range and Gain Scale.
 
+## Dynamics
+
+How a Dynamic Band moves its Live Gain (`engine/src/Dynamics.cpp`). Pro-Q 4 only says its timing and knee depend on the material, so the numbers below are eq1's own:
+
+- **Detection signal:** the main input before the EQ, through the region filter above (the same one Solo plays), on the part of the signal the Band processes: Left, Right, Mid or Side, or both channels for a Stereo Band. A Side Band on mono hears nothing and doesn't move.
+- **Level:** the detection signal's power, smoothed over 5 ms, in dB where a full-scale sine reads 0 dB. A Stereo Band takes the louder channel's level at each sample, and so applies one Live Gain to both.
+- **Gain computer:** movement starts 3 dB below Threshold (a soft knee) and rises smoothly, about 2:1, to the full Dynamic Range at 2 × |Dynamic Range| + 3 dB above it. Live Gain is Gain plus the movement times Dynamic Range, held to ±30 dB.
+- **Auto Threshold:** 4 dB above the mean level of the region over about the last 2 s (the mean of all it has heard, until it has heard 2 s). Levels below −80 dB don't count, so silence doesn't pull it down. Steady material rests below it; what stands out of the material moves the Band, at any overall level.
+- **Auto Attack:** 20 ms just above Threshold, faster the further above it the level goes: 20 ms × 3 / (3 + overshoot in dB).
+- **Auto Release:** 40 ms after a short burst, up to 500 ms after sustained movement, measured as the mean movement over about the last 0.5 s.
+- **Attack and Release settings:** the Auto timing times 10^((setting − 50%) / 50%), so 0% is ten times faster and 100% ten times slower. 50% is Auto itself, and the timing still follows the material at every setting.
+- **Changes:** Dynamic Range, Dynamics Bypass and a Shape change to or from one without dynamics glide over about 50 ms, like a Band's own settings, so the Band doesn't click. Shapes without dynamics, Bands not in use and Bypassed Bands don't run their detector.
+
 **Solo** plays the main input, before the EQ, through a filter for the Band's region above (`engine/src/Solo.h`), so you hear what the Band works on, not its Gain:
 
 - **Bell, Notch, Band Pass, All Pass:** a second-order Band Pass at Frequency, its −3 dB points 1/Q of Frequency apart.

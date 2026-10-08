@@ -8,11 +8,11 @@
 namespace eq1
 {
 
-// The region of the input a Soloed Band plays (docs/dsp/filter-design.md, "Detection"), as the
-// settings of a filter: around Frequency, as wide as Q, for Bell, Notch, Band Pass and All Pass;
-// below Frequency for a Low Shelf and above it for a High Shelf; everything for Tilt Shelf and Flat
-// Tilt; what a Cut removes for a Cut. Solo plays the region, not the Band's effect, so Gain plays no
-// part.
+// The region of the input a Soloed Band plays, and a Dynamic Band detects on
+// (docs/dsp/filter-design.md, "Detection"), as the settings of a filter: around Frequency, as wide as
+// Q, for Bell, Notch, Band Pass and All Pass; below Frequency for a Low Shelf and above it for a High
+// Shelf; everything for Tilt Shelf and Flat Tilt; what a Cut removes for a Cut. Solo plays the
+// region, not the Band's effect, so Gain plays no part.
 inline BandSettings soloRegionOf (const BandSettings& band)
 {
     BandSettings region { .inUse = true, .frequency = band.frequency, .q = std::sqrt (0.5) };

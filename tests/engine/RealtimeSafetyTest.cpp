@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <vector>
 
 using namespace eq1;
@@ -76,6 +77,53 @@ TEST_CASE ("Engine does not allocate with 24 Brickwall Bands")
                                      .brickwall = block % 16 != 15 };
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize });
+    }
+
+    REQUIRE (guard.allocations() == 0);
+}
+
+TEST_CASE ("Engine does not allocate with 24 Dynamic Bands")
+{
+    constexpr int blockSize = 512;
+    Engine engine;
+    engine.prepare (48000.0, blockSize, 2);
+
+    std::vector<float> left (blockSize), right (blockSize);
+    float* main[] = { left.data(), right.data() };
+
+    Settings settings;
+    test::AllocationGuard guard;
+    for (int block = 0; block < 64; ++block)
+    {
+        // Loud and quiet in turn, so every Band moves; every dynamic Shape, Stereo Placement, Auto and
+        // set Threshold, timing, and Dynamics Bypass switching.
+        for (size_t i = 0; i < left.size(); ++i)
+        {
+            const float level = block % 4 < 2 ? 0.5f : 0.001f;
+            left[i] = level * static_cast<float> ((i * 7919) % 101) / 101.0f;
+            right[i] = -0.5f * left[i];
+        }
+        for (size_t slot = 0; slot < settings.bands.size(); ++slot)
+        {
+            constexpr Shape shapes[] = { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt };
+            constexpr StereoPlacement placements[] = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
+                                                       StereoPlacement::Mid, StereoPlacement::Side };
+            settings.bands[slot] = { .inUse = true,
+                                     .shape = shapes[slot % 5],
+                                     .frequency = 100.0 + 400.0 * static_cast<double> (slot) + 10.0 * block,
+                                     .gain = 3.0,
+                                     .q = 1.0,
+                                     .placement = placements[(slot / 5) % 5],
+                                     .dynamicRange = slot % 2 == 0 ? -12.0 : 9.0,
+                                     .threshold = -40.0,
+                                     .thresholdAuto = slot % 3 == 0,
+                                     .attack = static_cast<double> ((slot * 13) % 101),
+                                     .release = static_cast<double> ((slot * 29) % 101),
+                                     .dynamicsBypass = (block + static_cast<int> (slot)) % 9 == 0 };
+        }
+        engine.setSettings (settings);
+        engine.process ({ main, 2, blockSize });
+        REQUIRE (std::isfinite (engine.liveGainDb (1)));
     }
 
     REQUIRE (guard.allocations() == 0);

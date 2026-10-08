@@ -2,6 +2,7 @@
 add_library(eq1_engine STATIC
     src/Engine.cpp
     src/Band.cpp
+    src/Dynamics.cpp
     src/MatchedDesign.cpp
     src/Response.cpp
     src/ShapeDesign.cpp

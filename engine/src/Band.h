@@ -25,6 +25,12 @@ public:
     // With snap, the new settings take effect at once instead of gliding.
     void setSettings (const BandSettings& settings, bool snap);
 
+    // Moves the Band's Live Gain away from its Gain by db, from the next process(): its dynamics.
+    void setDynamicOffset (double db) { dynamicOffset = db; }
+
+    // The Gain the Band's filter applies now: Gain plus the dynamic offset, held to +/-30 dB.
+    double liveGainDb() const;
+
     void process (float* const* channels, int numChannels, int numSamples);
 
 private:
@@ -64,6 +70,7 @@ private:
     Smoother mix;   // 0 = no effect, 1 = full effect
     Smoother shapeCrossfade; // 0 = previous chain, 1 = current chain
     Chain current, previous;
+    double dynamicOffset = 0.0, designedOffset = 0.0; // dB
 
     // Per channel, for mixing the filtered signal with the dry one, and the previous chain's with the current.
     std::vector<std::array<float, maxSubBlock>> wet, previousWet;

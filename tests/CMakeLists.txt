@@ -14,6 +14,7 @@ add_executable(eq1_engine_tests
     engine/BellResponseTest.cpp
     engine/BellStabilityTest.cpp
     engine/ClickFreeTest.cpp
+    engine/DynamicsTest.cpp
     engine/RealtimeSafetyTest.cpp
     engine/ResponseTest.cpp
     engine/SettingsHandoffTest.cpp

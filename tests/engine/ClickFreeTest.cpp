@@ -304,3 +304,40 @@ TEST_CASE ("Moving Solo to another Band, or changing the Soloed Band's Stereo Pl
     CHECK (discontinuity (output[0], host.sampleRate) < threshold);
     CHECK (discontinuity (output[1], host.sampleRate) < threshold);
 }
+
+namespace
+{
+// A Dynamic Bell on the tone, cutting by up to 18 dB above a Threshold of -40 dB.
+BandSettings dynamicBellOnTone (double timing)
+{
+    auto band = bellBand (toneFrequency, 0.0, 1.0);
+    band.dynamicRange = -18.0;
+    band.thresholdAuto = false;
+    band.threshold = -40.0;
+    band.attack = band.release = timing;
+    return band;
+}
+} // namespace
+
+TEST_CASE ("A Dynamic Band moving with Auto Attack and Release does not click")
+{
+    const auto host = anyHost();
+    CAPTURE (host.sampleRate, host.blockSize);
+    // The tone crosses Threshold every 50 ms as Threshold jumps.
+    const auto output = playTone (host, [] (double seconds, Settings& s) {
+        s.bands[0] = dynamicBellOnTone (50.0);
+        s.bands[0].threshold = alternating (seconds) ? -40.0 : 0.0;
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Switching Dynamics Bypass does not click, even at the fastest Attack and Release")
+{
+    const auto host = anyHost();
+    CAPTURE (host.sampleRate, host.blockSize);
+    const auto output = playTone (host, [] (double seconds, Settings& s) {
+        s.bands[0] = dynamicBellOnTone (0.0);
+        s.bands[0].dynamicsBypass = alternating (seconds);
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}

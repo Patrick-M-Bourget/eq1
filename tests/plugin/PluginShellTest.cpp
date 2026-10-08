@@ -126,6 +126,14 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         { "slope", "Slope", "dB/oct", 0.0f, 96.0f, 0.0f, 12.0f, 48.0f, {} },
         { "brickwall", "Brickwall", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
         { "placement", "Stereo Placement", "", 0.0f, 4.0f, 1.0f, 0.0f, 2.0f, { "Stereo", "Left", "Right", "Mid", "Side" } },
+        { "dynamic_range", "Dynamic Range", "dB", -30.0f, 30.0f, 0.0f, 0.0f, 0.0f, {} },
+        // Auto Threshold is its own switch, not the top of Threshold (ADR 0003, Consequences).
+        { "threshold", "Threshold", "dB", -60.0f, 0.0f, 0.0f, -30.0f, -30.0f, {} },
+        { "threshold_auto", "Auto Threshold", "", 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, {} },
+        // 50% is Auto: the centre of the range, so not a special value at its end.
+        { "attack", "Attack", "%", 0.0f, 100.0f, 0.0f, 50.0f, 50.0f, {} },
+        { "release", "Release", "%", 0.0f, 100.0f, 0.0f, 50.0f, 50.0f, {} },
+        { "dynamics_bypass", "Dynamics Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
     };
 
     juce::ScopedJuceInitialiser_GUI juce;
@@ -228,7 +236,7 @@ TEST_CASE ("A producer can pick any Shape for a Band")
     CHECK_THAT (sineGainDb (processor, 2000.0), WithinAbs (1.2, 0.1));
 }
 
-TEST_CASE ("Saved state restores every Band setting, including Brickwall")
+TEST_CASE ("Saved state restores every Band setting, including Brickwall and dynamics")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor saved;
@@ -241,6 +249,12 @@ TEST_CASE ("Saved state restores every Band setting, including Brickwall")
     setParameter (saved, "band7_brickwall", 1.0f);
     setParameter (saved, "band7_placement", 3.0f); // Mid
     setParameter (saved, "band24_bypass", 1.0f);
+    setParameter (saved, "band7_dynamic_range", -7.5f);
+    setParameter (saved, "band7_threshold", -42.0f);
+    setParameter (saved, "band7_threshold_auto", 0.0f);
+    setParameter (saved, "band7_attack", 20.0f);
+    setParameter (saved, "band7_release", 80.0f);
+    setParameter (saved, "band7_dynamics_bypass", 1.0f);
 
     juce::MemoryBlock state;
     saved.getStateInformation (state);
@@ -269,6 +283,12 @@ TEST_CASE ("Saved state restores every Band setting, including Brickwall")
     CHECK (value ("band7_placement") == 3.0f);
     CHECK (value ("band7_shape") == 4.0f);
     CHECK_THAT (value ("band7_slope"), WithinAbs (37.5, 1.0e-4));
+    CHECK_THAT (value ("band7_dynamic_range"), WithinAbs (-7.5, 1.0e-4));
+    CHECK_THAT (value ("band7_threshold"), WithinAbs (-42.0, 1.0e-4));
+    CHECK (value ("band7_threshold_auto") == 0.0f);
+    CHECK_THAT (value ("band7_attack"), WithinAbs (20.0, 1.0e-4));
+    CHECK_THAT (value ("band7_release"), WithinAbs (80.0, 1.0e-4));
+    CHECK (value ("band7_dynamics_bypass") == 1.0f);
 }
 
 TEST_CASE ("Hosts can use the plugin on mono and stereo tracks")
@@ -361,4 +381,39 @@ TEST_CASE ("Solo is not a host parameter and is not saved with the session")
     restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
     // Restoring a session lets go of any Solo.
     CHECK (restored.soloSlot() == 0);
+}
+
+TEST_CASE ("A Dynamic Band on the host parameters moves its Live Gain, which the editor can read")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    setParameter (processor, "band2_in_use", 1.0f);
+    setParameter (processor, "band2_gain", 4.0f);
+    setParameter (processor, "band2_threshold_auto", 0.0f);
+    setParameter (processor, "band2_threshold", -40.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (4.0, 0.1));
+    CHECK_THAT (processor.liveGainDb (2), WithinAbs (4.0, 1.0e-4));
+
+    setParameter (processor, "band2_dynamic_range", -10.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (-6.0, 0.1));
+    CHECK_THAT (processor.liveGainDb (2), WithinAbs (-6.0, 0.05));
+
+    setParameter (processor, "band2_dynamics_bypass", 1.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (4.0, 0.1));
+}
+
+TEST_CASE ("Switching a Dynamic Band to a Shape without dynamics keeps its dynamics settings")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    setParameter (processor, "band1_in_use", 1.0f);
+    setParameter (processor, "band1_dynamic_range", -10.0f);
+    setParameter (processor, "band1_threshold_auto", 0.0f);
+    setParameter (processor, "band1_threshold", -40.0f);
+    setParameter (processor, "band1_shape", 5.0f); // Notch
+    sineGainDb (processor, 1000.0);
+    setParameter (processor, "band1_shape", 0.0f); // Bell
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (-10.0, 0.1));
 }

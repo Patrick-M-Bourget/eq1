@@ -6,6 +6,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <array>
 #include <functional>
 #include <set>
 #include <vector>
@@ -19,8 +20,9 @@ class PluginProcessor;
 // adds a Band; drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box
 // around them); the wheel changes Q; Delete removes the selected Bands. Holding a handle still Solos
 // its Band until the mouse is released. Pressing on the spectrum, away from the handles, grabs its
-// peak there (Spectrum Grab). The curve comes from the Engine's own
-// response maths (eq1/Response.h).
+// peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
+// with its Live Gain's movement inside it, and its curve follows its Live Gain. The curve comes from
+// the Engine's own response maths (eq1/Response.h).
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
@@ -54,6 +56,8 @@ private:
     float yOf (double db) const;
     double dbAt (float y) const;
     juce::Point<float> handleOf (const BandSettings& band) const;
+    // The Gain a Band is drawn with: its Live Gain from the Engine while it is a Dynamic Band.
+    double drawnGain (int slot, const BandSettings& band) const;
     int slotAt (juce::Point<float> position) const; // 0 when no handle is there
 
     void select (std::set<int> slots);
@@ -68,6 +72,7 @@ private:
     std::vector<float> tapSamples; // read from the taps each frame
     juce::uint32 lastFrame = 0;
     Settings shown; // what was drawn last, refreshed on the timer
+    std::array<double, numBandSlots> shownLiveGains {};
 
     std::set<int> selected;
     std::set<int> selectedBeforeMarquee; // Shift or Cmd adds the marquee to it

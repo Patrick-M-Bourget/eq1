@@ -1,5 +1,6 @@
 #include "Band.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -165,9 +166,15 @@ void Band::crossfadeTo (const Setup& setup)
     shapeCrossfade.setTarget (1.0);
 }
 
+double Band::liveGainDb() const
+{
+    return std::clamp (gain.value() + dynamicOffset, -liveGainLimitDb, liveGainLimitDb);
+}
+
 void Band::design()
 {
-    current.cascade = designShape ({ current.setup.structure, std::exp (logFrequency.value()), gain.value(), std::exp (logQ.value()) },
+    designedOffset = dynamicOffset;
+    current.cascade = designShape ({ current.setup.structure, std::exp (logFrequency.value()), liveGainDb(), std::exp (logQ.value()) },
                                    sampleRate);
 }
 
@@ -182,7 +189,8 @@ void Band::process (float* const* channels, int numChannels, int numSamples)
         pending.reset();
     }
 
-    const bool gliding = logFrequency.isMoving() || gain.isMoving() || logQ.isMoving();
+    // A Dynamic Band's moving Live Gain glides its filter as a Gain change does.
+    const bool gliding = logFrequency.isMoving() || gain.isMoving() || logQ.isMoving() || dynamicOffset != designedOffset;
     const bool fading = mix.isMoving();
     const bool crossfading = shapeCrossfade.isMoving();
 

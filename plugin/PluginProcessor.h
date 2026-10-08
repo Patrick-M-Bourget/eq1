@@ -53,6 +53,9 @@ public:
     void setSolo (int slot) { heldSoloSlot = slot; }
     int soloSlot() const { return heldSoloSlot.load(); }
 
+    // A Band Slot's Live Gain in dB, for the display: from any thread.
+    double liveGainDb (int slot) const { return engine.liveGainDb (slot); }
+
     AnalyzerSettings analyzerSettings() const;
     void setAnalyzerSettings (const AnalyzerSettings& settings);
 

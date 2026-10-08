@@ -68,6 +68,12 @@ TEST_CASE ("A new Band takes the lowest free Band Slot, at the given Frequency a
     host.set (3, "brickwall", 1.0f);
     host.set (3, "bypass", 1.0f);
     host.set (3, "placement", 4.0f);
+    host.set (3, "dynamic_range", -12.0f);
+    host.set (3, "threshold", -50.0f);
+    host.set (3, "threshold_auto", 0.0f);
+    host.set (3, "attack", 10.0f);
+    host.set (3, "release", 90.0f);
+    host.set (3, "dynamics_bypass", 1.0f);
 
     host.editing.deleteBand (3);
     REQUIRE (host.editing.add (250.0, -4.0) == 3);
@@ -81,6 +87,12 @@ TEST_CASE ("A new Band takes the lowest free Band Slot, at the given Frequency a
     CHECK (host.value (3, "brickwall") == 0.0f);
     CHECK (host.value (3, "bypass") == 0.0f);
     CHECK (host.value (3, "placement") == 0.0f); // Stereo
+    CHECK (host.value (3, "dynamic_range") == 0.0f);
+    CHECK_THAT (host.value (3, "threshold"), WithinAbs (-30.0, 1.0e-4));
+    CHECK (host.value (3, "threshold_auto") == 1.0f);
+    CHECK_THAT (host.value (3, "attack"), WithinAbs (50.0, 1.0e-4));
+    CHECK_THAT (host.value (3, "release"), WithinAbs (50.0, 1.0e-4));
+    CHECK (host.value (3, "dynamics_bypass") == 0.0f);
 
     REQUIRE (host.editing.add (1000.0, 0.0) == 6);
 }

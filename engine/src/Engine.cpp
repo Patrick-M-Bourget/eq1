@@ -2,12 +2,14 @@
 
 #include "AnalysisFifo.h"
 #include "Band.h"
+#include "Dynamics.h"
 #include "LatestValue.h"
 #include "Smoother.h"
 #include "Solo.h"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <vector>
 
 namespace eq1
@@ -23,6 +25,9 @@ struct Engine::Impl
     bool snapToSettings = true; // after prepare, settings apply at once instead of gliding
 
     std::array<Band, numBandSlots> bands;
+    std::array<Dynamics, numBandSlots> dynamics;
+    std::array<std::atomic<double>, numBandSlots> liveGains {}; // for the display, after each block
+    static_assert (std::atomic<double>::is_always_lock_free, "process() never locks");
     std::vector<float*> subBlock; // per channel
 
     // Solo: the region filter, run on the part of the input the Soloed Band processes, and the
@@ -117,7 +122,10 @@ struct Engine::Impl
         if (! settingsChanged)
             return;
         for (size_t band = 0; band < bands.size(); ++band)
+        {
             bands[band].setSettings (settings.bands[band], snapToSettings);
+            dynamics[band].setSettings (settings.bands[band], snapToSettings);
+        }
 
         const int slot = settings.soloSlot;
         wantedSoloSlot = slot >= 1 && slot <= numBandSlots && settings.bands[static_cast<size_t> (slot - 1)].inUse ? slot : 0;
@@ -177,6 +185,8 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     impl->numChannels = numChannels;
     for (auto& band : impl->bands)
         band.prepare (sampleRate, numChannels);
+    for (auto& dynamics : impl->dynamics)
+        dynamics.prepare (sampleRate);
     impl->subBlock.assign (static_cast<size_t> (numChannels), nullptr);
     impl->soloRegion.prepare (sampleRate, numChannels);
     impl->soloMix.configure (Impl::soloFadeTimeConstantSeconds * sampleRate, 1.0e-6);
@@ -216,6 +226,9 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
         const bool soloing = impl->soloAudible();
         const int partChannels = soloing ? impl->takeSoloPart (impl->subBlock.data(), channels, count) : 0;
 
+        // Detection hears the main input before the EQ, so every Band's detector runs first.
+        for (size_t band = 0; band < impl->bands.size(); ++band)
+            impl->bands[band].setDynamicOffset (impl->dynamics[band].process (impl->subBlock.data(), channels, count));
         for (auto& band : impl->bands)
             band.process (impl->subBlock.data(), channels, count);
 
@@ -240,6 +253,13 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
     }
 
     Impl::pushMonoMix (impl->postEq, main.channels, channels, main.numSamples);
+    for (size_t band = 0; band < impl->bands.size(); ++band)
+        impl->liveGains[band].store (impl->bands[band].liveGainDb(), std::memory_order_relaxed);
+}
+
+double Engine::liveGainDb (int slot) const
+{
+    return slot >= 1 && slot <= numBandSlots ? impl->liveGains[static_cast<size_t> (slot - 1)].load (std::memory_order_relaxed) : 0.0;
 }
 
 int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples)

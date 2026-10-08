@@ -13,6 +13,7 @@ namespace
 constexpr double lowestFrequency = 10.0, highestFrequency = 30000.0;
 constexpr float handleRadius = 9.0f;
 constexpr float pixelStep = 2.0f; // the curves are evaluated every this many pixels
+constexpr float ringRadius = handleRadius + 5.0f;
 
 // Hues a golden ratio apart, so Bands in neighbouring slots look different.
 juce::Colour colourOf (int slot)
@@ -29,7 +30,9 @@ bool same (const Settings& a, const Settings& b)
     {
         const auto &x = a.bands[i], &y = b.bands[i];
         if (x.inUse != y.inUse || x.bypass != y.bypass || x.shape != y.shape || x.frequency != y.frequency || x.gain != y.gain
-            || x.q != y.q || x.slope != y.slope || x.brickwall != y.brickwall || x.placement != y.placement)
+            || x.q != y.q || x.slope != y.slope || x.brickwall != y.brickwall || x.placement != y.placement
+            || x.dynamicRange != y.dynamicRange || x.threshold != y.threshold || x.thresholdAuto != y.thresholdAuto
+            || x.attack != y.attack || x.release != y.release || x.dynamicsBypass != y.dynamicsBypass)
             return false;
     }
     return true;
@@ -129,7 +132,15 @@ void EqDisplay::timerCallback()
     // Host Automation, the Band panel and a restored state change the parameters and the range too.
     const auto latest = editing.settings();
     const int range = processor.displayRangeDb();
-    if (same (latest, shown) && range == shownRangeDb && ! messageExpired)
+    // Dynamic Bands move by themselves.
+    bool liveGainsMoved = false;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        const double live = drawnGain (slot, latest.bands[static_cast<size_t> (slot - 1)]);
+        liveGainsMoved = liveGainsMoved || ! juce::exactlyEqual (live, shownLiveGains[static_cast<size_t> (slot - 1)]);
+        shownLiveGains[static_cast<size_t> (slot - 1)] = live;
+    }
+    if (same (latest, shown) && range == shownRangeDb && ! messageExpired && ! liveGainsMoved)
         return;
     shown = latest;
     shownRangeDb = range;
@@ -172,6 +183,11 @@ juce::Point<float> EqDisplay::handleOf (const BandSettings& band) const
     const auto range = static_cast<double> (processor.displayRangeDb());
     const double gain = hasGain (band.shape) ? juce::jlimit (-range, range, band.gain) : 0.0;
     return { xOf (band.frequency), yOf (gain) };
+}
+
+double EqDisplay::drawnGain (int slot, const BandSettings& band) const
+{
+    return isDynamic (band) && band.inUse && ! band.dynamicsBypass ? processor.liveGainDb (slot) : band.gain;
 }
 
 int EqDisplay::slotAt (juce::Point<float> position) const
@@ -287,7 +303,9 @@ void EqDisplay::paint (juce::Graphics& g)
         if (! band.inUse)
             continue;
         const bool silent = band.bypass || (mono && band.placement == StereoPlacement::Side);
-        bandResponseDb (band, frequencies.data(), bandDb.data(), static_cast<int> (bandDb.size()), sampleRate);
+        auto live = band;
+        live.gain = drawnGain (slot, band);
+        bandResponseDb (live, frequencies.data(), bandDb.data(), static_cast<int> (bandDb.size()), sampleRate);
         if (! silent)
             for (size_t i = 0; i < total.size(); ++i)
                 total[i] += bandDb[i];
@@ -314,6 +332,26 @@ void EqDisplay::paint (juce::Graphics& g)
         }
         g.setColour (juce::Colours::black);
         g.drawText (juce::String (slot), circle, juce::Justification::centred);
+        if (isDynamic (band))
+        {
+            // The Dynamic Range ring: from the top, clockwise for a boost and anticlockwise for a cut, half
+            // a turn for 30 dB, shortened where Live Gain would go beyond +/-30 dB. Live Gain's movement
+            // is drawn on top of it.
+            const auto angleOf = [] (double db) { return static_cast<float> (db / liveGainLimitDb * juce::MathConstants<double>::pi); };
+            const double reach = juce::jlimit (-liveGainLimitDb, liveGainLimitDb, band.gain + band.dynamicRange) - band.gain;
+            const auto arc = [&] (double db) {
+                juce::Path path;
+                path.addCentredArc (centre.x, centre.y, ringRadius, ringRadius, 0.0f, 0.0f, angleOf (db), true);
+                return path;
+            };
+            g.setColour (juce::Colour (0xffd04040).withAlpha (band.dynamicsBypass ? 0.35f : 0.9f));
+            g.strokePath (arc (reach), juce::PathStrokeType (3.0f));
+            if (! band.dynamicsBypass)
+            {
+                g.setColour (juce::Colours::yellow);
+                g.strokePath (arc (drawnGain (slot, band) - band.gain), juce::PathStrokeType (3.0f));
+            }
+        }
         if (slot == soloedSlot)
         {
             g.setColour (juce::Colours::yellow);
