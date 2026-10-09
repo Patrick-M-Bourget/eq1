@@ -69,6 +69,12 @@ void migrate (juce::ValueTree& state)
     // 0 to 1: the state gained its version and nothing else.
     if (version < 1)
         state.setProperty (versionProperty, 1, nullptr);
+    // 1 to 2: A/B Compare. The settings are side A's, and B is a copy of them.
+    if (version < 2)
+    {
+        state.appendChild (juce::ValueTree (ABCompare::stateType).setProperty ("active", "A", nullptr), nullptr);
+        state.setProperty (versionProperty, 2, nullptr);
+    }
 }
 const juce::Identifier analyzerType { "Analyzer" }, showPreEqProperty { "showPreEq" }, showPostEqProperty { "showPostEq" },
     showSidechainProperty { "showSidechain" },
@@ -126,6 +132,7 @@ void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
+    state.appendChild (compare.capture(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -146,6 +153,10 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
             setAnalyzerSettings (fromTree (saved));
             state.removeChild (saved, nullptr);
         }
+        // Without one (from a newer version that saves it elsewhere), the settings are side A's.
+        const auto savedCompare = state.getChildWithName (ABCompare::stateType);
+        compare.restore (savedCompare);
+        state.removeChild (savedCompare, nullptr);
         parameters.replaceState (state);
         history.sessionRestored();
     }

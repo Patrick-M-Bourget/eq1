@@ -86,7 +86,7 @@ TEST_CASE ("Saved state carries the state version")
     const auto xml = savedXml (processor);
     REQUIRE (xml != nullptr);
     CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
-    CHECK (eq1::PluginProcessor::stateVersion == 1);
+    CHECK (eq1::PluginProcessor::stateVersion == 2);
 }
 
 TEST_CASE ("Save and reload sound exactly the same: Bands, dynamics, Sidechain detection and the output section")
@@ -111,6 +111,54 @@ TEST_CASE ("Save and reload sound exactly the same: Bands, dynamics, Sidechain d
     for (int ch = 0; ch < 2; ++ch)
         for (int i = 0; i < expected.getNumSamples(); ++i)
             REQUIRE (juce::exactlyEqual (actual.getSample (ch, i), expected.getSample (ch, i)));
+}
+
+TEST_CASE ("A/B Compare survives save and reload: the side you're on and both sides' settings")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    set (saved, "band1_in_use", 1.0f);
+    set (saved, "band1_frequency", 250.0f);
+    set (saved, "band1_gain", -4.5f);
+    saved.selectCompareSide (eq1::CompareSide::B);
+    set (saved, "band1_gain", 9.0f);
+    set (saved, "band4_in_use", 1.0f);
+    set (saved, "band4_shape", 2.0f);
+    set (saved, "output_gain", -2.0f);
+    const auto xml = savedXml (saved);
+    REQUIRE (xml != nullptr);
+
+    eq1::PluginProcessor restored;
+    load (restored, *xml);
+    CHECK (restored.compareSide() == eq1::CompareSide::B);
+    const auto checkSameSound = [&] {
+        const auto expected = play (saved), actual = play (restored);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < expected.getNumSamples(); ++i)
+                REQUIRE (juce::exactlyEqual (actual.getSample (ch, i), expected.getSample (ch, i)));
+    };
+    checkSameSound();
+
+    saved.selectCompareSide (eq1::CompareSide::A);
+    restored.selectCompareSide (eq1::CompareSide::A);
+    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
+    CHECK (value (restored, "band4_in_use") == 0.0f);
+    checkSameSound();
+}
+
+TEST_CASE ("A version 1 session loads on side A, with B a copy of it")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.selectCompareSide (eq1::CompareSide::B);
+    load (processor, *fixture ("state-v1.xml"));
+    CHECK (processor.compareSide() == eq1::CompareSide::A);
+    CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
+
+    processor.selectCompareSide (eq1::CompareSide::B);
+    CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
+    CHECK (value (processor, "band3_shape") == 4.0f);
+    CHECK_THAT (value (processor, "gain_scale"), WithinAbs (150.0, 1.0e-3));
 }
 
 TEST_CASE ("A session saved before the state had a version (version 0) loads every setting")
@@ -152,8 +200,11 @@ TEST_CASE ("A session from a newer version loads the settings this version knows
     xml->createNewChildElement ("SomethingNew")->setAttribute ("x", 1);
 
     eq1::PluginProcessor processor;
+    processor.selectCompareSide (eq1::CompareSide::B);
     load (processor, *xml);
     CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
     CHECK (processor.displayRangeDb() == 30);
     CHECK (processor.analyzerSettings().rangeDb == 120);
+    // It saves no A/B Compare this version knows: its settings are side A's.
+    CHECK (processor.compareSide() == eq1::CompareSide::A);
 }

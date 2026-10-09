@@ -85,7 +85,7 @@ public:
     // The version of the saved state's format. setStateInformation() brings older states up to it one
     // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
     // version. Bump it, and add a step to the migration, whenever the format changes.
-    static constexpr int stateVersion = 1;
+    static constexpr int stateVersion = 2;
 
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
