@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            docs, build, test, tsan and validate
+#   scripts/check.sh            docs, build, test, cpu, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
+#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget")
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
-#   scripts/check.sh validate   pluginval (VST3, AU), auval, Sidechain routing (VST3, AU), clap-validator,
-#                               AAX and Standalone built
+#   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
+#                               routing (VST3, AU), clap-validator, AAX and Standalone built
 #
 # BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden; CMake's
 # CMAKE_C_COMPILER_LAUNCHER and CMAKE_CXX_COMPILER_LAUNCHER environment variables (sccache in CI) apply. Validators
@@ -97,9 +98,11 @@ build() {
     cmake --build "$BUILD_DIR" --config Release --parallel
 }
 
+# In parallel, as the pre-commit hook runs them: the CPU budget, which needs the machine to itself,
+# is its own step.
 run_tests() {
     step "Engine and Plugin Shell tests"
-    ctest --test-dir "$BUILD_DIR" -C Release --output-on-failure
+    ctest --test-dir "$BUILD_DIR" -C Release -j 8 --output-on-failure
 }
 
 # A test filter that matches nothing is an error here, not a silent pass.
@@ -109,18 +112,28 @@ focus() {
     ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure
 }
 
+# On its own, after the tests: timings taken while anything else runs are meaningless.
+cpu() {
+    step "CPU budget"
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget
+    local exe=$BUILD_DIR/tests/eq1_cpu_budget
+    [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/eq1_cpu_budget
+    "$exe"
+}
+
 tsan() {
     if [ "$os" != macos ]; then
         echo "ThreadSanitizer runs on macOS only; skipped"
         return
     fi
     # Catches data races in the lock-free settings handoff and the analysis taps. The frequency
-    # response grids ([response]) run single-threaded, so they are left to the normal run.
+    # response grids ([response]) and the sweeps across sample rates and settings ([sweep]) run
+    # single-threaded, so they are left to the normal run.
     step "Engine tests under ThreadSanitizer"
     cmake -S . -B "$BUILD_DIR-tsan" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_BUILD_PLUGIN=OFF \
         "-DFETCHCONTENT_BASE_DIR=$DEPS" -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
     cmake --build "$BUILD_DIR-tsan" --parallel
-    TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE response
+    TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE 'response|sweep'
 }
 
 fetch_validators() {
@@ -152,7 +165,11 @@ fetch_validators() {
     fi
 }
 
-pluginval() { "$PLUGINVAL" --strictness-level 10 --validate-in-process --validate "$1"; }
+# Every sample rate eq1 supports, and block sizes from a sample at a time to larger than most hosts use.
+pluginval() {
+    "$PLUGINVAL" --strictness-level 10 --sample-rates 44100,48000,88200,96000,176400,192000 \
+        --block-sizes 1,7,64,128,256,512,1024,4096 --validate-in-process --validate "$1"
+}
 
 # macOS only finds an AU once it is installed and registered: install it for the check, and remove
 # it on the way out whether or not the check passes (a subshell, so the EXIT trap stays local).
@@ -193,10 +210,11 @@ validate() {
 case "${1:-all}" in
     build) build ;;
     test) run_tests ;;
+    cpu) cpu ;;
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     tsan) tsan ;;
     validate) validate ;;
     docs) docs ;;
-    all) docs; build; run_tests; tsan; validate ;;
-    *) sed -n '2,13p' "$0" >&2; exit 2 ;;
+    all) docs; build; run_tests; cpu; tsan; validate ;;
+    *) sed -n '2,14p' "$0" >&2; exit 2 ;;
 esac
