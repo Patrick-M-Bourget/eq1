@@ -129,7 +129,8 @@ cpu() {
     local out status=0
     out=$("$exe") || status=$?
     printf '%s\n' "$out"
-    # In CI the numbers also go to the job summary, and as annotations, readable while the job still runs.
+    # In CI the numbers also go to the job summary and as annotations: once the job ends, one API call
+    # (check-runs/<job>/annotations) reads them without downloading the log.
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         printf '### CPU budget (%s)\n\n```\n%s\n```\n' "$os" "$out" >> "$GITHUB_STEP_SUMMARY"
     fi
