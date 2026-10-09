@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            build, test, tsan and validate
+#   scripts/check.sh            docs, build, test, tsan and validate
+#   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -30,17 +31,66 @@ esac
 
 step() { printf '\n== %s\n' "$*"; }
 
+# A citation in code, docs/<file>.md, "<Section>", must name a doc that exists and a heading or bold
+# label (**<Section>** or **<Section>:**) in it; a bare docs/<file>.md must name a doc that exists.
+docs() {
+    step "Doc references"
+    local broken=0 ref file section
+    while IFS= read -r ref; do
+        file=${ref%%,*}
+        if [ ! -f "$file" ]; then
+            echo "$ref: no such file" >&2
+            broken=1
+            continue
+        fi
+        [ "$ref" = "$file" ] && continue
+        section=${ref#*, \"}
+        section=${section%\"}
+        if ! awk -v s="$section" '{ h = $0; sub (/^#+ /, "", h) } ($0 ~ /^#+ / && h == s) || index ($0, "**" s "**") || index ($0, "**" s ":**") { found = 1 } END { exit ! found }' "$file"; then
+            echo "$ref: no such section" >&2
+            broken=1
+        fi
+    done < <(git ls-files | grep -v '\.md$' | xargs grep -hoE 'docs/[A-Za-z0-9_./-]+\.md(, "[^"]+")?' | sort -u)
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists"
+    return "$broken"
+}
+
+# A CMake build folder keeps the generator it was made with, and refuses another. The dependencies'
+# own build folders (FetchContent subbuilds, juceaide) are caches: one made with another generator
+# (a restored CI cache, or a switch between Ninja and Visual Studio) is deleted and rebuilt. The main
+# build folder isn't deleted unasked.
+match_generator() {
+    local generator=$1 cache made
+    for cache in "$DEPS"/*/CMakeCache.txt "$DEPS"/*/*/CMakeCache.txt; do
+        [ -f "$cache" ] || continue
+        made=$(sed -n 's/^CMAKE_GENERATOR:INTERNAL=//p' "$cache")
+        if [ -n "$made" ] && [ "${made#"$generator"}" = "$made" ]; then
+            echo "$(dirname "$cache") was made with $made, not $generator: deleting it to rebuild"
+            rm -rf "$(dirname "$cache")"
+        fi
+    done
+    if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+        made=$(sed -n 's/^CMAKE_GENERATOR:INTERNAL=//p' "$BUILD_DIR/CMakeCache.txt")
+        if [ "${made#"$generator"}" = "$made" ]; then
+            echo "$BUILD_DIR was made with $made, not $generator: delete it, or set BUILD_DIR, and run again" >&2
+            exit 1
+        fi
+    fi
+}
+
 build() {
     step "Build ($os)"
     if [ "$os" = macos ]; then
+        match_generator Ninja
         cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
             -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     elif command -v cl > /dev/null; then
         # In an MSVC developer environment (CI sets one up), Ninja compiles every file in parallel.
+        match_generator Ninja
         cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     else
-        # Without one, Visual Studio finds the compiler itself. The build directory, and the build
-        # folders in the dependencies folder, keep the generator they were made with: delete them to switch.
+        # Without one, Visual Studio finds the compiler itself.
+        match_generator "Visual Studio"
         cmake -S . -B "$BUILD_DIR" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     fi
     cmake --build "$BUILD_DIR" --config Release --parallel
@@ -137,6 +187,7 @@ case "${1:-all}" in
     test) run_tests ;;
     tsan) tsan ;;
     validate) validate ;;
-    all) build; run_tests; tsan; validate ;;
-    *) sed -n '2,11p' "$0" >&2; exit 2 ;;
+    docs) docs ;;
+    all) docs; build; run_tests; tsan; validate ;;
+    *) sed -n '2,12p' "$0" >&2; exit 2 ;;
 esac

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Blocks a commit whose cited docs are missing, or whose build or tests fail. The slow frequency
+# response grids ([response]) are left to CI. A commit of Markdown alone runs the doc check only.
+# Install with scripts/install-hooks.sh. It checks the working tree, not just what is staged.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+scripts/check.sh docs
+if ! git diff --cached --name-only | grep -qv '\.md$'; then
+    exit 0
+fi
+
+BUILD_DIR=${BUILD_DIR:-build}
+if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    echo "pre-commit: no build in $BUILD_DIR yet; run scripts/check.sh build first" >&2
+    exit 1
+fi
+printf '\n== Build and tests (pre-commit)\n'
+cmake --build "$BUILD_DIR" --config Release --parallel
+ctest --test-dir "$BUILD_DIR" -C Release -LE response -j 8 --output-on-failure

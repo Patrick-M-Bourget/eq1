@@ -56,11 +56,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .deps
-          # The dependencies' build folders keep the CMake generator they were made with: bump the
-          # version (v2: Ninja on Windows) whenever the generator changes, so an old cache isn't restored.
+          # A restored folder built with another CMake generator is rebuilt by scripts/check.sh build.
           key: deps-v2-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**', 'scripts/check.sh') }}
           # A miss starts from the last saved dependencies (and the juceaide built in them), not from nothing.
           restore-keys: deps-v2-${{ runner.os }}-
+
+      - name: Doc references
+        run: scripts/check.sh docs
 
       - name: Build
         run: scripts/check.sh build
