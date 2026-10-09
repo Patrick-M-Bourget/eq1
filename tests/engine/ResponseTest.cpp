@@ -20,7 +20,7 @@ std::vector<float> measured (double sampleRate, const Settings& settings)
 }
 } // namespace
 
-TEST_CASE ("The display's response is the Engine's: every Shape, Slope and Q matches what the Engine plays")
+TEST_CASE ("The display's response is the Engine's: every Shape, Slope and Q matches what the Engine plays", "[sweep]")
 {
     const double sampleRate = GENERATE (44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0);
     const auto shape = GENERATE (Shape::Bell, Shape::LowShelf, Shape::LowCut, Shape::HighShelf, Shape::HighCut, Shape::Notch,

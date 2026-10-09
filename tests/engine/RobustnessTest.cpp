@@ -76,7 +76,7 @@ Settings extremes (Shape shape)
 
 } // namespace
 
-TEST_CASE ("Silence after a signal decays to true silence, never through subnormal numbers")
+TEST_CASE ("Silence after a signal decays to true silence, never through subnormal numbers", "[sweep]")
 {
     constexpr double sampleRate = 48000.0;
     constexpr int blockSize = 512;
@@ -114,7 +114,7 @@ TEST_CASE ("Processing leaves the caller's floating-point mode as it found it")
     REQUIRE (std::fpclassify (smallestNormal / 4.0f) == FP_SUBNORMAL);
 }
 
-TEST_CASE ("Every Shape at the ends of every setting stays finite and bounded, through the input and the silence after it")
+TEST_CASE ("Every Shape at the ends of every setting stays finite and bounded, through the input and the silence after it", "[sweep]")
 {
     const double sampleRate = anySampleRate();
     const auto shape = GENERATE (Shape::Bell, Shape::LowShelf, Shape::LowCut, Shape::HighShelf, Shape::HighCut,

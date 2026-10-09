@@ -130,7 +130,7 @@ std::vector<double> liveGainCourse (double sampleRate, const BandSettings& band)
 
 } // namespace
 
-TEST_CASE ("Without Dynamic Bands, the output is the same sample for sample however the host cuts it into blocks")
+TEST_CASE ("Without Dynamic Bands, the output is the same sample for sample however the host cuts it into blocks", "[sweep]")
 {
     const double sampleRate = anySampleRate();
     const auto blocks = anyBlocks();
@@ -140,7 +140,7 @@ TEST_CASE ("Without Dynamic Bands, the output is the same sample for sample howe
     REQUIRE (play (sampleRate, false, blocks.at) == reference);
 }
 
-TEST_CASE ("Dynamic Bands sound the same, to within 40 dB below the peak, however the host cuts the audio into blocks")
+TEST_CASE ("Dynamic Bands sound the same, to within 40 dB below the peak, however the host cuts the audio into blocks", "[sweep]")
 {
     const double sampleRate = anySampleRate();
     const auto blocks = anyBlocks();
@@ -152,7 +152,7 @@ TEST_CASE ("Dynamic Bands sound the same, to within 40 dB below the peak, howeve
     REQUIRE (differenceDb (reference, play (sampleRate, true, blocks.at)) < -40.0);
 }
 
-TEST_CASE ("A Dynamic Band's Live Gain follows the same course in time at every sample rate")
+TEST_CASE ("A Dynamic Band's Live Gain follows the same course in time at every sample rate", "[sweep]")
 {
     const double sampleRate = anySampleRate();
     const auto timing = GENERATE (0.0, 50.0, 100.0); // fastest, Auto and slowest Attack and Release

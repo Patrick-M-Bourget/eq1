@@ -127,12 +127,13 @@ tsan() {
         return
     fi
     # Catches data races in the lock-free settings handoff and the analysis taps. The frequency
-    # response grids ([response]) run single-threaded, so they are left to the normal run.
+    # response grids ([response]) and the sweeps across sample rates and settings ([sweep]) run
+    # single-threaded, so they are left to the normal run.
     step "Engine tests under ThreadSanitizer"
     cmake -S . -B "$BUILD_DIR-tsan" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_BUILD_PLUGIN=OFF \
         "-DFETCHCONTENT_BASE_DIR=$DEPS" -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
     cmake --build "$BUILD_DIR-tsan" --parallel
-    TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE response
+    TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE 'response|sweep'
 }
 
 fetch_validators() {
