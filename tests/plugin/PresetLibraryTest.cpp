@@ -58,7 +58,9 @@ TEST_CASE ("A User Preset saves as a file in the User folder and loads back")
     saved.edit ("band3_dynamic_range", -9.0f);
     saved.edit ("output_pan", 30.0f);
 
-    const auto file = library.save ("Bright Vocal", saved.processor.presetState());
+    const auto saving = library.save ("Bright Vocal", saved.processor.presetState());
+    REQUIRE (saving.has_value());
+    const auto file = *saving;
     CHECK (file == user.folder.getChildFile ("Bright Vocal.eq1preset"));
     CHECK (file.existsAsFile());
     const auto presets = library.userPresets();
@@ -79,7 +81,9 @@ TEST_CASE ("A User Preset file is portable: copied into another machine's folder
     Host saved;
     saved.edit ("band1_in_use", 1.0f);
     saved.edit ("band1_gain", 3.5f);
-    const auto file = PresetLibrary (here.folder).save ("Warm", saved.processor.presetState());
+    const auto saving = PresetLibrary (here.folder).save ("Warm", saved.processor.presetState());
+    REQUIRE (saving.has_value());
+    const auto file = *saving;
     const auto copy = there.folder.getChildFile (file.getFileName());
     REQUIRE (file.copyFileTo (copy));
     REQUIRE (file.deleteFile());
@@ -110,8 +114,9 @@ TEST_CASE ("Saving under an existing name replaces that Preset; a name a file ca
 
     const auto presets = library.userPresets();
     REQUIRE (presets.size() == 2);
-    CHECK (odd.existsAsFile());
-    CHECK (odd.getParentDirectory() == user.folder);
+    REQUIRE (odd.has_value());
+    CHECK (odd->existsAsFile());
+    CHECK (odd->getParentDirectory() == user.folder);
     Host loaded;
     loaded.processor.loadPreset (PresetLibrary::read (user.folder.getChildFile ("Kick.eq1preset")));
     CHECK (loaded.value ("band1_in_use") == 1.0f);
@@ -131,6 +136,15 @@ TEST_CASE ("The User folder lists only Presets, by name; a missing folder lists 
     CHECK (presets[1].getFileNameWithoutExtension() == "b");
 
     CHECK (PresetLibrary (user.folder.getChildFile ("missing")).userPresets().empty());
+}
+
+TEST_CASE ("Saving where a file can't be written gives nothing")
+{
+    Folder user;
+    const auto notAFolder = user.folder.getChildFile ("file");
+    REQUIRE (notAFolder.replaceWithText ("in the way"));
+    Host host;
+    CHECK_FALSE (PresetLibrary (notAFolder).save ("Kick", host.processor.presetState()).has_value());
 }
 
 TEST_CASE ("A file that isn't a Preset reads as nothing")

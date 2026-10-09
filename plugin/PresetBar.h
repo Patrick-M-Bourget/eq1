@@ -33,6 +33,8 @@ private:
     void showMenu();
     void load (const juce::ValueTree& preset);
     void askToSave();
+    // Saves the settings as a User Preset named name, when it isn't empty, and closes the prompt.
+    void saveAs (const juce::String& name);
     void chooseFileToLoad();
 
     PluginProcessor& processor;

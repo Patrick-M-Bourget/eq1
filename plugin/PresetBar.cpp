@@ -60,23 +60,37 @@ void PresetBar::load (const juce::ValueTree& preset)
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Load Preset", "That file isn't an eq1 Preset.");
 }
 
+// The menu, the name prompt and the file chooser call back after the editor may have closed: each
+// callback holds the bar by a SafePointer and does nothing once it is gone.
 void PresetBar::showMenu()
 {
+    const juce::Component::SafePointer<PresetBar> bar (this);
+    const auto loadWhileOpen = [bar] (juce::ValueTree preset) {
+        return [bar, preset] {
+            if (bar != nullptr)
+                bar->load (preset);
+        };
+    };
     juce::PopupMenu menu;
     menu.addSectionHeader ("Factory");
-    for (const auto& preset : PresetLibrary::factoryPresets())
-        menu.addItem (preset.name, [this, tree = preset.preset] { load (tree); });
+    for (const auto& factory : PresetLibrary::factoryPresets())
+        menu.addItem (factory.name, loadWhileOpen (factory.preset));
     menu.addSectionHeader ("User");
     const auto user = library.userPresets();
     if (user.empty())
         menu.addItem ("No User Presets yet", false, false, nullptr);
     for (const auto& file : user)
-        menu.addItem (file.getFileNameWithoutExtension(), [this, file] { load (PresetLibrary::read (file)); });
+        menu.addItem (file.getFileNameWithoutExtension(), loadWhileOpen (PresetLibrary::read (file)));
     menu.addSeparator();
-    menu.addItem ("Save as User Preset...", [this] { askToSave(); });
-    menu.addItem ("Load Preset File...", [this] { chooseFileToLoad(); });
-    menu.addItem ("Show User Presets Folder", [] {
-        const auto folder = PresetLibrary::defaultUserFolder();
+    menu.addItem ("Save as User Preset...", [bar] {
+        if (bar != nullptr)
+            bar->askToSave();
+    });
+    menu.addItem ("Load Preset File...", [bar] {
+        if (bar != nullptr)
+            bar->chooseFileToLoad();
+    });
+    menu.addItem ("Show User Presets Folder", [folder = library.folder()] {
         folder.createDirectory();
         folder.revealToUser();
     });
@@ -89,22 +103,29 @@ void PresetBar::askToSave()
     namePrompt->addTextEditor ("name", {});
     namePrompt->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
     namePrompt->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-    namePrompt->enterModalState (true, juce::ModalCallbackFunction::create ([this] (int result) {
-        const auto name = namePrompt->getTextEditorContents ("name").trim();
-        namePrompt.reset();
-        if (result == 1 && name.isNotEmpty() && library.save (name, processor.presetState()) == juce::File())
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                                                    "Save as User Preset",
-                                                    "Couldn't write the Preset to " + PresetLibrary::defaultUserFolder().getFullPathName() + ".");
+    const juce::Component::SafePointer<PresetBar> bar (this);
+    namePrompt->enterModalState (true, juce::ModalCallbackFunction::create ([bar] (int result) {
+        if (bar != nullptr)
+            bar->saveAs (result == 1 ? bar->namePrompt->getTextEditorContents ("name").trim() : juce::String());
     }));
+}
+
+void PresetBar::saveAs (const juce::String& name)
+{
+    namePrompt.reset();
+    if (name.isNotEmpty() && ! library.save (name, processor.presetState()))
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                "Save as User Preset",
+                                                "Couldn't write the Preset to " + library.folder().getFullPathName() + ".");
 }
 
 void PresetBar::chooseFileToLoad()
 {
-    chooser = std::make_unique<juce::FileChooser> ("Load Preset File", PresetLibrary::defaultUserFolder(), "*" + PresetLibrary::fileExtension);
-    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& chosen) {
-        if (const auto file = chosen.getResult(); file.existsAsFile())
-            load (PresetLibrary::read (file));
+    chooser = std::make_unique<juce::FileChooser> ("Load Preset File", library.folder(), "*" + PresetLibrary::fileExtension);
+    const juce::Component::SafePointer<PresetBar> bar (this);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [bar] (const juce::FileChooser& chosen) {
+        if (const auto file = chosen.getResult(); bar != nullptr && file.existsAsFile())
+            bar->load (PresetLibrary::read (file));
     });
 }
 

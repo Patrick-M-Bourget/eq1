@@ -34,12 +34,12 @@ std::vector<juce::File> PresetLibrary::userPresets() const
     return files;
 }
 
-juce::File PresetLibrary::save (const juce::String& name, const juce::ValueTree& preset) const
+std::optional<juce::File> PresetLibrary::save (const juce::String& name, const juce::ValueTree& preset) const
 {
     const auto file = userFolder.getChildFile (juce::File::createLegalFileName (name.trim()) + fileExtension);
     const auto xml = preset.createXml();
     if (xml == nullptr || ! userFolder.createDirectory() || ! xml->writeTo (file))
-        return {};
+        return std::nullopt;
     return file;
 }
 
@@ -48,9 +48,9 @@ juce::ValueTree PresetLibrary::read (const juce::File& file)
     return file.existsAsFile() ? fromXml (juce::XmlDocument::parse (file)) : juce::ValueTree();
 }
 
-std::vector<PresetLibrary::Factory> PresetLibrary::factoryPresets()
+std::vector<PresetLibrary::FactoryPreset> PresetLibrary::factoryPresets()
 {
-    std::vector<Factory> presets;
+    std::vector<FactoryPreset> presets;
     for (int i = 0; i < FactoryPresets::namedResourceListSize; ++i)
     {
         int size = 0;
@@ -58,7 +58,7 @@ std::vector<PresetLibrary::Factory> PresetLibrary::factoryPresets()
         const auto name = juce::String (FactoryPresets::originalFilenames[i]).upToLastOccurrenceOf (fileExtension, false, false);
         presets.push_back ({ name, fromXml (juce::XmlDocument::parse (juce::String::fromUTF8 (data, size))) });
     }
-    std::sort (presets.begin(), presets.end(), [] (const Factory& a, const Factory& b) { return byName (a.name, b.name); });
+    std::sort (presets.begin(), presets.end(), [] (const FactoryPreset& a, const FactoryPreset& b) { return byName (a.name, b.name); });
     return presets;
 }
 
