@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Staple design system</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tokens.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>body{margin:0;background:#050608}</style>
+</helmet>
+<div style="width: 1200px; min-height: 2900px; box-sizing: border-box; padding: 48px 56px 56px 56px; background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); display: flex; flex-direction: column; gap: 44px; border-radius: 10px">
+
+  <!-- Title -->
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--line-2)">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: var(--fs-2); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3)">Staple EQ</span>
+      <h1 style="margin: 0; font-size: 32px; font-weight: 600; letter-spacing: -0.02em">Design system</h1>
+    </div>
+    <p style="margin: 0; max-width: 460px; font-size: var(--fs-4); line-height: 1.55; color: var(--text-2)">Colour belongs to the bands. Everything else is neutral, thin-lined and quiet, so the curve is always the loudest thing on screen. Words follow the eq1 glossary. Every value in the plugin window comes from the tokens below, defined once in tokens.css.</p>
+  </div>
+
+  <!-- Colour -->
+  <section style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: var(--fs-5); font-weight: 600">Colour</h2>
+      <span style="font-size: var(--fs-3); line-height: 1.5; color: var(--text-3)">Neutral surfaces and text levels; band hues in OKLCH at equal lightness.</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 28px">
+      <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px">
+        <sc-for list="{{surfaces}}" as="c" hint-placeholder-count="7">
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <div style="height: 56px; border-radius: var(--r-2); background: {{c.v}}; box-shadow: inset 0 0 0 1px var(--line-2)"></div>
+            <span style="font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-1)">{{c.name}}</span>
+            <span style="font-size: var(--fs-2); color: var(--text-3)">{{c.use}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <sc-for list="{{texts}}" as="t" hint-placeholder-count="4">
+            <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line-1)">
+              <span style="font-size: var(--fs-4); color: {{t.v}}">{{t.sample}}</span>
+              <span style="font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">{{t.name}} · {{t.ratio}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <sc-for list="{{lines}}" as="l" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 14px">
+              <span style="flex: 1; height: 0; border-top: 1px solid {{l.v}}; outline: {{l.outline}}; outline-offset: 2px"></span>
+              <span style="width: 150px; font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">{{l.name}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Band palette · 24 slots · oklch(0.77 0.125 h) and oklch(0.84 0.095 h + 15°)</span>
+        <div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px">
+          <sc-for list="{{bands}}" as="b" hint-placeholder-count="24">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+              <span style="width: 28px; height: 28px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.16), rgba(255,255,255,0) 70%), {{b.c}}; box-shadow: 0 0 5px rgba(0,0,0,0.45)"></span>
+              <span style="font-family: var(--font-num); font-size: var(--fs-1); color: var(--text-3)">{{b.n}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 18px">
+        <span style="font-size: var(--fs-3); color: var(--text-2); width: 110px">Meter</span>
+        <span style="flex: 1; height: 8px; border-radius: 1px; background: linear-gradient(to right, var(--meter-1) 0%, var(--meter-2) 73%, var(--meter-3) 90%, var(--meter-clip) 100%)"></span>
+        <span style="font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">#3FC79A · #A9D66A · #E9B44C · #E5604F</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Semantic · fixed meaning, never the band colour</span>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+          <sc-for list="{{semantic}}" as="sm" hint-placeholder-count="5">
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span style="flex: none; width: 28px; height: 28px; border-radius: var(--r-2); background: {{sm.v}}; box-shadow: inset 0 0 0 1px var(--line-2)"></span>
+              <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+                <span style="font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-1)">{{sm.name}}</span>
+                <span style="font-size: var(--fs-1); color: var(--text-3)">{{sm.use}}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px">
+          <span style="font-size: var(--fs-2); color: var(--text-3); width: 110px">Stereo placement</span>
+          <sc-for list="{{places}}" as="pl" hint-placeholder-count="5">
+            <span style="display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2); color: var(--text-2)"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{pl.v}}"></span>{{pl.name}}</span>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Type -->
+  <section style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: var(--fs-5); font-weight: 600">Type</h2>
+      <span style="font-size: var(--fs-3); line-height: 1.5; color: var(--text-3)">Manrope throughout. Numbers use its tabular (even-width) digits, so values never jitter, with a plain zero.</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <sc-for list="{{type}}" as="t" hint-placeholder-count="5">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line-1)">
+            <span style="font-size: {{t.size}}; font-weight: {{t.w}}">{{t.sample}}</span>
+            <span style="font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">{{t.name}} · {{t.px}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <div style="padding: 16px; border-radius: var(--r-3); background: var(--surface-1); display: flex; flex-direction: column; gap: 6px; font-family: var(--font-num); font-variant-numeric: tabular-nums">
+          <span style="font-size: var(--fs-4); font-weight: 500">1.25 kHz</span>
+          <span style="font-size: var(--fs-4)">+6.33 dB</span>
+          <span style="font-size: var(--fs-4); color: var(--text-2)">Q 0.710</span>
+        </div>
+        <span style="font-size: var(--fs-3); line-height: 1.5; color: var(--text-3)">Precision: frequency 1 decimal below 100 Hz, else whole Hz / 2-decimal kHz; gain 1–2 decimals; Q 2–3 decimals. Section labels use --fs-2 uppercase with 0.12em tracking, and nowhere else.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Shape, space, elevation, motion -->
+  <section style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: var(--fs-5); font-weight: 600">Shape, space &amp; motion</h2>
+      <span style="font-size: var(--fs-3); line-height: 1.5; color: var(--text-3)">Circles only for knobs and Band handles. Everything else is a soft rectangle on an 8 px grid.</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Radius</span>
+        <sc-for list="{{radii}}" as="r" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 44px; height: 28px; border-radius: {{r.v}}; background: var(--fill-1); box-shadow: inset 0 0 0 1px var(--line-2)"></span>
+            <span style="font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">{{r.name}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Spacing</span>
+        <sc-for list="{{space}}" as="sp" hint-placeholder-count="5">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: {{sp.v}}px; height: 10px; border-radius: 1px; background: var(--fill-3)"></span>
+            <span style="font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">{{sp.v}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Elevation</span>
+        <div style="height: 44px; border-radius: var(--r-3); background: var(--menu); box-shadow: var(--shadow-1); display: flex; align-items: center; padding: 0 12px; font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">--shadow-1 · cards, menus</div>
+        <div style="height: 44px; border-radius: var(--r-3); background: var(--menu); box-shadow: var(--shadow-2); display: flex; align-items: center; padding: 0 12px; font-family: var(--font-num); font-size: var(--fs-2); color: var(--text-3)">--shadow-2 · dialogs</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Motion</span>
+        <sc-for list="{{motion}}" as="m" hint-placeholder-count="4">
+          <div style="display: flex; justify-content: space-between; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line-1)">
+            <span style="font-family: var(--font-num); font-size: var(--fs-2)">{{m.name}}</span>
+            <span style="font-size: var(--fs-2); color: var(--text-3)">{{m.use}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- Icons -->
+  <section style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: var(--fs-5); font-weight: 600">Icons</h2>
+      <span style="font-size: var(--fs-3); line-height: 1.5; color: var(--text-3)">16 px grid, 1.5 px stroke, round caps and joins, currentColor.</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{icons}}" as="ic" hint-placeholder-count="20">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px; border-radius: var(--r-2); background: var(--surface-1)">
+          <svg width="20" height="16" viewBox="{{ic.vb}}" fill="none" stroke="currentColor" style="color: var(--text-1); stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round" aria-hidden="true"><path d="{{ic.d}}"></path></svg>
+          <span style="font-size: var(--fs-1); color: var(--text-3); text-align: center">{{ic.name}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- Components -->
+  <section style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: var(--fs-5); font-weight: 600">Components &amp; states</h2>
+      <span style="font-size: var(--fs-3); line-height: 1.5; color: var(--text-3)">One set of states for every control. Hover lights a control up (brighter icon or a gentle lift) and never draws an outline.</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 28px">
+      <!-- Buttons -->
+      <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px">
+        <sc-for list="{{btnStates}}" as="bs" hint-placeholder-count="6">
+          <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px">
+            <span style="height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: var(--r-2); background: {{bs.bg}}; color: {{bs.fg}}; box-shadow: {{bs.sh}}; outline: {{bs.ol}}; outline-offset: 2px; font-size: var(--fs-3); font-weight: 500; filter: {{bs.filter}}">
+              Auto gain</span>
+            <span style="font-size: var(--fs-2); color: var(--text-3)">{{bs.name}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <!-- Icon buttons: no boxes; state is carried by the icon -->
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Icon buttons, Bypass &amp; Solo</span>
+        <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px">
+          <sc-for list="{{iconStates}}" as="is" hint-placeholder-count="6">
+            <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px">
+              <span style="width: 26px; height: 26px; border-radius: var(--r-2); background: {{is.bg}}; color: {{is.fg}}; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" style="stroke-width: var(--icon-stroke); stroke-linecap: round" aria-hidden="true"><path d="M7 1.5 V6.5"></path><path d="M3.8 3.6 a4.6 4.6 0 1 0 6.4 0"></path></svg></span>
+              <span style="font-size: var(--fs-2); color: var(--text-3); line-height: 1.4">{{is.name}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">Bypass is the only boxed icon state: --state-off on --state-off-bg, and the rest of that Band's controls fade to 38%. Global Bypass uses the same styling.</span>
+      </div>
+      <!-- Selectors + knobs + nodes -->
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: var(--fs-3); color: var(--text-2)">Selector &amp; text button</span>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 104px; height: 34px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 9px; border-radius: var(--r-3); background: #141519; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06); font-size: var(--fs-4); font-weight: 500"><svg width="20" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" style="color: {{col}}; stroke-width: var(--icon-stroke); stroke-linecap: round" aria-hidden="true"><path d="M1 10 C6 10 7 2 10 2 S14 10 19 10"></path></svg>Bell</span>
+            <span style="height: 32px; padding: 0 10px; border-radius: var(--r-2); display: flex; align-items: center; gap: 1px; font-size: var(--fs-4); font-weight: 600"><span>A</span><span style="color: var(--text-4); font-weight: 400">/</span><span style="color: var(--text-4)">B</span></span>
+            <span style="height: 32px; padding: 0 10px; border-radius: var(--r-2); background: var(--fill-2); display: flex; align-items: center; gap: 1px; font-size: var(--fs-4); font-weight: 600"><span>A</span><span style="color: var(--text-4); font-weight: 400">/</span><span style="color: var(--text-4)">B</span></span>
+          </div>
+          <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">Selectors (Shape, Stereo) share one size: 104 × 34, icon + label, no chevron. In the Band panel they sit flush with its left and right edges, with a Band-coloured hairline and wash glowing from the inner edge. Text buttons (A/B Compare, Copy) show a --fill-2 box only on hover.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: var(--fs-3); color: var(--text-2)">Knob · 30 / 50 / 66 + tooltip</span>
+          <div style="display: flex; align-items: flex-end; gap: 18px">
+            <sc-for list="{{knobs}}" as="k" hint-placeholder-count="3">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 4px">
+                <span style="position: relative; width: {{k.d}}px; height: {{k.d}}px; border-radius: 50%; box-sizing: border-box; background: radial-gradient(120% 120% at 50% 12%, #35373D 0%, #27282D 45%, #1C1D21 100%); border: 2px solid rgba(255,255,255,0.22); box-shadow: 0 6px 14px rgba(0,0,0,0.4)">
+                  <svg width="{{k.d}}" height="{{k.d}}" viewBox="{{k.vb}}" style="position: absolute; left: -2px; top: -2px" aria-hidden="true">
+                    <path d="{{k.val}}" style="fill: none; stroke: oklch(0.77 0.125 145); stroke-width: {{k.sw}}; stroke-linecap: round"></path>
+                  </svg>
+                </span>
+                <span style="font-size: var(--fs-2); color: var(--text-3)">{{k.l}}</span>
+              </div>
+            </sc-for>
+            <div style="align-self: center; min-width: 86px; box-sizing: border-box; padding: 5px 10px 6px; border-radius: var(--r-2); background: var(--menu); box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line-2); text-align: center">
+              <div style="font-size: var(--fs-2); line-height: 14px; color: var(--text-3)">Band 2 Gain</div>
+              <div style="font-size: var(--fs-4); line-height: 18px">+6.3 dB</div>
+            </div>
+          </div>
+          <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">No read-outs under knobs: the value appears in a tooltip on hover or drag; double-click it to type.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: var(--fs-3); color: var(--text-2)">Band handle</span>
+          <div style="display: flex; align-items: flex-end; gap: 22px">
+            <sc-for list="{{nodes}}" as="n" hint-placeholder-count="4">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 10px">
+                <span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center">
+                  <span style="width: {{n.s}}px; height: {{n.s}}px; box-sizing: border-box; border-radius: 50%; background: {{n.bg}}; border: {{n.bw}}px {{n.bs}} {{n.ring}}; box-shadow: {{n.sh}}"></span>
+                </span>
+                <span style="font-size: var(--fs-2); color: var(--text-3)">{{n.name}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <!-- Menu + card -->
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: var(--fs-3); color: var(--text-2)">Menu</span>
+          <div style="width: 200px; box-sizing: border-box; padding: 6px; border-radius: var(--r-3); background: var(--menu); border: 1px solid var(--line-2); box-shadow: var(--shadow-1); display: flex; flex-direction: column">
+            <span style="height: 30px; display: flex; align-items: center; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-4)">Disable</span>
+            <span style="height: 30px; display: flex; align-items: center; padding: 0 10px; border-radius: var(--r-2); background: var(--fill-1); font-size: var(--fs-4)">Invert Gain</span>
+            <span style="height: 1px; margin: 5px 8px; background: var(--line-2)"></span>
+            <span style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-4)">Shape<svg width="8" height="10" viewBox="0 0 8 10" fill="none" stroke="currentColor" style="opacity: 0.6; stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round"><path d="M2.5 2 L5.5 5 L2.5 8"></path></svg></span>
+            <span style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-4); color: var(--text-4)">Paste<span style="font-family: var(--font-num); font-size: var(--fs-2)">⌘V</span></span>
+          </div>
+          <span style="font-size: var(--fs-2); color: var(--text-3)">Items 30 px, hover --fill-1, disabled --text-4.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: var(--fs-3); color: var(--text-2)">Quick-controls card</span>
+          <div style="width: 172px; height: 70px; box-sizing: border-box; padding: 8px; border-radius: var(--r-3); background: var(--menu); border: 1px solid var(--line-2); box-shadow: var(--shadow-1); display: flex; justify-content: space-between; gap: 10px">
+            <div style="display: flex; flex-direction: column; justify-content: space-between; align-items: center">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" style="color: var(--text-2); stroke-width: var(--icon-stroke); stroke-linecap: round"><path d="M7 1.5 V6.5"></path><path d="M3.8 3.6 a4.6 4.6 0 1 0 6.4 0"></path></svg>
+              <svg width="20" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" style="color: oklch(0.77 0.125 265); stroke-width: var(--icon-stroke); stroke-linecap: round"><path d="M1 10 C6 10 7 2 10 2 S14 10 19 10"></path></svg>
+            </div>
+            <div style="display: flex; flex-direction: column; font-family: var(--font-num); font-size: var(--fs-3); line-height: 17px; min-width: 84px">
+              <span style="font-weight: 500">277.1 Hz</span><span>+6.33 dB</span><span style="color: var(--text-2)">Q 0.376</span>
+            </div>
+            <div style="display: flex; flex-direction: column; justify-content: space-between; align-items: center; color: var(--text-2)">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" style="stroke-width: var(--icon-stroke); stroke-linecap: round"><path d="M2 2 L10 10 M10 2 L2 10"></path></svg>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" style="stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round"><path d="M2 3.5 L5 6.5 L8 3.5"></path></svg>
+            </div>
+          </div>
+          <span style="font-size: var(--fs-2); color: var(--text-3)">Values are drag targets; edits never select the band.</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: var(--fs-3); color: var(--text-2)">Curve hierarchy</span>
+          <div style="height: 104px; border-radius: var(--r-3); background: var(--surface-1); position: relative; overflow: hidden">
+            <svg width="300" height="104" viewBox="0 0 300 104" style="position: absolute; left: 0; top: 0" aria-hidden="true">
+              <path d="M0 52 H300" style="stroke: #fff; stroke-opacity: 0.18; stroke-width: 1"></path>
+              <path d="M0 52 C60 52 80 30 110 30 S160 52 300 52" style="fill: none; stroke: oklch(0.77 0.125 145); stroke-opacity: 0.5; stroke-width: 1"></path>
+              <path d="M0 52 C150 52 170 78 200 78 S240 52 300 52" style="fill: oklch(0.77 0.125 325 / 0.3); stroke: oklch(0.77 0.125 325); stroke-width: 1.5"></path>
+              <path d="M0 52 C60 52 80 32 110 32 S170 60 200 72 S250 52 300 52" style="fill: none; stroke: var(--curve-main); stroke-width: 2"></path>
+            </svg>
+          </div>
+          <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">Sum 2 px --curve-main · selected 1.5 px + 30% fill · others 1 px at 50% · bypassed Bands desaturated at 60% and left out of the sum · Dynamic Range is a 20% wash with no outline · all display layers fade out at the window edges.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Panels & overlays -->
+  <section style="display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-size: var(--fs-5); font-weight: 600">Panels &amp; overlays</h2>
+      <span style="font-size: var(--fs-3); line-height: 1.5; color: var(--text-3)">The pieces that live on or around the band panel and footer.</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start">
+      <!-- Gain ring -->
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Gain + Dynamic Range ring</span>
+        <div style="height: 120px; border-radius: var(--r-3); background: var(--surface-1); display: flex; align-items: center; justify-content: center">
+          <span style="position: relative; width: 66px; height: 66px">
+            <svg width="66" height="66" viewBox="0 0 66 66" style="position: absolute; left: 0; top: 0; overflow: visible" aria-hidden="true">
+              <defs>
+                <radialGradient id="dsRange" gradientUnits="userSpaceOnUse" cx="33" cy="33" r="49"><stop offset="0.755" style="stop-color: #9C3344"></stop><stop offset="1" style="stop-color: var(--dyn-range)"></stop></radialGradient>
+                <radialGradient id="dsLive" gradientUnits="userSpaceOnUse" cx="33" cy="33" r="49"><stop offset="0.755" style="stop-color: #C49A34"></stop><stop offset="1" style="stop-color: var(--dyn-live)"></stop></radialGradient>
+              </defs>
+              <path d="{{ring.lane}}" style="fill: none; stroke: #FFFFFF; stroke-opacity: 0.06; stroke-width: 12"></path>
+              <path d="{{ring.range}}" style="fill: none; stroke: url(#dsRange); stroke-opacity: 0.85; stroke-width: 12"></path>
+              <path d="{{ring.live}}" style="fill: none; stroke: url(#dsLive); stroke-width: 12"></path>
+            </svg>
+            <span style="position: absolute; inset: 0; border-radius: 50%; box-sizing: border-box; background: radial-gradient(120% 120% at 50% 12%, #35373D 0%, #27282D 45%, #1C1D21 100%); border: 2px solid rgba(255,255,255,0.22); box-shadow: 0 6px 14px rgba(0,0,0,0.4)"></span>
+            <svg width="66" height="66" viewBox="0 0 66 66" style="position: absolute; left: 0; top: 0" aria-hidden="true"><path d="{{ring.val}}" style="fill: none; stroke: {{col}}; stroke-width: 3; stroke-linecap: round"></path></svg>
+          </span>
+        </div>
+        <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">12 px lane (flat white 6 %). Red = dynamic range, yellow = live gain reduction from the set gain; both graded inner → outer. No track behind the value arc.</span>
+      </div>
+      <!-- Edge selector -->
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Edge selector (in the band panel)</span>
+        <div style="height: 120px; border-radius: var(--r-3); background: var(--raised); display: flex; align-items: center; justify-content: space-between; overflow: hidden">
+          <span style="width: 104px; height: 34px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 9px; padding-left: 14px; border-radius: 0 var(--r-3) var(--r-3) 0; border: 1px solid transparent; border-left: 0; background: {{edgeL}}; font-size: var(--fs-4); font-weight: 500"><svg width="20" height="12" viewBox="0 0 20 12" fill="none" stroke="currentColor" style="color: {{col}}; stroke-width: var(--icon-stroke); stroke-linecap: round" aria-hidden="true"><path d="M1 10 C6 10 7 2 10 2 S14 10 19 10"></path></svg>Bell</span>
+          <span style="width: 104px; height: 34px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 8px; padding-right: 14px; border-radius: var(--r-3) 0 0 var(--r-3); border: 1px solid transparent; border-right: 0; background: {{edgeR}}; font-size: var(--fs-4); font-weight: 500"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--place-stereo)"></span>Stereo</span>
+        </div>
+        <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">Flush with the panel sides, base #141519, band-colour hairline + wash glowing from the inner edge.</span>
+      </div>
+      <!-- Free listen bar -->
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Detection Range bar (Free)</span>
+        <div style="position: relative; height: 120px; border-radius: var(--r-3); background: var(--surface-1); overflow: hidden">
+          <span style="position: absolute; left: 30%; width: 40%; top: 0; height: 84px; background: linear-gradient(to top, {{col}}, transparent); opacity: 0.16"></span>
+          <span style="position: absolute; left: 0; right: 0; top: 84px; height: 1px; background: var(--line-3)"></span>
+          <span style="position: absolute; left: 30%; width: 40%; top: 82.5px; height: 3px; border-radius: 2px; background: {{col}}"></span>
+          <span style="position: absolute; left: 30%; top: 74px; width: 12px; height: 20px; margin-left: -6px; border-radius: 6px; background: linear-gradient(180deg, #5A5D64, #3A3D44); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 5px rgba(0,0,0,0.5)"></span>
+          <span style="position: absolute; left: 70%; top: 74px; width: 12px; height: 20px; margin-left: -6px; border-radius: 6px; background: linear-gradient(180deg, #5A5D64, #3A3D44); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 5px rgba(0,0,0,0.5)"></span>
+          <span style="position: absolute; left: 30%; top: 56px; transform: translateX(-50%); font-size: var(--fs-1); color: var(--text-3)">141 Hz</span>
+          <span style="position: absolute; left: 70%; top: 56px; transform: translateX(-50%); font-size: var(--fs-1); color: var(--text-3)">261 Hz</span>
+        </div>
+        <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">Only when Detection Range is Free, just above the Band panel. Drag the ends or the segment.</span>
+      </div>
+      <!-- Analyzer popover -->
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Analyzer popover</span>
+        <div style="width: 220px; box-sizing: border-box; padding: 10px; display: flex; flex-direction: column; gap: 8px; border-radius: var(--r-3); background: var(--menu); border: 1px solid var(--line-2); box-shadow: var(--shadow-1); font-size: var(--fs-3)">
+          <div style="display: flex; gap: 4px; padding: 2px; border-radius: var(--r-2); background: var(--surface-1)">
+            <span style="flex: 1; height: 26px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-3)"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--text-4)"></span>Pre</span>
+            <span style="flex: 1; height: 26px; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: var(--r-2); background: var(--fill-2)"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--text-1)"></span>Post</span>
+            <span style="flex: 1; height: 26px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-3); opacity: 0.4"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--text-4)"></span>Sidechain</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 0 8px"><span style="color: var(--text-3)">Range</span><span>90 dB</span></div>
+          <div style="display: flex; justify-content: space-between; padding: 0 8px"><span style="color: var(--text-3)">Speed</span><span>Medium</span></div>
+          <div style="height: 1px; background: var(--line-2)"></div>
+          <div style="display: flex; gap: 4px"><span style="flex: 1; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-2); background: var(--fill-2)">Peak hold</span><span style="flex: 1; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text-3)">Freeze</span></div>
+        </div>
+      </div>
+      <!-- Output popover -->
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Output popover</span>
+        <div style="width: 176px; box-sizing: border-box; padding: 14px 12px 10px; display: flex; flex-direction: column; align-items: center; gap: 12px; border-radius: var(--r-3); background: var(--menu); border: 1px solid var(--line-2); box-shadow: var(--shadow-1)">
+          <div style="position: relative; width: 100%; display: flex; justify-content: center">
+            <span style="position: relative; width: 56px; height: 56px; border-radius: 50%; box-sizing: border-box; background: radial-gradient(120% 120% at 50% 12%, #35373D 0%, #27282D 45%, #1C1D21 100%); border: 2px solid rgba(255,255,255,0.22)"><svg width="56" height="56" viewBox="0 0 56 56" style="position: absolute; left: -2px; top: -2px" aria-hidden="true"><path d="{{outArc}}" style="fill: none; stroke: var(--curve-main); stroke-width: 3; stroke-linecap: round"></path></svg></span>
+            <span style="position: absolute; right: 0; bottom: 0; height: 20px; padding: 0 6px; border-radius: var(--r-1); background: var(--fill-1); color: var(--text-2); font-size: var(--fs-1); font-weight: 600; display: flex; align-items: center">L/R</span>
+          </div>
+          <div style="position: relative; width: 100%; height: 14px"><span style="position: absolute; left: 0; right: 0; top: 4px; height: 6px; border-radius: 3px; background: var(--fill-2)"></span><span style="position: absolute; left: 30%; width: 20%; top: 4px; height: 6px; border-radius: 3px; background: var(--text-2)"></span><span style="position: absolute; left: 30%; top: 1px; width: 6px; height: 12px; margin-left: -3px; border-radius: 2px; background: var(--text-1)"></span></div>
+          <div style="width: 100%; display: flex; gap: 4px; font-size: var(--fs-4); font-weight: 600"><span style="flex: 1; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--text-3)">Ø</span><span style="flex: 1; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-2); background: var(--fill-2)">A</span><span style="flex: 1; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-2); background: var(--fill-2)">|||</span></div>
+        </div>
+        <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">Opens from the footer Output Gain read-out. Output Gain ±24 dB, Pan Mode chip, Output Pan centre-detented, toggles: Phase Invert, Auto Gain, meter.</span>
+      </div>
+      <!-- Off state -->
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: var(--fs-3); color: var(--text-2)">Bypassed Band</span>
+        <div style="height: 120px; border-radius: var(--r-3); background: var(--raised); display: flex; align-items: center; justify-content: center; gap: 14px">
+          <span style="width: 26px; height: 26px; border-radius: var(--r-2); background: var(--state-off-bg); color: var(--state-off); display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" style="stroke-width: var(--icon-stroke); stroke-linecap: round" aria-hidden="true"><path d="M7 1.5 V6.5"></path><path d="M3.8 3.6 a4.6 4.6 0 1 0 6.4 0"></path></svg></span>
+          <span style="opacity: 0.38; display: flex; align-items: center; gap: 10px; font-size: var(--fs-4)"><span style="width: 40px; height: 40px; border-radius: 50%; box-sizing: border-box; background: radial-gradient(120% 120% at 50% 12%, #35373D 0%, #27282D 45%, #1C1D21 100%); border: 2px solid rgba(255,255,255,0.22)"></span>Controls at 38 %</span>
+        </div>
+        <span style="font-size: var(--fs-2); line-height: 1.5; color: var(--text-3)">Bypass turns red on a red tint; everything else in the panel fades (✕ stays bright). Curve stays visible but desaturated and leaves the sum.</span>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":2900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Band hue order: consecutive bands jump ≥ 90° round the wheel so the first few are clearly distinct
+    // (blue, orange, green, magenta, cyan, red, violet, yellow, indigo, lime, pink, teal); slots 12–23 repeat it lighter.
+    const band = function (ci) {
+      const h = Math.round([7, 1, 4, 10, 6, 0, 9, 2, 8, 3, 11, 5][ci % 12] * 30 + 25 + (ci >= 12 ? 15 : 0)) % 360;
+      return 'oklch(' + (ci >= 12 ? 0.84 : 0.77) + ' ' + (ci >= 12 ? 0.095 : 0.125) + ' ' + h + ')';
+    };
+    const arc = function (c, R, a0, a1) {
+      const pt = function (a) { const r = a * Math.PI / 180; return (c + R * Math.sin(r)).toFixed(1) + ' ' + (c - R * Math.cos(r)).toFixed(1); };
+      return 'M' + pt(a0) + ' A' + R + ' ' + R + ' 0 ' + (a1 - a0 > 180 ? 1 : 0) + ' 1 ' + pt(a1);
+    };
+    const knob = function (d, t, v) {
+      const c = d / 2, R = c - Math.max(4.5, Math.round(d * 0.1));
+      return { d: d, vb: '0 0 ' + d + ' ' + d, sw: d < 40 ? 2 : 3, track: arc(c, R, -135, 135), val: arc(c, R, -135, -135 + 270 * t), l: v };
+    };
+    const col = band(3);
+    const oc = band(1);
+    const rr = function (a) { return -135 + 270 * a; };
+    return {
+      col: oc,
+      ring: { lane: arc(33, 43, -135, 135), range: arc(33, 43, rr(0.35), rr(0.55)), live: arc(33, 43, rr(0.47), rr(0.55)), val: arc(33, 24, rr(0.5), rr(0.55)) },
+      outArc: arc(28, 21, 0, 40),
+      edgeL: 'radial-gradient(70% 140% at 100% 0%, ' + oc.replace(')', ' / 0.12)') + ', transparent 70%) padding-box, linear-gradient(#141519, #141519) padding-box, linear-gradient(to left, ' + oc.replace(')', ' / 0.6)') + ', ' + oc.replace(')', ' / 0.18)') + ' 45%, transparent 90%) border-box',
+      edgeR: 'radial-gradient(70% 140% at 0% 0%, ' + oc.replace(')', ' / 0.12)') + ', transparent 70%) padding-box, linear-gradient(#141519, #141519) padding-box, linear-gradient(to right, ' + oc.replace(')', ' / 0.6)') + ', ' + oc.replace(')', ' / 0.18)') + ' 45%, transparent 90%) border-box',
+      semantic: [
+        { name: '--curve-main', v: 'var(--curve-main)', use: 'Sum curve' },
+        { name: '--dyn-range', v: 'var(--dyn-range)', use: 'Dynamic Range ring' },
+        { name: '--dyn-live', v: 'var(--dyn-live)', use: 'Live Gain fill' },
+        { name: '--state-off', v: 'var(--state-off)', use: 'Bypass, Global Bypass' },
+        { name: '--state-off-bg', v: 'var(--state-off-bg)', use: 'Bypass tint' },
+        { name: '--an-sc', v: 'var(--an-sc)', use: 'Sidechain spectrum' },
+        { name: '--focus', v: 'var(--focus)', use: 'Keyboard focus' }
+      ],
+      places: [
+        { name: 'Left', v: 'var(--place-left)' }, { name: 'Right', v: 'var(--place-right)' }, { name: 'Stereo', v: 'var(--place-stereo)' },
+        { name: 'Mid', v: 'var(--place-mid)' }, { name: 'Side', v: 'var(--place-side)' }
+      ],
+      iconStates: [
+        { name: 'Rest · --text-3', bg: 'transparent', fg: 'var(--text-3)' },
+        { name: 'Hover · --text-1', bg: 'transparent', fg: 'var(--text-1)' },
+        { name: 'Active (Bypass off) · --text-2', bg: 'transparent', fg: 'var(--text-2)' },
+        { name: 'Bypassed · --state-off', bg: 'var(--state-off-bg)', fg: 'var(--state-off)' },
+        { name: 'Solo / Detection Audition on · Band colour', bg: 'transparent', fg: band(1) },
+        { name: 'Disabled · --text-4', bg: 'transparent', fg: 'var(--text-4)' }
+      ],
+      surfaces: [
+        { name: '--bg-0', v: 'var(--bg-0)', use: 'Window' },
+        { name: '--surface-1', v: 'var(--surface-1)', use: 'Quiet areas' },
+        { name: '--fill-1', v: 'var(--fill-1)', use: 'Controls' },
+        { name: '--fill-2', v: 'var(--fill-2)', use: 'Hover / on' },
+        { name: '--fill-3', v: 'var(--fill-3)', use: 'Strong on' },
+        { name: '--raised', v: 'var(--raised)', use: 'Band panel body' },
+        { name: '--menu', v: 'var(--menu)', use: 'Menus, cards' }
+      ],
+      texts: [
+        { name: '--text-1', v: 'var(--text-1)', sample: 'Primary — values, titles', ratio: '16.4:1' },
+        { name: '--text-2', v: 'var(--text-2)', sample: 'Secondary — labels', ratio: '9.1:1' },
+        { name: '--text-3', v: 'var(--text-3)', sample: 'Tertiary — scales, hints', ratio: '5.3:1' },
+        { name: '--text-4', v: 'var(--text-4)', sample: 'Disabled — inactive only', ratio: '2.6:1' }
+      ],
+      lines: [
+        { name: '--line-1 grid', v: 'var(--line-1)', outline: 'none' },
+        { name: '--line-2 divider', v: 'var(--line-2)', outline: 'none' },
+        { name: '--line-3 strong', v: 'var(--line-3)', outline: 'none' },
+        { name: '--focus ring 2px', v: 'transparent', outline: '2px solid var(--focus)' }
+      ],
+      bands: Array.from({ length: 24 }, function (_, i) { return { c: band(i), n: i + 1 }; }),
+      type: [
+        { name: '--fs-5', px: '16 / 600', size: 'var(--fs-5)', w: 600, sample: 'Lead Vocal Air' },
+        { name: '--fs-4', px: '13 / 500', size: 'var(--fs-4)', w: 500, sample: 'Shape · Bell' },
+        { name: '--fs-3', px: '12 / 400', size: 'var(--fs-3)', w: 400, sample: 'Phase  Minimum' },
+        { name: '--fs-2', px: '11 / 400', size: 'var(--fs-2)', w: 400, sample: 'Frequency' },
+        { name: '--fs-1', px: '10 / 400', size: 'var(--fs-1)', w: 400, sample: '-30  -40  -50' }
+      ],
+      radii: [{ name: '--r-1 4 · chips, segments', v: 'var(--r-1)' }, { name: '--r-2 6 · buttons, fields', v: 'var(--r-2)' }, { name: '--r-3 10 · panels, menus', v: 'var(--r-3)' }],
+      space: [{ v: 4 }, { v: 8 }, { v: 12 }, { v: 16 }, { v: 24 }],
+      motion: [
+        { name: '--dur-1 120', use: 'hover, press' },
+        { name: '--dur-2 180', use: 'menus, cards' },
+        { name: '--dur-3 240', use: 'panels' },
+        { name: 'popIn / slideIn', use: 'animate translate + scale, never transform' },
+        { name: '--ease', use: '.2 .7 .2 1' }
+      ],
+      icons: [
+        { name: 'Bypass', vb: '0 0 14 14', d: 'M7 1.5 V6.5 M3.8 3.6 a4.6 4.6 0 1 0 6.4 0' },
+        { name: 'Close', vb: '0 0 12 12', d: 'M2 2 L10 10 M10 2 L2 10' },
+        { name: 'More', vb: '0 0 10 10', d: 'M2 3.5 L5 6.5 L8 3.5' },
+        { name: 'Prev', vb: '0 0 16 16', d: 'M10 3 L5 8 L10 13' },
+        { name: 'Next', vb: '0 0 16 16', d: 'M6 3 L11 8 L6 13' },
+        { name: 'Undo', vb: '0 0 18 18', d: 'M6 4 L3 7 L6 10 M3 7 H11 a4 4 0 0 1 0 8 H8' },
+        { name: 'Redo', vb: '0 0 18 18', d: 'M12 4 L15 7 L12 10 M15 7 H7 a4 4 0 0 0 0 8 H10' },
+        { name: 'Solo · Detection Audition', vb: '0 0 16 16', d: 'M2.5 10 V8.5 a5.5 5.5 0 0 1 11 0 V10 M2 10 H5 V14 H2 Z M11 10 H14 V14 H11 Z' },
+        { name: 'Detection Source', vb: '0 0 16 12', d: 'M1 6 H9 M6 3 L9 6 L6 9 M12.5 1.5 V10.5' },
+        { name: 'Track', vb: '0 0 16 12', d: 'M1 6 H3 L4.5 2.5 L6.5 9.5 L8.5 3.5 L10 8 L11.5 6 H15' },
+        { name: 'Bell', vb: '0 0 20 12', d: 'M1 10 C6 10 7 2 10 2 S14 10 19 10' },
+        { name: 'Low Shelf', vb: '0 0 20 12', d: 'M1 3 H6 C9 3 11 9 14 9 H19' },
+        { name: 'High Shelf', vb: '0 0 20 12', d: 'M1 9 H6 C9 9 11 3 14 3 H19' },
+        { name: 'Low Cut', vb: '0 0 20 12', d: 'M2 11 C3.5 5 5.5 3 9 3 H19' },
+        { name: 'High Cut', vb: '0 0 20 12', d: 'M1 3 H11 C14.5 3 16.5 5 18 11' },
+        { name: 'Notch', vb: '0 0 20 12', d: 'M1 3 H7.5 C9 3 9.2 11 10 11 C10.8 11 11 3 12.5 3 H19' },
+        { name: 'Band Pass', vb: '0 0 20 12', d: 'M1 11 C7 11 8 2 10 2 S13 11 19 11' },
+        { name: 'Tilt Shelf', vb: '0 0 20 12', d: 'M1 8.5 H5 C8.5 8.5 11.5 3.5 15 3.5 H19 M8 6 H12' },
+        { name: 'Flat Tilt', vb: '0 0 20 12', d: 'M1 10 L19 2' },
+        { name: 'All Pass', vb: '0 0 20 12', d: 'M1 6 H19 M10 3 V9' },
+        { name: 'Detection Range: Band', vb: '0 0 16 12', d: 'M1 10 C5 10 6 3 8 3 S11 10 15 10' },
+        { name: 'Detection Range: Free', vb: '0 0 16 12', d: 'M2 6 H14 M4.5 3.5 L2 6 L4.5 8.5 M11.5 3.5 L14 6 L11.5 8.5' },
+        { name: 'Freeze', vb: '0 0 14 14', d: 'M7 1 V13 M1.8 4 L12.2 10 M1.8 10 L12.2 4 M5.5 2 L7 3.3 L8.5 2 M5.5 12 L7 10.7 L8.5 12' }
+      ],
+      btnStates: [
+        { name: 'Default', bg: 'var(--fill-1)', fg: 'var(--text-2)', sh: 'none', ol: 'none', filter: 'none' },
+        { name: 'Hover · lift', bg: 'var(--fill-1)', fg: 'var(--text-2)', sh: 'none', ol: 'none', filter: 'brightness(1.18)' },
+        { name: 'Pressed', bg: 'var(--fill-1)', fg: 'var(--text-2)', sh: 'none', ol: 'none', filter: 'brightness(1.3)' },
+        { name: 'Focus', bg: 'var(--fill-1)', fg: 'var(--text-1)', sh: 'none', ol: '2px solid var(--focus)', filter: 'none' },
+        { name: 'On', bg: 'var(--fill-3)', fg: 'var(--text-1)', sh: 'none', ol: 'none', filter: 'none' },
+        { name: 'Disabled', bg: 'var(--fill-1)', fg: 'var(--text-4)', sh: 'none', ol: 'none', filter: 'none' }
+      ],
+      knobs: [knob(30, 0.35, 'A'), knob(50, 0.6, 'Frequency'), knob(66, 0.72, 'Gain')],
+      nodes: [
+        { name: 'Normal', s: 16, bw: 1, bs: 'solid', ring: 'rgba(10,11,14,0.55)', bg: 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.16), rgba(255,255,255,0) 70%), ' + col, sh: '0 0 5px rgba(0,0,0,0.45)' },
+        { name: 'Hover', s: 18, bw: 1, bs: 'solid', ring: 'rgba(10,11,14,0.55)', bg: 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.16), rgba(255,255,255,0) 70%), ' + col, sh: '0 0 5px rgba(0,0,0,0.45)' },
+        { name: 'Selected', s: 22, bw: 2, bs: 'solid', ring: '#FFFFFF', bg: 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.16), rgba(255,255,255,0) 70%), ' + col, sh: '0 0 10px 1px ' + col.replace(')', ' / 0.4)') },
+        { name: 'Bypassed', s: 16, bw: 1, bs: 'solid', ring: 'rgba(10,11,14,0.55)', bg: 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.16), rgba(255,255,255,0) 70%), ' + col.replace('0.77 0.125', '0.72 0.045'), sh: '0 0 5px rgba(0,0,0,0.45)' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
