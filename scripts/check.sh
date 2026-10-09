@@ -98,9 +98,11 @@ build() {
     cmake --build "$BUILD_DIR" --config Release --parallel
 }
 
+# In parallel, as the pre-commit hook runs them: the CPU budget, which needs the machine to itself,
+# is its own step.
 run_tests() {
     step "Engine and Plugin Shell tests"
-    ctest --test-dir "$BUILD_DIR" -C Release --output-on-failure
+    ctest --test-dir "$BUILD_DIR" -C Release -j 8 --output-on-failure
 }
 
 # A test filter that matches nothing is an error here, not a silent pass.
