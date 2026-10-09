@@ -38,7 +38,7 @@ struct Engine::Impl
         int slot = 0; // 0 for none
         bool audition = false;
         StereoPlacement placement = StereoPlacement::Stereo;
-        DetectionSource source = DetectionSource::Internal; // Detection Audition only
+        DetectionSource source = DetectionSource::Internal; // Detection Audition only: switching it crossfades
 
         bool operator== (const Held&) const = default;
     };
