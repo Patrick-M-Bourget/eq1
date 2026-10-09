@@ -2,6 +2,7 @@
 
 #include "Parameters.h"
 #include "PluginEditor.h"
+#include "PresetSettings.h"
 
 namespace eq1
 {
@@ -124,6 +125,22 @@ void PluginProcessor::setAnalyzerSettings (const AnalyzerSettings& settings)
 void PluginProcessor::setDisplayRangeDb (int rangeDb)
 {
     displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
+}
+
+juce::ValueTree PluginProcessor::presetState()
+{
+    return capturePresetSettings (parameters, parameters.state.getType()).setProperty (versionProperty, stateVersion, nullptr);
+}
+
+void PluginProcessor::loadPreset (const juce::ValueTree& preset)
+{
+    if (! preset.hasType (parameters.state.getType()))
+        return;
+    auto settings = preset.createCopy();
+    migrate (settings);
+    history.beginTransaction();
+    applyPresetSettings (parameters, settings);
+    history.endTransaction();
 }
 
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)

@@ -59,6 +59,12 @@ public:
     void selectCompareSide (CompareSide side) { compare.select (side); }
     void copyAToB() { compare.copyAToB(); }
 
+    // The settings a Preset holds, from the side you're on, in the saved state's format.
+    juce::ValueTree presetState();
+    // Puts a Preset's settings on the side you're on, as one undo step, bringing an older version of
+    // the format up to date first. Anything that isn't a Preset changes nothing. Message thread only.
+    void loadPreset (const juce::ValueTree& preset);
+
     // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
