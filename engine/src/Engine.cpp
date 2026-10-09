@@ -5,6 +5,7 @@
 #include "Band.h"
 #include "Dynamics.h"
 #include "LatestValue.h"
+#include "NoSubnormals.h"
 #include "Output.h"
 #include "Smoother.h"
 #include "Solo.h"
@@ -289,6 +290,7 @@ void Engine::setSettings (const Settings& settings)
 
 void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
 {
+    const NoSubnormals noSubnormals;
     impl->applySettings();
     impl->updateHeld();
     impl->updateAutoGain (main.numSamples);

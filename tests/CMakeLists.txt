@@ -17,6 +17,8 @@ add_executable(eq1_engine_tests
     engine/OutputTest.cpp
     engine/DynamicsTest.cpp
     engine/RealtimeSafetyTest.cpp
+    engine/RobustnessTest.cpp
+    engine/SampleRateAndBlockSizeTest.cpp
     engine/ResponseTest.cpp
     engine/SettingsHandoffTest.cpp
     engine/StereoPlacementTest.cpp
@@ -51,3 +53,4 @@ if(EQ1_BUILD_PLUGIN)
         target_link_libraries(eq1_sidechain_routing_check PRIVATE "-framework CoreAudioKit")
     endif()
 endif()
+
