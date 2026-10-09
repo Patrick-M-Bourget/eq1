@@ -9,7 +9,8 @@
 #   scripts/check.sh validate   pluginval (VST3, AU), auval, Sidechain routing (VST3, AU), clap-validator,
 #                               AAX and Standalone built
 #
-# BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden. Validators
+# BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden; CMake's
+# CMAKE_C_COMPILER_LAUNCHER and CMAKE_CXX_COMPILER_LAUNCHER environment variables (sccache in CI) apply. Validators
 # are downloaded into the dependencies folder with gh, which needs to be authenticated (GH_TOKEN in CI).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -34,7 +35,12 @@ build() {
     if [ "$os" = macos ]; then
         cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
             -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+    elif command -v cl > /dev/null; then
+        # In an MSVC developer environment (CI sets one up), Ninja compiles every file in parallel.
+        cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     else
+        # Without one, Visual Studio finds the compiler itself. The build directory, and the build
+        # folders in the dependencies folder, keep the generator they were made with: delete them to switch.
         cmake -S . -B "$BUILD_DIR" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     fi
     cmake --build "$BUILD_DIR" --config Release --parallel
