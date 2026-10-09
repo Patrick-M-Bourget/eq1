@@ -61,8 +61,8 @@ bool set (juce::AudioProcessor& plugin, const juce::String& name, const juce::St
 }
 
 // Level change in dB of a 100 Hz sine through the plugin, in the Side or the Mid of the main input,
-// with a full-scale 60 Hz sine on every channel of the Sidechain when keyed.
-double gainDb (juce::AudioProcessor& plugin, bool side, bool keyed)
+// with a full-scale 60 Hz sine on every channel of the Sidechain when sidechainPlaying.
+double gainDb (juce::AudioProcessor& plugin, bool side, bool sidechainPlaying)
 {
     const int mainChannels = plugin.getMainBusNumInputChannels();
     const int channels = std::max (plugin.getTotalNumInputChannels(), plugin.getTotalNumOutputChannels());
@@ -79,7 +79,7 @@ double gainDb (juce::AudioProcessor& plugin, bool side, bool keyed)
             if (mainChannels > 1)
                 buffer.setSample (1, i, side ? -s : s);
             for (int ch = mainChannels; ch < plugin.getTotalNumInputChannels(); ++ch)
-                buffer.setSample (ch, i, keyed ? static_cast<float> (std::sin (2.0 * std::numbers::pi * 60.0 * n / sampleRate)) : 0.0f);
+                buffer.setSample (ch, i, sidechainPlaying ? static_cast<float> (std::sin (2.0 * std::numbers::pi * 60.0 * n / sampleRate)) : 0.0f);
             if (block >= 64)
                 input += s * s;
         }
