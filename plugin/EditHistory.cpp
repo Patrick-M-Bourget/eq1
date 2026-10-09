@@ -38,6 +38,7 @@ void EditHistory::openStep()
     if (openGestures + openTransactions != 1)
         return;
     valuesBefore = values();
+    outsideBefore = outside != nullptr ? outside->capture() : juce::ValueTree();
     gestured.clear();
 }
 
@@ -51,10 +52,19 @@ void EditHistory::closeStep()
     {
         const auto i = static_cast<size_t> (index);
         if (i < valuesAfter.size() && i < valuesBefore.size() && ! juce::exactlyEqual (valuesBefore[i], valuesAfter[i]))
-            step.push_back ({ index, valuesBefore[i], valuesAfter[i] });
+            step.changes.push_back ({ index, valuesBefore[i], valuesAfter[i] });
     }
     gestured.clear();
-    if (step.empty())
+    if (outside != nullptr)
+    {
+        if (auto outsideAfter = outside->capture(); ! outsideAfter.isEquivalentTo (outsideBefore))
+        {
+            step.outsideBefore = outsideBefore;
+            step.outsideAfter = outsideAfter;
+        }
+    }
+    outsideBefore = {};
+    if (step.changes.empty() && ! step.outsideAfter.isValid())
         return;
     undoStack.push_back (std::move (step));
     if (undoStack.size() > maxSteps)
@@ -103,12 +113,14 @@ void EditHistory::apply (const Step& step, bool forward)
 {
     const juce::ScopedValueSetter<bool> notAnEdit (applying, true);
     const auto& parameters = processor.getParameters();
-    for (const auto& change : step)
+    for (const auto& change : step.changes)
         parameters[change.index]->beginChangeGesture();
-    for (const auto& change : step)
+    for (const auto& change : step.changes)
         parameters[change.index]->setValueNotifyingHost (forward ? change.after : change.before);
-    for (const auto& change : step)
+    for (const auto& change : step.changes)
         parameters[change.index]->endChangeGesture();
+    if (outside != nullptr && step.outsideAfter.isValid())
+        outside->restore (forward ? step.outsideAfter : step.outsideBefore);
 }
 
 void EditHistory::undo()

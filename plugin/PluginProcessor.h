@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ABCompare.h"
 #include "AnalyzerSettings.h"
 #include "EditHistory.h"
 #include "Parameters.h"
@@ -52,6 +53,12 @@ public:
     // The undo history of the editor's edits. It outlives the editor, and restoring a session empties it.
     EditHistory& editHistory() { return history; }
 
+    // A/B Compare: which side the host parameters hold, and selecting the other, as one undo step.
+    // Message thread only.
+    CompareSide compareSide() const { return compare.side(); }
+    void selectCompareSide (CompareSide side) { compare.select (side); }
+    void copyAToB() { compare.copyAToB(); }
+
     // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
@@ -88,6 +95,7 @@ private:
     std::array<eq1::parameters::SlotValues, numBandSlots> slots; // read on the audio thread
     eq1::parameters::OutputValues output;
     EditHistory history { *this };
+    ABCompare compare { parameters, history };
 
     Engine engine;
     // Kept out of the parameter state, which a host may save from another thread, and written into

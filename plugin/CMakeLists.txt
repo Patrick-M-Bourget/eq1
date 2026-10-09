@@ -42,6 +42,8 @@ target_sources(eq1 PRIVATE
     BandPanel.cpp
     EqDisplay.cpp
     EditHistory.cpp
+    ABCompare.cpp
+    PresetSettings.cpp
     OutputPanel.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp)
