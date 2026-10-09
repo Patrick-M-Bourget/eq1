@@ -71,6 +71,9 @@ private:
     AnalyzerSettings analyzer; // taken once a frame
     std::vector<float> tapSamples; // read from the taps each frame
     juce::uint32 lastFrame = 0;
+    // The Bands as heard: their Gain and Dynamic Range under Gain Scale. The display draws, and the
+    // mouse moves, these (BandEditing takes Gains as heard).
+    Settings heardSettings() const;
     Settings shown; // what was drawn last, refreshed on the timer
     std::array<double, numBandSlots> shownLiveGains {};
 

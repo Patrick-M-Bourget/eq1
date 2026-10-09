@@ -63,6 +63,13 @@ enum class DetectionRange
     Free,
 };
 
+// What Output Pan balances: Left against Right, or Mid against Side (left of centre keeps the Mid).
+enum class PanMode
+{
+    LeftRight,
+    MidSide,
+};
+
 // One Band slot. A slot not in use, or a Bypassed Band, has no effect but keeps its settings.
 struct BandSettings
 {
@@ -99,10 +106,25 @@ struct BandSettings
 // Live Gain never goes beyond +/- this many dB, whatever Gain and Dynamic Range are.
 inline constexpr double liveGainLimitDb = 30.0;
 
+// Auto Gain never goes beyond +/- this many dB: Bands that leave almost nothing of pink noise, such
+// as Cuts that leave only a narrow band, would otherwise ask for a boost that blows up the signal.
+inline constexpr double autoGainLimitDb = 30.0;
+
 // True when the Band's Live Gain moves with its detection signal.
 inline bool isDynamic (const BandSettings& band) { return hasDynamics (band.shape) && band.dynamicRange != 0.0; }
 
 inline constexpr int numBandSlots = 24;
+
+// The Band as it plays under Gain Scale: its Gain and Dynamic Range scaled, on Shapes that have a Gain.
+inline BandSettings scaledByGainScale (BandSettings band, double gainScale)
+{
+    if (hasGain (band.shape))
+    {
+        band.gain *= gainScale;
+        band.dynamicRange *= gainScale;
+    }
+    return band;
+}
 
 // The full settings snapshot the Engine processes with.
 struct Settings
@@ -120,6 +142,26 @@ struct Settings
     // Stereo Band on a stereo source. Only a Band in use whose Shape has dynamics can be auditioned.
     // It takes precedence over Solo.
     int auditionSlot = 0;
+
+    // Gain Scale, 0 to 2 (0% to 200%): scales every Band's Gain and Dynamic Range in dB, on the Shapes
+    // that have a Gain. Live Gain stays within +/-30 dB.
+    double gainScale = 1.0;
+
+    // Auto Gain: compensates the output level by an estimate from the settings (eq1/Response.h,
+    // autoGainDb), not a measurement, so it doesn't follow dynamic movement. Held to +/-30 dB.
+    bool autoGain = false;
+
+    // The output, after every Band and Auto Gain. Output Gain is in dB, -infinity (silence) to +36. Output Pan, -1
+    // to 1, balances the two sides of its Pan Mode: the centre leaves both alone, and moving towards
+    // one side turns the other down, to silence at the end. Pan and Pan Mode have no effect on mono.
+    double outputGainDb = 0.0;
+    double outputPan = 0.0;
+    PanMode panMode = PanMode::LeftRight;
+    bool phaseInvert = false;
+
+    // Global Bypass: eq1's own switch, separate from the host's bypass. It crossfades to the input,
+    // unprocessed by anything above, and back.
+    bool globalBypass = false;
 
     bool operator== (const Settings&) const = default;
 };

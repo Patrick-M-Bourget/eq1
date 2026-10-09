@@ -4,6 +4,7 @@
 #include "eq1/Settings.h"
 
 #include <array>
+#include <complex>
 
 namespace eq1
 {
@@ -40,5 +41,11 @@ struct ShapeParameters
 
 // The decramped cascade for a Shape (ADR 0001). The section count depends only on the structure.
 Cascade designShape (const ShapeParameters& parameters, double sampleRate);
+
+// A Band's filter at its Gain, held to +/-30 dB as Live Gain is: what it plays without dynamics.
+Cascade designBand (const BandSettings& band, double sampleRate);
+
+// The cascade's complex response at frequency (Hz).
+std::complex<double> responseAt (const Cascade& cascade, double frequency, double sampleRate);
 
 } // namespace eq1

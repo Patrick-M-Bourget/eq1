@@ -367,4 +367,22 @@ Cascade designShape (const ShapeParameters& p, double sampleRate)
     return {};
 }
 
+Cascade designBand (const BandSettings& band, double sampleRate)
+{
+    const double gain = std::clamp (band.gain, -liveGainLimitDb, liveGainLimitDb);
+    return designShape ({ structureOf (band), band.frequency, gain, band.q }, sampleRate);
+}
+
+std::complex<double> responseAt (const Cascade& cascade, double frequency, double sampleRate)
+{
+    const auto z = std::polar (1.0, -2.0 * std::numbers::pi * frequency / sampleRate); // z^-1
+    std::complex<double> h = 1.0;
+    for (int i = 0; i < cascade.count; ++i)
+    {
+        const auto& c = cascade.sections[static_cast<size_t> (i)];
+        h *= (c.b0 + z * (c.b1 + z * c.b2)) / (1.0 + z * (c.a1 + z * c.a2));
+    }
+    return h;
+}
+
 } // namespace eq1

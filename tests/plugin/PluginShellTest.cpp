@@ -1,10 +1,13 @@
 #include "PluginProcessor.h"
 
+#include "eq1/Response.h"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
+#include <functional>
 #include <map>
 #include <numbers>
 
@@ -165,41 +168,55 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
             parameters[ranged->getParameterID()] = ranged;
 
-    CHECK (parameters.size() == 24 * std::size (controls));
+    // The whole-plugin controls. Output Gain's bottom, -80 dB, is silence (-inf), and 0 dB is at the
+    // centre of the range.
+    const Control wholePlugin[] = {
+        { "gain_scale", "Gain Scale", "%", 0.0f, 200.0f, 0.0f, 100.0f, 100.0f, {} },
+        { "auto_gain", "Auto Gain", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
+        { "output_gain", "Output Gain", "dB", -80.0f, 36.0f, 0.0f, 0.0f, 0.0f, {} },
+        { "output_pan", "Output Pan", "%", -100.0f, 100.0f, 0.0f, 0.0f, 0.0f, {} },
+        { "pan_mode", "Pan Mode", "", 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, { "L/R", "M/S" } },
+        { "phase_invert", "Phase Invert", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
+        { "global_bypass", "Global Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
+    };
+
+    CHECK (parameters.size() == 24 * std::size (controls) + std::size (wholePlugin));
+    const auto check = [&] (const Control& control, const juce::String& id, const juce::String& name) {
+        CAPTURE (id);
+        REQUIRE (parameters.contains (id));
+        auto* parameter = parameters[id];
+        const auto& range = parameter->getNormalisableRange();
+
+        CHECK (parameter->getName (100) == name);
+        CHECK (parameter->getLabel() == control.label);
+        CHECK (range.start == control.start);
+        CHECK (range.end == control.end);
+        CHECK (range.interval == control.interval);
+        // Within float precision of large defaults, such as 20 kHz.
+        CHECK_THAT (parameter->convertFrom0to1 (parameter->getDefaultValue()),
+                    WithinAbs (control.defaultValue, std::max (1.0e-4, 1.0e-6 * std::abs (control.defaultValue))));
+        CHECK_THAT (parameter->convertFrom0to1 (0.5f), WithinAbs (control.valueAtHalfway, 1.0e-3));
+
+        auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter);
+        CHECK ((choice != nullptr) == ! control.choices.isEmpty());
+        if (choice != nullptr)
+        {
+            CHECK (choice->choices == control.choices);
+            for (int index = 0; index < control.choices.size(); ++index)
+                CHECK_THAT (parameter->convertTo0to1 (static_cast<float> (index)),
+                            WithinAbs (index / (control.choices.size() - 1.0), 1.0e-6));
+        }
+        if (juce::String (control.suffix) == "slope")
+        {
+            CHECK (parameter->convertTo0to1 (0.0f) == 0.0f);
+            CHECK (parameter->convertTo0to1 (96.0f) == 1.0f);
+        }
+    };
     for (int slot = 1; slot <= 24; ++slot)
         for (const auto& control : controls)
-        {
-            const auto id = "band" + juce::String (slot) + "_" + control.suffix;
-            CAPTURE (id);
-            REQUIRE (parameters.contains (id));
-            auto* parameter = parameters[id];
-            const auto& range = parameter->getNormalisableRange();
-
-            CHECK (parameter->getName (100) == "Band " + juce::String (slot) + " " + control.name);
-            CHECK (parameter->getLabel() == control.label);
-            CHECK (range.start == control.start);
-            CHECK (range.end == control.end);
-            CHECK (range.interval == control.interval);
-            // Within float precision of large defaults, such as 20 kHz.
-            CHECK_THAT (parameter->convertFrom0to1 (parameter->getDefaultValue()),
-                        WithinAbs (control.defaultValue, std::max (1.0e-4, 1.0e-6 * std::abs (control.defaultValue))));
-            CHECK_THAT (parameter->convertFrom0to1 (0.5f), WithinAbs (control.valueAtHalfway, 1.0e-3));
-
-            auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter);
-            CHECK ((choice != nullptr) == ! control.choices.isEmpty());
-            if (choice != nullptr)
-            {
-                CHECK (choice->choices == control.choices);
-                for (int index = 0; index < control.choices.size(); ++index)
-                    CHECK_THAT (parameter->convertTo0to1 (static_cast<float> (index)),
-                                WithinAbs (index / (control.choices.size() - 1.0), 1.0e-6));
-            }
-            if (juce::String (control.suffix) == "slope")
-            {
-                CHECK (parameter->convertTo0to1 (0.0f) == 0.0f);
-                CHECK (parameter->convertTo0to1 (96.0f) == 1.0f);
-            }
-        }
+            check (control, "band" + juce::String (slot) + "_" + control.suffix, "Band " + juce::String (slot) + " " + control.name);
+    for (const auto& control : wholePlugin)
+        check (control, control.suffix, control.name);
 }
 
 TEST_CASE ("A Band slot shapes the sound only when in use and not Bypassed")
@@ -536,4 +553,188 @@ TEST_CASE ("Switching a Dynamic Band to a Shape without dynamics keeps its dynam
     sineGainDb (processor, 1000.0);
     setParameter (processor, "band1_shape", 0.0f); // Bell
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (-10.0, 0.1));
+}
+
+namespace
+{
+// A Bell at 1 kHz, +12 dB, in Band slot 1.
+void useBell (juce::AudioProcessor& processor)
+{
+    setParameter (processor, "band1_in_use", 1.0f);
+    setParameter (processor, "band1_frequency", 1000.0f);
+    setParameter (processor, "band1_gain", 12.0f);
+}
+} // namespace
+
+TEST_CASE ("Gain Scale on the host parameters scales every Band's Gain")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    useBell (processor);
+
+    setParameter (processor, "gain_scale", 50.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (6.0, 0.1));
+    setParameter (processor, "gain_scale", 200.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (24.0, 0.1));
+}
+
+TEST_CASE ("Output Gain on the host parameters sets the output level, its bottom silent")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+
+    setParameter (processor, "output_gain", -6.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (-6.0, 0.05));
+    setParameter (processor, "output_gain", 36.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (36.0, 0.05));
+    setParameter (processor, "output_gain", -80.0f);
+    CHECK (sineGainDb (processor, 1000.0) < -200.0);
+
+    auto* outputGain = processor.getParameters()[0];
+    for (auto* parameter : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter); ranged != nullptr && ranged->getParameterID() == "output_gain")
+            outputGain = ranged;
+    CHECK (outputGain->getText (0.0f, 100) == "-inf");
+    CHECK_THAT (outputGain->getValueForText ("-inf"), WithinAbs (0.0, 1.0e-6));
+}
+
+TEST_CASE ("Auto Gain on the host parameters compensates the Bands' level by its estimate")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    useBell (processor);
+
+    eq1::Settings settings;
+    settings.bands[0] = { .inUse = true, .frequency = 1000.0, .gain = 12.0 };
+    const double estimate = eq1::autoGainDb (settings, sampleRate);
+    REQUIRE (estimate < -1.0);
+
+    setParameter (processor, "auto_gain", 1.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (12.0 + estimate, 0.1));
+}
+
+TEST_CASE ("Output Pan and Pan Mode on the host parameters balance the output, on stereo tracks only")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo());
+    CHECK (processor.isOutputPanAvailable());
+
+    // Fully right turns the left channel, where the level is measured, off.
+    setParameter (processor, "output_pan", 100.0f);
+    CHECK (sineGainDb (processor, 1000.0) < -200.0);
+    setParameter (processor, "output_pan", -50.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
+
+    // In M/S, fully left keeps only the Mid: a Side signal goes silent, a Mid one passes.
+    setParameter (processor, "pan_mode", 1.0f);
+    setParameter (processor, "output_pan", -100.0f);
+    CHECK (sineGainDb (processor, 1000.0, Content::side) < -200.0);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
+
+    useLayout (processor, juce::AudioChannelSet::mono());
+    CHECK_FALSE (processor.isOutputPanAvailable());
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
+}
+
+TEST_CASE ("Phase Invert on the host parameters flips the output's polarity")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    setParameter (processor, "phase_invert", 1.0f);
+
+    juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
+    juce::MidiBuffer midi;
+    for (int block = 0; block < 32; ++block)
+    {
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            for (int i = 0; i < blockSize; ++i)
+                buffer.setSample (ch, i, 0.25f);
+        processor.processBlock (buffer, midi);
+    }
+    CHECK_THAT (buffer.getSample (0, blockSize - 1), WithinAbs (-0.25, 1.0e-6));
+    CHECK_THAT (buffer.getSample (1, blockSize - 1), WithinAbs (-0.25, 1.0e-6));
+}
+
+TEST_CASE ("Global Bypass on the host parameters passes the input through")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    useBell (processor);
+    setParameter (processor, "output_gain", 9.0f);
+    REQUIRE_THAT (sineGainDb (processor, 1000.0), WithinAbs (21.0, 0.1));
+
+    setParameter (processor, "global_bypass", 1.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 1.0e-4));
+}
+
+TEST_CASE ("Saved state restores the output controls, Global Bypass included")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    const std::pair<const char*, float> values[] = { { "gain_scale", 150.0f },  { "auto_gain", 1.0f },    { "output_gain", -12.5f },
+                                                     { "output_pan", 35.0f },   { "pan_mode", 1.0f },     { "phase_invert", 1.0f },
+                                                     { "global_bypass", 1.0f } };
+    for (const auto& [id, value] : values)
+        setParameter (saved, id, value);
+
+    juce::MemoryBlock state;
+    saved.getStateInformation (state);
+    eq1::PluginProcessor restored;
+    restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    for (const auto& [id, value] : values)
+        for (auto* parameter : restored.getParameters())
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter); ranged->getParameterID() == id)
+            {
+                CAPTURE (id);
+                CHECK_THAT (ranged->convertFrom0to1 (ranged->getValue()), WithinAbs (value, 1.0e-3));
+            }
+}
+
+TEST_CASE ("The editor fits every output control in its row, at its smallest and on mono")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    const auto layout = GENERATE (juce::AudioChannelSet::stereo(), juce::AudioChannelSet::mono());
+    useLayout (processor, layout);
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    const auto* constrainer = editor->getConstrainer();
+    REQUIRE (constrainer != nullptr);
+    editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
+
+    int found = 0;
+    std::function<void (juce::Component&)> visit = [&] (juce::Component& component) {
+        for (auto* child : component.getChildren())
+        {
+            const auto name = [&]() -> juce::String {
+                if (auto* button = dynamic_cast<juce::Button*> (child))
+                    return button->getButtonText();
+                return {};
+            }();
+            if (name == "Auto Gain" || name == "Phase Invert" || name == "Global Bypass")
+            {
+                CAPTURE (name);
+                ++found;
+                const auto bounds = editor->getLocalArea (child->getParentComponent(), child->getBounds());
+                CHECK (child->isVisible());
+                CHECK (editor->getLocalBounds().contains (bounds));
+                CHECK (bounds.getWidth() > 0);
+            }
+            visit (*child);
+        }
+    };
+    visit (*editor);
+    CHECK (found == 3);
+    if (const auto snapshot = juce::SystemStats::getEnvironmentVariable ("EQ1_EDITOR_SNAPSHOT", {}); snapshot.isNotEmpty())
+    {
+        juce::File file (snapshot + (layout == juce::AudioChannelSet::mono() ? "-mono.png" : "-stereo.png"));
+        file.deleteFile();
+        juce::FileOutputStream stream (file);
+        juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds()), stream);
+    }
 }

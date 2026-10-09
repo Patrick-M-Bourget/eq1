@@ -8,11 +8,12 @@ namespace eq1
 {
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState()), display (p, editing), panel (p, editing)
+    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState()), display (p, editing), panel (p, editing), output (p)
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
     addAndMakeVisible (display);
     addAndMakeVisible (panel);
+    addAndMakeVisible (output);
 
     // The display's Gain range, saved with the plugin.
     for (int range : { 6, 12, 30 })
@@ -51,8 +52,9 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     startTimerHz (4);
 
     setResizable (true, true);
-    setResizeLimits (640, 420, 2560, 1600);
-    setSize (960, 600);
+    // Wide enough for the output controls' row.
+    setResizeLimits (960, 452, 2560, 1600);
+    setSize (1100, 632);
 }
 
 void PluginEditor::showAnalyzerSettings()
@@ -95,6 +97,7 @@ void PluginEditor::resized()
 {
     auto area = getLocalBounds();
     auto toolbar = area.removeFromTop (32).reduced (6, 4);
+    output.setBounds (area.removeFromBottom (32));
     panel.setBounds (area.removeFromBottom (170));
     display.setBounds (area);
 

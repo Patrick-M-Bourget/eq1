@@ -13,6 +13,10 @@ namespace eq1
 
 // The editor's rules for adding, deleting and moving Bands. Every edit goes to the host parameters
 // as a gesture, so hosts record it as Host Automation. Message thread only.
+//
+// The display shows Gains as heard, under Gain Scale, so the Gains add() and dragBy() take are heard
+// Gains: each is stored divided by Gain Scale. At 0% every Gain is heard as 0 dB, so a Band is added
+// at Gain 0 and a vertical drag changes nothing.
 class BandEditing
 {
 public:
@@ -48,6 +52,7 @@ public:
     void setShape (int slot, Shape shape);
 
     BandSettings band (int slot) const;
+    // Every Band's stored settings, and the whole-plugin ones.
     Settings settings() const;
 
 private:
@@ -55,6 +60,8 @@ private:
     // Sets a parameter to a plain value, within its range, as one gesture.
     void set (const juce::String& id, double value);
     void setWithinGesture (const juce::String& id, double value);
+    // The stored Gain for a Gain heard under Gain Scale.
+    double storedGain (double heard) const;
 
     struct Dragged
     {
@@ -65,6 +72,7 @@ private:
 
     juce::AudioProcessorValueTreeState& parameters;
     std::array<parameters::SlotValues, numBandSlots> slots;
+    parameters::OutputValues output;
     std::vector<Dragged> dragged;
 };
 
