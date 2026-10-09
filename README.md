@@ -6,7 +6,7 @@ Real-time EQ plugin (VST3, AU, AAX, CLAP and Standalone) for macOS Universal and
 
 - `engine/` is the DSP Engine: plain C++ with no dependency on JUCE.
 - `plugin/` is the Plugin Shell: the JUCE layer that maps host parameters to Engine settings.
-- `tests/engine/` tests the Engine through its public interface; `tests/plugin/` drives the Plugin Shell like a host.
+- `tests/engine/` tests the Engine through its public interface; `tests/plugin/` drives the Plugin Shell like a host; `tests/host/` loads the built plugins through their format wrappers, as a DAW does.
 
 ## Build and test
 
