@@ -126,7 +126,18 @@ cpu() {
     cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget
     local exe=$BUILD_DIR/tests/eq1_cpu_budget
     [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/eq1_cpu_budget
-    "$exe"
+    local out status=0
+    out=$("$exe") || status=$?
+    printf '%s\n' "$out"
+    # In CI the numbers also go to the job summary and as annotations: once the job ends, one API call
+    # (check-runs/<job>/annotations) reads them without downloading the log.
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        printf '### CPU budget (%s)\n\n```\n%s\n```\n' "$os" "$out" >> "$GITHUB_STEP_SUMMARY"
+    fi
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        grep 'kHz' <<< "$out" | while IFS= read -r line; do echo "::notice title=CPU budget ($os)::$line"; done
+    fi
+    return "$status"
 }
 
 tsan() {
