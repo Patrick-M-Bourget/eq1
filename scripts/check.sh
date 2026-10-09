@@ -6,6 +6,7 @@
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
+#   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU), auval, Sidechain routing (VST3, AU), clap-validator,
 #                               AAX and Standalone built
@@ -101,6 +102,13 @@ run_tests() {
     ctest --test-dir "$BUILD_DIR" -C Release --output-on-failure
 }
 
+# A test filter that matches nothing is an error here, not a silent pass.
+focus() {
+    step "Tests matching $1"
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_engine_tests eq1_plugin_tests
+    ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure
+}
+
 tsan() {
     if [ "$os" != macos ]; then
         echo "ThreadSanitizer runs on macOS only; skipped"
@@ -185,9 +193,10 @@ validate() {
 case "${1:-all}" in
     build) build ;;
     test) run_tests ;;
+    focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     tsan) tsan ;;
     validate) validate ;;
     docs) docs ;;
     all) docs; build; run_tests; tsan; validate ;;
-    *) sed -n '2,12p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,13p' "$0" >&2; exit 2 ;;
 esac

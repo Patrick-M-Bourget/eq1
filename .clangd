@@ -1,0 +1,3 @@
+# The compile commands of scripts/check.sh build, for clangd's diagnostics.
+CompileFlags:
+  CompilationDatabase: build

@@ -15,6 +15,12 @@ if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
     echo "pre-commit: no build in $BUILD_DIR yet; run scripts/check.sh build first" >&2
     exit 1
 fi
-printf '\n== Build and tests (pre-commit)\n'
-cmake --build "$BUILD_DIR" --config Release --parallel
-ctest --test-dir "$BUILD_DIR" -C Release -LE response -j 8 --output-on-failure
+# The output goes to a log: only its summary on success, all of it on failure.
+log="$BUILD_DIR/pre-commit.log"
+printf '\n== Build and tests (pre-commit), log in %s\n' "$log"
+if ! { cmake --build "$BUILD_DIR" --config Release --parallel \
+    && ctest --test-dir "$BUILD_DIR" -C Release -LE response -j 8 --output-on-failure; } > "$log" 2>&1; then
+    cat "$log" >&2
+    exit 1
+fi
+grep -E '^[0-9]+% tests passed' "$log"
