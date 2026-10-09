@@ -289,8 +289,8 @@ def _held_upper_section(upper: Analog, reference_hz, hold_hz, match_hz, fs):
     section is (never higher); zeros fitting a blend of the analog section's magnitude and the held
     section's own, by how far the Q was lowered."""
     analog_q = 1 / upper.d1
-    relative = math.sqrt(upper.squared(hold_hz / reference_hz) / upper.squared(0))
-    held_q = min(analog_q, relative)
+    q_at_hold = math.sqrt(upper.squared(hold_hz / reference_hz) / upper.squared(0))
+    held_q = min(analog_q, q_at_hold)
     held = Analog(0, 0, upper.n0, 1, 1 / held_q, 1)
     blend = math.sqrt(1 - held_q / analog_q)
     squared = lambda f: upper.squared(f / reference_hz) ** (1 - blend) * held.squared(f / hold_hz) ** blend

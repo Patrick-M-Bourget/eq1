@@ -418,6 +418,8 @@ TEST_CASE ("A steep Band Pass's response moves smoothly as Frequency or Q crosse
         bandResponseDb (band, probes, last[2].data(), static_cast<int> (std::size (probes)), sampleRate);
         if (step < 2)
             continue;
+        // Deep in the stopband the dB values are numerical noise. The limit sits between the smoothest
+        // design's worst (0.26 dB) and a design that jumps where a section is held (1.3 dB).
         for (size_t i = 0; i < std::size (probes); ++i)
             if (std::max ({ last[0][i], last[1][i], last[2][i] }) > -100.0)
                 REQUIRE (std::abs (last[0][i] - 2.0 * last[1][i] + last[2][i]) < 0.6);

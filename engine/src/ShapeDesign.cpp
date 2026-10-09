@@ -186,14 +186,7 @@ std::pair<std::complex<double>, std::complex<double>> reciprocalRoots (std::comp
     return { (b + d) / 2.0, (b - d) / 2.0 };
 }
 
-// Band Pass: s -> Q (s + 1/s) of a Butterworth low-pass of order Slope / 6. Each low-pass pole pair
-// becomes a lower and an upper pole pair, with s / Q for each. Together they are designed as a Low
-// Cut section on the lower pair (s^2) and a High Cut section on the upper one (1 / Q^2): split this
-// way a wide Band Pass stays accurate. The odd pole gives one band-pass section.
-//
-// Above 24 dB/oct, near Nyquist, the upper pairs whose natural frequency is beyond what can be placed
-// would each bump up a little where they are held, and many small errors add up: a steep Band Pass
-// is designed for that (docs/dsp/filter-design.md, "Band Pass sections").
+// A steep Band Pass, above 24 dB/oct, is designed for accuracy near Nyquist (designBandPass).
 constexpr int steepBandPassOrder = 5;
 // Where a steep Band Pass's upper sections are held, as a share of Nyquist.
 constexpr double bandPassHold = 0.95;
@@ -206,8 +199,9 @@ constexpr double bandPassHold = 0.95;
 BiquadCoefficients heldUpperSection (const AnalogSection& upper, double reference, double hold, double matchFrequency, double sampleRate)
 {
     const double analogQ = 1.0 / upper.d1;
-    const double relative = std::sqrt (analogSquared (upper, hold / reference) / analogSquared (upper, 0.0));
-    const double heldQ = std::min (analogQ, relative);
+    // A second-order low-pass is Q times as loud at its natural frequency as at DC.
+    const double qAtHold = std::sqrt (analogSquared (upper, hold / reference) / analogSquared (upper, 0.0));
+    const double heldQ = std::min (analogQ, qAtHold);
     const AnalogSection held { 0.0, 0.0, upper.n0, 1.0, 1.0 / heldQ, 1.0 };
     const double blend = std::sqrt (1.0 - heldQ / analogQ);
     const auto squared = [&] (double frequency) {
@@ -216,6 +210,14 @@ BiquadCoefficients heldUpperSection (const AnalogSection& upper, double referenc
     return matchMagnitudes (held, hold, sampleRate, matchFrequency, squared (0.0), squared (matchFrequency), squared (0.5 * sampleRate));
 }
 
+// Band Pass: s -> Q (s + 1/s) of a Butterworth low-pass of order Slope / 6. Each low-pass pole pair
+// becomes a lower and an upper pole pair, with s / Q for each. Together they are designed as a Low
+// Cut section on the lower pair (s^2) and a High Cut section on the upper one (1 / Q^2): split this
+// way a wide Band Pass stays accurate. The odd pole gives one band-pass section.
+//
+// Above 24 dB/oct, near Nyquist, the upper pairs whose natural frequency is beyond what can be placed
+// would each bump up a little where they are held, and many small errors add up: a steep Band Pass
+// is designed for that (docs/dsp/filter-design.md, "Band Pass sections").
 Cascade designBandPass (const ShapeParameters& p, double sampleRate)
 {
     Cascade cascade;
@@ -255,7 +257,8 @@ Cascade designBandPass (const ShapeParameters& p, double sampleRate)
             add (cascade, matchSection (odd, p.frequency, sampleRate));
         });
     // The sections' small errors lean the same way and add up: the whole cascade's gain is set to the
-    // target's at Frequency (or the hold, if Frequency is above it).
+    // target's at Frequency (or the hold, if Frequency is above it), which is in the passband, so the
+    // cascade's response there is never near zero.
     if (steep)
         scale (cascade, std::sqrt (targetSquared / std::norm (responseAt (cascade, gainAt, sampleRate))));
     return cascade;
