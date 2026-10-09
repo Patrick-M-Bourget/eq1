@@ -106,6 +106,10 @@ struct BandSettings
 // Live Gain never goes beyond +/- this many dB, whatever Gain and Dynamic Range are.
 inline constexpr double liveGainLimitDb = 30.0;
 
+// Auto Gain never goes beyond +/- this many dB: Bands that leave almost nothing of pink noise, such
+// as Cuts that leave only a narrow band, would otherwise ask for a boost that blows up the signal.
+inline constexpr double autoGainLimitDb = 30.0;
+
 // True when the Band's Live Gain moves with its detection signal.
 inline bool isDynamic (const BandSettings& band) { return hasDynamics (band.shape) && band.dynamicRange != 0.0; }
 
@@ -144,7 +148,7 @@ struct Settings
     double gainScale = 1.0;
 
     // Auto Gain: compensates the output level by an estimate from the settings (eq1/Response.h,
-    // autoGainDb), not a measurement, so it doesn't follow dynamic movement.
+    // autoGainDb), not a measurement, so it doesn't follow dynamic movement. Held to +/-30 dB.
     bool autoGain = false;
 
     // The output, after every Band and Auto Gain. Output Gain is in dB, -infinity (silence) to +36. Output Pan, -1

@@ -22,7 +22,8 @@ double responseDb (const Settings& settings, double frequency, double sampleRate
 
 // Auto Gain's estimate: the gain in dB that brings pink noise from 20 Hz to 20 kHz, through the
 // static curve of every Band in use and not Bypassed under Gain Scale, back to the average power it
-// went in at. Dynamics and Stereo Placement are not part of it: the curve is the one drawn.
+// went in at, held to +/-30 dB. Dynamics and Stereo Placement are not part of it: the curve is the
+// one drawn.
 double autoGainDb (const Settings& settings, double sampleRate);
 
 } // namespace eq1

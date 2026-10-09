@@ -473,3 +473,19 @@ TEST_CASE ("Global Bypass passes the input through, whatever the Bands and outpu
     const std::vector<std::vector<float>> mono { input[0] };
     checkMix (mono, processed (settings, mono), 0, 1.0, 0.0);
 }
+
+TEST_CASE ("Auto Gain is held to +/-30 dB, however much the Bands take away or add")
+{
+    // A Low Cut at 10 kHz and a High Cut at 100 Hz leave almost nothing.
+    Settings nothing;
+    nothing.bands[0] = band (Shape::LowCut, 10000.0, 0.0, 0.7, 96.0);
+    nothing.bands[1] = band (Shape::HighCut, 100.0, 0.0, 0.7, 96.0);
+    CHECK (autoGainDb (nothing, sampleRate) == 30.0);
+
+    Settings loud;
+    for (size_t slot = 0; slot < 8; ++slot)
+        loud.bands[slot] = band (Shape::TiltShelf, 1000.0, 30.0, 0.7);
+    for (size_t slot = 8; slot < 16; ++slot)
+        loud.bands[slot] = band (Shape::Bell, 1000.0, 30.0, 0.1);
+    CHECK (autoGainDb (loud, sampleRate) == -30.0);
+}

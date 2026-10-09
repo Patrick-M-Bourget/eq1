@@ -37,7 +37,7 @@ bool AutoGainEstimate::advance (int points)
     }
     if (running())
         return false;
-    resultDb = numCascades == 0 ? 0.0 : -10.0 * std::log10 (sum / numPoints);
+    resultDb = numCascades == 0 ? 0.0 : std::clamp (-10.0 * std::log10 (sum / numPoints), -autoGainLimitDb, autoGainLimitDb);
     return true;
 }
 
