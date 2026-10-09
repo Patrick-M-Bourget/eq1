@@ -3,6 +3,7 @@
 #include "eq1/Settings.h"
 
 #include <cmath>
+#include <limits>
 
 namespace eq1::parameters
 {
@@ -92,6 +93,12 @@ const juce::StringArray& detectionSourceNames()
 const juce::StringArray& detectionRangeNames()
 {
     static const juce::StringArray names { "Band", "Free" };
+    return names;
+}
+
+const juce::StringArray& panModeNames()
+{
+    static const juce::StringArray names { "L/R", "M/S" };
     return names;
 }
 
@@ -187,6 +194,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                  20000.0f,
                                                                  withText (1, "Hz")));
     }
+
+    // Gain Scale 0 to 200%, Output Gain -inf to +36 dB as in Pro-Q 4, with 0 dB at the centre and its
+    // bottom (-80 dB) silent; Output Pan -100% (left, or Mid) to 100% (right, or Side).
+    juce::NormalisableRange<float> outputGainRange (outputGainSilentDb, 36.0f);
+    outputGainRange.setSkewForCentre (0.0f);
+    const auto outputGainText = juce::AudioParameterFloatAttributes()
+                                    .withLabel ("dB")
+                                    .withStringFromValueFunction ([] (float value, int) {
+                                        return value <= outputGainSilentDb ? juce::String ("-inf") : juce::String (value, 2);
+                                    })
+                                    .withValueFromStringFunction ([] (const juce::String& text) {
+                                        return text.trim().equalsIgnoreCase ("-inf") ? outputGainSilentDb : text.getFloatValue();
+                                    });
+    layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { gainScaleId, 1 },
+                                                             "Gain Scale",
+                                                             juce::NormalisableRange<float> (0.0f, 200.0f),
+                                                             100.0f,
+                                                             withText (1, "%")),
+                std::make_unique<juce::AudioParameterBool> (juce::ParameterID { autoGainId, 1 }, "Auto Gain", false),
+                std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { outputGainId, 1 }, "Output Gain", outputGainRange, 0.0f, outputGainText),
+                std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { outputPanId, 1 },
+                                                             "Output Pan",
+                                                             juce::NormalisableRange<float> (-100.0f, 100.0f),
+                                                             0.0f,
+                                                             withText (1, "%")),
+                std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { panModeId, 1 }, "Pan Mode", panModeNames(), 0),
+                std::make_unique<juce::AudioParameterBool> (juce::ParameterID { phaseInvertId, 1 }, "Phase Invert", false),
+                std::make_unique<juce::AudioParameterBool> (juce::ParameterID { globalBypassId, 1 }, "Global Bypass", false));
     return layout;
 }
 
@@ -230,6 +265,26 @@ BandSettings SlotValues::read() const
              .attack = attack->load(),
              .release = release->load(),
              .dynamicsBypass = dynamicsBypass->load() >= 0.5f };
+}
+
+OutputValues OutputValues::of (juce::AudioProcessorValueTreeState& parameters)
+{
+    return { parameters.getRawParameterValue (gainScaleId),   parameters.getRawParameterValue (autoGainId),
+             parameters.getRawParameterValue (outputGainId),  parameters.getRawParameterValue (outputPanId),
+             parameters.getRawParameterValue (panModeId),     parameters.getRawParameterValue (phaseInvertId),
+             parameters.getRawParameterValue (globalBypassId) };
+}
+
+void OutputValues::readInto (Settings& settings) const
+{
+    const float outputGainDb = outputGain->load();
+    settings.gainScale = gainScale->load() / 100.0;
+    settings.autoGain = autoGain->load() >= 0.5f;
+    settings.outputGainDb = outputGainDb <= outputGainSilentDb ? -std::numeric_limits<double>::infinity() : outputGainDb;
+    settings.outputPan = outputPan->load() / 100.0;
+    settings.panMode = static_cast<PanMode> (juce::roundToInt (panMode->load()));
+    settings.phaseInvert = phaseInvert->load() >= 0.5f;
+    settings.globalBypass = globalBypass->load() >= 0.5f;
 }
 
 } // namespace eq1::parameters

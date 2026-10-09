@@ -152,6 +152,34 @@ TEST_CASE ("Dragging several Bands moves them together, stopping together at the
     CHECK_THAT (host.value (4, "gain"), WithinAbs (5.0, 1.0e-4));
 }
 
+TEST_CASE ("Under Gain Scale, Gains added and dragged on the display are the Gains heard")
+{
+    Host host;
+    auto* gainScale = host.processor.parameterState().getParameter ("gain_scale");
+    gainScale->setValueNotifyingHost (gainScale->convertTo0to1 (50.0f));
+    CHECK (host.editing.settings().gainScale == 0.5);
+
+    // Added where the display shows +6 dB: heard at +6, so stored at +12.
+    const auto slot = host.editing.add (1000.0, 6.0);
+    REQUIRE (slot == 1);
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (12.0, 1.0e-4));
+
+    // Dragged down 3 dB on the display: stored 6 dB lower.
+    host.editing.beginDrag ({ 1 });
+    host.editing.dragBy (1.0, -3.0);
+    host.editing.endDrag();
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (6.0, 1.0e-4));
+
+    // At 0% every Gain is heard as 0 dB, so a vertical drag leaves the stored Gain alone.
+    gainScale->setValueNotifyingHost (0.0f);
+    host.editing.beginDrag ({ 1 });
+    host.editing.dragBy (1.0, 5.0);
+    host.editing.endDrag();
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (6.0, 1.0e-4));
+    REQUIRE (host.editing.add (1000.0, 6.0) == 2);
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (0.0, 1.0e-4));
+}
+
 TEST_CASE ("The wheel scales a Band's Q, within its range")
 {
     Host host;

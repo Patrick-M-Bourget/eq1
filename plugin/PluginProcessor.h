@@ -41,6 +41,10 @@ public:
     // Stereo Placement there, and the sound follows what a mono signal has: all Mid, Left and Right the same.
     bool isStereoPlacementAvailable() const { return getMainBusNumOutputChannels() > 1; }
 
+    // False on a mono track, where the editor offers no Output Pan or Pan Mode; they keep their
+    // values and have no effect there.
+    bool isOutputPanAvailable() const { return getMainBusNumOutputChannels() > 1; }
+
     // The host parameters and the editor's settings, saved with the plugin.
     juce::AudioProcessorValueTreeState& parameterState() { return parameters; }
 
@@ -73,6 +77,7 @@ public:
 private:
     juce::AudioProcessorValueTreeState parameters;
     std::array<eq1::parameters::SlotValues, numBandSlots> slots; // read on the audio thread
+    eq1::parameters::OutputValues output;
 
     Engine engine;
     // Kept out of the parameter state, which a host may save from another thread, and written into

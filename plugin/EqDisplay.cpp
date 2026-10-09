@@ -48,7 +48,7 @@ juce::String frequencyText (double frequency)
 EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
 {
     setWantsKeyboardFocus (true);
-    shown = editing.settings();
+    shown = heardSettings();
     tapSamples.resize (1 << 16);
     startTimerHz (60);
 }
@@ -92,6 +92,14 @@ const AnalyzerSpectrum* EqDisplay::spectrumToGrab() const
     return analyzer.showPostEq ? &postEq : analyzer.showPreEq ? &preEq : nullptr;
 }
 
+Settings EqDisplay::heardSettings() const
+{
+    auto settings = editing.settings();
+    for (auto& band : settings.bands)
+        band = scaledByGainScale (band, settings.gainScale);
+    return settings;
+}
+
 EqDisplay::~EqDisplay()
 {
     releaseSolo();
@@ -122,7 +130,7 @@ void EqDisplay::timerCallback()
     if (updateAnalyzer())
     {
         // The spectra move every frame.
-        shown = editing.settings();
+        shown = heardSettings();
         shownRangeDb = processor.displayRangeDb();
         repaint();
         return;
@@ -132,7 +140,7 @@ void EqDisplay::timerCallback()
     if (messageExpired)
         allInUseMessageUntil = 0;
     // Host Automation, the Band panel and a restored state change the parameters and the range too.
-    const auto latest = editing.settings();
+    const auto latest = heardSettings();
     const int range = processor.displayRangeDb();
     // Dynamic Bands move by themselves.
     bool liveGainsMoved = false;
@@ -489,7 +497,7 @@ void EqDisplay::mouseDrag (const juce::MouseEvent& e)
     // A grabbed Band stays on its peak: the drag sets its Gain.
     const double frequencyRatio = grabbing ? 1.0 : frequencyAt (e.position.x) / frequencyAt (dragStart.x);
     editing.dragBy (frequencyRatio, dbAt (e.position.y) - dbAt (dragStart.y));
-    shown = editing.settings();
+    shown = heardSettings();
     repaint();
 }
 
@@ -511,7 +519,7 @@ void EqDisplay::mouseDoubleClick (const juce::MouseEvent& e)
         return;
     if (const auto slot = editing.add (frequencyAt (e.position.x), dbAt (e.position.y)))
     {
-        shown = editing.settings();
+        shown = heardSettings();
         select ({ *slot });
         return;
     }
@@ -530,7 +538,7 @@ void EqDisplay::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWhee
     const double factor = std::pow (2.0, static_cast<double> (wheel.deltaY) * (wheel.isReversed ? -1.0 : 1.0));
     for (int slot : targets)
         editing.scaleQ (slot, factor);
-    shown = editing.settings();
+    shown = heardSettings();
     repaint();
 }
 
@@ -541,7 +549,7 @@ bool EqDisplay::keyPressed (const juce::KeyPress& key)
         for (int slot : selected)
             editing.deleteBand (slot);
         select ({});
-        shown = editing.settings();
+        shown = heardSettings();
         return true;
     }
     return false;

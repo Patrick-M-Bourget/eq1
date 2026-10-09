@@ -33,6 +33,18 @@ juce::String detectionRangeId (int slot);
 juce::String detectionLowId (int slot);
 juce::String detectionHighId (int slot);
 
+// The whole-plugin controls.
+inline const juce::String gainScaleId { "gain_scale" };
+inline const juce::String autoGainId { "auto_gain" };
+inline const juce::String outputGainId { "output_gain" };
+inline const juce::String outputPanId { "output_pan" };
+inline const juce::String panModeId { "pan_mode" };
+inline const juce::String phaseInvertId { "phase_invert" };
+inline const juce::String globalBypassId { "global_bypass" };
+
+// Output Gain's bottom, in dB: silence, shown as -inf.
+inline constexpr float outputGainSilentDb = -80.0f;
+
 // The Shape choices, in the order of the Shape enum: Pro-Q 4's order, frozen by ADR 0003.
 const juce::StringArray& shapeNames();
 
@@ -43,6 +55,9 @@ const juce::StringArray& placementNames();
 // The Detection Source and Detection Range choices, in the order of their enums; frozen at release too.
 const juce::StringArray& detectionSourceNames();
 const juce::StringArray& detectionRangeNames();
+
+// The Pan Mode choices, in the order of the PanMode enum; frozen at release too.
+const juce::StringArray& panModeNames();
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
@@ -71,6 +86,22 @@ struct SlotValues
 
     static SlotValues of (juce::AudioProcessorValueTreeState& parameters, int slot);
     BandSettings read() const;
+};
+
+// The whole-plugin host parameters, readable from any thread.
+struct OutputValues
+{
+    std::atomic<float>* gainScale;
+    std::atomic<float>* autoGain;
+    std::atomic<float>* outputGain;
+    std::atomic<float>* outputPan;
+    std::atomic<float>* panMode;
+    std::atomic<float>* phaseInvert;
+    std::atomic<float>* globalBypass;
+
+    static OutputValues of (juce::AudioProcessorValueTreeState& parameters);
+    // Sets the whole-plugin settings, leaving the Bands, Solo and Detection Audition alone.
+    void readInto (Settings& settings) const;
 };
 
 } // namespace eq1::parameters

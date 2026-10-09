@@ -11,7 +11,8 @@ PluginProcessor::PluginProcessor()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withInput ("Sidechain", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters (*this, nullptr, "eq1", parameters::createLayout())
+      parameters (*this, nullptr, "eq1", parameters::createLayout()),
+      output (eq1::parameters::OutputValues::of (parameters))
 {
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slots[static_cast<size_t> (slot - 1)] = eq1::parameters::SlotValues::of (parameters, slot);
@@ -42,6 +43,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         settings.bands[slot] = slots[slot].read();
     settings.soloSlot = heldSoloSlot.load();
     settings.auditionSlot = heldAuditionSlot.load();
+    output.readInto (settings);
     engine.setSettings (settings);
 
     auto main = getBusBuffer (buffer, false, 0);

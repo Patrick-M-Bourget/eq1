@@ -5,7 +5,8 @@
 namespace eq1
 {
 
-BandEditing::BandEditing (juce::AudioProcessorValueTreeState& parametersToEdit) : parameters (parametersToEdit)
+BandEditing::BandEditing (juce::AudioProcessorValueTreeState& parametersToEdit)
+    : parameters (parametersToEdit), output (parameters::OutputValues::of (parametersToEdit))
 {
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slots[static_cast<size_t> (slot - 1)] = parameters::SlotValues::of (parameters, slot);
@@ -47,7 +48,16 @@ Settings BandEditing::settings() const
     Settings result;
     for (int slot = 1; slot <= numBandSlots; ++slot)
         result.bands[static_cast<size_t> (slot - 1)] = band (slot);
+    output.readInto (result);
     return result;
+}
+
+double BandEditing::storedGain (double heard) const
+{
+    Settings whole;
+    output.readInto (whole);
+    const double gainScale = whole.gainScale;
+    return gainScale > 0.0 ? heard / gainScale : 0.0;
 }
 
 bool BandEditing::isFull() const
@@ -68,7 +78,7 @@ std::optional<int> BandEditing::add (double frequency, double gain)
         const BandSettings defaults;
         set (parameters::shapeId (slot), static_cast<double> (defaults.shape));
         set (parameters::frequencyId (slot), frequency);
-        set (parameters::gainId (slot), gain);
+        set (parameters::gainId (slot), storedGain (gain));
         set (parameters::qId (slot), defaults.q);
         set (parameters::slopeId (slot), defaults.slope);
         set (parameters::brickwallId (slot), static_cast<double> (defaults.brickwall));
@@ -116,6 +126,7 @@ void BandEditing::dragBy (double frequencyRatio, double gainOffset)
 {
     if (dragged.empty())
         return;
+    gainOffset = storedGain (gainOffset);
     // The furthest the group can go before one of its Bands leaves a range.
     const auto& frequencyRange = parameter (parameters::frequencyId (1)).getNormalisableRange();
     const auto& gainRange = parameter (parameters::gainId (1)).getNormalisableRange();
