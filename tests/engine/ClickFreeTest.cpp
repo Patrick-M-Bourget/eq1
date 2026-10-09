@@ -99,11 +99,25 @@ constexpr double threshold = 2.0;
 // False until the onset has passed, then flips every 50 ms.
 bool alternating (double seconds) { return seconds >= onsetSeconds && static_cast<int> ((seconds - onsetSeconds) / 0.05) % 2 == 0; }
 
-// A sample at a time, odd and large blocks, at every sample rate eq1 is checked at.
+#if defined(__SANITIZE_THREAD__)
+    #define EQ1_THREAD_SANITIZER 1
+#elif defined(__has_feature)
+    #if __has_feature(thread_sanitizer)
+        #define EQ1_THREAD_SANITIZER 1
+    #endif
+#endif
+
+// A sample at a time, odd and large blocks, at every sample rate eq1 is checked at. Under
+// ThreadSanitizer, which runs these single-threaded tests many times slower and only looks for
+// data races, the common sample rates only.
 Host anyHost()
 {
+#if EQ1_THREAD_SANITIZER
+    return GENERATE (Host { 44100.0, 17 }, Host { 48000.0, 64 }, Host { 48000.0, 512 }, Host { 96000.0, 17 }, Host { 96000.0, 512 });
+#else
     return GENERATE (Host { 44100.0, 17 }, Host { 48000.0, 64 }, Host { 48000.0, 512 }, Host { 88200.0, 1 }, Host { 96000.0, 17 },
                      Host { 96000.0, 512 }, Host { 176400.0, 33 }, Host { 192000.0, 4096 });
+#endif
 }
 
 } // namespace
