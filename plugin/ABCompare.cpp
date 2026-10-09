@@ -2,12 +2,15 @@
 
 #include "PresetSettings.h"
 
+#include <utility>
+
 namespace eq1
 {
 
 namespace
 {
-const juce::Identifier activeProperty { "active" }, sideType { "Side" }, idProperty { "id" }, valueProperty { "value" };
+const juce::Identifier activeProperty { "active" }, sideType { "Side" }, idProperty { "id" }, valueProperty { "value" },
+    loadedPresetType { "LoadedPreset" }, sideProperty { "side" }, nameProperty { "name" };
 
 juce::String nameOf (CompareSide side) { return side == CompareSide::A ? "A" : "B"; }
 } // namespace
@@ -27,29 +30,27 @@ ABCompare::~ABCompare()
 CompareSide ABCompare::side() const
 {
     const juce::SpinLock::ScopedLockType hold (lock);
-    return active;
+    return state.active;
 }
 
-juce::ValueTree ABCompare::otherSide() const
+ABCompare::State ABCompare::current() const
 {
     const juce::SpinLock::ScopedLockType hold (lock);
-    return other;
+    return state;
 }
 
-void ABCompare::set (CompareSide side, juce::ValueTree otherSide)
+void ABCompare::set (State next)
 {
     const juce::SpinLock::ScopedLockType hold (lock);
-    active = side;
-    other = std::move (otherSide);
+    state = std::move (next);
     ++changes;
 }
 
-void ABCompare::putOnParameters (const juce::ValueTree& settings, CompareSide side, juce::ValueTree otherSide)
+void ABCompare::putOnParameters (const juce::ValueTree& settings, State next)
 {
     {
         const juce::SpinLock::ScopedLockType hold (lock);
-        active = side;
-        other = std::move (otherSide);
+        state = std::move (next);
         arriving = settings;
         ++changes;
     }
@@ -64,36 +65,87 @@ void ABCompare::select (CompareSide side)
     if (side == this->side())
         return;
     history.beginTransaction();
-    auto leaving = capturePresetSettings (parameters, sideType);
-    if (const auto target = otherSide(); target.isValid())
-        putOnParameters (target, side, std::move (leaving));
+    auto next = current();
+    const auto target = std::exchange (next.other, capturePresetSettings (parameters, sideType));
+    next.active = side;
+    if (target.isValid())
+        putOnParameters (target, std::move (next));
     else
-        set (side, std::move (leaving));
+    {
+        // B, still a copy of A, is selected for the first time: it takes A's Loaded Preset too.
+        next.loadedOn (CompareSide::B) = next.loadedOn (CompareSide::A);
+        set (std::move (next));
+    }
     history.endTransaction();
 }
 
 void ABCompare::copyAToB()
 {
     history.beginTransaction();
-    if (side() == CompareSide::A)
-        set (CompareSide::A, capturePresetSettings (parameters, sideType));
-    else if (auto a = otherSide(); a.isValid())
-        putOnParameters (a, CompareSide::B, a);
+    auto next = current();
+    next.loadedOn (CompareSide::B) = next.loadedOn (CompareSide::A);
+    if (next.active == CompareSide::A)
+    {
+        next.other = capturePresetSettings (parameters, sideType);
+        set (std::move (next));
+    }
+    else if (const auto a = next.other; a.isValid())
+        putOnParameters (a, std::move (next));
     history.endTransaction();
 }
 
-juce::ValueTree ABCompare::treeOf (CompareSide selected, const juce::ValueTree& unselected)
+void ABCompare::loadPreset (const juce::ValueTree& preset, const juce::String& name)
 {
-    auto state = juce::ValueTree (stateType).setProperty (activeProperty, nameOf (selected), nullptr);
-    if (unselected.isValid())
-        state.appendChild (unselected.createCopy(), nullptr);
-    return state;
+    const auto loaded = loadedPresetOf (preset, name);
+    history.beginTransaction();
+    auto next = current();
+    next.loadedOn (next.active) = loaded;
+    putOnParameters (loaded, std::move (next));
+    history.endTransaction();
+}
+
+void ABCompare::presetSaved (const juce::ValueTree& preset, const juce::String& name)
+{
+    history.beginTransaction();
+    auto next = current();
+    next.loadedOn (next.active) = loadedPresetOf (preset, name);
+    set (std::move (next));
+    history.endTransaction();
+}
+
+juce::ValueTree ABCompare::loadedPresetOf (const juce::ValueTree& preset, const juce::String& name)
+{
+    return presetSettingsAsLoaded (parameters, preset, loadedPresetType).setProperty (nameProperty, name, nullptr);
+}
+
+juce::String ABCompare::loadedPresetName() const
+{
+    const juce::SpinLock::ScopedLockType hold (lock);
+    return state.loadedOn (state.active).getProperty (nameProperty).toString();
+}
+
+bool ABCompare::isModified() const
+{
+    const auto s = current();
+    const auto& loaded = s.loadedOn (s.active);
+    return loaded.isValid() && ! holdsPresetSettings (parameters, loaded);
+}
+
+juce::ValueTree ABCompare::treeOf (const State& s)
+{
+    auto tree = juce::ValueTree (stateType).setProperty (activeProperty, nameOf (s.active), nullptr);
+    if (s.other.isValid())
+        tree.appendChild (s.other.createCopy(), nullptr);
+    for (const auto side : { CompareSide::A, CompareSide::B })
+        if (const auto& loaded = s.loadedOn (side); loaded.isValid())
+            tree.appendChild (loaded.createCopy().setProperty (sideProperty, nameOf (side), nullptr), nullptr);
+    return tree;
 }
 
 juce::ValueTree ABCompare::capture() const
 {
     const juce::SpinLock::ScopedLockType hold (lock);
-    return treeOf (active, other);
+    return treeOf (state);
 }
 
 juce::ValueTree ABCompare::savedState() const
@@ -103,16 +155,15 @@ juce::ValueTree ABCompare::savedState() const
     for (;;)
     {
         int changesBefore;
-        CompareSide selected;
-        juce::ValueTree unselected, comingIn;
+        State kept;
+        juce::ValueTree comingIn;
         {
             const juce::SpinLock::ScopedLockType hold (lock);
             changesBefore = changes;
-            selected = active;
-            unselected = other;
+            kept = state;
             comingIn = arriving;
         }
-        auto state = parameters.copyState();
+        auto saved = parameters.copyState();
         {
             const juce::SpinLock::ScopedLockType hold (lock);
             const int changed = changes - changesBefore;
@@ -120,23 +171,28 @@ juce::ValueTree ABCompare::savedState() const
                 continue;
         }
         for (const auto& setting : comingIn)
-            state.getChildWithProperty (idProperty, setting.getProperty (idProperty))
+            saved.getChildWithProperty (idProperty, setting.getProperty (idProperty))
                 .setProperty (valueProperty, setting.getProperty (valueProperty), nullptr);
-        state.appendChild (treeOf (selected, unselected), nullptr);
-        return state;
+        saved.appendChild (treeOf (kept), nullptr);
+        return saved;
     }
 }
 
 void ABCompare::restore (const juce::ValueTree& saved)
 {
-    const auto otherSaved = saved.getChildWithName (sideType);
-    set (saved.getProperty (activeProperty).toString() == nameOf (CompareSide::B) ? CompareSide::B : CompareSide::A,
-         otherSaved.isValid() ? otherSaved.createCopy() : juce::ValueTree());
+    State next;
+    next.active = saved.getProperty (activeProperty).toString() == nameOf (CompareSide::B) ? CompareSide::B : CompareSide::A;
+    if (const auto otherSaved = saved.getChildWithName (sideType); otherSaved.isValid())
+        next.other = otherSaved.createCopy();
+    for (const auto side : { CompareSide::A, CompareSide::B })
+        if (const auto loaded = saved.getChildWithProperty (sideProperty, nameOf (side)); loaded.hasType (loadedPresetType))
+            next.loadedOn (side) = loaded.createCopy();
+    set (std::move (next));
 }
 
 juce::ValueTree ABCompare::initialState()
 {
-    return treeOf (CompareSide::A, {});
+    return treeOf ({});
 }
 
 } // namespace eq1

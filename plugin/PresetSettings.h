@@ -18,4 +18,11 @@ juce::ValueTree capturePresetSettings (juce::AudioProcessorValueTreeState& param
 // goes to its default, so the same tree always sounds the same; the other parameters are left alone.
 void applyPresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree);
 
+// The settings applyPresetSettings() puts on the parameters from preset, as capturePresetSettings()
+// gives them: every setting a Preset holds, those preset leaves out at their defaults.
+juce::ValueTree presetSettingsAsLoaded (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& preset, const juce::Identifier& type);
+
+// Whether the parameters hold the settings applyPresetSettings() puts on them from tree.
+bool holdsPresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree);
+
 } // namespace eq1

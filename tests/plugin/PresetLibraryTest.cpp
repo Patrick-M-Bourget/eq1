@@ -68,7 +68,7 @@ TEST_CASE ("A User Preset saves as a file in the User folder and loads back")
     CHECK (presets.front() == file);
 
     Host loaded;
-    loaded.processor.loadPreset (PresetLibrary::read (file));
+    loaded.processor.loadPreset (PresetLibrary::read (file), file.getFileNameWithoutExtension());
     CHECK (loaded.value ("band3_in_use") == 1.0f);
     CHECK_THAT (loaded.value ("band3_frequency"), WithinAbs (4200.0, 1.0e-2));
     CHECK_THAT (loaded.value ("band3_dynamic_range"), WithinAbs (-9.0, 1.0e-4));
@@ -97,7 +97,7 @@ TEST_CASE ("A User Preset file is portable: copied into another machine's folder
     const auto presets = PresetLibrary (there.folder).userPresets();
     REQUIRE (presets.size() == 1);
     Host loaded;
-    loaded.processor.loadPreset (PresetLibrary::read (presets.front()));
+    loaded.processor.loadPreset (PresetLibrary::read (presets.front()), presets.front().getFileNameWithoutExtension());
     CHECK (loaded.value ("band1_in_use") == 1.0f);
     CHECK_THAT (loaded.value ("band1_gain"), WithinAbs (3.5, 1.0e-4));
 }
@@ -118,7 +118,7 @@ TEST_CASE ("Saving under an existing name replaces that Preset; a name a file ca
     CHECK (odd->existsAsFile());
     CHECK (odd->getParentDirectory() == user.folder);
     Host loaded;
-    loaded.processor.loadPreset (PresetLibrary::read (user.folder.getChildFile ("Kick.eq1preset")));
+    loaded.processor.loadPreset (PresetLibrary::read (user.folder.getChildFile ("Kick.eq1preset")), "Kick");
     CHECK (loaded.value ("band1_in_use") == 1.0f);
 }
 
@@ -169,7 +169,7 @@ TEST_CASE ("Factory Presets are bundled, and each loads its settings")
         REQUIRE (preset.hasType ("eq1"));
 
         Host host;
-        host.processor.loadPreset (preset);
+        host.processor.loadPreset (preset, name);
         for (const auto& setting : preset)
         {
             const auto id = setting.getProperty ("id").toString();

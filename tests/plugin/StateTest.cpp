@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PresetLibrary.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -87,7 +88,7 @@ TEST_CASE ("Saved state carries the state version")
     const auto xml = savedXml (processor);
     REQUIRE (xml != nullptr);
     CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
-    CHECK (eq1::PluginProcessor::stateVersion == 2);
+    CHECK (eq1::PluginProcessor::stateVersion == 3);
 }
 
 TEST_CASE ("Save and reload sound exactly the same: Bands, dynamics, Sidechain detection and the output section")
@@ -210,7 +211,7 @@ TEST_CASE ("A session from a newer version loads the settings this version knows
     CHECK (processor.compareSide() == eq1::CompareSide::A);
 }
 
-TEST_CASE ("A session saved in the middle of an A/B switch or copy holds both sides whole")
+TEST_CASE ("A session saved in the middle of an A/B switch, a copy or a Preset load holds both sides whole")
 {
     // A host saving from its own thread can save while the editor is switching sides. A listener on
     // the parameters saves at the first change the switch makes, as such a host might.
@@ -229,8 +230,13 @@ TEST_CASE ("A session saved in the middle of an A/B switch or copy holds both si
     };
 
     juce::ScopedJuceInitialiser_GUI juce;
-    const bool copy = GENERATE (false, true);
-    CAPTURE (copy);
+    const auto change = GENERATE (Catch::Generators::as<std::string> {}, "switch", "copy", "load");
+    CAPTURE (change);
+    const bool copy = change == "copy", loadOnB = change == "load";
+    eq1::PluginProcessor maker;
+    set (maker, "band1_gain", 6.0f);
+    set (maker, "band2_gain", 2.0f);
+    const auto preset = maker.presetState();
     eq1::PluginProcessor processor;
     set (processor, "band1_gain", 6.0f);
     set (processor, "band2_gain", 2.0f);
@@ -242,6 +248,8 @@ TEST_CASE ("A session saved in the middle of an A/B switch or copy holds both si
         SaveDuringChange host (processor);
         if (copy)
             processor.copyAToB();
+        else if (loadOnB)
+            processor.loadPreset (preset, "Preset");
         else
             processor.selectCompareSide (eq1::CompareSide::A);
         xml = std::move (host.saved);
@@ -251,11 +259,72 @@ TEST_CASE ("A session saved in the middle of an A/B switch or copy holds both si
     // Reloaded, the side being switched to is whole on the parameters, and the other side whole too.
     eq1::PluginProcessor restored;
     load (restored, *xml);
-    const auto onA = copy ? eq1::CompareSide::B : eq1::CompareSide::A;
-    CHECK (restored.compareSide() == onA);
+    // A's settings are on the side the change ends on, and on the other side too unless it was a switch.
+    const auto ending = copy || loadOnB ? eq1::CompareSide::B : eq1::CompareSide::A;
+    CHECK (restored.compareSide() == ending);
     CHECK_THAT (value (restored, "band1_gain"), WithinAbs (6.0, 1.0e-4));
     CHECK_THAT (value (restored, "band2_gain"), WithinAbs (2.0, 1.0e-4));
-    restored.selectCompareSide (copy ? eq1::CompareSide::A : eq1::CompareSide::B);
-    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (copy ? 6.0 : -3.0, 1.0e-4));
-    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (copy ? 2.0 : -1.0, 1.0e-4));
+    if (loadOnB)
+    {
+        CHECK (restored.loadedPresetName() == "Preset");
+        CHECK_FALSE (restored.isLoadedPresetModified());
+    }
+    restored.selectCompareSide (ending == eq1::CompareSide::B ? eq1::CompareSide::A : eq1::CompareSide::B);
+    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (change == "switch" ? -3.0 : 6.0, 1.0e-4));
+    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (change == "switch" ? -1.0 : 2.0, 1.0e-4));
+}
+
+TEST_CASE ("Save and reload keep each side's Loaded Preset and Modified state, even after its file is deleted")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    juce::TemporaryFile folder;
+    REQUIRE (folder.getFile().createDirectory());
+    const eq1::PresetLibrary library (folder.getFile());
+    const auto savePreset = [&] (const juce::String& name, const std::initializer_list<std::pair<const char*, float>> values) {
+        eq1::PluginProcessor maker;
+        for (const auto& [id, v] : values)
+            set (maker, id, v);
+        const auto file = library.save (name, maker.presetState());
+        REQUIRE (file.has_value());
+        return *file;
+    };
+    const auto vocal = savePreset ("Vocal", { { "band2_in_use", 1.0f }, { "band2_frequency", 3456.7f }, { "band2_q", 2.7f } });
+    const auto kick = savePreset ("Kick", { { "band1_in_use", 1.0f }, { "band1_gain", 4.0f }, { "output_pan", -13.0f } });
+
+    eq1::PluginProcessor saved;
+    saved.loadPreset (eq1::PresetLibrary::read (vocal), "Vocal");
+    set (saved, "band2_gain", 3.0f);
+    saved.selectCompareSide (eq1::CompareSide::B);
+    saved.loadPreset (eq1::PresetLibrary::read (kick), "Kick");
+    const auto xml = savedXml (saved);
+    REQUIRE (xml != nullptr);
+    folder.getFile().deleteRecursively();
+
+    eq1::PluginProcessor restored;
+    load (restored, *xml);
+    CHECK (restored.loadedPresetName() == "Kick");
+    CHECK_FALSE (restored.isLoadedPresetModified());
+    restored.selectCompareSide (eq1::CompareSide::A);
+    CHECK (restored.loadedPresetName() == "Vocal");
+    CHECK (restored.isLoadedPresetModified());
+    set (restored, "band2_gain", 0.0f);
+    CHECK_FALSE (restored.isLoadedPresetModified());
+}
+
+TEST_CASE ("A version 2 session loads with no Loaded Preset on either side")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor maker;
+    set (maker, "band1_in_use", 1.0f);
+    eq1::PluginProcessor processor;
+    processor.loadPreset (maker.presetState(), "Before");
+    processor.selectCompareSide (eq1::CompareSide::B);
+
+    load (processor, *fixture ("state-v2.xml"));
+    CHECK (processor.compareSide() == eq1::CompareSide::A);
+    CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
+    CHECK (processor.loadedPresetName().isEmpty());
+    CHECK_FALSE (processor.isLoadedPresetModified());
+    processor.selectCompareSide (eq1::CompareSide::B);
+    CHECK (processor.loadedPresetName().isEmpty());
 }

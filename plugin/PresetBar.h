@@ -14,7 +14,8 @@ class PluginProcessor;
 
 // Presets and A/B Compare, in one row: the Presets menu (Factory and User Presets, saving the
 // settings as a User Preset, loading a Preset file from anywhere), the A and B sides and Copy A to B.
-// Each load, switch and copy is one undo step.
+// Each load, save, switch and copy is one undo step. The Presets button shows the side's Loaded
+// Preset, followed by * when Modified, with its full name in a tooltip.
 class PresetBar final : public juce::Component, private juce::Timer
 {
 public:
@@ -26,14 +27,16 @@ public:
     std::function<void()> onEdit;
 
 private:
-    // Follows the side, which undo and restoring a session change too.
+    // Follows the side and its Loaded Preset, which edits, undo and restoring a session change too.
     void timerCallback() override;
     void showSide();
+    void showLoadedPreset();
     void edited();
     void showMenu();
-    void load (const juce::ValueTree& preset);
+    void load (const juce::ValueTree& preset, const juce::String& name);
     void askToSave();
-    // Saves the settings as a User Preset named name, when it isn't empty, and closes the prompt.
+    // Saves the settings as a User Preset named name, when it isn't empty, making it the side's Loaded
+    // Preset, and closes the prompt.
     void saveAs (const juce::String& name);
     void chooseFileToLoad();
 
