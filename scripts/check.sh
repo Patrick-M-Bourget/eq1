@@ -8,8 +8,8 @@
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
-#   scripts/check.sh validate   pluginval (VST3, AU), auval, Sidechain routing (VST3, AU), clap-validator,
-#                               AAX and Standalone built
+#   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
+#                               routing (VST3, AU), clap-validator, AAX and Standalone built
 #
 # BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden; CMake's
 # CMAKE_C_COMPILER_LAUNCHER and CMAKE_CXX_COMPILER_LAUNCHER environment variables (sccache in CI) apply. Validators
@@ -152,7 +152,11 @@ fetch_validators() {
     fi
 }
 
-pluginval() { "$PLUGINVAL" --strictness-level 10 --validate-in-process --validate "$1"; }
+# Every sample rate eq1 supports, and block sizes from a sample at a time to larger than most hosts use.
+pluginval() {
+    "$PLUGINVAL" --strictness-level 10 --sample-rates 44100,48000,88200,96000,176400,192000 \
+        --block-sizes 1,7,64,128,256,512,1024,4096 --validate-in-process --validate "$1"
+}
 
 # macOS only finds an AU once it is installed and registered: install it for the check, and remove
 # it on the way out whether or not the check passes (a subshell, so the EXIT trap stays local).
