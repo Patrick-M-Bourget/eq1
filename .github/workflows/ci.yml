@@ -70,6 +70,9 @@ jobs:
       - name: Engine and Plugin Shell tests
         run: scripts/check.sh test
 
+      - name: CPU budget
+        run: scripts/check.sh cpu
+
       - name: Engine tests under ThreadSanitizer
         if: runner.os == 'macOS'
         run: scripts/check.sh tsan
