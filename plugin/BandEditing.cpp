@@ -2,11 +2,13 @@
 
 #include "Parameters.h"
 
+#include <utility>
+
 namespace eq1
 {
 
-BandEditing::BandEditing (juce::AudioProcessorValueTreeState& parametersToEdit)
-    : parameters (parametersToEdit), output (parameters::OutputValues::of (parametersToEdit))
+BandEditing::BandEditing (juce::AudioProcessorValueTreeState& parametersToEdit, EditHistory& editHistory)
+    : parameters (parametersToEdit), history (editHistory), output (parameters::OutputValues::of (parametersToEdit))
 {
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slots[static_cast<size_t> (slot - 1)] = parameters::SlotValues::of (parameters, slot);
@@ -76,6 +78,7 @@ std::optional<int> BandEditing::add (double frequency, double gain)
             continue;
         // The slot's settings first, so the audio never plays the Band with what the slot held before.
         const BandSettings defaults;
+        history.beginTransaction();
         set (parameters::shapeId (slot), static_cast<double> (defaults.shape));
         set (parameters::frequencyId (slot), frequency);
         set (parameters::gainId (slot), storedGain (gain));
@@ -91,6 +94,7 @@ std::optional<int> BandEditing::add (double frequency, double gain)
         set (parameters::dynamicsBypassId (slot), static_cast<double> (defaults.dynamicsBypass));
         set (parameters::bypassId (slot), 0.0);
         set (parameters::inUseId (slot), 1.0);
+        history.endTransaction();
         return slot;
     }
     return std::nullopt;
@@ -98,15 +102,29 @@ std::optional<int> BandEditing::add (double frequency, double gain)
 
 std::optional<int> BandEditing::grab (double frequency)
 {
+    history.beginTransaction();
     const auto slot = add (frequency, 0.0);
-    if (slot)
-        beginDrag ({ *slot });
+    if (! slot)
+    {
+        history.endTransaction();
+        return slot;
+    }
+    beginDrag ({ *slot });
+    grabbing = true;
     return slot;
 }
 
 void BandEditing::deleteBand (int slot)
 {
     set (parameters::inUseId (slot), 0.0);
+}
+
+void BandEditing::deleteBands (const std::vector<int>& slotsToDelete)
+{
+    history.beginTransaction();
+    for (int slot : slotsToDelete)
+        deleteBand (slot);
+    history.endTransaction();
 }
 
 void BandEditing::beginDrag (std::vector<int> slotsToDrag)
@@ -153,11 +171,21 @@ void BandEditing::endDrag()
             parameter (parameters::gainId (d.slot)).endChangeGesture();
     }
     dragged.clear();
+    if (std::exchange (grabbing, false))
+        history.endTransaction();
 }
 
 void BandEditing::scaleQ (int slot, double factor)
 {
     set (parameters::qId (slot), band (slot).q * factor);
+}
+
+void BandEditing::scaleQ (const std::vector<int>& slotsToScale, double factor)
+{
+    history.beginTransaction();
+    for (int slot : slotsToScale)
+        scaleQ (slot, factor);
+    history.endTransaction();
 }
 
 void BandEditing::setShape (int slot, Shape shape)

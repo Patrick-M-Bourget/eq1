@@ -22,9 +22,11 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
+    // Cmd-Z undoes, Shift-Cmd-Z (or Cmd-Y) redoes; Ctrl on Windows.
+    bool keyPressed (const juce::KeyPress& key) override;
 
 private:
-    // Follows a display range restored with the plugin's state.
+    // Follows a display range restored with the plugin's state, and what can be undone.
     void timerCallback() override;
 
     PluginProcessor& eqProcessor;
@@ -33,6 +35,10 @@ private:
     BandPanel panel;
     OutputPanel output;
     juce::ComboBox displayRange;
+    juce::TextButton undoButton { "Undo" }, redoButton { "Redo" };
+    void undo();
+    void redo();
+    void showUndoState();
 
     // The Analyzer's controls, above the display.
     juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" }, showSidechain { "Sidechain" };

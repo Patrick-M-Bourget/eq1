@@ -185,9 +185,12 @@ void BandPanel::storeThreshold()
     }
     else
     {
+        // One undo step, though Auto and Threshold are each set as a gesture.
+        processor.editHistory().beginTransaction();
         thresholdAutoAttachment->setValueAsCompleteGesture (automatic ? 1.0f : 0.0f);
         if (! automatic)
             thresholdAttachment->setValueAsCompleteGesture (static_cast<float> (value));
+        processor.editHistory().endTransaction();
     }
 }
 

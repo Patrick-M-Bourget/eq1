@@ -18,7 +18,7 @@ struct Host
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    eq1::BandEditing editing { processor.parameterState() };
+    eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
 
     float value (int slot, const char* control)
     {
@@ -259,7 +259,7 @@ TEST_CASE ("An editor closed in the middle of a drag still ends its gestures")
     GestureLog log;
     host.processor.addListener (&log);
     {
-        eq1::BandEditing editing { host.processor.parameterState() };
+        eq1::BandEditing editing { host.processor.parameterState(), host.processor.editHistory() };
         editing.beginDrag ({ 1 });
         editing.dragBy (2.0, 1.0);
     }

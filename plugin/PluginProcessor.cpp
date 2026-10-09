@@ -60,7 +60,16 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 
 namespace
 {
-const juce::Identifier displayRangeProperty { "displayRangeDb" };
+const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" };
+
+// Brings a saved state from an older version up to stateVersion, one version at a time.
+void migrate (juce::ValueTree& state)
+{
+    const int version = state.getProperty (versionProperty, 0);
+    // 0 to 1: the state gained its version and nothing else.
+    if (version < 1)
+        state.setProperty (versionProperty, 1, nullptr);
+}
 const juce::Identifier analyzerType { "Analyzer" }, showPreEqProperty { "showPreEq" }, showPostEqProperty { "showPostEq" },
     showSidechainProperty { "showSidechain" },
     rangeProperty { "rangeDb" }, speedProperty { "speed" }, resolutionProperty { "resolution" }, analyzerTiltProperty { "tiltDbPerOctave" };
@@ -114,6 +123,7 @@ void PluginProcessor::setDisplayRangeDb (int rangeDb)
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = parameters.copyState();
+    state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
     if (auto xml = state.createXml())
@@ -127,6 +137,8 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         setSolo (0);
         setDetectionAudition (0);
         auto state = juce::ValueTree::fromXml (*xml);
+        migrate (state);
+        state.removeProperty (versionProperty, nullptr);
         setDisplayRangeDb (state.getProperty (displayRangeProperty, 12));
         state.removeProperty (displayRangeProperty, nullptr);
         if (auto saved = state.getChildWithName (analyzerType); saved.isValid())
@@ -135,6 +147,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
             state.removeChild (saved, nullptr);
         }
         parameters.replaceState (state);
+        history.sessionRestored();
     }
 }
 

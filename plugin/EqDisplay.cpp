@@ -536,8 +536,7 @@ void EqDisplay::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWhee
     else
         targets = selected;
     const double factor = std::pow (2.0, static_cast<double> (wheel.deltaY) * (wheel.isReversed ? -1.0 : 1.0));
-    for (int slot : targets)
-        editing.scaleQ (slot, factor);
+    editing.scaleQ ({ targets.begin(), targets.end() }, factor);
     shown = heardSettings();
     repaint();
 }
@@ -546,8 +545,7 @@ bool EqDisplay::keyPressed (const juce::KeyPress& key)
 {
     if ((key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) && ! selected.empty())
     {
-        for (int slot : selected)
-            editing.deleteBand (slot);
+        editing.deleteBands ({ selected.begin(), selected.end() });
         select ({});
         shown = heardSettings();
         return true;
