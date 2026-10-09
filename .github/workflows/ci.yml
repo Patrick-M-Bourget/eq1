@@ -41,6 +41,8 @@ jobs:
         with:
           path: .deps
           key: deps-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**', 'scripts/check.sh') }}
+          # A miss starts from the last saved dependencies (and the juceaide built in them), not from nothing.
+          restore-keys: deps-${{ runner.os }}-
 
       - name: Build
         run: scripts/check.sh build
