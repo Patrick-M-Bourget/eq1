@@ -8,7 +8,7 @@ namespace eq1
 {
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState()), display (p, editing), panel (p, editing), output (p)
+    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), output (p)
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
     addAndMakeVisible (display);
@@ -24,6 +24,15 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         display.repaint();
     };
     addAndMakeVisible (displayRange);
+
+    undoButton.onClick = [this] { undo(); };
+    redoButton.onClick = [this] { redo(); };
+    for (auto* button : { &undoButton, &redoButton })
+    {
+        button->setWantsKeyboardFocus (false);
+        addAndMakeVisible (*button);
+    }
+    showUndoState();
 
     for (auto* toggle : { &showPreEq, &showPostEq, &showSidechain })
     {
@@ -44,7 +53,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     analyzerTilt.setSliderStyle (juce::Slider::LinearHorizontal);
     analyzerTilt.setRange (0.0, 6.0, 0.5);
     analyzerTilt.setTextValueSuffix (" dB/oct");
-    analyzerTilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 80, 20);
+    analyzerTilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 20);
     analyzerTilt.onValueChange = [this] { storeAnalyzerSettings(); };
     addAndMakeVisible (analyzerTilt);
     showAnalyzerSettings();
@@ -80,8 +89,43 @@ void PluginEditor::storeAnalyzerSettings()
                                        .tiltDbPerOctave = analyzerTilt.getValue() });
 }
 
+void PluginEditor::undo()
+{
+    eqProcessor.editHistory().undo();
+    showUndoState();
+}
+
+void PluginEditor::redo()
+{
+    eqProcessor.editHistory().redo();
+    showUndoState();
+}
+
+void PluginEditor::showUndoState()
+{
+    undoButton.setEnabled (eqProcessor.editHistory().canUndo());
+    redoButton.setEnabled (eqProcessor.editHistory().canRedo());
+}
+
+bool PluginEditor::keyPressed (const juce::KeyPress& key)
+{
+    const auto command = juce::ModifierKeys::commandModifier;
+    if (key == juce::KeyPress ('z', command, 0))
+    {
+        undo();
+        return true;
+    }
+    if (key == juce::KeyPress ('z', command | juce::ModifierKeys::shiftModifier, 0) || key == juce::KeyPress ('y', command, 0))
+    {
+        redo();
+        return true;
+    }
+    return false;
+}
+
 void PluginEditor::timerCallback()
 {
+    showUndoState();
     // Follows settings restored with the plugin's state.
     if (displayRange.getSelectedId() != eqProcessor.displayRangeDb())
         displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
@@ -102,16 +146,21 @@ void PluginEditor::resized()
     display.setBounds (area);
 
     displayRange.setBounds (toolbar.removeFromRight (110));
+    toolbar.removeFromRight (6);
+    redoButton.setBounds (toolbar.removeFromRight (52));
+    toolbar.removeFromRight (4);
+    undoButton.setBounds (toolbar.removeFromRight (52));
     showPreEq.setBounds (toolbar.removeFromLeft (56));
     showPostEq.setBounds (toolbar.removeFromLeft (60));
     showSidechain.setBounds (toolbar.removeFromLeft (90));
     for (auto* combo : { &analyzerRange, &analyzerSpeed, &analyzerResolution })
     {
         toolbar.removeFromLeft (6);
-        combo->setBounds (toolbar.removeFromLeft (100));
+        combo->setBounds (toolbar.removeFromLeft (88));
     }
     toolbar.removeFromLeft (12);
-    analyzerTiltLabel.setBounds (toolbar.removeFromLeft (90));
+    analyzerTiltLabel.setBounds (toolbar.removeFromLeft (80));
+    // What is left, up to 180 wide.
     analyzerTilt.setBounds (toolbar.removeFromLeft (180));
 }
 

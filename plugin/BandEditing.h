@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditHistory.h"
 #include "Parameters.h"
 #include "eq1/Settings.h"
 
@@ -20,7 +21,9 @@ namespace eq1
 class BandEditing
 {
 public:
-    explicit BandEditing (juce::AudioProcessorValueTreeState& parameters);
+    // Each edit is one step in history: adding a Band, and Spectrum Grab with its drag, change several
+    // parameters but are undone together.
+    BandEditing (juce::AudioProcessorValueTreeState& parameters, EditHistory& history);
     // Ends a drag still going, so the host sees every gesture finish.
     ~BandEditing();
 
@@ -36,6 +39,8 @@ public:
 
     // Deletes a Band: its slot becomes free and keeps its settings. Other Bands keep their numbers.
     void deleteBand (int slot);
+    // Deletes several Bands as one edit: the Delete key on a selection.
+    void deleteBands (const std::vector<int>& slots);
 
     bool isFull() const;
 
@@ -71,6 +76,8 @@ private:
     };
 
     juce::AudioProcessorValueTreeState& parameters;
+    EditHistory& history;
+    bool grabbing = false; // a Spectrum Grab's transaction is open until its drag ends
     std::array<parameters::SlotValues, numBandSlots> slots;
     parameters::OutputValues output;
     std::vector<Dragged> dragged;

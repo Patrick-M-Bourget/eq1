@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AnalyzerSettings.h"
+#include "EditHistory.h"
 #include "Parameters.h"
 #include "eq1/Engine.h"
 
@@ -48,6 +49,9 @@ public:
     // The host parameters and the editor's settings, saved with the plugin.
     juce::AudioProcessorValueTreeState& parameterState() { return parameters; }
 
+    // The undo history of the editor's edits. It outlives the editor, and restoring a session clears it.
+    EditHistory& editHistory() { return history; }
+
     // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
@@ -71,6 +75,11 @@ public:
     // The Engine's analysis taps, for the Analyzer: from one reader thread, the message thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return engine.readAnalysis (tap, destination, maxSamples); }
 
+    // The version of the saved state's format. setStateInformation() brings older states up to it one
+    // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
+    // version. Bump it, and add a step to the migration, whenever the format changes.
+    static constexpr int stateVersion = 1;
+
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
@@ -78,6 +87,7 @@ private:
     juce::AudioProcessorValueTreeState parameters;
     std::array<eq1::parameters::SlotValues, numBandSlots> slots; // read on the audio thread
     eq1::parameters::OutputValues output;
+    EditHistory history { *this };
 
     Engine engine;
     // Kept out of the parameter state, which a host may save from another thread, and written into

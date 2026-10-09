@@ -546,8 +546,7 @@ bool EqDisplay::keyPressed (const juce::KeyPress& key)
 {
     if ((key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) && ! selected.empty())
     {
-        for (int slot : selected)
-            editing.deleteBand (slot);
+        editing.deleteBands ({ selected.begin(), selected.end() });
         select ({});
         shown = heardSettings();
         return true;
