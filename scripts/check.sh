@@ -39,8 +39,8 @@ build() {
         # In an MSVC developer environment (CI sets one up), Ninja compiles every file in parallel.
         cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     else
-        # Without one, Visual Studio finds the compiler itself. A build directory keeps the generator
-        # it was made with: delete it to switch.
+        # Without one, Visual Studio finds the compiler itself. The build directory, and the build
+        # folders in the dependencies folder, keep the generator they were made with: delete them to switch.
         cmake -S . -B "$BUILD_DIR" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     fi
     cmake --build "$BUILD_DIR" --config Release --parallel
