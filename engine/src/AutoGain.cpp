@@ -37,7 +37,9 @@ bool AutoGainEstimate::advance (int points)
     }
     if (running())
         return false;
-    resultDb = numCascades == 0 ? 0.0 : std::clamp (-10.0 * std::log10 (sum / numPoints), -autoGainLimitDb, autoGainLimitDb);
+    const double db = numCascades == 0 ? 0.0 : -10.0 * std::log10 (sum / numPoints);
+    // A degenerate curve (no power at all, or not a number) asks for no compensation it can't have.
+    resultDb = std::isnan (db) ? 0.0 : std::clamp (db, -autoGainLimitDb, autoGainLimitDb);
     return true;
 }
 

@@ -130,6 +130,18 @@ _Avoid_: Bypass (unqualified) for the whole plugin
 The gain applied to the whole plugin's output, after every Band, in dB.
 _Avoid_: Master gain, output level, Gain (unqualified)
 
+**Output Pan**:
+The balance of the whole plugin's output between the two sides of its Pan Mode; the centre leaves both alone. Unavailable on mono.
+_Avoid_: Balance, Pan (unqualified) when a Band's Stereo Placement could be meant
+
+**Pan Mode**:
+What Output Pan balances: Left against Right (L/R), or Mid against Side (M/S).
+_Avoid_: Stereo mode, Channel mode
+
+**Phase Invert**:
+Flipping the polarity of the whole plugin's output.
+_Avoid_: Polarity flip, phase flip, invert
+
 **Gain Scale**:
 A single control that scales every Band's Gain and Dynamic Range at once.
 _Avoid_: Depth, master gain, amount
