@@ -30,15 +30,24 @@ constexpr double timingSpread = 10.0;
 // Dynamic Range and Dynamics Bypass changes glide like a Band's settings: about 50 ms.
 constexpr double glideTimeConstantSeconds = 0.007;
 
+// A Free Detection Range's limits roll off at this Slope, steep enough to pick out a kick alone.
+constexpr double freeRangeSlope = 24.0;
+
 double coefficientFor (double seconds, double sampleRate) { return 1.0 - std::exp (-1.0 / (seconds * sampleRate)); }
 
 double timingScale (double percent) { return std::pow (timingSpread, (std::clamp (percent, 0.0, 100.0) - 50.0) / 50.0); }
+// A Free Detection Range's limit: a Butterworth Cut at frequency.
+BandSettings freeLimit (Shape cut, double frequency)
+{
+    return { .inUse = true, .shape = cut, .frequency = frequency, .q = std::sqrt (0.5), .slope = freeRangeSlope };
+}
 } // namespace
 
 void Dynamics::prepare (double newSampleRate)
 {
     sampleRate = newSampleRate;
-    region.prepare (sampleRate, 2);
+    rangeFilter.prepare (sampleRate, 2);
+    highLimit.prepare (sampleRate, 2);
     detection.assign (2, {});
     detectionChannels.clear();
     for (auto& channel : detection)
@@ -55,20 +64,33 @@ void Dynamics::prepare (double newSampleRate)
 void Dynamics::setSettings (const BandSettings& settings, bool snap)
 {
     placement = settings.placement;
+    source = settings.detectionSource;
     dynamicRange = settings.dynamicRange;
     threshold = settings.threshold;
     thresholdAuto = settings.thresholdAuto;
     attackScale = timingScale (settings.attack);
     releaseScale = timingScale (settings.release);
 
-    const bool wasListening = active.value() > 0.0 || active.isMoving();
+    const bool wasRunning = running();
     const double activeTarget = settings.inUse && ! settings.bypass && isDynamic (settings) && ! settings.dynamicsBypass ? 1.0 : 0.0;
-    const bool restart = snap || (! wasListening && activeTarget > 0.0);
-    region.setSettings (soloRegionOf (settings), restart);
-    if (restart)
+    if (settings.detectionRange == DetectionRange::Free)
     {
-        power = {};
-        movement = sustain = 0.0;
+        rangeFilterSettings = freeLimit (Shape::LowCut, settings.detectionLow);
+        highLimitSettings = freeLimit (Shape::HighCut, settings.detectionHigh);
+    }
+    else
+    {
+        rangeFilterSettings = soloRegionOf (settings);
+        highLimitSettings = {}; // not in use: passes everything
+    }
+    if (snap || (! wasRunning && activeTarget > 0.0))
+    {
+        startAfresh();
+    }
+    else
+    {
+        rangeFilter.setSettings (rangeFilterSettings, false);
+        highLimit.setSettings (highLimitSettings, false);
     }
     if (snap)
     {
@@ -83,9 +105,49 @@ void Dynamics::setSettings (const BandSettings& settings, bool snap)
     }
 }
 
-int Dynamics::takeDetectionSignal (const float* const* input, int numChannels, int numSamples)
+void Dynamics::startAfresh()
+{
+    rangeFilter.setSettings (rangeFilterSettings, true);
+    highLimit.setSettings (highLimitSettings, true);
+    power = {};
+    movement = sustain = 0.0;
+}
+
+void Dynamics::setAuditioned (bool newAuditioned)
+{
+    if (newAuditioned && ! running())
+        startAfresh();
+    auditioned = newAuditioned;
+}
+
+float Dynamics::auditionSample (int outputChannels, int ch, int i) const
+{
+    const auto at = [&] (size_t c) { return detection[c][static_cast<size_t> (i)]; };
+    if (detectionChannelCount == 0 || (detectionChannelCount == 2 && ch > 1))
+        return 0.0f;
+    if (detectionChannelCount == 1)
+        return at (0);
+    return outputChannels == 1 ? 0.5f * (at (0) + at (1)) : at (static_cast<size_t> (ch));
+}
+
+int Dynamics::takeDetectionSignal (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels,
+                                   int numSamples)
 {
     const auto copy = [&] (size_t to, const float* from) { std::copy (from, from + numSamples, detection[to].data()); };
+    if (source == DetectionSource::External)
+    {
+        if (sidechainChannels <= 0)
+            return 0;
+        // A mono Sidechain is the detection signal for every Stereo Placement, Side included, so
+        // a mono kick on the Sidechain always works. A stereo one follows the main input's rules.
+        if (sidechainChannels == 1)
+        {
+            copy (0, sidechain[0]);
+            return 1;
+        }
+        input = sidechain;
+        numChannels = sidechainChannels;
+    }
     if (numChannels < 2)
     {
         // On mono the signal is all Mid, and Left and Right are the same signal.
@@ -124,14 +186,19 @@ double Dynamics::autoReleaseSeconds() const
     return autoReleaseFastestSeconds + (autoReleaseSustainedSeconds - autoReleaseFastestSeconds) * sustain;
 }
 
-double Dynamics::process (const float* const* input, int numChannels, int numSamples)
+double Dynamics::process (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int numSamples)
 {
-    if (active.value() == 0.0 && ! active.isMoving())
+    if (! running())
         return 0.0;
 
-    const int detectionCount = takeDetectionSignal (input, numChannels, numSamples);
+    const int detectionCount = detectionChannelCount = takeDetectionSignal (input, numChannels, sidechain, sidechainChannels, numSamples);
     if (detectionCount > 0)
-        region.process (detectionChannels.data(), detectionCount, numSamples);
+    {
+        rangeFilter.process (detectionChannels.data(), detectionCount, numSamples);
+        highLimit.process (detectionChannels.data(), detectionCount, numSamples);
+    }
+    else
+        power = {}; // nothing heard: a Sidechain connected again starts afresh
 
     // The level of each sample: the louder detection channel's power, where a full-scale sine reads 0 dB.
     std::array<double, Band::maxSubBlock> levels;

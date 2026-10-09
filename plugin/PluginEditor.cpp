@@ -24,7 +24,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     };
     addAndMakeVisible (displayRange);
 
-    for (auto* toggle : { &showPreEq, &showPostEq })
+    for (auto* toggle : { &showPreEq, &showPostEq, &showSidechain })
     {
         toggle->onClick = [this] { storeAnalyzerSettings(); };
         addAndMakeVisible (*toggle);
@@ -60,6 +60,7 @@ void PluginEditor::showAnalyzerSettings()
     const auto settings = eqProcessor.analyzerSettings();
     showPreEq.setToggleState (settings.showPreEq, juce::dontSendNotification);
     showPostEq.setToggleState (settings.showPostEq, juce::dontSendNotification);
+    showSidechain.setToggleState (settings.showSidechain, juce::dontSendNotification);
     analyzerRange.setSelectedId (settings.rangeDb, juce::dontSendNotification);
     analyzerSpeed.setSelectedId (static_cast<int> (settings.speed) + 1, juce::dontSendNotification);
     analyzerResolution.setSelectedId (static_cast<int> (settings.resolution) + 1, juce::dontSendNotification);
@@ -70,6 +71,7 @@ void PluginEditor::storeAnalyzerSettings()
 {
     eqProcessor.setAnalyzerSettings ({ .showPreEq = showPreEq.getToggleState(),
                                        .showPostEq = showPostEq.getToggleState(),
+                                       .showSidechain = showSidechain.getToggleState(),
                                        .rangeDb = analyzerRange.getSelectedId(),
                                        .speed = static_cast<AnalyzerSpeed> (analyzerSpeed.getSelectedId() - 1),
                                        .resolution = static_cast<AnalyzerResolution> (analyzerResolution.getSelectedId() - 1),
@@ -99,6 +101,7 @@ void PluginEditor::resized()
     displayRange.setBounds (toolbar.removeFromRight (110));
     showPreEq.setBounds (toolbar.removeFromLeft (56));
     showPostEq.setBounds (toolbar.removeFromLeft (60));
+    showSidechain.setBounds (toolbar.removeFromLeft (90));
     for (auto* combo : { &analyzerRange, &analyzerSpeed, &analyzerResolution })
     {
         toolbar.removeFromLeft (6);
@@ -106,7 +109,7 @@ void PluginEditor::resized()
     }
     toolbar.removeFromLeft (12);
     analyzerTiltLabel.setBounds (toolbar.removeFromLeft (90));
-    analyzerTilt.setBounds (toolbar.removeFromLeft (220));
+    analyzerTilt.setBounds (toolbar.removeFromLeft (180));
 }
 
 } // namespace eq1

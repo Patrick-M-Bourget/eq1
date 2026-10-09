@@ -6,7 +6,7 @@ Real-time EQ plugin (VST3, AU, AAX, CLAP and Standalone) for macOS Universal and
 
 - `engine/` is the DSP Engine: plain C++ with no dependency on JUCE.
 - `plugin/` is the Plugin Shell: the JUCE layer that maps host parameters to Engine settings.
-- `tests/engine/` tests the Engine through its public interface; `tests/plugin/` drives the Plugin Shell like a host.
+- `tests/engine/` tests the Engine through its public interface; `tests/plugin/` drives the Plugin Shell like a host; `tests/host/` loads the built plugins through their format wrappers, as a DAW does.
 
 ## Build and test
 
@@ -14,7 +14,7 @@ Real-time EQ plugin (VST3, AU, AAX, CLAP and Standalone) for macOS Universal and
 - builds every format (macOS Universal or Windows x64);
 - runs the Engine and Plugin Shell tests;
 - runs the Engine tests under ThreadSanitizer (macOS only);
-- validates the plugins with pluginval, auval and clap-validator.
+- validates the plugins with pluginval, auval and clap-validator, and checks Sidechain routing through the VST3 and AU wrappers.
 
 Run one part with `scripts/check.sh build|test|tsan|validate`. CMake fetches the dependencies (JUCE, clap-juce-extensions, Catch2) into `.deps/`. The validators are fetched there too, with an authenticated `gh`.
 

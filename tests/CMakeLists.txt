@@ -36,3 +36,15 @@ if(EQ1_BUILD_PLUGIN)
     target_link_libraries(eq1_plugin_tests PRIVATE eq1 eq1::engine Catch2::Catch2WithMain)
     catch_discover_tests(eq1_plugin_tests)
 endif()
+
+if(EQ1_BUILD_PLUGIN)
+    # Hosts the built plugin through its VST3 or AU wrapper (scripts/check.sh validate).
+    juce_add_console_app(eq1_sidechain_routing_check PRODUCT_NAME "eq1_sidechain_routing_check")
+    target_sources(eq1_sidechain_routing_check PRIVATE host/SidechainRoutingCheck.cpp)
+    target_compile_definitions(eq1_sidechain_routing_check PRIVATE
+        JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(eq1_sidechain_routing_check PRIVATE juce::juce_audio_processors juce::juce_recommended_config_flags)
+    if(APPLE)
+        target_link_libraries(eq1_sidechain_routing_check PRIVATE "-framework CoreAudioKit")
+    endif()
+endif()

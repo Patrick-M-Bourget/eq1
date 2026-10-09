@@ -101,6 +101,47 @@ TEST_CASE ("A faster speed follows a new signal sooner")
     CHECK_THAT (levelAfterOneTenth (AnalyzerSpeed::veryFast), WithinAbs (0.0, 2.0));
 }
 
+TEST_CASE ("When the tap stops sending audio, the spectrum falls away at its speed rather than freezing")
+{
+    // A disconnected Sidechain sends nothing, and its spectrum must not go on showing the last kick.
+    // It holds for a quarter second first, longer than a host's largest blocks take to arrive.
+    const auto levelAfterSilence = [] (AnalyzerSpeed speed, double seconds) {
+        AnalyzerSpectrum spectrum;
+        spectrum.prepare (sampleRate, AnalyzerResolution::medium);
+        play (spectrum, { { 1000.0, 1.0 } }, 3.0, speed);
+        for (int frame = 0; frame < static_cast<int> (seconds * 60.0); ++frame)
+            spectrum.update (1.0 / 60.0, speed);
+        return spectrum.levelDb (1000.0, 0.0);
+    };
+    CHECK (levelAfterSilence (AnalyzerSpeed::fast, 0.2) > -3.0);
+    CHECK (levelAfterSilence (AnalyzerSpeed::fast, 2.0) < -40.0);
+    CHECK (levelAfterSilence (AnalyzerSpeed::slow, 0.5) > levelAfterSilence (AnalyzerSpeed::fast, 0.5) + 5.0);
+}
+
+TEST_CASE ("A host sending audio in large blocks, fewer than one per frame, gives a steady spectrum")
+{
+    // 8192 samples at 48 kHz arrive about once every ten 60 fps frames.
+    AnalyzerSpectrum spectrum;
+    spectrum.prepare (sampleRate, AnalyzerResolution::medium);
+    constexpr int framesPerBlock = 10;
+    std::vector<float> block (8192);
+    long n = 0;
+    double lowest = 0.0;
+    for (int frame = 0; frame < 4 * 60; ++frame)
+    {
+        if (frame % framesPerBlock == 0)
+        {
+            for (auto& s : block)
+                s = static_cast<float> (std::sin (2.0 * std::numbers::pi * 1000.0 * static_cast<double> (n++) / sampleRate));
+            spectrum.push (block.data(), static_cast<int> (block.size()));
+        }
+        spectrum.update (1.0 / 60.0, AnalyzerSpeed::veryFast);
+        if (frame >= 60)
+            lowest = std::min (lowest, spectrum.levelDb (1000.0, 0.0));
+    }
+    CHECK (lowest > -3.0);
+}
+
 TEST_CASE ("The peak near a Frequency is the top of the spectrum around it")
 {
     AnalyzerSpectrum spectrum;

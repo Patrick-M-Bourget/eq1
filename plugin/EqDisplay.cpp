@@ -61,8 +61,10 @@ bool EqDisplay::updateAnalyzer()
     const double seconds = lastFrame == 0 ? 1.0 / 60.0 : juce::jlimit (0.001, 0.25, (now - lastFrame) / 1000.0);
     lastFrame = now;
 
-    const std::pair<AnalysisTap, AnalyzerSpectrum*> taps[] = { { AnalysisTap::PreEq, &preEq }, { AnalysisTap::PostEq, &postEq } };
-    const bool showing[] = { analyzer.showPreEq, analyzer.showPostEq };
+    const std::pair<AnalysisTap, AnalyzerSpectrum*> taps[] = { { AnalysisTap::PreEq, &preEq },
+                                                               { AnalysisTap::PostEq, &postEq },
+                                                               { AnalysisTap::Sidechain, &sidechain } };
+    const bool showing[] = { analyzer.showPreEq, analyzer.showPostEq, analyzer.showSidechain };
     for (size_t i = 0; i < std::size (taps); ++i)
     {
         auto [tap, spectrum] = taps[i];
@@ -76,7 +78,7 @@ bool EqDisplay::updateAnalyzer()
         if (showing[i])
             spectrum->update (seconds, analyzer.speed);
     }
-    return analyzer.showPreEq || analyzer.showPostEq;
+    return analyzer.showPreEq || analyzer.showPostEq || analyzer.showSidechain;
 }
 
 float EqDisplay::spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const
@@ -240,7 +242,7 @@ void EqDisplay::paint (juce::Graphics& g)
         g.drawText (f >= 1000.0 ? juce::String (juce::roundToInt (f / 1000.0)) + "k" : juce::String (juce::roundToInt (f)),
                     juce::Rectangle<float> (x + 3.0f, static_cast<float> (getHeight()) - 16.0f, 40.0f, 14.0f), juce::Justification::left);
     }
-    // The Analyzer behind everything: pre-EQ filled, post-EQ filled and outlined.
+    // The Analyzer behind everything: pre-EQ filled, post-EQ filled and outlined, the Sidechain outlined.
     const auto spectrumLine = [&] (const AnalyzerSpectrum& spectrum) {
         juce::Path line;
         for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
@@ -271,6 +273,11 @@ void EqDisplay::paint (juce::Graphics& g)
         g.fillPath (areaUnder (line));
         g.setColour (juce::Colour (0x70a0d8ff));
         g.strokePath (line, juce::PathStrokeType (1.0f));
+    }
+    if (analyzer.showSidechain)
+    {
+        g.setColour (juce::Colour (0xa0e0a040));
+        g.strokePath (spectrumLine (sidechain), juce::PathStrokeType (1.0f));
     }
 
     const int range = processor.displayRangeDb();

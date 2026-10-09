@@ -48,6 +48,21 @@ enum class StereoPlacement
     Side,
 };
 
+// The signal a Dynamic Band listens to: the main input, or the Sidechain.
+enum class DetectionSource
+{
+    Internal,
+    External,
+};
+
+// The part of the spectrum a Dynamic Band's detector listens to: the Band's own region, or between
+// a user-set low and high limit.
+enum class DetectionRange
+{
+    Band,
+    Free,
+};
+
 // One Band slot. A slot not in use, or a Bypassed Band, has no effect but keeps its settings.
 struct BandSettings
 {
@@ -65,8 +80,12 @@ struct BandSettings
 
     // Dynamics. A Band is a Dynamic Band when its Shape has dynamics and dynamicRange is not 0: its
     // Live Gain then moves from Gain towards Gain + dynamicRange as its detection signal rises above
-    // Threshold, never beyond +/-30 dB. Detection is on the main input, in the Band's region
-    // (docs/dsp/filter-design.md, "Detection"), on the part of the signal the Band processes.
+    // Threshold, never beyond +/-30 dB. Detection is on its Detection Source, in its Detection Range
+    // (docs/dsp/filter-design.md, "Dynamics"), on the part of the signal the Band processes.
+    DetectionSource detectionSource = DetectionSource::Internal;
+    DetectionRange detectionRange = DetectionRange::Band;
+    double detectionLow = 20.0;     // Hz, the Free Detection Range's limits
+    double detectionHigh = 20000.0; // Hz
     double dynamicRange = 0.0;  // dB, -30 to 30
     double threshold = -30.0;   // dB, where a full-scale sine reads 0; ignored when thresholdAuto
     bool thresholdAuto = true;  // Threshold keeps adapting to the level of the Band's region
@@ -94,6 +113,13 @@ struct Settings
     // host parameter and is never saved. The output is then only the region of the input that Band
     // works on, on the part of the signal it processes.
     int soloSlot = 0;
+
+    // The Band Slot (1 to 24) whose Detection Audition is held, or 0. Like Solo, it lasts while the
+    // editor holds it and is never saved. The output is then what that Band's detector hears: its
+    // detection signal after the Detection Range, on every channel, or each channel's own for a
+    // Stereo Band on a stereo source. Only a Band in use whose Shape has dynamics can be auditioned.
+    // It takes precedence over Solo.
+    int auditionSlot = 0;
 
     bool operator== (const Settings&) const = default;
 };

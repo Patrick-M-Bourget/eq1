@@ -274,6 +274,7 @@ TEST_CASE ("Analyzer settings are saved with the session")
     CHECK (saved.analyzerSettings() == defaults);
     CHECK (defaults.showPreEq);
     CHECK (defaults.showPostEq);
+    CHECK_FALSE (defaults.showSidechain);
     CHECK (defaults.rangeDb == 90);
     CHECK (defaults.speed == eq1::AnalyzerSpeed::medium);
     CHECK (defaults.resolution == eq1::AnalyzerResolution::medium);
@@ -281,6 +282,7 @@ TEST_CASE ("Analyzer settings are saved with the session")
 
     const eq1::AnalyzerSettings changed { .showPreEq = false,
                                           .showPostEq = true,
+                                          .showSidechain = true,
                                           .rangeDb = 120,
                                           .speed = eq1::AnalyzerSpeed::veryFast,
                                           .resolution = eq1::AnalyzerResolution::maximum,

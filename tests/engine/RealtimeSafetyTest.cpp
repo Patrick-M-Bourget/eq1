@@ -88,15 +88,18 @@ TEST_CASE ("Engine does not allocate with 24 Dynamic Bands")
     Engine engine;
     engine.prepare (48000.0, blockSize, 2);
 
-    std::vector<float> left (blockSize), right (blockSize);
+    std::vector<float> left (blockSize), right (blockSize), sidechainLeft (blockSize, 0.3f), sidechainRight (blockSize, -0.1f);
     float* main[] = { left.data(), right.data() };
+    const float* sidechainChannels[] = { sidechainLeft.data(), sidechainRight.data() };
 
     Settings settings;
     test::AllocationGuard guard;
     for (int block = 0; block < 64; ++block)
     {
         // Loud and quiet in turn, so every Band moves; every dynamic Shape, Stereo Placement, Auto and
-        // set Threshold, timing, and Dynamics Bypass switching.
+        // set Threshold, timing, and Dynamics Bypass switching; Internal and External detection, Band
+        // and Free Detection Range, a stereo, mono and no Sidechain, and Detection Audition moving
+        // from Band to Band.
         for (size_t i = 0; i < left.size(); ++i)
         {
             const float level = block % 4 < 2 ? 0.5f : 0.001f;
@@ -114,6 +117,10 @@ TEST_CASE ("Engine does not allocate with 24 Dynamic Bands")
                                      .gain = 3.0,
                                      .q = 1.0,
                                      .placement = placements[(slot / 5) % 5],
+                                     .detectionSource = (block + static_cast<int> (slot)) % 4 < 2 ? DetectionSource::Internal : DetectionSource::External,
+                                     .detectionRange = (block / 3 + static_cast<int> (slot)) % 2 == 0 ? DetectionRange::Band : DetectionRange::Free,
+                                     .detectionLow = 40.0 + 5.0 * block,
+                                     .detectionHigh = 2000.0 + 100.0 * static_cast<double> (slot),
                                      .dynamicRange = slot % 2 == 0 ? -12.0 : 9.0,
                                      .threshold = -40.0,
                                      .thresholdAuto = slot % 3 == 0,
@@ -121,8 +128,10 @@ TEST_CASE ("Engine does not allocate with 24 Dynamic Bands")
                                      .release = static_cast<double> ((slot * 29) % 101),
                                      .dynamicsBypass = (block + static_cast<int> (slot)) % 9 == 0 };
         }
+        settings.auditionSlot = block % 5 == 4 ? 0 : 1 + (block / 5) % numBandSlots;
+        const ConstAudioBlock sidechain { sidechainChannels, block % 3 == 0 ? 1 : 2, blockSize };
         engine.setSettings (settings);
-        engine.process ({ main, 2, blockSize });
+        engine.process ({ main, 2, blockSize }, block % 7 == 6 ? nullptr : &sidechain);
         REQUIRE (std::isfinite (engine.liveGainDb (1)));
     }
 

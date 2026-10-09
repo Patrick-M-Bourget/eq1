@@ -32,6 +32,13 @@ BandSettings dynamicBell (double gain, double dynamicRange, double threshold)
     return band;
 }
 
+// A signal for the Sidechain: its channel count, and its sample (channel, sample index).
+struct Sidechain
+{
+    int numChannels = 2;
+    std::function<double (int, int)> signal;
+};
+
 struct Run
 {
     std::vector<double> liveGain;              // slot 1's Live Gain after each block
@@ -45,7 +52,8 @@ Run play (int numChannels,
           const Settings& start,
           const std::function<double (int, int)>& signal,
           const std::function<void (double, Settings&)>& change = {},
-          int blockSize = 64)
+          int blockSize = 64,
+          const Sidechain* sidechain = nullptr)
 {
     Engine engine;
     engine.prepare (sampleRate, blockSize, numChannels);
@@ -56,6 +64,12 @@ Run play (int numChannels,
     std::vector<float*> channels;
     for (auto& channel : block)
         channels.push_back (channel.data());
+    const int sidechainChannels = sidechain != nullptr ? sidechain->numChannels : 0;
+    std::vector<std::vector<float>> sidechainSamples (static_cast<size_t> (sidechainChannels), std::vector<float> (blockSize));
+    std::vector<const float*> sidechainChannelPointers;
+    for (auto& channel : sidechainSamples)
+        sidechainChannelPointers.push_back (channel.data());
+    const ConstAudioBlock sidechainBlock { sidechainChannelPointers.data(), sidechainChannels, blockSize };
     const int numBlocks = static_cast<int> (seconds * sampleRate / blockSize);
     for (int b = 0, n = 0; b < numBlocks; ++b, n += blockSize)
     {
@@ -65,7 +79,10 @@ Run play (int numChannels,
         for (int ch = 0; ch < numChannels; ++ch)
             for (int i = 0; i < blockSize; ++i)
                 block[static_cast<size_t> (ch)][static_cast<size_t> (i)] = static_cast<float> (signal (ch, n + i));
-        engine.process ({ channels.data(), numChannels, blockSize });
+        for (int ch = 0; ch < sidechainChannels; ++ch)
+            for (int i = 0; i < blockSize; ++i)
+                sidechainSamples[static_cast<size_t> (ch)][static_cast<size_t> (i)] = static_cast<float> (sidechain->signal (ch, n + i));
+        engine.process ({ channels.data(), numChannels, blockSize }, sidechain != nullptr ? &sidechainBlock : nullptr);
         run.liveGain.push_back (engine.liveGainDb (1));
         for (int ch = 0; ch < numChannels; ++ch)
             run.output[static_cast<size_t> (ch)].insert (run.output[static_cast<size_t> (ch)].end(), block[static_cast<size_t> (ch)].begin(),
@@ -375,4 +392,244 @@ TEST_CASE ("Bell to Notch and back to Bell restores the Band's dynamics unchange
     CHECK_THAT (run.liveGain[blocksPerSecond - 1], WithinAbs (-7.0, 0.05));
     CHECK (run.liveGain[2 * blocksPerSecond - 1] == 2.0); // Notch: no movement
     CHECK_THAT (last (run), WithinAbs (-7.0, 0.05));
+}
+
+namespace
+{
+// A tone at frequency, levelDb loud, the same on every channel.
+std::function<double (int, int)> tone (double frequency, double levelDb)
+{
+    return [=] (int, int n) { return sine (frequency, levelDb, n); };
+}
+
+const std::function<double (int, int)> silence = [] (int, int) { return 0.0; };
+
+BandSettings externalBell()
+{
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    band.detectionSource = DetectionSource::External;
+    return band;
+}
+
+Run playWithSidechain (int numChannels, const BandSettings& band, const std::function<double (int, int)>& main, const Sidechain& sidechain)
+{
+    return play (numChannels, 1.0, withBand (band), main, {}, 64, &sidechain);
+}
+} // namespace
+
+TEST_CASE ("An External Dynamic Band reacts to the Sidechain, not the main input")
+{
+    const auto band = externalBell();
+    // Loud main input, silent Sidechain: no movement.
+    CHECK (last (playWithSidechain (2, band, tone (1000.0, -6.0), { 2, silence })) == 0.0);
+    // Silent main input, loud Sidechain in the Band's region: the full Dynamic Range.
+    CHECK_THAT (last (playWithSidechain (2, band, silence, { 2, tone (1000.0, -6.0) })), WithinAbs (-9.0, 0.05));
+
+    // An Internal Band ignores the Sidechain.
+    auto internal = band;
+    internal.detectionSource = DetectionSource::Internal;
+    CHECK (last (playWithSidechain (2, internal, silence, { 2, tone (1000.0, -6.0) })) == 0.0);
+}
+
+TEST_CASE ("With a stereo Sidechain, a Mid or Side External Band listens to the Sidechain's Mid or Side")
+{
+    const auto placement = GENERATE (StereoPlacement::Mid, StereoPlacement::Side);
+    CAPTURE (static_cast<int> (placement));
+    auto band = externalBell();
+    band.placement = placement;
+    const auto toneIn = [] (StereoPlacement part) {
+        return [part] (int ch, int n) { return (ch == 1 && part == StereoPlacement::Side ? -1.0 : 1.0) * sine (1000.0, -6.0, n); };
+    };
+    const auto other = placement == StereoPlacement::Mid ? StereoPlacement::Side : StereoPlacement::Mid;
+
+    CHECK (last (playWithSidechain (2, band, silence, { 2, toneIn (other) })) == 0.0);
+    CHECK_THAT (last (playWithSidechain (2, band, silence, { 2, toneIn (placement) })), WithinAbs (-9.0, 0.05));
+}
+
+TEST_CASE ("With a mono Sidechain, an External Band moves with it whatever its Stereo Placement, Side included")
+{
+    const auto placement = GENERATE (StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right, StereoPlacement::Mid,
+                                     StereoPlacement::Side);
+    CAPTURE (static_cast<int> (placement));
+    // A kick: a 60 Hz thump on the Sidechain, ducking a Low Shelf on the bass.
+    auto band = externalBell();
+    band.shape = Shape::LowShelf;
+    band.frequency = 150.0;
+    band.placement = placement;
+    const auto run = playWithSidechain (2, band, tone (80.0, -20.0), { 1, tone (60.0, -6.0) });
+    CHECK_THAT (last (run), WithinAbs (-9.0, 0.05));
+}
+
+TEST_CASE ("With no Sidechain connected, an External Band doesn't move")
+{
+    const auto numChannels = GENERATE (1, 2);
+    CAPTURE (numChannels);
+    const auto run = play (numChannels, 1.0, withBand (externalBell()), tone (1000.0, -3.0));
+    for (double g : run.liveGain)
+        REQUIRE (g == 0.0);
+
+    // Nor with Auto Threshold, which has nothing to hear.
+    auto automatic = externalBell();
+    automatic.thresholdAuto = true;
+    for (double g : play (numChannels, 1.0, withBand (automatic), tone (1000.0, -3.0)).liveGain)
+        REQUIRE (g == 0.0);
+}
+
+TEST_CASE ("An External Band moved by the Sidechain returns to Gain when the Sidechain is disconnected")
+{
+    const auto band = externalBell();
+    Engine engine;
+    engine.prepare (sampleRate, 64, 2);
+    engine.setSettings (withBand (band));
+    std::vector<float> left (64), right (64), sidechainSamples (64);
+    float* main[] = { left.data(), right.data() };
+    const float* sidechainChannelPointers[] = { sidechainSamples.data() };
+    const ConstAudioBlock sidechainBlock { sidechainChannelPointers, 1, 64 };
+    for (int b = 0, n = 0; b < 750; ++b)
+    {
+        std::fill (left.begin(), left.end(), 0.0f);
+        std::fill (right.begin(), right.end(), 0.0f);
+        for (int i = 0; i < 64; ++i, ++n)
+            sidechainSamples[static_cast<size_t> (i)] = static_cast<float> (sine (1000.0, -6.0, n));
+        engine.process ({ main, 2, 64 }, &sidechainBlock);
+    }
+    CHECK_THAT (engine.liveGainDb (1), WithinAbs (-9.0, 0.05));
+    for (int b = 0; b < 3000; ++b)
+        engine.process ({ main, 2, 64 });
+    CHECK_THAT (engine.liveGainDb (1), WithinAbs (0.0, 0.01));
+}
+
+TEST_CASE ("A Free Detection Range limits detection to its low and high limits, wherever the Band is")
+{
+    // A Bell at 5 kHz that listens only between 50 and 200 Hz.
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    band.frequency = 5000.0;
+    band.detectionRange = DetectionRange::Free;
+    band.detectionLow = 50.0;
+    band.detectionHigh = 200.0;
+    const auto liveGainOn = [&] (double frequency) { return last (play (1, 1.0, withBand (band), tone (frequency, -6.0))); };
+    CHECK_THAT (liveGainOn (100.0), WithinAbs (-9.0, 0.05));
+    // Not at the Band's own Frequency, nor two octaves beyond either limit.
+    CHECK (liveGainOn (5000.0) == 0.0);
+    CHECK_THAT (liveGainOn (800.0), WithinAbs (0.0, 0.01));
+    CHECK_THAT (liveGainOn (12.5), WithinAbs (0.0, 0.01));
+
+    // Back to a Band Detection Range: the Band hears its own region again.
+    band.detectionRange = DetectionRange::Band;
+    CHECK_THAT (liveGainOn (5000.0), WithinAbs (-9.0, 0.05));
+    CHECK (liveGainOn (100.0) == 0.0);
+}
+
+TEST_CASE ("A Free Detection Range applies to the Sidechain too")
+{
+    auto band = externalBell();
+    band.detectionRange = DetectionRange::Free;
+    band.detectionLow = 40.0;
+    band.detectionHigh = 120.0;
+    CHECK_THAT (last (playWithSidechain (2, band, silence, { 1, tone (60.0, -6.0) })), WithinAbs (-9.0, 0.05));
+    CHECK (last (playWithSidechain (2, band, silence, { 1, tone (1000.0, -6.0) })) == 0.0);
+}
+
+namespace
+{
+// The level in dB of frequency in the last half second of samples, where a full-scale sine reads 0 dB.
+double levelOf (const std::vector<float>& samples, double frequency)
+{
+    const size_t length = static_cast<size_t> (0.5 * sampleRate), from = samples.size() - length;
+    double re = 0.0, im = 0.0;
+    for (size_t i = from; i < samples.size(); ++i)
+    {
+        const double w = 2.0 * std::numbers::pi * frequency * static_cast<double> (i) / sampleRate;
+        re += samples[i] * std::cos (w);
+        im -= samples[i] * std::sin (w);
+    }
+    return 20.0 * std::log10 (2.0 * std::hypot (re, im) / static_cast<double> (length) + 1.0e-30);
+}
+} // namespace
+
+TEST_CASE ("Detection Audition plays what a Dynamic Band's detector hears instead of the output")
+{
+    // An External Band listening between 50 and 200 Hz; the Sidechain has a 100 Hz kick tone and a
+    // 5 kHz hat, the main input a 1 kHz tone.
+    auto band = externalBell();
+    band.detectionRange = DetectionRange::Free;
+    band.detectionLow = 50.0;
+    band.detectionHigh = 200.0;
+    auto settings = withBand (band);
+    settings.auditionSlot = 1;
+    const Sidechain sidechainSamples { 1, [] (int, int n) { return sine (100.0, -12.0, n) + sine (5000.0, -12.0, n); } };
+    const auto run = play (2, 1.0, settings, tone (1000.0, -12.0), {}, 64, &sidechainSamples);
+    for (const auto& channel : run.output)
+    {
+        CHECK_THAT (levelOf (channel, 100.0), WithinAbs (-12.0, 0.5));
+        CHECK (levelOf (channel, 5000.0) < -60.0);
+        CHECK (levelOf (channel, 1000.0) < -60.0);
+    }
+
+    // Letting go fades back to the EQ's output: after the fade, exactly what it plays unauditioned.
+    const auto released = play (2, 1.0, settings, tone (1000.0, -12.0), [] (double seconds, Settings& s) { s.auditionSlot = seconds < 0.25 ? 1 : 0; },
+                                64, &sidechainSamples);
+    const auto unauditioned = play (2, 1.0, withBand (band), tone (1000.0, -12.0), {}, 64, &sidechainSamples);
+    for (size_t ch = 0; ch < 2; ++ch)
+        CHECK (std::equal (released.output[ch].begin() + static_cast<long> (0.5 * sampleRate), released.output[ch].end(),
+                           unauditioned.output[ch].begin() + static_cast<long> (0.5 * sampleRate)));
+}
+
+TEST_CASE ("Detection Audition of a Stereo Band on a stereo source plays each channel's detection signal")
+{
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    auto settings = withBand (band);
+    settings.auditionSlot = 1;
+    const auto run = play (2, 1.0, settings, [] (int ch, int n) { return sine (1000.0, ch == 0 ? -6.0 : -20.0, n); });
+    CHECK_THAT (levelOf (run.output[0], 1000.0), WithinAbs (-6.0, 0.2));
+    CHECK_THAT (levelOf (run.output[1], 1000.0), WithinAbs (-20.0, 0.2));
+}
+
+TEST_CASE ("Detection Audition on a mono track plays the mean of a stereo Sidechain's two detection channels")
+{
+    auto settings = withBand (externalBell());
+    settings.auditionSlot = 1;
+    const Sidechain stereo { 2, [] (int ch, int n) { return ch == 0 ? sine (1000.0, -6.0, n) : 0.0; } };
+    const auto run = play (1, 1.0, settings, silence, {}, 64, &stereo);
+    CHECK_THAT (levelOf (run.output[0], 1000.0), WithinAbs (-12.0, 0.2));
+}
+
+TEST_CASE ("Detection Audition needs a Band in use with a Shape that has dynamics")
+{
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    band.shape = GENERATE (Shape::Notch, Shape::LowCut);
+    const bool inUse = GENERATE (true, false);
+    band.inUse = inUse;
+    CAPTURE (static_cast<int> (band.shape), inUse);
+    auto auditioned = withBand (band);
+    auditioned.auditionSlot = 1;
+    const auto signal = [] (int, int n) { return sine (300.0, -12.0, n) + sine (1000.0, -12.0, n); };
+    CHECK (play (2, 0.5, auditioned, signal).output == play (2, 0.5, withBand (band), signal).output);
+}
+
+TEST_CASE ("With a mono Sidechain, an External Side Band ducks on every kick and recovers between them")
+{
+    // A kick at 120 bpm: a 60 Hz thump decaying over about 80 ms, on each beat.
+    constexpr double beat = 0.5;
+    const Sidechain kick { 1, [] (int, int n) {
+                              const double t = std::fmod (n / sampleRate, beat);
+                              return std::exp (-t / 0.08) * sine (60.0, -3.0, n);
+                          } };
+    auto band = externalBell();
+    band.shape = Shape::LowShelf;
+    band.frequency = 150.0;
+    band.placement = StereoPlacement::Side;
+    // The bass, wide in the stereo field.
+    const auto bass = [] (int ch, int n) { return (ch == 0 ? 1.0 : -1.0) * sine (80.0, -20.0, n); };
+    const auto run = play (2, 4.0, withBand (band), bass, {}, timingBlock, &kick);
+
+    for (double hit = 1.0; hit + beat <= 4.0; hit += beat)
+    {
+        CAPTURE (hit);
+        double deepest = 0.0;
+        for (size_t b = blockAt (hit); b < blockAt (hit + 0.1); ++b)
+            deepest = std::min (deepest, run.liveGain[b]);
+        CHECK (deepest < -6.0);
+        CHECK (run.liveGain[blockAt (hit + beat) - 1] > -3.0);
+    }
 }

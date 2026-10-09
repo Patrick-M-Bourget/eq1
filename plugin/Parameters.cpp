@@ -65,6 +65,10 @@ juce::String thresholdAutoId (int slot) { return slotId (slot, "threshold_auto")
 juce::String attackId (int slot) { return slotId (slot, "attack"); }
 juce::String releaseId (int slot) { return slotId (slot, "release"); }
 juce::String dynamicsBypassId (int slot) { return slotId (slot, "dynamics_bypass"); }
+juce::String detectionSourceId (int slot) { return slotId (slot, "detection_source"); }
+juce::String detectionRangeId (int slot) { return slotId (slot, "detection_range"); }
+juce::String detectionLowId (int slot) { return slotId (slot, "detection_low"); }
+juce::String detectionHighId (int slot) { return slotId (slot, "detection_high"); }
 
 const juce::StringArray& shapeNames()
 {
@@ -79,12 +83,25 @@ const juce::StringArray& placementNames()
     return names;
 }
 
+const juce::StringArray& detectionSourceNames()
+{
+    static const juce::StringArray names { "Internal", "External" };
+    return names;
+}
+
+const juce::StringArray& detectionRangeNames()
+{
+    static const juce::StringArray names { "Band", "Free" };
+    return names;
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
     // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40. Slope is one continuous
     // 0 to 96 dB/oct range shared by every Shape, and Brickwall a separate switch (ADR 0003).
     // Dynamic Range is +/-30 dB as in Pro-Q 4; Threshold -60 to 0 dB, with Auto a separate switch
-    // (ADR 0003, Consequences), on by default; Attack and Release 0 to 100%, Auto at 50%.
+    // (ADR 0003, Consequences), on by default; Attack and Release 0 to 100%, Auto at 50%. The Free
+    // Detection Range's limits span Frequency's range, from 20 Hz to 20 kHz by default.
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
@@ -150,7 +167,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                  timingText()),
                     std::make_unique<juce::AudioParameterBool> (juce::ParameterID { dynamicsBypassId (slot), 1 },
                                                                 slotName (slot, "Dynamics Bypass"),
-                                                                false));
+                                                                false),
+                    std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { detectionSourceId (slot), 1 },
+                                                                  slotName (slot, "Detection Source"),
+                                                                  detectionSourceNames(),
+                                                                  0),
+                    std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { detectionRangeId (slot), 1 },
+                                                                  slotName (slot, "Detection Range"),
+                                                                  detectionRangeNames(),
+                                                                  0),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { detectionLowId (slot), 1 },
+                                                                 slotName (slot, "Detection Low"),
+                                                                 logRange (10.0f, 30000.0f),
+                                                                 20.0f,
+                                                                 withText (1, "Hz")),
+                    std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { detectionHighId (slot), 1 },
+                                                                 slotName (slot, "Detection High"),
+                                                                 logRange (10.0f, 30000.0f),
+                                                                 20000.0f,
+                                                                 withText (1, "Hz")));
     }
     return layout;
 }
@@ -167,7 +202,11 @@ SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int s
              parameters.getRawParameterValue (thresholdAutoId (slot)),
              parameters.getRawParameterValue (attackId (slot)),
              parameters.getRawParameterValue (releaseId (slot)),
-             parameters.getRawParameterValue (dynamicsBypassId (slot)) };
+             parameters.getRawParameterValue (dynamicsBypassId (slot)),
+             parameters.getRawParameterValue (detectionSourceId (slot)),
+             parameters.getRawParameterValue (detectionRangeId (slot)),
+             parameters.getRawParameterValue (detectionLowId (slot)),
+             parameters.getRawParameterValue (detectionHighId (slot)) };
 }
 
 BandSettings SlotValues::read() const
@@ -181,6 +220,10 @@ BandSettings SlotValues::read() const
              .slope = slope->load(),
              .brickwall = brickwall->load() >= 0.5f,
              .placement = static_cast<StereoPlacement> (juce::roundToInt (placement->load())),
+             .detectionSource = static_cast<DetectionSource> (juce::roundToInt (detectionSource->load())),
+             .detectionRange = static_cast<DetectionRange> (juce::roundToInt (detectionRange->load())),
+             .detectionLow = detectionLow->load(),
+             .detectionHigh = detectionHigh->load(),
              .dynamicRange = dynamicRange->load(),
              .threshold = threshold->load(),
              .thresholdAuto = thresholdAuto->load() >= 0.5f,

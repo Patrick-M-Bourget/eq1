@@ -9,6 +9,7 @@ namespace eq1
 PluginProcessor::PluginProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
+                          .withInput ("Sidechain", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "eq1", parameters::createLayout())
 {
@@ -23,10 +24,12 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    // Mono and stereo tracks, the same in and out.
+    // Mono and stereo tracks, the same in and out, with a stereo, mono or no Sidechain.
     const auto& main = layouts.getMainOutputChannelSet();
+    const auto sidechain = layouts.getChannelSet (true, 1);
     return layouts.getMainInputChannelSet() == main
-           && (main == juce::AudioChannelSet::mono() || main == juce::AudioChannelSet::stereo());
+           && (main == juce::AudioChannelSet::mono() || main == juce::AudioChannelSet::stereo())
+           && (sidechain.isDisabled() || sidechain == juce::AudioChannelSet::mono() || sidechain == juce::AudioChannelSet::stereo());
 }
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -38,8 +41,14 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     for (size_t slot = 0; slot < slots.size(); ++slot)
         settings.bands[slot] = slots[slot].read();
     settings.soloSlot = heldSoloSlot.load();
+    settings.auditionSlot = heldAuditionSlot.load();
     engine.setSettings (settings);
-    engine.process ({ buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples() });
+
+    auto main = getBusBuffer (buffer, false, 0);
+    const auto sidechainBuffer = getBusBuffer (buffer, true, 1);
+    const ConstAudioBlock sidechain { sidechainBuffer.getArrayOfReadPointers(), sidechainBuffer.getNumChannels(), sidechainBuffer.getNumSamples() };
+    engine.process ({ main.getArrayOfWritePointers(), main.getNumChannels(), main.getNumSamples() },
+                    sidechain.numChannels > 0 ? &sidechain : nullptr);
 }
 
 juce::AudioProcessorEditor* PluginProcessor::createEditor()
@@ -51,6 +60,7 @@ namespace
 {
 const juce::Identifier displayRangeProperty { "displayRangeDb" };
 const juce::Identifier analyzerType { "Analyzer" }, showPreEqProperty { "showPreEq" }, showPostEqProperty { "showPostEq" },
+    showSidechainProperty { "showSidechain" },
     rangeProperty { "rangeDb" }, speedProperty { "speed" }, resolutionProperty { "resolution" }, analyzerTiltProperty { "tiltDbPerOctave" };
 
 juce::ValueTree toTree (const AnalyzerSettings& a)
@@ -58,6 +68,7 @@ juce::ValueTree toTree (const AnalyzerSettings& a)
     return juce::ValueTree (analyzerType)
         .setProperty (showPreEqProperty, a.showPreEq, nullptr)
         .setProperty (showPostEqProperty, a.showPostEq, nullptr)
+        .setProperty (showSidechainProperty, a.showSidechain, nullptr)
         .setProperty (rangeProperty, a.rangeDb, nullptr)
         .setProperty (speedProperty, static_cast<int> (a.speed), nullptr)
         .setProperty (resolutionProperty, static_cast<int> (a.resolution), nullptr)
@@ -70,6 +81,7 @@ AnalyzerSettings fromTree (const juce::ValueTree& tree)
     const int range = tree.getProperty (rangeProperty, defaults.rangeDb);
     return { .showPreEq = tree.getProperty (showPreEqProperty, defaults.showPreEq),
              .showPostEq = tree.getProperty (showPostEqProperty, defaults.showPostEq),
+             .showSidechain = tree.getProperty (showSidechainProperty, defaults.showSidechain),
              .rangeDb = range == 60 || range == 120 ? range : 90,
              .speed = static_cast<AnalyzerSpeed> (juce::jlimit (static_cast<int> (AnalyzerSpeed::verySlow), static_cast<int> (AnalyzerSpeed::veryFast),
                                                                 static_cast<int> (tree.getProperty (speedProperty, static_cast<int> (defaults.speed))))),
@@ -111,6 +123,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (auto xml = getXmlFromBinary (data, sizeInBytes); xml != nullptr && xml->hasTagName (parameters.state.getType()))
     {
         setSolo (0);
+        setDetectionAudition (0);
         auto state = juce::ValueTree::fromXml (*xml);
         setDisplayRangeDb (state.getProperty (displayRangeProperty, 12));
         state.removeProperty (displayRangeProperty, nullptr);

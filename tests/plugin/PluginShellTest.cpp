@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
@@ -34,10 +35,12 @@ enum class Content
     side,
 };
 
-// Level change in dB of a steady sine through the processor, measured on the first channel.
-double sineGainDb (juce::AudioProcessor& processor, double frequency, Content content = Content::mid)
+// Level change in dB of a steady sine through the processor, measured on the first channel. With
+// sidechainFrequency, the Sidechain carries a full-scale sine at it on every channel.
+double sineGainDb (juce::AudioProcessor& processor, double frequency, Content content = Content::mid, double sidechainFrequency = 0.0)
 {
     const int numChannels = processor.getTotalNumInputChannels();
+    const int mainChannels = processor.getMainBusNumInputChannels();
     juce::AudioBuffer<float> buffer (numChannels, blockSize);
     juce::MidiBuffer midi;
     double inputPower = 0.0, outputPower = 0.0;
@@ -48,8 +51,11 @@ double sineGainDb (juce::AudioProcessor& processor, double frequency, Content co
         {
             const auto s = static_cast<float> (std::sin (2.0 * std::numbers::pi * frequency * n / sampleRate));
             buffer.setSample (0, i, s);
-            if (numChannels > 1)
+            if (mainChannels > 1)
                 buffer.setSample (1, i, content == Content::side ? -s : s);
+            const auto sidechainSample = static_cast<float> (sidechainFrequency > 0.0 ? std::sin (2.0 * std::numbers::pi * sidechainFrequency * n / sampleRate) : 0.0);
+            for (int ch = mainChannels; ch < numChannels; ++ch)
+                buffer.setSample (ch, i, sidechainSample);
             if (block >= 32)
                 inputPower += s * s;
         }
@@ -61,13 +67,24 @@ double sineGainDb (juce::AudioProcessor& processor, double frequency, Content co
     return 10.0 * std::log10 (outputPower / inputPower);
 }
 
-// Switches the main input and output to the given layout, as a host does, and prepares to play.
-void useLayout (juce::AudioProcessor& processor, const juce::AudioChannelSet& channels)
+// A layout with the given main input and output, and Sidechain (disabled when empty).
+juce::AudioProcessor::BusesLayout layoutOf (const juce::AudioChannelSet& in,
+                                           const juce::AudioChannelSet& out,
+                                           const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
 {
     juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (channels);
-    layout.outputBuses.add (channels);
-    REQUIRE (processor.setBusesLayout (layout));
+    layout.inputBuses.add (in);
+    layout.inputBuses.add (sidechain);
+    layout.outputBuses.add (out);
+    return layout;
+}
+
+// Switches the main input and output to the given layout, as a host does, and prepares to play.
+void useLayout (juce::AudioProcessor& processor,
+                const juce::AudioChannelSet& channels,
+                const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
+{
+    REQUIRE (processor.setBusesLayout (layoutOf (channels, channels, sidechain)));
     processor.prepareToPlay (sampleRate, blockSize);
 }
 
@@ -134,6 +151,10 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         { "attack", "Attack", "%", 0.0f, 100.0f, 0.0f, 50.0f, 50.0f, {} },
         { "release", "Release", "%", 0.0f, 100.0f, 0.0f, 50.0f, 50.0f, {} },
         { "dynamics_bypass", "Dynamics Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
+        { "detection_source", "Detection Source", "", 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, { "Internal", "External" } },
+        { "detection_range", "Detection Range", "", 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, { "Band", "Free" } },
+        { "detection_low", "Detection Low", "Hz", 10.0f, 30000.0f, 0.0f, 20.0f, 547.7226f, {} },
+        { "detection_high", "Detection High", "Hz", 10.0f, 30000.0f, 0.0f, 20000.0f, 547.7226f, {} },
     };
 
     juce::ScopedJuceInitialiser_GUI juce;
@@ -159,7 +180,9 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
             CHECK (range.start == control.start);
             CHECK (range.end == control.end);
             CHECK (range.interval == control.interval);
-            CHECK_THAT (parameter->convertFrom0to1 (parameter->getDefaultValue()), WithinAbs (control.defaultValue, 1.0e-4));
+            // Within float precision of large defaults, such as 20 kHz.
+            CHECK_THAT (parameter->convertFrom0to1 (parameter->getDefaultValue()),
+                        WithinAbs (control.defaultValue, std::max (1.0e-4, 1.0e-6 * std::abs (control.defaultValue))));
             CHECK_THAT (parameter->convertFrom0to1 (0.5f), WithinAbs (control.valueAtHalfway, 1.0e-3));
 
             auto* choice = dynamic_cast<juce::AudioParameterChoice*> (parameter);
@@ -236,7 +259,7 @@ TEST_CASE ("A producer can pick any Shape for a Band")
     CHECK_THAT (sineGainDb (processor, 2000.0), WithinAbs (1.2, 0.1));
 }
 
-TEST_CASE ("Saved state restores every Band setting, including Brickwall and dynamics")
+TEST_CASE ("Saved state restores every Band setting, including Brickwall, dynamics and detection")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor saved;
@@ -255,6 +278,10 @@ TEST_CASE ("Saved state restores every Band setting, including Brickwall and dyn
     setParameter (saved, "band7_attack", 20.0f);
     setParameter (saved, "band7_release", 80.0f);
     setParameter (saved, "band7_dynamics_bypass", 1.0f);
+    setParameter (saved, "band7_detection_source", 1.0f);
+    setParameter (saved, "band7_detection_range", 1.0f);
+    setParameter (saved, "band7_detection_low", 45.0f);
+    setParameter (saved, "band7_detection_high", 180.0f);
 
     juce::MemoryBlock state;
     saved.getStateInformation (state);
@@ -289,6 +316,10 @@ TEST_CASE ("Saved state restores every Band setting, including Brickwall and dyn
     CHECK_THAT (value ("band7_attack"), WithinAbs (20.0, 1.0e-4));
     CHECK_THAT (value ("band7_release"), WithinAbs (80.0, 1.0e-4));
     CHECK (value ("band7_dynamics_bypass") == 1.0f);
+    CHECK (value ("band7_detection_source") == 1.0f);
+    CHECK (value ("band7_detection_range") == 1.0f);
+    CHECK_THAT (value ("band7_detection_low"), WithinAbs (45.0, 1.0e-3));
+    CHECK_THAT (value ("band7_detection_high"), WithinAbs (180.0, 1.0e-2));
 }
 
 TEST_CASE ("Hosts can use the plugin on mono and stereo tracks")
@@ -298,15 +329,104 @@ TEST_CASE ("Hosts can use the plugin on mono and stereo tracks")
     const auto mono = juce::AudioChannelSet::mono(), stereo = juce::AudioChannelSet::stereo();
 
     const auto supports = [&] (const juce::AudioChannelSet& in, const juce::AudioChannelSet& out) {
-        juce::AudioProcessor::BusesLayout layout;
-        layout.inputBuses.add (in);
-        layout.outputBuses.add (out);
-        return processor.checkBusesLayoutSupported (layout);
+        return processor.checkBusesLayoutSupported (layoutOf (in, out));
     };
     CHECK (supports (mono, mono));
     CHECK (supports (stereo, stereo));
     CHECK_FALSE (supports (mono, stereo));
     CHECK_FALSE (supports (stereo, mono));
+}
+
+TEST_CASE ("The plugin offers a stereo Sidechain, and accepts a mono one or none, on mono and stereo tracks")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    REQUIRE (processor.getBusCount (true) == 2);
+    auto* sidechain = processor.getBus (true, 1);
+    CHECK (sidechain->getName() == "Sidechain");
+    CHECK (sidechain->getDefaultLayout() == juce::AudioChannelSet::stereo());
+    CHECK_FALSE (sidechain->isMain());
+
+    const auto mono = juce::AudioChannelSet::mono(), stereo = juce::AudioChannelSet::stereo();
+    for (const auto& track : { mono, stereo })
+        for (const auto& sidechainLayout : { juce::AudioChannelSet::disabled(), mono, stereo })
+        {
+            CAPTURE (track.getDescription(), sidechainLayout.getDescription());
+            CHECK (processor.checkBusesLayoutSupported (layoutOf (track, track, sidechainLayout)));
+        }
+    CHECK_FALSE (processor.checkBusesLayoutSupported (layoutOf (stereo, stereo, juce::AudioChannelSet::create5point1())));
+}
+
+TEST_CASE ("An External Dynamic Band ducks on the Sidechain, mono or stereo, and not on the main input")
+{
+    const auto sidechainLayout = GENERATE (juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo());
+    CAPTURE (sidechainLayout.getDescription());
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo(), sidechainLayout);
+    // A Bell on the bass at 100 Hz, ducked by a kick tone at 60 Hz in a Free Detection Range.
+    setParameter (processor, "band1_in_use", 1.0f);
+    setParameter (processor, "band1_frequency", 100.0f);
+    setParameter (processor, "band1_dynamic_range", -10.0f);
+    setParameter (processor, "band1_threshold_auto", 0.0f);
+    setParameter (processor, "band1_threshold", -40.0f);
+    setParameter (processor, "band1_detection_source", 1.0f); // External
+    setParameter (processor, "band1_detection_range", 1.0f);  // Free
+    setParameter (processor, "band1_detection_low", 40.0f);
+    setParameter (processor, "band1_detection_high", 80.0f);
+
+    CHECK_THAT (sineGainDb (processor, 100.0), WithinAbs (0.0, 0.1));
+    CHECK_THAT (sineGainDb (processor, 100.0, Content::mid, 60.0), WithinAbs (-10.0, 0.1));
+    // A Side Band hears a mono Sidechain too; a stereo one's Side is silent here.
+    setParameter (processor, "band1_placement", 4.0f); // Side
+    sineGainDb (processor, 100.0, Content::side, 60.0); // until the duck above has released
+    CHECK_THAT (sineGainDb (processor, 100.0, Content::side, 60.0), WithinAbs (sidechainLayout.size() == 1 ? -10.0 : 0.0, 0.1));
+}
+
+TEST_CASE ("With the Sidechain disabled, an External Dynamic Band doesn't move")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo());
+    setParameter (processor, "band1_in_use", 1.0f);
+    setParameter (processor, "band1_dynamic_range", -10.0f);
+    setParameter (processor, "band1_threshold_auto", 0.0f);
+    setParameter (processor, "band1_threshold", -40.0f);
+    setParameter (processor, "band1_detection_source", 1.0f);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.01));
+    CHECK (processor.liveGainDb (1) == 0.0);
+}
+
+TEST_CASE ("Holding Detection Audition plays the detection signal; it is not a host parameter and is not saved")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo(), juce::AudioChannelSet::stereo());
+    setParameter (processor, "band3_in_use", 1.0f);
+    setParameter (processor, "band3_frequency", 1000.0f);
+    setParameter (processor, "band3_gain", 12.0f);
+    setParameter (processor, "band3_detection_source", 1.0f);
+
+    processor.setDetectionAudition (3);
+    CHECK (processor.detectionAuditionSlot() == 3);
+    // The main input isn't heard; the Sidechain in the Band's region is, at its own level.
+    CHECK (sineGainDb (processor, 1000.0) < -100.0);
+    CHECK_THAT (sineGainDb (processor, 1000.0, Content::mid, 1000.0), WithinAbs (0.0, 0.1));
+
+    processor.setDetectionAudition (0);
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (12.0, 0.1));
+
+    for (auto* parameter : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
+            CHECK_FALSE (ranged->getParameterID().containsIgnoreCase ("audition"));
+    processor.setDetectionAudition (3);
+    juce::MemoryBlock state;
+    processor.getStateInformation (state);
+    CHECK_FALSE (state.toString().containsIgnoreCase ("audition"));
+    eq1::PluginProcessor restored;
+    restored.setDetectionAudition (2);
+    restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    CHECK (restored.detectionAuditionSlot() == 0);
 }
 
 TEST_CASE ("Stereo Placement is available on stereo tracks only")

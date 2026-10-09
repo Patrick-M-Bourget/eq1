@@ -32,7 +32,7 @@ private:
     juce::ComboBox displayRange;
 
     // The Analyzer's controls, above the display.
-    juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" };
+    juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" }, showSidechain { "Sidechain" };
     juce::ComboBox analyzerRange, analyzerSpeed, analyzerResolution;
     juce::Label analyzerTiltLabel;
     juce::Slider analyzerTilt;

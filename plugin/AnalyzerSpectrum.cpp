@@ -24,6 +24,10 @@ double timeConstantOf (AnalyzerSpeed speed)
 }
 
 constexpr double silence = 1.0e-20; // -200 dB
+
+// How long a tap may send nothing before the spectrum falls away: longer than the largest host
+// blocks take to arrive (8192 samples at 44.1 kHz is 186 ms), so those don't flicker it.
+constexpr double hold = 0.25;
 } // namespace
 
 int AnalyzerSpectrum::fftSize (double sampleRate, AnalyzerResolution resolution)
@@ -51,6 +55,7 @@ void AnalyzerSpectrum::prepare (double newSampleRate, AnalyzerResolution newReso
 
     history.assign (static_cast<size_t> (size), 0.0f);
     historyWrite = 0;
+    secondsSilent = 0.0;
     transform.assign (static_cast<size_t> (2 * size), 0.0f);
     power.assign (static_cast<size_t> (size / 2 + 1), silence);
 }
@@ -62,22 +67,31 @@ void AnalyzerSpectrum::push (const float* samples, int count)
         history[historyWrite] = samples[i];
         historyWrite = (historyWrite + 1) % history.size();
     }
+    if (count > 0)
+        secondsSilent = 0.0;
 }
 
 void AnalyzerSpectrum::update (double seconds, AnalyzerSpeed speed)
 {
     if (fft == nullptr)
         return;
-    // The newest size samples, oldest first, windowed.
-    for (size_t i = 0; i < history.size(); ++i)
-        transform[i] = history[(historyWrite + i) % history.size()] * window[i];
-    std::fill (transform.begin() + size, transform.end(), 0.0f);
-    fft->performFrequencyOnlyForwardTransform (transform.data(), true);
+    // A tap that has sent nothing for a while (a disconnected Sidechain, a host that stopped
+    // processing) shows silence, not its last samples over and over.
+    const bool heard = secondsSilent <= hold;
+    secondsSilent += seconds;
+    if (heard)
+    {
+        // The newest size samples, oldest first, windowed.
+        for (size_t i = 0; i < history.size(); ++i)
+            transform[i] = history[(historyWrite + i) % history.size()] * window[i];
+        std::fill (transform.begin() + size, transform.end(), 0.0f);
+        fft->performFrequencyOnlyForwardTransform (transform.data(), true);
+    }
 
     const double amount = 1.0 - std::exp (-seconds / timeConstantOf (speed));
     for (size_t bin = 0; bin < power.size(); ++bin)
     {
-        const double amplitude = transform[bin] / windowGain;
+        const double amplitude = heard ? transform[bin] / windowGain : 0.0;
         power[bin] += (std::max (amplitude * amplitude, silence) - power[bin]) * amount;
     }
 }
