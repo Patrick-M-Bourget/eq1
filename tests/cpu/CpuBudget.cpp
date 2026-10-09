@@ -89,7 +89,7 @@ struct Budget
 };
 
 // docs/performance.md, "CPU budget".
-constexpr Budget budgets[] = { { 48000.0, 12.0 }, { 96000.0, 20.0 } };
+constexpr Budget budgets[] = { { 48000.0, 35.0 }, { 96000.0, 60.0 } };
 
 // Silence and subnormal input may cost no more than this times the music. Subnormal arithmetic is
 // many times slower on x64, so a filter left to ring down into subnormal numbers is far over it.

@@ -4,12 +4,12 @@
 
 `tests/cpu/CpuBudget.cpp` (`scripts/check.sh cpu`, its own CI step) measures the Engine with 24 Dynamic Bands: Bells across the spectrum, stereo, 512-sample blocks, on noise that is loud for 100 ms of every 200 so every Band keeps moving and redesigning its filter. The load is the median of five 4-second runs, in percent of real time.
 
-| Sample rate | Ceiling | Apple M3 (2026-10-09) |
-| --- | --- | --- |
-| 48 kHz | 12% | 3.7% |
-| 96 kHz | 20% | 7.4% |
+| Sample rate | Ceiling | CI Windows x64 | CI macOS (arm64) | Apple M3 |
+| --- | --- | --- | --- | --- |
+| 48 kHz | 35% | 9.6–11.0% | 5.9% | 3.7% |
+| 96 kHz | 60% | 18.1–19.1% | 14.6% | 7.4% |
 
-The ceilings are set from the M3's load, with room for slower CI runners, until the runners' own numbers are recorded here; they still fail on a regression that multiplies the cost. They are absolute, not relative to a baseline, so runner noise doesn't fail the check.
+Measured 2026-10-09; the CI columns are GitHub's `windows-latest` and `macos-latest` runners. The ceilings are about three times the slowest runner's worst run: high enough that runner noise doesn't fail the check, low enough to fail on a regression that multiplies the cost. They are absolute, not relative to a baseline.
 
 The same run fails if silence (after every filter has rung down) or input made of subnormal numbers costs more than 1.5 times the music. That catches arithmetic on subnormal numbers, many times slower than normal on x64; on arm64 it runs at full speed, so the Windows x64 run is the one that would catch it.
 
