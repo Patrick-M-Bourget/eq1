@@ -26,4 +26,4 @@ New features: `/grilling` → amend the spec (#1) → `/domain-modeling` for new
 
 ### Worktrees
 
-The main checkout stays on `main`. Work on a branch in its own worktree, with its own `build/`: `git worktree add ../eq1-<ticket> -b <branch> origin/main`. A hook (`.claude/hooks/one-branch-per-worktree.sh`) blocks switching branches in the main checkout.
+The main checkout stays on `main`. Work on a branch in its own worktree, with its own `build/`: `git worktree add ../eq1-<ticket> -b <branch> origin/main`. A hook (`.claude/hooks/one-branch-per-worktree.sh`) blocks switching branches in the main checkout. An approved change that isn't applied at once, such as a retro's, goes on a branch or a draft PR, where other sessions can see it.
