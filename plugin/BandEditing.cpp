@@ -180,6 +180,14 @@ void BandEditing::scaleQ (int slot, double factor)
     set (parameters::qId (slot), band (slot).q * factor);
 }
 
+void BandEditing::scaleQ (const std::vector<int>& slotsToScale, double factor)
+{
+    history.beginTransaction();
+    for (int slot : slotsToScale)
+        scaleQ (slot, factor);
+    history.endTransaction();
+}
+
 void BandEditing::setShape (int slot, Shape shape)
 {
     set (parameters::shapeId (slot), static_cast<double> (shape));

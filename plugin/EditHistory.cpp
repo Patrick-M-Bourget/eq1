@@ -21,21 +21,39 @@ std::vector<float> EditHistory::values() const
     return result;
 }
 
-void EditHistory::open()
+void EditHistory::catchUp()
 {
-    if (openGestures + openTransactions == 1)
-        valuesBefore = values();
+    const int restored = restores.load (std::memory_order_acquire);
+    if (restoresSeen == restored)
+        return;
+    restoresSeen = restored;
+    undoStack.clear();
+    redoStack.clear();
+    openGestures = openTransactions = 0;
+    gestured.clear();
 }
 
-void EditHistory::close()
+void EditHistory::openStep()
 {
-    if (openGestures + openTransactions != 0)
+    if (openGestures + openTransactions != 1)
+        return;
+    valuesBefore = values();
+    gestured.clear();
+}
+
+void EditHistory::closeStep()
+{
+    if (editInProgress())
         return;
     const auto valuesAfter = values();
     Step step;
-    for (size_t i = 0; i < valuesAfter.size() && i < valuesBefore.size(); ++i)
-        if (! juce::exactlyEqual (valuesBefore[i], valuesAfter[i]))
-            step.push_back ({ static_cast<int> (i), valuesBefore[i], valuesAfter[i] });
+    for (int index : gestured)
+    {
+        const auto i = static_cast<size_t> (index);
+        if (i < valuesAfter.size() && i < valuesBefore.size() && ! juce::exactlyEqual (valuesBefore[i], valuesAfter[i]))
+            step.push_back ({ index, valuesBefore[i], valuesAfter[i] });
+    }
+    gestured.clear();
     if (step.empty())
         return;
     undoStack.push_back (std::move (step));
@@ -44,35 +62,41 @@ void EditHistory::close()
     redoStack.clear();
 }
 
-void EditHistory::audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int)
+void EditHistory::audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int index)
 {
+    catchUp();
     if (applying)
         return;
     ++openGestures;
-    open();
+    openStep();
+    gestured.insert (index);
 }
 
 void EditHistory::audioProcessorParameterChangeGestureEnd (juce::AudioProcessor*, int)
 {
-    // An end without its begin (one begun before the history was listening) changes nothing.
+    catchUp();
+    // An end without its begin (one begun before the history was listening, or before a session was
+    // restored) changes nothing.
     if (applying || openGestures == 0)
         return;
     --openGestures;
-    close();
+    closeStep();
 }
 
 void EditHistory::beginTransaction()
 {
+    catchUp();
     ++openTransactions;
-    open();
+    openStep();
 }
 
 void EditHistory::endTransaction()
 {
+    catchUp();
     if (openTransactions == 0)
         return;
     --openTransactions;
-    close();
+    closeStep();
 }
 
 void EditHistory::apply (const Step& step, bool forward)
@@ -89,7 +113,8 @@ void EditHistory::apply (const Step& step, bool forward)
 
 void EditHistory::undo()
 {
-    if (undoStack.empty())
+    catchUp();
+    if (editInProgress() || undoStack.empty())
         return;
     apply (undoStack.back(), false);
     redoStack.push_back (std::move (undoStack.back()));
@@ -98,17 +123,12 @@ void EditHistory::undo()
 
 void EditHistory::redo()
 {
-    if (redoStack.empty())
+    catchUp();
+    if (editInProgress() || redoStack.empty())
         return;
     apply (redoStack.back(), true);
     undoStack.push_back (std::move (redoStack.back()));
     redoStack.pop_back();
-}
-
-void EditHistory::clear()
-{
-    undoStack.clear();
-    redoStack.clear();
 }
 
 } // namespace eq1

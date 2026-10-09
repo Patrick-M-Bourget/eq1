@@ -244,3 +244,73 @@ TEST_CASE ("The undo history is empty after a session is reloaded")
     CHECK_FALSE (host.history.canUndo());
     CHECK_FALSE (host.history.canRedo());
 }
+
+TEST_CASE ("Host Automation during an editor drag stays out of the drag's undo step")
+{
+    Host host;
+    host.editing.add (100.0, 0.0);
+    host.editing.beginDrag ({ 1 });
+    host.editing.dragBy (2.0, 0.0);
+    host.hostSets (eq1::parameters::outputGainId, -9.0f);
+    host.hostSets ("band5_gain", 4.0f);
+    host.editing.endDrag();
+    REQUIRE (host.history.undoSteps() == 2);
+
+    host.history.undo();
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (100.0f, 1.0e-4f));
+    CHECK_THAT (host.value (eq1::parameters::outputGainId), WithinAbs (-9.0, 1.0e-3));
+    CHECK_THAT (host.value (5, "gain"), WithinAbs (4.0, 1.0e-4));
+}
+
+TEST_CASE ("A session restored in the middle of a drag leaves the undo history empty")
+{
+    Host host;
+    host.editing.add (100.0, 0.0);
+    juce::MemoryBlock state;
+    host.processor.getStateInformation (state);
+
+    host.editing.beginDrag ({ 1 });
+    host.editing.dragBy (2.0, 3.0);
+    host.processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    host.editing.dragBy (3.0, 3.0);
+    host.editing.endDrag();
+    CHECK_FALSE (host.history.canUndo());
+    CHECK_FALSE (host.history.canRedo());
+
+    // The next edit is recorded as usual.
+    host.editing.setShape (1, Shape::Notch);
+    CHECK (host.history.undoSteps() == 1);
+}
+
+TEST_CASE ("Undo and redo wait until an edit in progress is finished")
+{
+    Host host;
+    host.editing.add (100.0, 0.0);
+    host.editing.beginDrag ({ 1 });
+    host.editing.dragBy (2.0, 0.0);
+    host.history.undo();
+    CHECK (host.value (1, "in_use") == 1.0f);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (200.0f, 1.0e-4f));
+    host.editing.endDrag();
+    CHECK (host.history.undoSteps() == 2);
+
+    host.history.undo();
+    host.editing.beginDrag ({ 1 });
+    host.history.redo();
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (100.0f, 1.0e-4f));
+    host.editing.endDrag();
+    CHECK (host.history.canRedo());
+}
+
+TEST_CASE ("The wheel over several selected Bands is one undo step")
+{
+    Host host;
+    host.editing.add (100.0, 0.0);
+    host.editing.add (1000.0, 0.0);
+    host.editing.scaleQ ({ 1, 2 }, 2.0);
+    CHECK_THAT (host.value (2, "q"), WithinRel (2.0f, 1.0e-4f));
+    CHECK (host.history.undoSteps() == 3);
+    host.history.undo();
+    CHECK_THAT (host.value (1, "q"), WithinRel (1.0f, 1.0e-4f));
+    CHECK_THAT (host.value (2, "q"), WithinRel (1.0f, 1.0e-4f));
+}

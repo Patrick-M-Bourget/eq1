@@ -53,6 +53,8 @@ public:
 
     // Multiplies a Band's Q by factor, within its range: the mouse wheel.
     void scaleQ (int slot, double factor);
+    // The same on several Bands as one edit: the wheel over a selection.
+    void scaleQ (const std::vector<int>& slots, double factor);
 
     void setShape (int slot, Shape shape);
 

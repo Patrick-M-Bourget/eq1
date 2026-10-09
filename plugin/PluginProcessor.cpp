@@ -147,7 +147,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
             state.removeChild (saved, nullptr);
         }
         parameters.replaceState (state);
-        history.clear();
+        history.sessionRestored();
     }
 }
 

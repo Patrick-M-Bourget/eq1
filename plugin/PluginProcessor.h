@@ -49,7 +49,7 @@ public:
     // The host parameters and the editor's settings, saved with the plugin.
     juce::AudioProcessorValueTreeState& parameterState() { return parameters; }
 
-    // The undo history of the editor's edits. It outlives the editor, and restoring a session clears it.
+    // The undo history of the editor's edits. It outlives the editor, and restoring a session empties it.
     EditHistory& editHistory() { return history; }
 
     // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
