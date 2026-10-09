@@ -19,6 +19,8 @@ Real-time EQ plugin (VST3, AU, AAX, CLAP and Standalone) for macOS Universal and
 
 Run one part with `scripts/check.sh docs|build|test|tsan|validate`. CMake fetches the dependencies (JUCE, clap-juce-extensions, Catch2) into `.deps/`. The validators are fetched there too, with an authenticated `gh`.
 
+`scripts/ci-timings.sh <run-id> [attempt]` prints how long each CI job and step took, and why a job never started.
+
 Run `scripts/install-hooks.sh` once per clone: its pre-commit hook blocks a commit whose build or tests (all but the slow response grids) fail.
 
 Plugins land in `build/plugin/eq1_artefacts/Release/`. AAX is built unsigned and can only be loaded in Pro Tools Developer.
