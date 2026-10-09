@@ -1,5 +1,7 @@
 #include "EditHistory.h"
 
+#include "Parameters.h"
+
 namespace eq1
 {
 
@@ -113,12 +115,10 @@ void EditHistory::apply (const Step& step, bool forward)
 {
     const juce::ScopedValueSetter<bool> notAnEdit (applying, true);
     const auto& parameters = processor.getParameters();
+    std::vector<eq1::parameters::NewValue> values;
     for (const auto& change : step.changes)
-        parameters[change.index]->beginChangeGesture();
-    for (const auto& change : step.changes)
-        parameters[change.index]->setValueNotifyingHost (forward ? change.after : change.before);
-    for (const auto& change : step.changes)
-        parameters[change.index]->endChangeGesture();
+        values.push_back ({ parameters[change.index], forward ? change.after : change.before });
+    eq1::parameters::setTogether (values);
     if (outside != nullptr && step.outsideAfter.isValid())
         outside->restore (forward ? step.outsideAfter : step.outsideBefore);
 }

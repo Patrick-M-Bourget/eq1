@@ -15,8 +15,8 @@ namespace eq1
 // editor is dragging. Gestures that overlap, or that fall inside a transaction, are one step. Undo
 // and redo wait until the edit in progress is finished, and set the parameters inside gestures, so
 // the host can record them as automation too. A step also holds what it changed in the state kept
-// outside the parameters, such as A/B Compare's side. The history isn't saved: it starts empty, and empties
-// when a session is restored.
+// outside the parameters, such as A/B Compare's side. The history isn't saved: it starts empty, and
+// empties when a session is restored.
 // Message thread only, except sessionRestored().
 class EditHistory final : private juce::AudioProcessorListener
 {
@@ -84,8 +84,8 @@ private:
     juce::AudioProcessor& processor;
     int openGestures = 0, openTransactions = 0;
     std::vector<float> valuesBefore; // when the open step began
-    juce::ValueTree outsideBefore;
-    OutsideState* outside = nullptr;
+    juce::ValueTree outsideBefore;    // the outside state when the open step began
+    OutsideState* outside = nullptr; // the one tracked, if any
     std::set<int> gestured;          // the parameters gestured in the open step
     std::vector<Step> undoStack, redoStack;
     bool applying = false; // undo or redo is setting the parameters: not an edit

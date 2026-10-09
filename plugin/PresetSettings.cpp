@@ -39,12 +39,7 @@ juce::ValueTree capturePresetSettings (juce::AudioProcessorValueTreeState& param
 
 void applyPresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree)
 {
-    struct Change
-    {
-        juce::RangedAudioParameter* parameter;
-        float value;
-    };
-    std::vector<Change> changes;
+    std::vector<eq1::parameters::NewValue> changes;
     forEachPresetSetting (parameters, [&] (juce::RangedAudioParameter& p) {
         const auto saved = tree.getChildWithProperty (idProperty, p.getParameterID());
         const float value = saved.isValid() ? p.convertTo0to1 (static_cast<float> (saved.getProperty (valueProperty)))
@@ -52,12 +47,7 @@ void applyPresetSettings (juce::AudioProcessorValueTreeState& parameters, const 
         if (! juce::exactlyEqual (value, p.getValue()))
             changes.push_back ({ &p, value });
     });
-    for (const auto& change : changes)
-        change.parameter->beginChangeGesture();
-    for (const auto& change : changes)
-        change.parameter->setValueNotifyingHost (change.value);
-    for (const auto& change : changes)
-        change.parameter->endChangeGesture();
+    eq1::parameters::setTogether (changes);
 }
 
 } // namespace eq1

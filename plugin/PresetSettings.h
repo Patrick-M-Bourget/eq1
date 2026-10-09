@@ -10,12 +10,12 @@ namespace eq1
 
 bool isPresetSetting (const juce::RangedAudioParameter& parameter);
 
-// The preset settings as a tree of the given type, with a PARAM child for each, holding its id and
-// plain value as the saved state does.
+// The settings a Preset holds, as a tree of the given type, with a PARAM child for each, holding
+// its id and plain value as the saved state does.
 juce::ValueTree capturePresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::Identifier& type);
 
-// Sets the preset settings to those in tree, inside gestures. One it doesn't hold goes to its
-// default, so the same tree always sounds the same; the other parameters are left alone.
+// Sets the settings a Preset holds to those in tree, inside gestures. One the tree doesn't hold
+// goes to its default, so the same tree always sounds the same; the other parameters are left alone.
 void applyPresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree);
 
 } // namespace eq1
