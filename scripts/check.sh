@@ -2,7 +2,8 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
 #
 #   scripts/check.sh            build, test, tsan and validate
-#   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64)
+#   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
+#                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU), auval, Sidechain routing (VST3, AU), clap-validator,
@@ -32,9 +33,9 @@ build() {
     step "Build ($os)"
     if [ "$os" = macos ]; then
         cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
-            "-DFETCHCONTENT_BASE_DIR=$DEPS"
+            -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     else
-        cmake -S . -B "$BUILD_DIR" -A x64 "-DFETCHCONTENT_BASE_DIR=$DEPS"
+        cmake -S . -B "$BUILD_DIR" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     fi
     cmake --build "$BUILD_DIR" --config Release --parallel
 }
@@ -131,5 +132,5 @@ case "${1:-all}" in
     tsan) tsan ;;
     validate) validate ;;
     all) build; run_tests; tsan; validate ;;
-    *) sed -n '2,10p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,11p' "$0" >&2; exit 2 ;;
 esac
