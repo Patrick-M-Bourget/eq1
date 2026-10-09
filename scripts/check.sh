@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            docs, build, test, tsan and validate
+#   scripts/check.sh            docs, build, test, cpu, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
+#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget")
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
@@ -109,6 +110,15 @@ focus() {
     ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure
 }
 
+# On its own, after the tests: timings taken while anything else runs are meaningless.
+cpu() {
+    step "CPU budget"
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget
+    local exe=$BUILD_DIR/tests/eq1_cpu_budget
+    [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/eq1_cpu_budget
+    "$exe"
+}
+
 tsan() {
     if [ "$os" != macos ]; then
         echo "ThreadSanitizer runs on macOS only; skipped"
@@ -197,10 +207,11 @@ validate() {
 case "${1:-all}" in
     build) build ;;
     test) run_tests ;;
+    cpu) cpu ;;
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     tsan) tsan ;;
     validate) validate ;;
     docs) docs ;;
-    all) docs; build; run_tests; tsan; validate ;;
-    *) sed -n '2,13p' "$0" >&2; exit 2 ;;
+    all) docs; build; run_tests; cpu; tsan; validate ;;
+    *) sed -n '2,14p' "$0" >&2; exit 2 ;;
 esac

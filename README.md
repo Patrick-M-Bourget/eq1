@@ -14,10 +14,11 @@ Real-time EQ plugin (VST3, AU, AAX, CLAP and Standalone) for macOS Universal and
 - checks that every doc section cited in code exists;
 - builds every format (macOS Universal or Windows x64);
 - runs the Engine and Plugin Shell tests;
+- measures the Engine's CPU load against its budget (`docs/performance.md`);
 - runs the Engine tests under ThreadSanitizer (macOS only);
 - validates the plugins with pluginval (at every supported sample rate), auval and clap-validator, and checks Sidechain routing through the VST3 and AU wrappers.
 
-Run one part with `scripts/check.sh docs|build|test|tsan|validate`. CMake fetches the dependencies (JUCE, clap-juce-extensions, Catch2) into `.deps/`. The validators are fetched there too, with an authenticated `gh`.
+Run one part with `scripts/check.sh docs|build|test|cpu|tsan|validate`. CMake fetches the dependencies (JUCE, clap-juce-extensions, Catch2) into `.deps/`. The validators are fetched there too, with an authenticated `gh`.
 
 `scripts/ci-timings.sh <run-id> [attempt]` prints how long each CI job and step took, and why a job never started.
 

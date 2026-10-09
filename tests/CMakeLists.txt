@@ -54,3 +54,7 @@ if(EQ1_BUILD_PLUGIN)
     endif()
 endif()
 
+# Measures the Engine's CPU load against its budget (scripts/check.sh cpu). Not a ctest test: it
+# needs the machine to itself.
+add_executable(eq1_cpu_budget cpu/CpuBudget.cpp)
+target_link_libraries(eq1_cpu_budget PRIVATE eq1::engine)
