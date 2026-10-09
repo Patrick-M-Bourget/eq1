@@ -42,6 +42,7 @@ public:
     void push (const float* samples, int count);
 
     // Analyses the newest samples and moves the shown spectrum toward them, as for a frame seconds long.
+    // With nothing pushed for a quarter second, it moves toward silence instead.
     void update (double seconds, AnalyzerSpeed speed);
 
     // The shown level at frequency, plus Analyzer Tilt: tiltDbPerOctave times the octaves above 1 kHz.
@@ -64,6 +65,7 @@ private:
     std::unique_ptr<juce::dsp::FFT> fft;
     std::vector<float> window, history, transform;
     size_t historyWrite = 0;
+    double secondsSilent = 0.0; // since samples were last pushed
     double windowGain = 1.0;
     std::vector<double> power; // per bin, smoothed
 };
