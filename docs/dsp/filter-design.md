@@ -14,6 +14,10 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
 - **Low Cut sections:** the three-point match can't place a double zero exactly at DC, which leaves the stopband tens of dB too loud. So a Low Cut section keeps the matched poles, fixes its zeros at DC, (1 − z⁻¹)² or (1 − z⁻¹), and is scaled to the analog magnitude at Frequency.
 - **High Cut sections:** each is matched at its damped natural frequency, Frequency × √(1 − 1/(4Q²)) (at least 0.1 × Frequency, for sections with Q below 0.5), held at or below half Nyquist. Matching at Frequency instead bulges the passband by up to 35 dB near Nyquist at Brickwall; this way a High Cut rolls off early there instead of boosting.
 - **Band Pass sections:** each Butterworth pole pair becomes a lower and an upper pole pair. The lower one is designed as a Low Cut section (zeros at DC), with its gain the geometric mean of the gains matching at its own natural frequency and at Nyquist. The upper one is designed as a High Cut section, matched at no more than 0.9 of its natural frequency: matched right at the peak of a very sharp section, the poles' tiny error shows up as tens of dB of gain. Plain band-pass sections fail wide Band Passes, whose two pole pairs sit far apart. Every section is designed around its own natural frequency, so poles above Nyquist are held just below it.
+  - **Above 24 dB/oct:** held that way, each upper section bumps up a little at the hold, and the sections' small errors all lean the same way, so a 96 dB/oct Band Pass would read up to 18 dB too loud near Nyquist. A steep Band Pass changes two things:
+    - **Held upper sections:** an upper section whose natural frequency is above 0.95 × Nyquist has its poles placed there, with the Q that makes it as loud there, relative to DC, as the analog section is (never a higher Q). Its zeros fit a blend of the analog section's magnitude and the held section's own, weighted by √(1 − held Q / analog Q): the analog section's where the Q isn't lowered, so the design is continuous as Frequency or Q crosses the hold, and the held section's as it is lowered most, so the zeros don't reach for the analog peak above Nyquist.
+    - **Whole-cascade gain:** the cascade's gain is set to the target's at Frequency, or at the hold if Frequency is above it.
+  - Band Passes at 24 dB/oct and below keep the plain design. Lowering the Q alone, or setting the gain alone, each left one region far outside the limits below, and holding at 0.98 × Nyquist left the top region 2–3 dB too loud; holds from 0.94 to 0.96 all pass.
 - **Notch sections:** the zeros are fixed on the unit circle exactly at Frequency, and the gain matches the analog section at DC.
 - **All Pass:** bilinear, prewarped at Frequency: the one Shape that isn't matched. Its magnitude is flat by construction, so it can't cramp (ADR 0001), and the bilinear phase is exact at Frequency, where matched poles were 16° off at order 1 by 0.45 × Nyquist. A digital all-pass reaches −180° × order at Nyquist while the analog one only gets there at infinity, so near Nyquist its phase runs ahead.
 - **Why one biquad can't be exact:** a biquad's response is flat at Nyquist, while a high or wide analog curve is still sloping there. A single section cannot match it exactly near Nyquist. RBJ bilinear Bells miss by 85–100% on the Bell test's grid.
@@ -45,6 +49,22 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
 - **All Pass:** Butterworth poles of order Slope / 6, with zeros mirrored across the jω axis, so the phase at Frequency is −90° × order. Q scales the sections as for Cuts. Magnitude is flat; it is tested on phase.
 - **Bell:** always one second-order section (12 dB/oct) until #19 decides a steeper target.
 - **Slopes between whole orders:** until #18 decides a fractional target, a Slope is rounded to the nearest whole order (to the nearest 6 dB/oct, or 12 dB/oct for Notch). So a Cut or Band Pass below 3 dB/oct passes the signal unchanged. This rule is temporary.
+
+## Test tolerances
+
+How far the Engine's response may stray from the analog target in `tests/engine/ShapeResponseTest.cpp`, by where Frequency sits relative to Nyquist. Cuts, Band Pass and Notch are read against the target shifted up to 1/12 octave either way: **louder** is how far the response rises above the highest of those (or above −60 dB, where the target is lower), **quieter** how far it falls below the lowest of them, where that is above −24 dB. Louder matters most: the skirt then passes what it should remove.
+
+**Band Pass** (louder / quieter, dB):
+
+| Frequency / Nyquist | Up to 24 dB/oct | Above 24 dB/oct | Above 24 dB/oct, measured |
+|---|---|---|---|
+| up to 0.45 | 0.5 / 1.0 | 2.5 / 5.5 | 1.0 / 4.9 |
+| up to 0.73 | 2.0 / 2.5 | 3.0 / 6.0 | 0.7 / 2.8 |
+| up to 0.91 | 5.0 / 2.0 | 5.0 / 9.0 | 3.1 / 6.0 |
+
+The measured column is the worst case in the filter lab over the test's grid (Frequency 20 Hz to 20 kHz, Q 0.1, 0.71, 2, 10 and 40, at 44.1, 48 and 96 kHz), at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py band-pass --orders 5 6 7 8 9 10 11 12 13 14 15 16 --q 0.1 0.71 2 10 40`.
+
+The other Shapes' limits are in the test, beside each Shape's check.
 
 ## Detection
 

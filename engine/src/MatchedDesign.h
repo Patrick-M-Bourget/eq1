@@ -38,6 +38,20 @@ BiquadCoefficients matchHighPass (const AnalogSection& section,
 // unit circle exactly at zeroFrequency, and the magnitude equal to the analog section's at DC.
 BiquadCoefficients matchNotch (const AnalogSection& section, double referenceFrequency, double sampleRate, double zeroFrequency);
 
+// A second-order section with the matched poles of poles (an analog section, around referenceFrequency)
+// and a numerator chosen so its squared magnitude is squaredAtDc at DC, squaredAtMatch at matchFrequency
+// and squaredAtNyquist at Nyquist: for a target other than the poles' own analog section.
+BiquadCoefficients matchMagnitudes (const AnalogSection& poles,
+                                    double referenceFrequency,
+                                    double sampleRate,
+                                    double matchFrequency,
+                                    double squaredAtDc,
+                                    double squaredAtMatch,
+                                    double squaredAtNyquist);
+
+// The analog section's squared magnitude at normalisedFrequency (a multiple of its reference frequency).
+double analogSquared (const AnalogSection& section, double normalisedFrequency);
+
 // The section with its poles and zeros swapped, so its magnitude is the reciprocal.
 BiquadCoefficients inverse (const BiquadCoefficients& c);
 

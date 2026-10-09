@@ -117,6 +117,18 @@ def match_high_pass(a: Analog, reference_hz, fs, and_nyquist=False):
     return c
 
 
+def match_magnitudes(poles: Analog, reference_hz, fs, match_hz, at_dc, at_match, at_nyquist):
+    """Poles as match_section's for poles; numerator fitting the given squared magnitudes at DC, match_hz
+    and Nyquist."""
+    c = match_section(Analog(0, 0, 1, poles.d2, poles.d1, poles.d0), reference_hz, fs)
+    den = _weights(1, c.a1, c.a2)
+    p0, p1, p2 = _phi(min(2 * PI * match_hz / fs, 0.98 * PI))
+    n0, n1 = den[0] * at_dc, den[1] * at_nyquist
+    n2 = ((den[0] * p0 + den[1] * p1 + den[2] * p2) * at_match - n0 * p0 - n1 * p1) / p2
+    c.b0, c.b1, c.b2 = _factor(n0, n1, n2)
+    return c
+
+
 def match_notch(a: Analog, reference_hz, fs, zero_hz):
     """Poles as match_section's, zeros on the unit circle at zero_hz, magnitude matched at DC."""
     c = match_section(Analog(0, 0, 1, a.d2, a.d1, a.d0), reference_hz, fs)
@@ -268,10 +280,31 @@ def _transformed_quadratics(order, roots_of):
         yield [(-2 * x.real, abs(x) ** 2) for x in roots_of(p)]
 
 
+STEEP_BAND_PASS_ORDER = 5
+BAND_PASS_HOLD = 0.95  # where a steep Band Pass's upper sections are held, as a share of Nyquist
+
+
+def _held_upper_section(upper: Analog, reference_hz, hold_hz, match_hz, fs):
+    """Poles at hold_hz with the Q that makes the section as loud there, relative to DC, as the analog
+    section is (never higher); zeros fitting a blend of the analog section's magnitude and the held
+    section's own, by how far the Q was lowered."""
+    analog_q = 1 / upper.d1
+    q_at_hold = math.sqrt(upper.squared(hold_hz / reference_hz) / upper.squared(0))
+    held_q = min(analog_q, q_at_hold)
+    held = Analog(0, 0, upper.n0, 1, 1 / held_q, 1)
+    blend = math.sqrt(1 - held_q / analog_q)
+    squared = lambda f: upper.squared(f / reference_hz) ** (1 - blend) * held.squared(f / hold_hz) ** blend
+    return match_magnitudes(held, hold_hz, fs, match_hz, squared(0), squared(match_hz), squared(fs / 2))
+
+
 def band_pass(fs, frequency, gain=None, q=0.71, order=2):
     """s -> Q (s + 1/s) of a Butterworth low-pass. Each low-pass pole pair gives a lower pair, designed as
     a Low Cut section, and an upper pair, designed as a High Cut section matched at most 0.9 of its
-    natural frequency; the odd pole gives one band-pass section."""
+    natural frequency; the odd pole gives one band-pass section. Above 24 dB/oct, upper sections beyond
+    the hold are held there (_held_upper_section) and the whole cascade's gain is set to the target's at
+    Frequency, or the hold if Frequency is above it."""
+    steep = order >= STEEP_BAND_PASS_ORDER
+    hold = BAND_PASS_HOLD * fs / 2
     analog, sections = [], []
     for quads in _transformed_quadratics(order, lambda p: _reciprocal_roots(p / q)):
         if quads is None:
@@ -284,8 +317,18 @@ def band_pass(fs, frequency, gain=None, q=0.71, order=2):
         upper, w_high = normalised(Analog(0, 0, 1 / (q * q), 1, *high))
         analog += [Analog(1, 0, 0, 1, *low), Analog(0, 0, 1 / (q * q), 1, *high)]
         sections.append(match_high_pass(lower, frequency * w_low, fs, and_nyquist=True))
+        reference = frequency * w_high
         damped = math.sqrt(max(1 - upper.d1 * upper.d1 / 4, 0.01))
-        sections.append(match_section(upper, frequency * w_high, fs, match_hz=min(frequency * w_high * min(damped, 0.9), fs / 4)))
+        match = min(reference * min(damped, 0.9), fs / 4)
+        if steep and reference > hold:
+            sections.append(_held_upper_section(upper, reference, hold, match, fs))
+        else:
+            sections.append(match_section(upper, reference, fs, match_hz=match))
+    if steep:
+        at = min(frequency, hold)
+        k = 10 ** ((_analog_db(analog, at, frequency) - cascade_db(sections, at, fs)) / 20)
+        s = sections[0]
+        s.b0, s.b1, s.b2 = s.b0 * k, s.b1 * k, s.b2 * k
     return sections, lambda f: _analog_db(analog, f, frequency)
 
 
