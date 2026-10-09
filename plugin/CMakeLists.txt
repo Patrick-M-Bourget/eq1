@@ -42,9 +42,24 @@ target_sources(eq1 PRIVATE
     BandPanel.cpp
     EqDisplay.cpp
     EditHistory.cpp
+    ABCompare.cpp
+    PresetSettings.cpp
+    PresetLibrary.cpp
+    PresetBar.cpp
     OutputPanel.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp)
+
+# The Factory Presets, bundled into the plugin.
+juce_add_binary_data(eq1_factory_presets
+    NAMESPACE FactoryPresets
+    HEADER_NAME FactoryPresets.h
+    SOURCES
+        ${PROJECT_SOURCE_DIR}/presets/factory/Default.eq1preset
+        "${PROJECT_SOURCE_DIR}/presets/factory/De-Esser.eq1preset"
+        "${PROJECT_SOURCE_DIR}/presets/factory/Kick Punch.eq1preset"
+        "${PROJECT_SOURCE_DIR}/presets/factory/Master Polish.eq1preset"
+        "${PROJECT_SOURCE_DIR}/presets/factory/Vocal Presence.eq1preset")
 
 target_compile_definitions(eq1 PUBLIC
     JUCE_WEB_BROWSER=0
@@ -54,6 +69,7 @@ target_compile_definitions(eq1 PUBLIC
 target_link_libraries(eq1
     PRIVATE
         eq1::engine
+        eq1_factory_presets
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC

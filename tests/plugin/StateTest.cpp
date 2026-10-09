@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
@@ -86,7 +87,7 @@ TEST_CASE ("Saved state carries the state version")
     const auto xml = savedXml (processor);
     REQUIRE (xml != nullptr);
     CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
-    CHECK (eq1::PluginProcessor::stateVersion == 1);
+    CHECK (eq1::PluginProcessor::stateVersion == 2);
 }
 
 TEST_CASE ("Save and reload sound exactly the same: Bands, dynamics, Sidechain detection and the output section")
@@ -111,6 +112,54 @@ TEST_CASE ("Save and reload sound exactly the same: Bands, dynamics, Sidechain d
     for (int ch = 0; ch < 2; ++ch)
         for (int i = 0; i < expected.getNumSamples(); ++i)
             REQUIRE (juce::exactlyEqual (actual.getSample (ch, i), expected.getSample (ch, i)));
+}
+
+TEST_CASE ("A/B Compare survives save and reload: the side you're on and both sides' settings")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    set (saved, "band1_in_use", 1.0f);
+    set (saved, "band1_frequency", 250.0f);
+    set (saved, "band1_gain", -4.5f);
+    saved.selectCompareSide (eq1::CompareSide::B);
+    set (saved, "band1_gain", 9.0f);
+    set (saved, "band4_in_use", 1.0f);
+    set (saved, "band4_shape", 2.0f);
+    set (saved, "output_gain", -2.0f);
+    const auto xml = savedXml (saved);
+    REQUIRE (xml != nullptr);
+
+    eq1::PluginProcessor restored;
+    load (restored, *xml);
+    CHECK (restored.compareSide() == eq1::CompareSide::B);
+    const auto checkSameSound = [&] {
+        const auto expected = play (saved), actual = play (restored);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < expected.getNumSamples(); ++i)
+                REQUIRE (juce::exactlyEqual (actual.getSample (ch, i), expected.getSample (ch, i)));
+    };
+    checkSameSound();
+
+    saved.selectCompareSide (eq1::CompareSide::A);
+    restored.selectCompareSide (eq1::CompareSide::A);
+    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
+    CHECK (value (restored, "band4_in_use") == 0.0f);
+    checkSameSound();
+}
+
+TEST_CASE ("A version 1 session loads on side A, with B a copy of it")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.selectCompareSide (eq1::CompareSide::B);
+    load (processor, *fixture ("state-v1.xml"));
+    CHECK (processor.compareSide() == eq1::CompareSide::A);
+    CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
+
+    processor.selectCompareSide (eq1::CompareSide::B);
+    CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
+    CHECK (value (processor, "band3_shape") == 4.0f);
+    CHECK_THAT (value (processor, "gain_scale"), WithinAbs (150.0, 1.0e-3));
 }
 
 TEST_CASE ("A session saved before the state had a version (version 0) loads every setting")
@@ -152,8 +201,61 @@ TEST_CASE ("A session from a newer version loads the settings this version knows
     xml->createNewChildElement ("SomethingNew")->setAttribute ("x", 1);
 
     eq1::PluginProcessor processor;
+    processor.selectCompareSide (eq1::CompareSide::B);
     load (processor, *xml);
     CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
     CHECK (processor.displayRangeDb() == 30);
     CHECK (processor.analyzerSettings().rangeDb == 120);
+    // It saves no A/B Compare this version knows: its settings are side A's.
+    CHECK (processor.compareSide() == eq1::CompareSide::A);
+}
+
+TEST_CASE ("A session saved in the middle of an A/B switch or copy holds both sides whole")
+{
+    // A host saving from its own thread can save while the editor is switching sides. A listener on
+    // the parameters saves at the first change the switch makes, as such a host might.
+    struct SaveDuringChange final : juce::AudioProcessorListener
+    {
+        juce::AudioProcessor& processor;
+        std::unique_ptr<juce::XmlElement> saved;
+        explicit SaveDuringChange (juce::AudioProcessor& p) : processor (p) { processor.addListener (this); }
+        ~SaveDuringChange() override { processor.removeListener (this); }
+        void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override
+        {
+            if (saved == nullptr)
+                saved = savedXml (processor);
+        }
+        void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+    };
+
+    juce::ScopedJuceInitialiser_GUI juce;
+    const bool copy = GENERATE (false, true);
+    CAPTURE (copy);
+    eq1::PluginProcessor processor;
+    set (processor, "band1_gain", 6.0f);
+    set (processor, "band2_gain", 2.0f);
+    processor.selectCompareSide (eq1::CompareSide::B);
+    set (processor, "band1_gain", -3.0f);
+    set (processor, "band2_gain", -1.0f);
+    std::unique_ptr<juce::XmlElement> xml;
+    {
+        SaveDuringChange host (processor);
+        if (copy)
+            processor.copyAToB();
+        else
+            processor.selectCompareSide (eq1::CompareSide::A);
+        xml = std::move (host.saved);
+    }
+    REQUIRE (xml != nullptr);
+
+    // Reloaded, the side being switched to is whole on the parameters, and the other side whole too.
+    eq1::PluginProcessor restored;
+    load (restored, *xml);
+    const auto onA = copy ? eq1::CompareSide::B : eq1::CompareSide::A;
+    CHECK (restored.compareSide() == onA);
+    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (6.0, 1.0e-4));
+    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (2.0, 1.0e-4));
+    restored.selectCompareSide (copy ? eq1::CompareSide::A : eq1::CompareSide::B);
+    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (copy ? 6.0 : -3.0, 1.0e-4));
+    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (copy ? 2.0 : -1.0, 1.0e-4));
 }

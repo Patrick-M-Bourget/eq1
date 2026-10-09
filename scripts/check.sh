@@ -50,7 +50,7 @@ docs() {
             echo "$ref: no such section" >&2
             broken=1
         fi
-    done < <(git ls-files | grep -v '\.md$' | xargs grep -hoE 'docs/[A-Za-z0-9_./-]+\.md(, "[^"]+")?' | sort -u)
+    done < <(git ls-files -z -- ':!*.md' | xargs -0 grep -hoE 'docs/[A-Za-z0-9_./-]+\.md(, "[^"]+")?' | sort -u)
     [ "$broken" = 0 ] && echo "Every cited doc and section exists"
     return "$broken"
 }

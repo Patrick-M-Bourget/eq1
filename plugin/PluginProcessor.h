@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ABCompare.h"
 #include "AnalyzerSettings.h"
 #include "EditHistory.h"
 #include "Parameters.h"
@@ -52,6 +53,19 @@ public:
     // The undo history of the editor's edits. It outlives the editor, and restoring a session empties it.
     EditHistory& editHistory() { return history; }
 
+    // A/B Compare: which side the host parameters hold, from any thread; selecting a side and Copy A
+    // to B, each one undo step, from the message thread only.
+    CompareSide compareSide() const { return compare.side(); }
+    void selectCompareSide (CompareSide side) { compare.select (side); }
+    void copyAToB() { compare.copyAToB(); }
+
+    // The settings a Preset holds, from the side you're on, in the saved state's format.
+    juce::ValueTree presetState();
+    // Puts a Preset's settings on the side you're on, as one undo step, bringing an older version of
+    // the format up to date first. Anything that isn't a Preset changes nothing and returns false.
+    // Message thread only.
+    bool loadPreset (const juce::ValueTree& preset);
+
     // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
@@ -78,7 +92,7 @@ public:
     // The version of the saved state's format. setStateInformation() brings older states up to it one
     // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
     // version. Bump it, and add a step to the migration, whenever the format changes.
-    static constexpr int stateVersion = 1;
+    static constexpr int stateVersion = 2;
 
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
@@ -88,6 +102,7 @@ private:
     std::array<eq1::parameters::SlotValues, numBandSlots> slots; // read on the audio thread
     eq1::parameters::OutputValues output;
     EditHistory history { *this };
+    ABCompare compare { parameters, history };
 
     Engine engine;
     // Kept out of the parameter state, which a host may save from another thread, and written into

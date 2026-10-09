@@ -1,7 +1,7 @@
 #pragma once
 
-// Measurement helpers for Engine tests: drive the Engine through its public interface and
-// measure what comes out.
+// Measurement helpers for Engine and Plugin Shell tests: drive the Engine through its public
+// interface and measure what comes out.
 
 #include "eq1/Engine.h"
 
@@ -96,6 +96,21 @@ inline std::vector<double> frequenciesUpToNyquist (double sampleRate, int count)
     for (int i = 0; i < count; ++i)
         frequencies.push_back (10.0 * std::pow (nyquist / 10.0, i / double (count - 1)));
     return frequencies;
+}
+
+// How much sharper the sharpest corner of a sine of toneFrequency is, from sample `from` on, than a
+// pure sine of the same peak level would allow: a sine A sin(wn) has a second difference of at most
+// A w^2. Clicks show up far above 1.
+inline double discontinuity (const std::vector<float>& output, double sampleRate, double toneFrequency, size_t from)
+{
+    double peak = 0.0, sharpest = 0.0;
+    for (auto i = std::max (from, size_t { 2 }); i < output.size(); ++i)
+    {
+        peak = std::max (peak, static_cast<double> (std::abs (output[i])));
+        sharpest = std::max (sharpest, std::abs (static_cast<double> (output[i]) - 2.0 * output[i - 1] + output[i - 2]));
+    }
+    const double w = 2.0 * std::numbers::pi * toneFrequency / sampleRate;
+    return sharpest / (peak * w * w);
 }
 
 } // namespace eq1::test

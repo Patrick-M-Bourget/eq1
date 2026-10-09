@@ -225,6 +225,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     return layout;
 }
 
+void setTogether (const std::vector<NewValue>& values)
+{
+    for (const auto& [parameter, value] : values)
+        parameter->beginChangeGesture();
+    for (const auto& [parameter, value] : values)
+        parameter->setValueNotifyingHost (value);
+    for (const auto& [parameter, value] : values)
+        parameter->endChangeGesture();
+}
+
 SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int slot)
 {
     return { parameters.getRawParameterValue (frequencyId (slot)), parameters.getRawParameterValue (gainId (slot)),

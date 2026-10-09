@@ -4,6 +4,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <vector>
+
 namespace eq1::parameters
 {
 
@@ -60,6 +62,17 @@ const juce::StringArray& detectionRangeNames();
 const juce::StringArray& panModeNames();
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+
+// A parameter's new normalised value.
+struct NewValue
+{
+    juce::AudioProcessorParameter* parameter;
+    float value;
+};
+
+// Sets several parameters as one edit the host sees: every gesture begins before the first value
+// changes, and ends after the last.
+void setTogether (const std::vector<NewValue>& values);
 
 // The host parameters of one Band slot, readable from any thread.
 struct SlotValues

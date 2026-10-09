@@ -4,6 +4,7 @@
 #include "BandPanel.h"
 #include "EqDisplay.h"
 #include "OutputPanel.h"
+#include "PresetBar.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -12,8 +13,9 @@ namespace eq1
 
 class PluginProcessor;
 
-// The native editor (ADR 0002): the EQ display above, the selected Band's panel below it, and the
-// whole-plugin output controls at the bottom. Resizable; everything is drawn as vectors, so it stays
+// The native editor (ADR 0002): Presets, A/B Compare and undo at the top, the Analyzer's controls
+// under them, the EQ display, the selected Band's panel below it, and the whole-plugin output
+// controls at the bottom. Resizable; everything is drawn as vectors, so it stays
 // sharp at any display scale.
 class PluginEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
@@ -34,6 +36,7 @@ private:
     EqDisplay display;
     BandPanel panel;
     OutputPanel output;
+    PresetBar presetBar;
     juce::ComboBox displayRange;
     juce::TextButton undoButton { "Undo" }, redoButton { "Redo" };
     void undo();

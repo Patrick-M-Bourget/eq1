@@ -87,20 +87,11 @@ std::array<std::vector<float>, 2> playStereoTone (Host host, const std::function
     return output;
 }
 
-// How much sharper the output's sharpest corner is than a pure sine of the same peak level would
-// allow: a sine A sin(wn) has a second difference of at most A w^2. Clicks show up far above 1.
-// The onset is skipped: the tone itself starts abruptly, and steep filters ring as it does. Every
-// change a test makes comes after it.
+// test::discontinuity of the output after the onset. The onset is skipped: the tone itself starts
+// abruptly, and steep filters ring as it does. Every change a test makes comes after it.
 double discontinuity (const std::vector<float>& output, double sampleRate)
 {
-    double peak = 0.0, sharpest = 0.0;
-    for (auto i = static_cast<size_t> (onsetSeconds * sampleRate); i < output.size(); ++i)
-    {
-        peak = std::max (peak, static_cast<double> (std::abs (output[i])));
-        sharpest = std::max (sharpest, std::abs (static_cast<double> (output[i]) - 2.0 * output[i - 1] + output[i - 2]));
-    }
-    const double w = 2.0 * std::numbers::pi * toneFrequency / sampleRate;
-    return sharpest / (peak * w * w);
+    return test::discontinuity (output, sampleRate, toneFrequency, static_cast<size_t> (onsetSeconds * sampleRate));
 }
 
 constexpr double threshold = 2.0;

@@ -2,6 +2,7 @@
 
 #include "Parameters.h"
 #include "PluginEditor.h"
+#include "PresetSettings.h"
 
 namespace eq1
 {
@@ -69,6 +70,12 @@ void migrate (juce::ValueTree& state)
     // 0 to 1: the state gained its version and nothing else.
     if (version < 1)
         state.setProperty (versionProperty, 1, nullptr);
+    // 1 to 2: A/B Compare. The settings are side A's, and B is a copy of them.
+    if (version < 2)
+    {
+        state.appendChild (ABCompare::initialState(), nullptr);
+        state.setProperty (versionProperty, 2, nullptr);
+    }
 }
 const juce::Identifier analyzerType { "Analyzer" }, showPreEqProperty { "showPreEq" }, showPostEqProperty { "showPostEq" },
     showSidechainProperty { "showSidechain" },
@@ -120,9 +127,26 @@ void PluginProcessor::setDisplayRangeDb (int rangeDb)
     displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
 }
 
+juce::ValueTree PluginProcessor::presetState()
+{
+    return capturePresetSettings (parameters, parameters.state.getType()).setProperty (versionProperty, stateVersion, nullptr);
+}
+
+bool PluginProcessor::loadPreset (const juce::ValueTree& preset)
+{
+    if (! preset.hasType (parameters.state.getType()))
+        return false;
+    auto settings = preset.createCopy();
+    migrate (settings);
+    history.beginTransaction();
+    applyPresetSettings (parameters, settings);
+    history.endTransaction();
+    return true;
+}
+
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    auto state = parameters.copyState();
+    auto state = compare.savedState();
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
@@ -146,6 +170,10 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
             setAnalyzerSettings (fromTree (saved));
             state.removeChild (saved, nullptr);
         }
+        // Without one (from a newer version that saves it elsewhere), the settings are side A's.
+        const auto savedCompare = state.getChildWithName (ABCompare::stateType);
+        compare.restore (savedCompare);
+        state.removeChild (savedCompare, nullptr);
         parameters.replaceState (state);
         history.sessionRestored();
     }

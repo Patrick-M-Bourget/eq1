@@ -14,14 +14,26 @@ namespace eq1
 // it, so Host Automation and the host's own parameter view never become undo steps, even while the
 // editor is dragging. Gestures that overlap, or that fall inside a transaction, are one step. Undo
 // and redo wait until the edit in progress is finished, and set the parameters inside gestures, so
-// the host can record them as automation too. The history isn't saved: it starts empty, and empties
-// when a session is restored.
+// the host can record them as automation too. A step also holds what it changed in the state kept
+// outside the parameters, such as A/B Compare's side. The history isn't saved: it starts empty, and
+// empties when a session is restored.
 // Message thread only, except sessionRestored().
 class EditHistory final : private juce::AudioProcessorListener
 {
 public:
     explicit EditHistory (juce::AudioProcessor& processor);
     ~EditHistory() override;
+
+    // State kept outside the parameters that edits can change, read when a step begins and ends and
+    // put back by undo and redo.
+    struct OutsideState
+    {
+        virtual ~OutsideState() = default;
+        virtual juce::ValueTree capture() const = 0;
+        virtual void restore (const juce::ValueTree& state) = 0;
+    };
+    // The one OutsideState, which must outlive the history or be replaced with nullptr first.
+    void track (OutsideState* state) { outside = state; }
 
     // Holds one undo step open across several gestures, for an edit that changes several parameters
     // one after another: adding a Band, or Spectrum Grab and its drag. Transactions nest.
@@ -46,7 +58,11 @@ private:
         int index;
         float before, after;
     };
-    using Step = std::vector<Change>;
+    struct Step
+    {
+        std::vector<Change> changes;
+        juce::ValueTree outsideBefore, outsideAfter; // invalid when the step left it alone
+    };
 
     void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
     void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
@@ -68,6 +84,8 @@ private:
     juce::AudioProcessor& processor;
     int openGestures = 0, openTransactions = 0;
     std::vector<float> valuesBefore; // when the open step began
+    juce::ValueTree outsideBefore;    // the outside state when the open step began
+    OutsideState* outside = nullptr; // the one tracked, if any
     std::set<int> gestured;          // the parameters gestured in the open step
     std::vector<Step> undoStack, redoStack;
     bool applying = false; // undo or redo is setting the parameters: not an edit
