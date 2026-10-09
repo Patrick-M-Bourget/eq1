@@ -37,6 +37,7 @@ private:
     BandPanel panel;
     OutputPanel output;
     PresetBar presetBar;
+    juce::TooltipWindow tooltips { this };
     juce::ComboBox displayRange;
     juce::TextButton undoButton { "Undo" }, redoButton { "Redo" };
     void undo();

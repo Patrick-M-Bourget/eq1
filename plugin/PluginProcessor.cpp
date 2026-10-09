@@ -76,6 +76,9 @@ void migrate (juce::ValueTree& state)
         state.appendChild (ABCompare::initialState(), nullptr);
         state.setProperty (versionProperty, 2, nullptr);
     }
+    // 2 to 3: each side's Loaded Preset. Neither side has one.
+    if (version < 3)
+        state.setProperty (versionProperty, 3, nullptr);
 }
 const juce::Identifier analyzerType { "Analyzer" }, showPreEqProperty { "showPreEq" }, showPostEqProperty { "showPostEq" },
     showSidechainProperty { "showSidechain" },
@@ -132,15 +135,13 @@ juce::ValueTree PluginProcessor::presetState()
     return capturePresetSettings (parameters, parameters.state.getType()).setProperty (versionProperty, stateVersion, nullptr);
 }
 
-bool PluginProcessor::loadPreset (const juce::ValueTree& preset)
+bool PluginProcessor::loadPreset (const juce::ValueTree& preset, const juce::String& name)
 {
     if (! preset.hasType (parameters.state.getType()))
         return false;
     auto settings = preset.createCopy();
     migrate (settings);
-    history.beginTransaction();
-    applyPresetSettings (parameters, settings);
-    history.endTransaction();
+    compare.loadPreset (settings, name);
     return true;
 }
 

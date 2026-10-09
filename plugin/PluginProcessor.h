@@ -61,10 +61,17 @@ public:
 
     // The settings a Preset holds, from the side you're on, in the saved state's format.
     juce::ValueTree presetState();
-    // Puts a Preset's settings on the side you're on, as one undo step, bringing an older version of
-    // the format up to date first. Anything that isn't a Preset changes nothing and returns false.
-    // Message thread only.
-    bool loadPreset (const juce::ValueTree& preset);
+    // Puts a Preset's settings on the side you're on and makes it the side's Loaded Preset, named
+    // name, as one undo step, bringing an older version of the format up to date first. Anything that
+    // isn't a Preset changes nothing and returns false. Message thread only.
+    bool loadPreset (const juce::ValueTree& preset, const juce::String& name);
+    // The side you're on was saved as a Preset (presetState()) named name: it becomes the side's
+    // Loaded Preset, as one undo step. Message thread only.
+    void presetSaved (const juce::String& name, const juce::ValueTree& preset) { compare.presetSaved (name, preset); }
+    // The Loaded Preset of the side you're on, or an empty name for none, and whether the side is
+    // Modified. Message thread only.
+    juce::String loadedPresetName() const { return compare.loadedPresetName(); }
+    bool isLoadedPresetModified() const { return compare.isModified(); }
 
     // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
     int displayRangeDb() const { return displayRange.load(); }
@@ -92,7 +99,7 @@ public:
     // The version of the saved state's format. setStateInformation() brings older states up to it one
     // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
     // version. Bump it, and add a step to the migration, whenever the format changes.
-    static constexpr int stateVersion = 2;
+    static constexpr int stateVersion = 3;
 
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
