@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
@@ -207,4 +208,54 @@ TEST_CASE ("A session from a newer version loads the settings this version knows
     CHECK (processor.analyzerSettings().rangeDb == 120);
     // It saves no A/B Compare this version knows: its settings are side A's.
     CHECK (processor.compareSide() == eq1::CompareSide::A);
+}
+
+TEST_CASE ("A session saved in the middle of an A/B switch or copy holds both sides whole")
+{
+    // A host saving from its own thread can save while the editor is switching sides. A listener on
+    // the parameters saves at the first change the switch makes, as such a host might.
+    struct SaveDuringChange final : juce::AudioProcessorListener
+    {
+        juce::AudioProcessor& processor;
+        std::unique_ptr<juce::XmlElement> saved;
+        explicit SaveDuringChange (juce::AudioProcessor& p) : processor (p) { processor.addListener (this); }
+        ~SaveDuringChange() override { processor.removeListener (this); }
+        void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override
+        {
+            if (saved == nullptr)
+                saved = savedXml (processor);
+        }
+        void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+    };
+
+    juce::ScopedJuceInitialiser_GUI juce;
+    const bool copy = GENERATE (false, true);
+    CAPTURE (copy);
+    eq1::PluginProcessor processor;
+    set (processor, "band1_gain", 6.0f);
+    set (processor, "band2_gain", 2.0f);
+    processor.selectCompareSide (eq1::CompareSide::B);
+    set (processor, "band1_gain", -3.0f);
+    set (processor, "band2_gain", -1.0f);
+    std::unique_ptr<juce::XmlElement> xml;
+    {
+        SaveDuringChange host (processor);
+        if (copy)
+            processor.copyAToB();
+        else
+            processor.selectCompareSide (eq1::CompareSide::A);
+        xml = std::move (host.saved);
+    }
+    REQUIRE (xml != nullptr);
+
+    // Reloaded, the side being switched to is whole on the parameters, and the other side whole too.
+    eq1::PluginProcessor restored;
+    load (restored, *xml);
+    const auto onA = copy ? eq1::CompareSide::B : eq1::CompareSide::A;
+    CHECK (restored.compareSide() == onA);
+    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (6.0, 1.0e-4));
+    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (2.0, 1.0e-4));
+    restored.selectCompareSide (copy ? eq1::CompareSide::A : eq1::CompareSide::B);
+    CHECK_THAT (value (restored, "band1_gain"), WithinAbs (copy ? 6.0 : -3.0, 1.0e-4));
+    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (copy ? 2.0 : -1.0, 1.0e-4));
 }

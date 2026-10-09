@@ -73,7 +73,7 @@ void migrate (juce::ValueTree& state)
     // 1 to 2: A/B Compare. The settings are side A's, and B is a copy of them.
     if (version < 2)
     {
-        state.appendChild (juce::ValueTree (ABCompare::stateType).setProperty ("active", "A", nullptr), nullptr);
+        state.appendChild (ABCompare::initialState(), nullptr);
         state.setProperty (versionProperty, 2, nullptr);
     }
 }
@@ -146,11 +146,10 @@ bool PluginProcessor::loadPreset (const juce::ValueTree& preset)
 
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    auto state = parameters.copyState();
+    auto state = compare.savedState();
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
-    state.appendChild (compare.capture(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
