@@ -101,7 +101,7 @@ Listening to the signal a Dynamic Band's detector hears instead of the plugin's 
 _Avoid_: Sidechain solo, listen, Solo (for detection)
 
 **Detection Level**:
-The level of a Dynamic Band's detection signal, as the detector compares it with the Threshold.
+The level of a Band's detection signal, as its detector compares it with the Threshold, in dB where a full-scale sine reads 0.
 _Avoid_: Input level, sidechain level
 
 **Clear Dynamics**:
