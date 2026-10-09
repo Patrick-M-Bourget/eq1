@@ -17,6 +17,8 @@ add_executable(eq1_engine_tests
     engine/OutputTest.cpp
     engine/DynamicsTest.cpp
     engine/RealtimeSafetyTest.cpp
+    engine/RobustnessTest.cpp
+    engine/SampleRateAndBlockSizeTest.cpp
     engine/ResponseTest.cpp
     engine/SettingsHandoffTest.cpp
     engine/StereoPlacementTest.cpp
@@ -29,7 +31,7 @@ catch_discover_tests(eq1_engine_tests ADD_TAGS_AS_LABELS)
 if(EQ1_BUILD_PLUGIN)
     # Host-level checks drive the Plugin Shell the way a host does.
     add_executable(eq1_plugin_tests plugin/PluginShellTest.cpp plugin/BandEditingTest.cpp plugin/AnalyzerSpectrumTest.cpp
-        plugin/StateTest.cpp plugin/EditHistoryTest.cpp plugin/ABCompareTest.cpp plugin/PresetTest.cpp plugin/PresetLibraryTest.cpp)
+        plugin/StateTest.cpp plugin/EditHistoryTest.cpp plugin/ABCompareTest.cpp plugin/PresetTest.cpp plugin/PresetLibraryTest.cpp plugin/HostSessionTest.cpp)
     target_include_directories(eq1_plugin_tests PRIVATE
         ${PROJECT_SOURCE_DIR}/plugin
         $<TARGET_PROPERTY:eq1,INCLUDE_DIRECTORIES>)
@@ -51,3 +53,8 @@ if(EQ1_BUILD_PLUGIN)
         target_link_libraries(eq1_sidechain_routing_check PRIVATE "-framework CoreAudioKit")
     endif()
 endif()
+
+# Measures the Engine's CPU load against its budget (scripts/check.sh cpu). Not a ctest test: it
+# needs the machine to itself.
+add_executable(eq1_cpu_budget cpu/CpuBudget.cpp)
+target_link_libraries(eq1_cpu_budget PRIVATE eq1::engine)

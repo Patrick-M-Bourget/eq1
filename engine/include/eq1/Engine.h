@@ -30,7 +30,8 @@ enum class AnalysisTap
 };
 
 // The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis() and
-// liveGainDb() never allocate, lock or do I/O.
+// liveGainDb() never allocate, lock or do I/O. process() flushes subnormal numbers to zero, whatever
+// the caller's floating-point mode, and leaves that mode as it found it.
 //
 // Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
 // one thread at a time may call it; the newest settings are taken at the start of each process().
@@ -44,7 +45,10 @@ public:
     void prepare (double sampleRate, int maxBlockSize, int numChannels);
     void setSettings (const Settings& settings);
 
-    // Processes main in place. sidechain may be null when nothing is connected.
+    // Processes main in place. sidechain may be null when nothing is connected. Blocks may be of any
+    // size, changing from call to call. The output doesn't depend on how the host cuts the audio into
+    // blocks, sample for sample, except a Dynamic Band's: its gain moves once per run of at most 16
+    // samples, and a run also ends where a block does.
     void process (AudioBlock main, const ConstAudioBlock* sidechain = nullptr);
 
     // Copies up to maxSamples of the tap's mono signal, oldest first, and returns how many were copied.
