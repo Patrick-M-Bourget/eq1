@@ -57,12 +57,6 @@ void factor (const SquaredMagnitude& m, double& c0, double& c1, double& c2)
         std::swap (c0, c2);
 }
 
-double analogSquared (const AnalogSection& a, double normalisedFrequency)
-{
-    const std::complex<double> s { 0.0, normalisedFrequency };
-    return std::norm ((a.n2 * s * s + a.n1 * s + a.n0) / (a.d2 * s * s + a.d1 * s + a.d0));
-}
-
 // Above ~0.98 Nyquist the matched poles fold back; they, and the match points, are held just below it.
 double digitalFrequency (double frequency, double sampleRate)
 {
@@ -95,6 +89,12 @@ void matchPoles (const AnalogSection& section, double w, BiquadCoefficients& c)
 
 } // namespace
 
+double analogSquared (const AnalogSection& a, double normalisedFrequency)
+{
+    const std::complex<double> s { 0.0, normalisedFrequency };
+    return std::norm ((a.n2 * s * s + a.n1 * s + a.n0) / (a.d2 * s * s + a.d1 * s + a.d0));
+}
+
 BiquadCoefficients matchSection (const AnalogSection& section, double referenceFrequency, double sampleRate)
 {
     return matchSection (section, referenceFrequency, sampleRate, referenceFrequency);
@@ -126,6 +126,27 @@ BiquadCoefficients matchSection (const AnalogSection& section, double referenceF
     num.p2 = (den.at (atMatch) * analogSquared (section, wMatch / (2.0 * std::numbers::pi) * sampleRate / referenceFrequency)
               - num.p0 * atMatch.phi0 - num.p1 * atMatch.phi1)
              / atMatch.phi2;
+    factor (num, c.b0, c.b1, c.b2);
+    return c;
+}
+
+BiquadCoefficients matchMagnitudes (const AnalogSection& poles,
+                                    double referenceFrequency,
+                                    double sampleRate,
+                                    double matchFrequency,
+                                    double squaredAtDc,
+                                    double squaredAtMatch,
+                                    double squaredAtNyquist)
+{
+    BiquadCoefficients c;
+    matchPoles (poles, digitalFrequency (referenceFrequency, sampleRate), c);
+    const SquaredMagnitude den (1.0, c.a1, c.a2);
+    const Phi atMatch (digitalFrequency (matchFrequency, sampleRate));
+
+    SquaredMagnitude num;
+    num.p0 = den.p0 * squaredAtDc;
+    num.p1 = den.p1 * squaredAtNyquist;
+    num.p2 = (den.at (atMatch) * squaredAtMatch - num.p0 * atMatch.phi0 - num.p1 * atMatch.phi1) / atMatch.phi2;
     factor (num, c.b0, c.b1, c.b2);
     return c;
 }

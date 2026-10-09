@@ -1,10 +1,13 @@
 #include "Measure.h"
 
+#include "eq1/Response.h"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <numbers>
@@ -135,13 +138,13 @@ double allPassPhase (double f, double frequency, int order, double q)
     return phase;
 }
 
-// Allowed Band Pass and Notch error in dB, read as for Cuts (docs/dsp/filter-design.md).
+// Allowed Band Pass and Notch error in dB, read as for Cuts (docs/dsp/filter-design.md, "Test tolerances").
 CutTolerance bandTolerance (Shape s, double sampleRate, double frequency, int order)
 {
     const double position = frequency / (sampleRate / 2.0);
     const int region = position <= 0.45 ? 0 : position <= 0.73 ? 1 : 2;
     constexpr CutTolerance bandPass[] = { { 0.5, 1.0 }, { 2.0, 2.5 }, { 5.0, 2.0 } };
-    constexpr CutTolerance steepBandPass[] = { { 2.5, 5.5 }, { 6.0, 9.0 }, { 18.0, 9.0 } };
+    constexpr CutTolerance steepBandPass[] = { { 2.5, 5.5 }, { 3.0, 6.0 }, { 5.0, 9.0 } };
     constexpr CutTolerance notch[] = { { 0.1, 6.0 }, { 0.1, 6.5 }, { 0.1, 6.5 } };
     if (s == Shape::Notch)
         return notch[region];
@@ -386,5 +389,37 @@ TEST_CASE ("All Pass is flat and turns the phase by 90 degrees per order at Freq
         // Wrapped phase can't show an error beyond 180 degrees, so the bound holds where it is smaller.
         if (f <= frequency && tolerance < 180.0)
             REQUIRE (std::abs (wrappedDegrees (test::phase (response, f, sampleRate) - allPassPhase (f, frequency, order, q))) <= tolerance);
+    }
+}
+
+TEST_CASE ("A steep Band Pass's response moves smoothly as Frequency or Q crosses where its upper sections are held", "[response]")
+{
+    // Swept in steps of 5 Hz in Frequency, or 0.2% in Q, the response changes evenly from step to step,
+    // whether or not an upper section is held near Nyquist: no step stands out from the ones on either
+    // side (the second difference, in dB, stays small), so the design has no jumps to click on. A steep
+    // skirt may still move by a fraction of a dB per step.
+    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
+    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0);
+    const int order = GENERATE (5, 16);
+    const bool sweepQ = GENERATE (false, true);
+    CAPTURE (sampleRate, q, order, sweepQ);
+    const double nyquist = sampleRate / 2.0;
+    const double probes[] = { 0.2 * nyquist, 0.6 * nyquist, 0.8 * nyquist, 0.92 * nyquist, 0.98 * nyquist };
+    std::array<std::array<double, std::size (probes)>, 3> last {}; // the last three steps' responses
+    // Frequency from 0.6 to 1.2 x Nyquist, across the hold at 0.95; Q from half to twice q.
+    const int steps = sweepQ ? 700 : static_cast<int> (0.6 * nyquist / 5.0);
+    for (int step = 0; step < steps; ++step)
+    {
+        const double frequency = sweepQ ? 0.9 * nyquist : 0.6 * nyquist + 5.0 * step;
+        const double bandQ = sweepQ ? q * 0.5 * std::pow (1.002, step) : q;
+        CAPTURE (frequency, bandQ);
+        BandSettings band { .inUse = true, .shape = Shape::BandPass, .frequency = frequency, .q = bandQ, .slope = 6.0 * order };
+        std::rotate (last.begin(), last.begin() + 1, last.end());
+        bandResponseDb (band, probes, last[2].data(), static_cast<int> (std::size (probes)), sampleRate);
+        if (step < 2)
+            continue;
+        for (size_t i = 0; i < std::size (probes); ++i)
+            if (std::max ({ last[0][i], last[1][i], last[2][i] }) > -100.0)
+                REQUIRE (std::abs (last[0][i] - 2.0 * last[1][i] + last[2][i]) < 0.6);
     }
 }

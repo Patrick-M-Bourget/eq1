@@ -190,10 +190,41 @@ std::pair<std::complex<double>, std::complex<double>> reciprocalRoots (std::comp
 // becomes a lower and an upper pole pair, with s / Q for each. Together they are designed as a Low
 // Cut section on the lower pair (s^2) and a High Cut section on the upper one (1 / Q^2): split this
 // way a wide Band Pass stays accurate. The odd pole gives one band-pass section.
+//
+// Above 24 dB/oct, near Nyquist, the upper pairs whose natural frequency is beyond what can be placed
+// would each bump up a little where they are held, and many small errors add up: a steep Band Pass
+// is designed for that (docs/dsp/filter-design.md, "Band Pass sections").
+constexpr int steepBandPassOrder = 5;
+// Where a steep Band Pass's upper sections are held, as a share of Nyquist.
+constexpr double bandPassHold = 0.95;
+
+// An upper section whose natural frequency, reference, is above hold: its poles at hold with the Q
+// that makes it as loud there, relative to DC, as the analog section is (never a higher Q). Its zeros
+// fit a blend of the analog section's magnitude and the held section's own, by how far its Q was
+// lowered: the analog section's where it wasn't (so the design is continuous at the hold), the held
+// section's where it was lowered most (whose zeros don't then reach for the analog peak above Nyquist).
+BiquadCoefficients heldUpperSection (const AnalogSection& upper, double reference, double hold, double matchFrequency, double sampleRate)
+{
+    const double analogQ = 1.0 / upper.d1;
+    const double relative = std::sqrt (analogSquared (upper, hold / reference) / analogSquared (upper, 0.0));
+    const double heldQ = std::min (analogQ, relative);
+    const AnalogSection held { 0.0, 0.0, upper.n0, 1.0, 1.0 / heldQ, 1.0 };
+    const double blend = std::sqrt (1.0 - heldQ / analogQ);
+    const auto squared = [&] (double frequency) {
+        return std::pow (analogSquared (upper, frequency / reference), 1.0 - blend) * std::pow (analogSquared (held, frequency / hold), blend);
+    };
+    return matchMagnitudes (held, hold, sampleRate, matchFrequency, squared (0.0), squared (matchFrequency), squared (0.5 * sampleRate));
+}
+
 Cascade designBandPass (const ShapeParameters& p, double sampleRate)
 {
     Cascade cascade;
     const double q = p.q;
+    const bool steep = p.structure.order >= steepBandPassOrder;
+    const double hold = bandPassHold * 0.5 * sampleRate;
+    // The analog target's squared magnitude where a steep Band Pass's gain is set, built up section by section.
+    const double gainAt = std::min (p.frequency, hold);
+    double targetSquared = 1.0;
     transformedButterworth (
         p.structure.order,
         [q] (std::complex<double> pole) { return reciprocalRoots (pole / q); },
@@ -202,17 +233,31 @@ Cascade designBandPass (const ShapeParameters& p, double sampleRate)
             if (std::norm (lowerRoot) > std::norm (upperRoot))
                 std::swap (lowerRoot, upperRoot);
 
-            const auto lower = normalise ({ 1.0, 0.0, 0.0, 1.0, -2.0 * lowerRoot.real(), std::norm (lowerRoot) });
+            const AnalogSection lowerAnalog { 1.0, 0.0, 0.0, 1.0, -2.0 * lowerRoot.real(), std::norm (lowerRoot) };
+            const AnalogSection upperAnalog { 0.0, 0.0, 1.0 / (q * q), 1.0, -2.0 * upperRoot.real(), std::norm (upperRoot) };
+            targetSquared *= analogSquared (lowerAnalog, gainAt / p.frequency) * analogSquared (upperAnalog, gainAt / p.frequency);
+
+            const auto lower = normalise (lowerAnalog);
             add (cascade,
                  matchHighPass (lower.section, p.frequency * lower.naturalFrequency, sampleRate, HighPassGain::betweenReferenceAndNyquist));
 
             // Matched as a High Cut section, but at most 0.9 of its natural frequency: a very sharp
             // section matched at its peak takes the poles' tiny error as gain.
-            const auto upper = normalise ({ 0.0, 0.0, 1.0 / (q * q), 1.0, -2.0 * upperRoot.real(), std::norm (upperRoot) });
+            const auto upper = normalise (upperAnalog);
             const double reference = p.frequency * upper.naturalFrequency;
-            add (cascade, matchSection (upper.section, reference, sampleRate, dampedMatchFrequency (reference, upper.section.d1, sampleRate, 0.9)));
+            const double match = dampedMatchFrequency (reference, upper.section.d1, sampleRate, 0.9);
+            add (cascade, steep && reference > hold ? heldUpperSection (upper.section, reference, hold, match, sampleRate)
+                                                    : matchSection (upper.section, reference, sampleRate, match));
         },
-        [&] { add (cascade, matchSection ({ 0.0, 1.0 / q, 0.0, 1.0, 1.0 / q, 1.0 }, p.frequency, sampleRate)); });
+        [&] {
+            const AnalogSection odd { 0.0, 1.0 / q, 0.0, 1.0, 1.0 / q, 1.0 };
+            targetSquared *= analogSquared (odd, gainAt / p.frequency);
+            add (cascade, matchSection (odd, p.frequency, sampleRate));
+        });
+    // The sections' small errors lean the same way and add up: the whole cascade's gain is set to the
+    // target's at Frequency (or the hold, if Frequency is above it).
+    if (steep)
+        scale (cascade, std::sqrt (targetSquared / std::norm (responseAt (cascade, gainAt, sampleRate))));
     return cascade;
 }
 
