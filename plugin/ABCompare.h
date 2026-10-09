@@ -39,7 +39,7 @@ public:
     void loadPreset (const juce::ValueTree& preset, const juce::String& name);
     // The side you're on was saved as a Preset holding preset: it becomes the side's Loaded Preset,
     // named name, as one undo step.
-    void presetSaved (const juce::String& name, const juce::ValueTree& preset);
+    void presetSaved (const juce::ValueTree& preset, const juce::String& name);
     // The Loaded Preset of the side you're on, or an empty name for none.
     juce::String loadedPresetName() const;
     // Whether the side you're on is Modified: its settings differ from its Loaded Preset's as loaded.
@@ -73,18 +73,20 @@ private:
 
     juce::ValueTree capture() const override;
     static juce::ValueTree treeOf (const State& state);
+    // A Loaded Preset: its name and the settings preset puts on the parameters.
+    juce::ValueTree loadedPresetOf (const juce::ValueTree& preset, const juce::String& name);
 
     State current() const;
     void set (State next);
-    // Puts a side's settings on the parameters, telling a save made meanwhile what they will be. The
-    // A/B state changes with it, to next, as a save sees it.
+    // Puts a side's or a Preset's settings on the parameters, telling a save made meanwhile what they
+    // will be. The A/B state changes with it, to next, as a save sees it.
     void putOnParameters (const juce::ValueTree& settings, State next);
 
     juce::AudioProcessorValueTreeState& parameters;
     EditHistory& history;
     mutable juce::SpinLock lock; // a host may save or restore while the editor switches sides
     State state;
-    juce::ValueTree arriving; // the side putOnParameters() is putting on the parameters, while it does
+    juce::ValueTree arriving; // the settings putOnParameters() is putting on the parameters, while it does
     int changes = 0;          // counts every change of the above, so a save can tell it raced one
 
     JUCE_DECLARE_NON_COPYABLE (ABCompare)

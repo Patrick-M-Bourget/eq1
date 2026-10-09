@@ -302,7 +302,7 @@ TEST_CASE ("Copy A to B, and B's first selection, give B A's Loaded Preset and M
     CHECK (host.processor.isLoadedPresetModified() == modified);
 }
 
-TEST_CASE ("Saving the settings as a User Preset makes it the side's Loaded Preset, unmodified, as one undo step")
+TEST_CASE ("Settings saved as a Preset make it the side's Loaded Preset, unmodified, as one undo step")
 {
     const auto vocal = presetWith ({ { "band2_in_use", 1.0f } });
     Host host;
@@ -311,7 +311,7 @@ TEST_CASE ("Saving the settings as a User Preset makes it the side's Loaded Pres
     REQUIRE (host.processor.isLoadedPresetModified());
     const int steps = host.processor.editHistory().undoSteps();
 
-    host.processor.presetSaved ("Vocal Louder", host.processor.presetState());
+    host.processor.presetSaved (host.processor.presetState(), "Vocal Louder");
     CHECK (host.processor.loadedPresetName() == "Vocal Louder");
     CHECK_FALSE (host.processor.isLoadedPresetModified());
     host.edit ("band2_gain", 5.0f);

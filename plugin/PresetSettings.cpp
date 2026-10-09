@@ -66,7 +66,6 @@ juce::ValueTree presetSettingsAsLoaded (juce::AudioProcessorValueTreeState& para
     return tree;
 }
 
-
 bool holdsPresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree)
 {
     bool holds = true;

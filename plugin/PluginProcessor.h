@@ -67,7 +67,7 @@ public:
     bool loadPreset (const juce::ValueTree& preset, const juce::String& name);
     // The side you're on was saved as a Preset (presetState()) named name: it becomes the side's
     // Loaded Preset, as one undo step. Message thread only.
-    void presetSaved (const juce::String& name, const juce::ValueTree& preset) { compare.presetSaved (name, preset); }
+    void presetSaved (const juce::ValueTree& preset, const juce::String& name) { compare.presetSaved (preset, name); }
     // The Loaded Preset of the side you're on, or an empty name for none, and whether the side is
     // Modified. Message thread only.
     juce::String loadedPresetName() const { return compare.loadedPresetName(); }

@@ -96,7 +96,7 @@ void ABCompare::copyAToB()
 
 void ABCompare::loadPreset (const juce::ValueTree& preset, const juce::String& name)
 {
-    const auto loaded = presetSettingsAsLoaded (parameters, preset, loadedPresetType).setProperty (nameProperty, name, nullptr);
+    const auto loaded = loadedPresetOf (preset, name);
     history.beginTransaction();
     auto next = current();
     next.loadedOn (next.active) = loaded;
@@ -104,13 +104,18 @@ void ABCompare::loadPreset (const juce::ValueTree& preset, const juce::String& n
     history.endTransaction();
 }
 
-void ABCompare::presetSaved (const juce::String& name, const juce::ValueTree& preset)
+void ABCompare::presetSaved (const juce::ValueTree& preset, const juce::String& name)
 {
     history.beginTransaction();
     auto next = current();
-    next.loadedOn (next.active) = presetSettingsAsLoaded (parameters, preset, loadedPresetType).setProperty (nameProperty, name, nullptr);
+    next.loadedOn (next.active) = loadedPresetOf (preset, name);
     set (std::move (next));
     history.endTransaction();
+}
+
+juce::ValueTree ABCompare::loadedPresetOf (const juce::ValueTree& preset, const juce::String& name)
+{
+    return presetSettingsAsLoaded (parameters, preset, loadedPresetType).setProperty (nameProperty, name, nullptr);
 }
 
 juce::String ABCompare::loadedPresetName() const
