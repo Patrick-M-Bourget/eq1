@@ -48,6 +48,14 @@ _Avoid_: Mute, disable, off
 Auditioning only the region of the spectrum a Band affects.
 _Avoid_: Listen, audition (for Bands)
 
+**Split**:
+Turning one Stereo Band into two Bands, one Left and one Right, that keep every other setting.
+_Avoid_: Duplicate, separate
+
+**Invert Gain**:
+Flipping the sign of a Band's Gain and Dynamic Range, so a boost becomes the same cut.
+_Avoid_: Flip, Phase Invert (for a Band)
+
 ## Dynamics
 
 **Dynamic Band**:
@@ -92,6 +100,14 @@ _Avoid_: Bypass (unqualified) for dynamics
 Listening to the signal a Dynamic Band's detector hears instead of the plugin's output.
 _Avoid_: Sidechain solo, listen, Solo (for detection)
 
+**Detection Level**:
+The level of a Dynamic Band's detection signal, as the detector compares it with the Threshold.
+_Avoid_: Input level, sidechain level
+
+**Clear Dynamics**:
+Putting every dynamics setting of a Band back to its default, so it stops being a Dynamic Band.
+_Avoid_: Reset (unqualified), remove dynamics
+
 ## Whole-plugin
 
 **Processing Mode**:
@@ -109,6 +125,14 @@ _Avoid_: Tilt (unqualified) for the Analyzer
 **Spectrum Grab**:
 Grabbing a peak in the Analyzer to create or adjust a Band at that spot.
 _Avoid_: Peak grab, click-to-EQ
+
+**Peak Hold**:
+A faint line on the Analyzer that holds the highest level each frequency reached, then falls back slowly.
+_Avoid_: Freeze, max hold
+
+**Display Range**:
+How many dB above and below 0 dB the EQ display shows Gain over; it changes the view, never the sound.
+_Avoid_: Zoom, range (unqualified), scale
 
 **Preset**:
 A saved, named set of every setting that affects the sound: Factory (shipped with eq1) or User (saved by the user).
@@ -157,3 +181,7 @@ _Avoid_: Depth, master gain, amount
 **Host Automation**:
 Parameter changes recorded and played back by the DAW hosting the plugin.
 _Avoid_: Automation (unqualified)
+
+**Output Meter**:
+The display of the plugin's output level per channel, with a clip light that stays lit until cleared; separate from the Analyzer.
+_Avoid_: Meter (unqualified), level meter, VU
