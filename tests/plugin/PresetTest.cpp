@@ -145,8 +145,8 @@ TEST_CASE ("Something that isn't a Preset changes nothing")
 {
     Host host;
     host.edit ("band1_in_use", 1.0f);
-    host.processor.loadPreset (juce::ValueTree ("SomethingElse"));
-    host.processor.loadPreset ({});
+    CHECK_FALSE (host.processor.loadPreset (juce::ValueTree ("SomethingElse")));
+    CHECK_FALSE (host.processor.loadPreset ({}));
     CHECK (host.value ("band1_in_use") == 1.0f);
     CHECK (host.processor.editHistory().undoSteps() == 1);
 }

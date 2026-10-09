@@ -132,15 +132,16 @@ juce::ValueTree PluginProcessor::presetState()
     return capturePresetSettings (parameters, parameters.state.getType()).setProperty (versionProperty, stateVersion, nullptr);
 }
 
-void PluginProcessor::loadPreset (const juce::ValueTree& preset)
+bool PluginProcessor::loadPreset (const juce::ValueTree& preset)
 {
     if (! preset.hasType (parameters.state.getType()))
-        return;
+        return false;
     auto settings = preset.createCopy();
     migrate (settings);
     history.beginTransaction();
     applyPresetSettings (parameters, settings);
     history.endTransaction();
+    return true;
 }
 
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)

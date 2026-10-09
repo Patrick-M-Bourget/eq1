@@ -8,12 +8,14 @@ namespace eq1
 {
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), output (p)
+    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), output (p), presetBar (p)
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
     addAndMakeVisible (display);
     addAndMakeVisible (panel);
     addAndMakeVisible (output);
+    presetBar.onEdit = [this] { showUndoState(); };
+    addAndMakeVisible (presetBar);
 
     // The display's Gain range, saved with the plugin.
     for (int range : { 6, 12, 30 })
@@ -62,8 +64,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     setResizable (true, true);
     // Wide enough for the output controls' row.
-    setResizeLimits (960, 452, 2560, 1600);
-    setSize (1100, 632);
+    setResizeLimits (960, 484, 2560, 1600);
+    setSize (1100, 664);
 }
 
 void PluginEditor::showAnalyzerSettings()
@@ -140,16 +142,18 @@ void PluginEditor::paint (juce::Graphics& g)
 void PluginEditor::resized()
 {
     auto area = getLocalBounds();
+    auto header = area.removeFromTop (32).reduced (6, 4);
     auto toolbar = area.removeFromTop (32).reduced (6, 4);
     output.setBounds (area.removeFromBottom (32));
     panel.setBounds (area.removeFromBottom (170));
     display.setBounds (area);
 
+    redoButton.setBounds (header.removeFromRight (52));
+    header.removeFromRight (4);
+    undoButton.setBounds (header.removeFromRight (52));
+    presetBar.setBounds (header);
+
     displayRange.setBounds (toolbar.removeFromRight (110));
-    toolbar.removeFromRight (6);
-    redoButton.setBounds (toolbar.removeFromRight (52));
-    toolbar.removeFromRight (4);
-    undoButton.setBounds (toolbar.removeFromRight (52));
     showPreEq.setBounds (toolbar.removeFromLeft (56));
     showPostEq.setBounds (toolbar.removeFromLeft (60));
     showSidechain.setBounds (toolbar.removeFromLeft (90));

@@ -45,6 +45,7 @@ target_sources(eq1 PRIVATE
     ABCompare.cpp
     PresetSettings.cpp
     PresetLibrary.cpp
+    PresetBar.cpp
     OutputPanel.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp)
