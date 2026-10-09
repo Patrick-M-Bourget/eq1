@@ -3,14 +3,18 @@
 #
 #   scripts/ci-timings.sh <run-id> [attempt]     attempt defaults to the latest
 #
-# A job that ran no steps prints its annotations instead: why it never started (billing, a runner).
+# A step still running shows its time so far. A job that ran no steps prints its annotations instead:
+# why it never started (billing, a runner).
 set -euo pipefail
 run=${1:?usage: scripts/ci-timings.sh <run-id> [attempt]}
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 attempt=${2:-$(gh api "repos/$repo/actions/runs/$run" --jq .run_attempt)}
 
 gh api "repos/$repo/actions/runs/$run/attempts/$attempt/jobs" --jq '
-  def minutes(a; b): if a and b then ((b | fromdateiso8601) - (a | fromdateiso8601)) as $s | "\($s / 60 | floor)m\($s % 60 | floor)s" else "-" end;
+  def minutes(a; b):
+    if a then ((if b then b | fromdateiso8601 else now end) - (a | fromdateiso8601)) as $s
+      | "\($s / 60 | floor)m\($s % 60 | floor)s\(if b then "" else " so far" end)"
+    else "-" end;
   .jobs[] | "J \(.id) \(.steps | length) \(.name): \(.conclusion // .status), \(minutes(.started_at; .completed_at))",
     (.steps[] | "S   \(.name): \(minutes(.started_at; .completed_at))")' |
 while read -r kind rest; do

@@ -33,7 +33,7 @@ Create a GitHub issue.
 ## When a skill says "fetch the relevant ticket"
 
 Read it as in **Read an issue** above.
-A ticket's spec is its latest `## Agent Brief` comment when it has one; the brief supersedes the body. `gh issue view <number> --comments` prints the comments without the body, so read with `--json` as above.
+A ticket's spec is its latest `## Agent Brief` comment when it has one; the brief supersedes the body. Decisions settled in conversation before implementing (tolerances, scope, what an ambiguous criterion means) are posted as a new Agent Brief first, so the ticket keeps them. `gh issue view <number> --comments` prints the comments without the body, so read with `--json` as above.
 
 ## Wayfinding operations
 

@@ -7,6 +7,7 @@ Judgement calls for review. Mechanical rules live in `scripts/check.sh` and the 
 A test's inputs must cover the region its name and comments claim. Check sweep bounds and step counts against that region, and make sure a test signal actually has content there.
 
 - **Sweeps:** a sweep "across the hold at 0.95 × Nyquist" must run past 0.95 × Nyquist at every sample rate it is run at, with its step count computed from the range, not fixed.
+- **Red without the change:** a test added with a fix or a guard fails when that code is taken out. Untouched samples, a property the code can't affect, or a check the code passes by construction make it pass either way. The PR shows the failing run as evidence, or the reviewer asks for one.
 - **Fixtures near Nyquist:** a fixture that shapes a test signal (a band-limit, a reference filter) is exact over the whole range it is used in. The Engine's own Shapes are inexact near Nyquist (`docs/dsp/filter-design.md`, "Test tolerances"), so a test band-limits with them only where they are accurate, or at a sample rate where they are (96 kHz for a 20 kHz High Cut).
 
 ## Comments and docs state current behaviour

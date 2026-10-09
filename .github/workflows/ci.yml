@@ -67,17 +67,23 @@ jobs:
       - name: Build
         run: scripts/check.sh build
 
+      # Time limits of about twice a normal run, so a step that slows down fails and names itself
+      # (scripts/ci-timings.sh shows each step's time). Build has none: a cold compiler cache varies too much.
       - name: Engine and Plugin Shell tests
+        timeout-minutes: 8
         run: scripts/check.sh test
 
       - name: CPU budget
+        timeout-minutes: 3
         run: scripts/check.sh cpu
 
       - name: Engine tests under ThreadSanitizer
         if: runner.os == 'macOS'
+        timeout-minutes: 15
         run: scripts/check.sh tsan
 
       - name: Validate plugins (pluginval, auval, clap-validator, AAX and Standalone built)
+        timeout-minutes: 8
         run: scripts/check.sh validate
 
       - name: Compiler cache statistics
