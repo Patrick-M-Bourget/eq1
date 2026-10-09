@@ -57,8 +57,11 @@ target_link_libraries(eq1
         juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+if(EQ1_LTO)
+    target_link_libraries(eq1 PUBLIC juce::juce_recommended_lto_flags)
+endif()
 
 clap_juce_extensions_plugin(TARGET eq1
     CLAP_ID "com.pbourget.eq1"

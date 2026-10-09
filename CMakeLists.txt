@@ -10,6 +10,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(EQ1_BUILD_PLUGIN "Build the Plugin Shell (needs JUCE)" ON)
 option(EQ1_BUILD_TESTS "Build the tests" ON)
+# Link-time optimisation is for what ships. scripts/check.sh turns it off: on MSVC it makes each
+# format's link several minutes long.
+option(EQ1_LTO "Build the Plugin Shell with link-time optimisation" ON)
 
 include(FetchContent)
 
