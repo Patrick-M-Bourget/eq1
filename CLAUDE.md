@@ -2,6 +2,8 @@
 
 Real-time EQ plugin (VST3/AU/AAX/CLAP) modeled on FabFilter Pro-Q 4, built with JUCE 9. Use the vocabulary in `GLOSSARY.md`; respect the decisions in `docs/adr/`.
 
+Checks: `scripts/check.sh` (its header lists them); run a few tests with `scripts/check.sh focus <regex>`.
+
 Filter design (analog targets, decramping, test tolerances): `docs/dsp/filter-design.md`. Try a design in `tools/filter-lab/filterlab.py` before writing C++.
 
 ## Agent skills
