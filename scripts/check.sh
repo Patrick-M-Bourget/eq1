@@ -2,7 +2,7 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
 #
 #   scripts/check.sh            docs, build, test, cpu, tsan and validate
-#   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists
+#   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, and GLOSSARY.md is the only glossary
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -53,6 +53,14 @@ docs() {
             broken=1
         fi
     done < <(git ls-files -z -- ':!*.md' | xargs -0 grep -hoE 'docs/[A-Za-z0-9_./-]+\.md(, "[^"]+")?' | sort -u)
+    # One glossary: GLOSSARY.md at the root (or the ones GLOSSARY-MAP.md lists). A copy elsewhere,
+    # such as one bundled with a design handoff, goes stale.
+    if [ ! -f GLOSSARY-MAP.md ]; then
+        while IFS= read -r copy; do
+            echo "$copy: a second glossary; GLOSSARY.md at the root is the only one" >&2
+            broken=1
+        done < <(git ls-files -- '*GLOSSARY.md' ':!GLOSSARY.md')
+    fi
     [ "$broken" = 0 ] && echo "Every cited doc and section exists"
     return "$broken"
 }
