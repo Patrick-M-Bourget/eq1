@@ -1,6 +1,7 @@
 # The DSP Engine: plain C++, no dependency on JUCE's plugin wrapper or UI.
 add_library(eq1_engine STATIC
     src/Engine.cpp
+    src/AutoGain.cpp
     src/Band.cpp
     src/Dynamics.cpp
     src/MatchedDesign.cpp

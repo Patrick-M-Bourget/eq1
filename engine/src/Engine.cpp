@@ -1,9 +1,11 @@
 #include "eq1/Engine.h"
 
 #include "AnalysisFifo.h"
+#include "AutoGain.h"
 #include "Band.h"
 #include "Dynamics.h"
 #include "LatestValue.h"
+#include "Output.h"
 #include "Smoother.h"
 #include "Solo.h"
 
@@ -28,6 +30,20 @@ struct Engine::Impl
     std::array<Dynamics, numBandSlots> dynamics;
     std::array<std::atomic<double>, numBandSlots> liveGains {}; // for the display, after each block
     static_assert (std::atomic<double>::is_always_lock_free, "process() never locks");
+    Output output;
+
+    // Global Bypass: bypassMix crossfades from the processed output (0) to the input (1), copied into dry.
+    static constexpr double bypassFadeTimeConstantSeconds = 0.007; // as a Band's crossfades: about 50 ms
+    Smoother bypassMix;
+    std::vector<std::array<float, Band::maxSubBlock>> dry; // per channel
+
+    // Auto Gain's estimate is worked out over several blocks, at most a point every
+    // samplesPerAutoGainPoint samples, so a new estimate takes about 40 ms at 48 kHz.
+    static constexpr int samplesPerAutoGainPoint = 2;
+    double sampleRate = 48000.0;
+    AutoGainEstimate autoGain;
+    Settings estimated; // the settings of the estimate running or last finished: only Bands and Gain Scale count
+    bool estimateStale = false;
     std::vector<float*> subBlock; // per channel
     std::array<const float*, 2> sidechainSubBlock {}; // the Sidechain's first two channels
 
@@ -138,9 +154,27 @@ struct Engine::Impl
             return;
         for (size_t band = 0; band < bands.size(); ++band)
         {
-            bands[band].setSettings (settings.bands[band], snapToSettings);
-            dynamics[band].setSettings (settings.bands[band], snapToSettings);
+            const auto playing = scaledByGainScale (settings.bands[band], settings.gainScale);
+            bands[band].setSettings (playing, snapToSettings);
+            dynamics[band].setSettings (playing, snapToSettings);
         }
+        if (snapToSettings)
+        {
+            // The first estimate is worked out at once, so the output starts at the right level.
+            estimated = settings;
+            autoGain.start (settings, sampleRate);
+            autoGain.advance (AutoGainEstimate::numPoints);
+            estimateStale = false;
+        }
+        else if (settings.bands != estimated.bands || settings.gainScale != estimated.gainScale)
+        {
+            estimateStale = true;
+        }
+        updateOutput (snapToSettings);
+        if (snapToSettings)
+            bypassMix.reset (settings.globalBypass ? 1.0 : 0.0);
+        else
+            bypassMix.setTarget (settings.globalBypass ? 1.0 : 0.0);
 
         const auto bandIn = [&] (int slot) -> const BandSettings* {
             const bool valid = slot >= 1 && slot <= numBandSlots && settings.bands[static_cast<size_t> (slot - 1)].inUse;
@@ -166,6 +200,24 @@ struct Engine::Impl
         }
         settingsChanged = false;
         snapToSettings = false;
+    }
+
+    void updateOutput (bool snap) { output.setSettings (settings, settings.autoGain ? autoGain.db() : 0.0, snap); }
+
+    // Once a block: carries on with the Auto Gain estimate, starting a new one once the last has
+    // finished if the Bands have changed since, and glides the output to it when it finishes.
+    void updateAutoGain (int numSamples)
+    {
+        if (! autoGain.running())
+        {
+            if (! estimateStale)
+                return;
+            estimated = settings;
+            autoGain.start (settings, sampleRate);
+            estimateStale = false;
+        }
+        if (autoGain.advance ((numSamples + samplesPerAutoGainPoint - 1) / samplesPerAutoGainPoint))
+            updateOutput (false);
     }
 
     // Starts playing the wanted Solo or Detection Audition, once nothing else is audible; with snap,
@@ -206,10 +258,15 @@ Engine::~Engine() = default;
 void Engine::prepare (double sampleRate, int, int numChannels)
 {
     impl->numChannels = numChannels;
+    impl->sampleRate = sampleRate;
     for (auto& band : impl->bands)
         band.prepare (sampleRate, numChannels);
     for (auto& dynamics : impl->dynamics)
         dynamics.prepare (sampleRate);
+    impl->output.prepare (sampleRate, numChannels);
+    impl->bypassMix.configure (Impl::bypassFadeTimeConstantSeconds * sampleRate, 1.0e-6);
+    impl->bypassMix.reset (0.0);
+    impl->dry.assign (static_cast<size_t> (numChannels), {});
     impl->subBlock.assign (static_cast<size_t> (numChannels), nullptr);
     impl->soloRegion.prepare (sampleRate, numChannels);
     impl->heldMix.configure (Impl::heldFadeTimeConstantSeconds * sampleRate, 1.0e-6);
@@ -234,6 +291,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
 {
     impl->applySettings();
     impl->updateHeld();
+    impl->updateAutoGain (main.numSamples);
 
     const int channels = std::min (main.numChannels, impl->numChannels);
     Impl::pushMonoMix (impl->preEq, main.channels, channels, main.numSamples);
@@ -250,6 +308,12 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
             impl->subBlock[static_cast<size_t> (ch)] = main.channels[ch] + start;
         for (int ch = 0; ch < sidechainChannels; ++ch)
             impl->sidechainSubBlock[static_cast<size_t> (ch)] = sidechain->channels[ch] + start;
+
+        const bool bypassing = impl->bypassMix.value() > 0.0 || impl->bypassMix.isMoving();
+        if (bypassing)
+            for (int ch = 0; ch < channels; ++ch)
+                std::copy (impl->subBlock[static_cast<size_t> (ch)], impl->subBlock[static_cast<size_t> (ch)] + count,
+                           impl->dry[static_cast<size_t> (ch)].data());
 
         const bool holding = impl->heldAudible();
         const int partChannels = holding && ! impl->playing.audition ? impl->takeSoloPart (impl->subBlock.data(), channels, count) : 0;
@@ -277,6 +341,22 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
                     const double dry = samples[i];
                     samples[i] = static_cast<float> (dry + mixes[static_cast<size_t> (i)] * (impl->heldSample (partChannels, ch, i) - dry));
                 }
+            }
+        }
+
+        impl->output.process (impl->subBlock.data(), channels, count);
+
+        if (bypassing)
+        {
+            std::array<double, Band::maxSubBlock> mixes;
+            for (size_t i = 0; i < static_cast<size_t> (count); ++i)
+                mixes[i] = impl->bypassMix.next();
+            for (int ch = 0; ch < channels; ++ch)
+            {
+                float* samples = impl->subBlock[static_cast<size_t> (ch)];
+                const auto& input = impl->dry[static_cast<size_t> (ch)];
+                for (size_t i = 0; i < static_cast<size_t> (count); ++i)
+                    samples[i] = static_cast<float> (samples[i] + mixes[i] * (input[i] - samples[i]));
             }
         }
     }

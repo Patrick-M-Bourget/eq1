@@ -84,3 +84,12 @@ How a Dynamic Band moves its Live Gain (`engine/src/Dynamics.cpp`). Pro-Q 4 only
 - **Low Cut, High Cut:** the opposite Cut at the same Slope and Brickwall, at least 6 dB/oct, with Q 0.71 whatever the Cut's own Q.
 - **Stereo Placement:** the region of the part the Band processes, decoded back to where it came from; the rest is silent. A Left Band's Solo is the left channel's region and a silent right; a Side Band's Solo on mono is silent.
 - **Moving Solo** to another Band, or changing the Soloed Band's Stereo Placement, fades the old Solo out before the new one fades in. A Bypassed Band still Solos its region.
+
+## Output
+
+What follows the Bands (`engine/src/Output.h`, `engine/src/AutoGain.cpp`):
+
+- **Gain Scale** multiplies each Band's Gain and Dynamic Range in dB, on Shapes with a Gain, before anything else: the Band glides to it as to a Gain change, and Live Gain stays within ±30 dB. The drawn curve uses the same scaled Gains.
+- **Auto Gain** is −10·log₁₀ of the curve's mean power gain at 1,024 frequencies spaced evenly in log frequency from 20 Hz to 20 kHz (up to Nyquist below 40 kHz): pink noise has equal power per octave, so this brings pink noise over that range back to the average power it went in at. It uses each Band's Gain, scaled, without dynamics, and ignores Stereo Placement, as the drawn curve does. Within 0.1 dB of a measured pink probe on the reference settings in `tests/engine/OutputTest.cpp`. The Engine works a new estimate out over about 40 ms of audio once the Bands change, and glides to it.
+- **Output Gain, Output Pan, Phase Invert:** one 2×2 mix of the two channels, each of its four amounts gliding over about 50 ms, so every change, Pan Mode included, is click-free. Pan is a balance: the centre leaves both sides at unity and each step towards one side turns the other down linearly, to silence at the end. In M/S the left side is Mid and the right Side. On mono only Output Gain, Auto Gain and Phase Invert apply.
+- **Global Bypass** crossfades over about 50 ms to the input as it came in. The Bands keep running underneath, so switching back is click-free too.

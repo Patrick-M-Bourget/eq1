@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <numbers>
 #include <vector>
 
@@ -340,4 +341,51 @@ TEST_CASE ("Switching Dynamics Bypass does not click, even at the fastest Attack
         s.bands[0].dynamicsBypass = alternating (seconds);
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Switching Global Bypass does not click")
+{
+    const auto host = anyHost();
+    CAPTURE (host.sampleRate, host.blockSize);
+    const auto output = playStereoTone (host, [] (double seconds, Settings& s) {
+        s.bands[0] = bellBand (toneFrequency, 18.0, 1.0);
+        s.outputGainDb = -6.0;
+        s.phaseInvert = true;
+        s.globalBypass = alternating (seconds);
+    });
+    CHECK (discontinuity (output[0], host.sampleRate) < threshold);
+    CHECK (discontinuity (output[1], host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Jumps in Output Gain and Gain Scale, and switching Phase Invert and Auto Gain, do not click")
+{
+    const auto host = anyHost();
+    const int control = GENERATE (0, 1, 2, 3);
+    CAPTURE (host.sampleRate, host.blockSize, control);
+    const auto output = playTone (host, [control] (double seconds, Settings& s) {
+        s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
+        const bool on = alternating (seconds);
+        switch (control)
+        {
+            case 0: s.outputGainDb = on ? 12.0 : -std::numeric_limits<double>::infinity(); break;
+            case 1: s.gainScale = on ? 2.0 : 0.0; break;
+            case 2: s.phaseInvert = on; break;
+            case 3: s.autoGain = on; break;
+        }
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
+TEST_CASE ("Jumps in Output Pan, and switching Pan Mode, do not click")
+{
+    const auto host = anyHost();
+    const bool switchMode = GENERATE (false, true);
+    CAPTURE (host.sampleRate, host.blockSize, switchMode);
+    const auto output = playStereoTone (host, [switchMode] (double seconds, Settings& s) {
+        const bool on = alternating (seconds);
+        s.outputPan = switchMode ? 0.7 : on ? -1.0 : 1.0;
+        s.panMode = switchMode && on ? PanMode::MidSide : PanMode::LeftRight;
+    });
+    CHECK (discontinuity (output[0], host.sampleRate) < threshold);
+    CHECK (discontinuity (output[1], host.sampleRate) < threshold);
 }

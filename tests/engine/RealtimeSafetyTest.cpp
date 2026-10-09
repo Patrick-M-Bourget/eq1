@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 using namespace eq1;
@@ -46,6 +47,14 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
         }
         // Solo moving from Band to Band, and off.
         settings.soloSlot = block % 6 == 5 ? 0 : 1 + block % numBandSlots;
+        // Every output control moving, and Auto Gain estimating as the Bands change.
+        settings.gainScale = 0.25 * (block % 9);
+        settings.autoGain = block % 3 != 0;
+        settings.outputGainDb = block % 8 == 7 ? -std::numeric_limits<double>::infinity() : 6.0 * (block % 7) - 18.0;
+        settings.outputPan = 0.4 * (block % 6) - 1.0;
+        settings.panMode = block % 10 < 5 ? PanMode::LeftRight : PanMode::MidSide;
+        settings.phaseInvert = block % 4 == 1;
+        settings.globalBypass = block % 12 >= 9;
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize }, block % 2 == 0 ? &sidechainBlock : nullptr);
         engine.readAnalysis (AnalysisTap::PostEq, analysis.data(), blockSize);
