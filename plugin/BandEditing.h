@@ -53,14 +53,15 @@ public:
     void dragBy (double frequencyRatio, double gainOffset);
     void endDrag();
 
-    // The display's Dynamic Range grip: a drag of one Band's range end as heard, as one gesture and one
+    // The display's Dynamic Range Handle: a drag of one Band's range end as heard, as one gesture and one
     // undo step. dragDynamicRangeTo sets the stored Dynamic Range so that Gain + Dynamic Range is heard
     // at heardEnd under Gain Scale, rounded to 0.5 dB, within the parameter's +/-30 dB. Below 1 % Gain
     // Scale nothing is heard to follow, so it changes nothing.
     void beginDynamicRangeDrag (int slot);
     void dragDynamicRangeTo (double heardEnd);
     void endDynamicRangeDrag();
-    // Sets a Band's stored Dynamic Range, within +/-30 dB, as one gesture: the grip's double-click and keys.
+    // Sets a Band's stored Dynamic Range, within +/-30 dB, as one gesture: the Dynamic Range Handle's
+    // double-click and keys.
     void setDynamicRange (int slot, double dynamicRange);
 
     // The arrow keys: moves the given Bands from where they are, Frequency by semitones and Gain by

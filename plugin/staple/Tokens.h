@@ -175,14 +175,14 @@ namespace handle
     constexpr float soloRing = 2.0f, soloRingOffset = 5.0f;       // the Solo cue's ring, outside the handle
 } // namespace handle
 
-// The Dynamic Range grip on the display: two triangles in the Band's colour, in a hit area.
-namespace grip
+// The Dynamic Range Handle on the display: two triangles in the Band's colour, in a hit area.
+namespace dynamicRangeHandle
 {
     constexpr float triangleWidth = 10.0f, triangleHeight = 7.0f, gap = 3.0f;
     constexpr float width = 18.0f, height = 26.0f;
     constexpr float belowHandle = 26.0f, edgeInset = 14.0f; // with no Dynamic Range; kept inside the top and bottom
-    constexpr float restingAlpha = 0.55f;                   // other Dynamic Bands' grips, until hovered
-} // namespace grip
+    constexpr float restingAlpha = 0.55f;                   // other Dynamic Bands' handles, until hovered
+} // namespace dynamicRangeHandle
 
 // The ghost Bell over empty space (HANDOFF.md §5.1).
 namespace ghost
