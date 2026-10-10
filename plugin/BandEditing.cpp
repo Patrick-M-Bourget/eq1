@@ -2,6 +2,8 @@
 
 #include "Parameters.h"
 
+#include <algorithm>
+#include <array>
 #include <utility>
 
 namespace eq1
@@ -64,10 +66,16 @@ double BandEditing::storedGain (double heard) const
 
 bool BandEditing::isFull() const
 {
+    return freeSlots() == 0;
+}
+
+int BandEditing::freeSlots() const
+{
+    int free = 0;
     for (int slot = 1; slot <= numBandSlots; ++slot)
         if (! band (slot).inUse)
-            return false;
-    return true;
+            ++free;
+    return free;
 }
 
 std::optional<int> BandEditing::add (double frequency, double gain)
@@ -262,6 +270,50 @@ void BandEditing::setBrickwall (const std::vector<int>& slotsToEdit)
 void BandEditing::setPlacement (const std::vector<int>& slotsToEdit, StereoPlacement placement)
 {
     editEach (slotsToEdit, [&] (int slot, const BandSettings&) { set (parameters::placementId (slot), static_cast<double> (placement)); });
+}
+
+std::vector<int> BandEditing::split (const std::vector<int>& slotsToSplit)
+{
+    std::vector<int> stereo;
+    for (int slot : slotsToSplit)
+        if (const auto settings = band (slot); settings.inUse && settings.placement == StereoPlacement::Stereo)
+            stereo.push_back (slot);
+    std::sort (stereo.begin(), stereo.end(), [this] (int a, int b) { return std::pair (band (a).frequency, a) < std::pair (band (b).frequency, b); });
+
+    // Every setting a Right half copies from its Stereo Band, by normalised value so it is exact.
+    using IdOf = juce::String (*) (int);
+    static constexpr std::array<IdOf, 17> copied {
+        parameters::frequencyId,       parameters::gainId,           parameters::qId,             parameters::bypassId,
+        parameters::shapeId,           parameters::slopeId,          parameters::brickwallId,     parameters::dynamicRangeId,
+        parameters::thresholdId,       parameters::thresholdAutoId,  parameters::attackId,        parameters::releaseId,
+        parameters::dynamicsBypassId,  parameters::detectionSourceId, parameters::detectionRangeId, parameters::detectionLowId,
+        parameters::detectionHighId,
+    };
+    std::vector<int> halves;
+    history.beginTransaction();
+    for (int slot : stereo)
+    {
+        int right = 1;
+        while (right <= numBandSlots && band (right).inUse)
+            ++right;
+        if (right > numBandSlots)
+            break;
+        // The new Band's settings first, so the audio never plays it with what the slot held before.
+        for (auto idOf : copied)
+        {
+            auto& to = parameter (idOf (right));
+            to.beginChangeGesture();
+            to.setValueNotifyingHost (parameter (idOf (slot)).getValue());
+            to.endChangeGesture();
+        }
+        set (parameters::placementId (right), static_cast<double> (StereoPlacement::Right));
+        set (parameters::placementId (slot), static_cast<double> (StereoPlacement::Left));
+        set (parameters::inUseId (right), 1.0);
+        halves.insert (halves.end(), { slot, right });
+    }
+    history.endTransaction();
+    std::sort (halves.begin(), halves.end());
+    return halves;
 }
 
 } // namespace eq1

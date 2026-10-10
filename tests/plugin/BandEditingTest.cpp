@@ -1,10 +1,16 @@
 #include "BandEditing.h"
 #include "PluginProcessor.h"
+#include "eq1/Engine.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <cmath>
+#include <functional>
 #include <map>
+#include <numbers>
+#include <random>
+#include <string>
 
 using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
@@ -29,6 +35,17 @@ struct Host
     {
         auto* parameter = processor.parameterState().getParameter ("band" + juce::String (slot) + "_" + control);
         parameter->setValueNotifyingHost (parameter->convertTo0to1 (plain));
+    }
+
+    // Every control of a Band Slot, by name.
+    std::map<std::string, float> controlsOf (int slot)
+    {
+        std::map<std::string, float> controls;
+        for (const char* control : { "in_use", "bypass", "shape", "frequency", "gain", "q", "slope", "brickwall", "placement",
+                                     "dynamic_range", "threshold", "threshold_auto", "attack", "release", "dynamics_bypass",
+                                     "detection_source", "detection_range", "detection_low", "detection_high" })
+            controls[control] = value (slot, control);
+        return controls;
     }
 
     void addBand (int slot, float frequency, float gain)
@@ -478,4 +495,147 @@ TEST_CASE ("Slope on a selection sets the Bands that have a Slope, turning a Cut
     CHECK (host.value (1, "brickwall") == 1.0f);
     CHECK (host.value (1, "slope") == 12.0f);
     CHECK (host.value (3, "slope") == 12.0f);
+}
+
+TEST_CASE ("Split leaves a Left Band in each Stereo Band's slot and a Right Band in the lowest free slot, as one undo step")
+{
+    Host host;
+    host.addBand (1, 500.0f, 6.0f);
+    host.set (1, "shape", 3.0f); // High Shelf
+    host.set (1, "q", 2.5f);
+    host.set (1, "slope", 24.0f);
+    host.set (1, "bypass", 1.0f);
+    host.set (1, "dynamic_range", -6.0f);
+    host.set (1, "threshold_auto", 0.0f);
+    host.set (1, "threshold", -40.0f);
+    host.set (1, "attack", 20.0f);
+    host.set (1, "release", 80.0f);
+    host.set (1, "detection_source", 1.0f); // External
+    host.set (1, "detection_range", 1.0f);  // Free
+    host.set (1, "detection_low", 300.0f);
+    host.set (1, "detection_high", 3000.0f);
+    host.addBand (2, 1000.0f, 3.0f);
+    host.set (2, "placement", 3.0f); // Mid: ignored
+    host.addBand (3, 2000.0f, -3.0f);
+    // What slot 4 held before must not come back.
+    host.set (4, "q", 9.0f);
+    const auto stereo = host.controlsOf (1);
+
+    const auto result = host.editing.split ({ 1, 2, 3 });
+
+    CHECK (result == std::vector<int> { 1, 3, 4, 5 });
+    auto left = stereo, right = stereo;
+    left["placement"] = 1.0f;
+    right["placement"] = 2.0f;
+    CHECK (host.controlsOf (1) == left);
+    CHECK (host.controlsOf (4) == right);
+    CHECK (host.value (2, "placement") == 3.0f);
+    CHECK (host.value (3, "placement") == 1.0f);
+    CHECK (host.value (5, "placement") == 2.0f);
+    CHECK_THAT (host.value (5, "frequency"), WithinRel (2000.0f, 1.0e-4f));
+
+    auto& history = host.processor.editHistory();
+    CHECK (history.undoSteps() == 1);
+    history.undo();
+    CHECK (host.controlsOf (1) == stereo);
+    CHECK (host.value (3, "placement") == 0.0f);
+    CHECK (host.value (4, "in_use") == 0.0f);
+    CHECK (host.value (5, "in_use") == 0.0f);
+}
+
+TEST_CASE ("Split with fewer free Band Slots than Stereo Bands splits the lowest-Frequency ones, lower slots first on a tie")
+{
+    Host host;
+    for (int slot = 1; slot <= 23; ++slot)
+        host.addBand (slot, 100.0f, 0.0f);
+    host.set (1, "frequency", 5000.0f);
+    host.set (2, "frequency", 200.0f);
+    host.set (3, "frequency", 200.0f);
+
+    CHECK (host.editing.split ({ 3, 1, 2 }) == std::vector<int> { 2, 24 });
+    CHECK (host.value (1, "placement") == 0.0f);
+    CHECK (host.value (2, "placement") == 1.0f);
+    CHECK (host.value (3, "placement") == 0.0f);
+    CHECK (host.editing.split ({ 1, 3 }).empty());
+}
+
+namespace
+{
+constexpr double splitSampleRate = 48000.0;
+constexpr int splitBlockSize = 64;
+
+struct Played
+{
+    std::vector<std::vector<float>> output; // per channel
+    std::vector<double> liveGains;          // each slot's Live Gain at the end, slot 1 first
+};
+
+// Plays signal (channel, sample index) through a stereo Engine with settings for seconds.
+Played play (const eq1::Settings& settings, double seconds, const std::function<float (int, int)>& signal)
+{
+    eq1::Engine engine;
+    engine.prepare (splitSampleRate, splitBlockSize, 2);
+    engine.setSettings (settings);
+    Played played;
+    played.output.resize (2);
+    std::vector<std::vector<float>> block (2, std::vector<float> (splitBlockSize));
+    std::vector<float*> channels { block[0].data(), block[1].data() };
+    for (int n = 0; n < static_cast<int> (seconds * splitSampleRate); n += splitBlockSize)
+    {
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < splitBlockSize; ++i)
+                block[static_cast<size_t> (ch)][static_cast<size_t> (i)] = signal (ch, n + i);
+        engine.process ({ channels.data(), 2, splitBlockSize });
+        for (int ch = 0; ch < 2; ++ch)
+            played.output[static_cast<size_t> (ch)].insert (played.output[static_cast<size_t> (ch)].end(), block[static_cast<size_t> (ch)].begin(),
+                                                            block[static_cast<size_t> (ch)].end());
+    }
+    for (int slot = 1; slot <= eq1::numBandSlots; ++slot)
+        played.liveGains.push_back (engine.liveGainDb (slot));
+    return played;
+}
+} // namespace
+
+TEST_CASE ("Split doesn't change the output of a Band that isn't dynamic")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 9.0f);
+    host.set (1, "q", 2.0f);
+    host.addBand (2, 4000.0f, -6.0f);
+    host.set (2, "shape", 3.0f); // High Shelf, not selected
+    std::mt19937 random (7);
+    std::uniform_real_distribution<float> unit (-0.5f, 0.5f);
+    std::vector<std::vector<float>> noise (2, std::vector<float> (8192));
+    for (auto& channel : noise)
+        for (auto& sample : channel)
+            sample = unit (random);
+    const auto signal = [&] (int ch, int n) { return noise[static_cast<size_t> (ch)][static_cast<size_t> (n)]; };
+    const auto before = play (host.editing.settings(), 8192 / splitSampleRate, signal);
+
+    REQUIRE (host.editing.split ({ 1 }) == std::vector<int> { 1, 3 });
+    const auto after = play (host.editing.settings(), 8192 / splitSampleRate, signal);
+
+    for (size_t ch = 0; ch < 2; ++ch)
+        for (size_t i = 0; i < noise[ch].size(); ++i)
+        {
+            CAPTURE (ch, i);
+            REQUIRE_THAT (after.output[ch][i], WithinAbs (before.output[ch][i], 1.0e-5));
+        }
+}
+
+TEST_CASE ("A split Dynamic Band's halves each move with their own channel only")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 0.0f);
+    host.set (1, "dynamic_range", -9.0f);
+    host.set (1, "threshold_auto", 0.0f);
+    host.set (1, "threshold", -30.0f);
+    REQUIRE (host.editing.split ({ 1 }) == std::vector<int> { 1, 2 });
+
+    const auto toneOnLeft = [] (int ch, int n) {
+        return ch == 0 ? static_cast<float> (0.5 * std::sin (2.0 * std::numbers::pi * 1000.0 * n / splitSampleRate)) : 0.0f;
+    };
+    const auto played = play (host.editing.settings(), 1.0, toneOnLeft);
+    CHECK_THAT (played.liveGains[0], WithinAbs (-9.0, 0.05));
+    CHECK (played.liveGains[1] == 0.0);
 }

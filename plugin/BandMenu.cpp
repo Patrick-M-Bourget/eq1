@@ -89,7 +89,16 @@ juce::PopupMenu BandMenu::build() const
         }
         menu.addSubMenu ("Stereo Placement", placements, stereoPlacementAvailable);
 
-        // Split (#42) joins as its own group here, and Cut, Copy and Paste (#43) at the top of the next.
+        // Cut, Copy and Paste (#43) join at the top of the next group.
+        menu.addSeparator();
+        const auto toSplit = static_cast<int> (std::count_if (bands.begin(), bands.end(), [] (const BandSettings& b) {
+            return b.placement == StereoPlacement::Stereo;
+        }));
+        const int splits = std::min (toSplit, editing.freeSlots());
+        menu.addItem (splits > 0 && splits < toSplit ? "Split (" + juce::String (splits) + " of " + juce::String (toSplit) + ")" : juce::String ("Split"),
+                      stereoPlacementAvailable && splits > 0,
+                      false,
+                      [&edit, slots, selectHalves = select] { selectHalves (edit.split (slots)); });
         menu.addSeparator();
         menu.addItem ("Delete", deleteSelection);
         menu.addSeparator();
