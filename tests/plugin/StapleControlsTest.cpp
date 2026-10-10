@@ -1,5 +1,7 @@
+#include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/LookAndFeel.h"
+#include "staple/controls/IconButton.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/KnobTooltip.h"
 #include "staple/controls/ParseValue.h"
@@ -77,6 +79,23 @@ struct Kit
         target.mouseDrag (event (target, from.translated (0.0f, dy / 2.0f), left, from));
         target.mouseDrag (event (target, to, left, from));
         target.mouseUp (event (target, to, mods, from));
+    }
+
+    // A press and a release at the target's centre, through Component's interface (Button's is protected).
+    static void press (juce::Component& target)
+    {
+        const auto at = target.getLocalBounds().toFloat().getCentre();
+        target.mouseDown (event (target, at, juce::ModifierKeys::leftButtonModifier, at));
+    }
+    static void release (juce::Component& target)
+    {
+        const auto at = target.getLocalBounds().toFloat().getCentre();
+        target.mouseUp (event (target, at, {}, at));
+    }
+    static void click (juce::Component& target)
+    {
+        press (target);
+        release (target);
     }
 
     static void doubleClick (juce::Component& target, juce::Point<float> at)
@@ -263,4 +282,53 @@ TEST_CASE ("A value typed into a Knob's tooltip commits as one undo step on Ente
     tooltip.getEditor()->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
     CHECK_THAT (position (knob), WithinAbs (1.0, 1.0e-6));
     CHECK (kit.history.undoSteps() == 2);
+}
+
+TEST_CASE ("A momentary IconButton is lit only while held, and reports its press and release")
+{
+    Kit kit;
+    staple::IconButton solo ("Solo", staple::Icon::headphones);
+    solo.setMomentary (true);
+    solo.setLitColour (staple::tokens::band[3]);
+    int presses = 0, releases = 0;
+    solo.onPress = [&] { ++presses; };
+    solo.onRelease = [&] { ++releases; };
+    kit.add (solo, { 10, 10, 24, 24 });
+    CHECK_FALSE (solo.isLit());
+
+    Kit::press (solo);
+    CHECK (solo.isLit());
+    CHECK (presses == 1);
+    CHECK (releases == 0);
+    Kit::release (solo);
+    CHECK_FALSE (solo.isLit());
+    CHECK (presses == 1);
+    CHECK (releases == 1);
+    CHECK_FALSE (solo.getToggleState()); // held, never toggled
+}
+
+TEST_CASE ("An IconButton attached as a toggle is lit while on, or shows Off for a Bypass-style power button")
+{
+    Kit kit;
+    staple::IconButton phase ("Phase Invert", staple::Icon::phaseInvert);
+    phase.setClickingTogglesState (true);
+    Attachment::ButtonAttachment phaseAttachment (kit.state(), eq1::parameters::phaseInvertId, phase);
+    staple::IconButton bypass ("Bypass", staple::Icon::power);
+    bypass.setOffLook (true);
+    bypass.setClickingTogglesState (true);
+    Attachment::ButtonAttachment bypassAttachment (kit.state(), eq1::parameters::bypassId (1), bypass);
+    kit.add (phase, { 10, 10, 24, 24 });
+    kit.add (bypass, { 40, 10, 24, 24 });
+
+    CHECK_FALSE (phase.isLit());
+    Kit::click (phase);
+    CHECK (kit.value (eq1::parameters::phaseInvertId) == 1.0f);
+    CHECK (phase.isLit());
+    CHECK (kit.history.undoSteps() == 1);
+
+    CHECK_FALSE (bypass.isOff());
+    kit.processor.parameterState().getParameter (eq1::parameters::bypassId (1))->setValueNotifyingHost (1.0f);
+    CHECK (bypass.getToggleState());
+    CHECK (bypass.isOff());
+    CHECK_FALSE (bypass.isLit());
 }

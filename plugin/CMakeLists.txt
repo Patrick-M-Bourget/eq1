@@ -58,6 +58,7 @@ target_sources(eq1 PRIVATE
     staple/Fonts.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
+    staple/controls/IconButton.cpp
     staple/controls/Knob.cpp
     staple/controls/KnobTooltip.cpp
     staple/controls/Overlay.cpp
