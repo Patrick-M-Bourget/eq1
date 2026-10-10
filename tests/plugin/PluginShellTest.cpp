@@ -664,6 +664,32 @@ TEST_CASE ("Output Gain at its default, and at the centre of its host range, is 
     CHECK (raw->load() == 0.0f);
 }
 
+TEST_CASE ("With every parameter at its default, the output is the input bit for bit")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    const auto layout = GENERATE (juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo());
+    useLayout (processor, layout);
+
+    juce::Random random (75);
+    juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
+    juce::MidiBuffer midi;
+    for (int block = 0; block < 16; ++block)
+    {
+        buffer.clear();
+        for (int ch = 0; ch < processor.getMainBusNumInputChannels(); ++ch)
+            for (int i = 0; i < blockSize; ++i)
+                buffer.setSample (ch, i, i % 4 == 0 ? (i % 8 == 0 ? 1.0f : -1.0f) : random.nextFloat() * 2.0f - 1.0f);
+        const juce::AudioBuffer<float> input (buffer);
+        processor.processBlock (buffer, midi);
+        for (int ch = 0; ch < processor.getMainBusNumOutputChannels(); ++ch)
+            for (int i = 0; i < blockSize; ++i)
+                if (buffer.getSample (ch, i) != input.getSample (ch, i))
+                    FAIL ("Block " << block << ", channel " << ch << ", sample " << i << ": " << input.getSample (ch, i) << " in, "
+                                   << buffer.getSample (ch, i) << " out");
+    }
+}
+
 TEST_CASE ("Auto Gain on the host parameters compensates the Bands' level by its estimate")
 {
     juce::ScopedJuceInitialiser_GUI juce;
