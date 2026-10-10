@@ -328,13 +328,7 @@ TEST_CASE ("A Band's Off button lights its translucent tint while hovered, more 
     REQUIRE (bypass.isOff());
     // The tint alone, on nothing, at the square's top middle, clear of the icon.
     const auto tint = [&bypass] (bool highlighted, bool down) {
-        // A software image, and the Graphics gone before the read: a GPU-backed image (Direct2D on
-        // Windows) holds its drawing until its context ends.
-        juce::Image image (juce::Image::ARGB, 24, 24, true, juce::SoftwareImageType());
-        {
-            juce::Graphics g (image);
-            bypass.paintButton (g, highlighted, down);
-        }
+        const auto image = harness::paintImage (24, 24, [&] (juce::Graphics& g) { bypass.paintButton (g, highlighted, down); });
         return static_cast<int> (image.getPixelAt (12, 2).getAlpha());
     };
     const auto rest = tint (false, false), hovered = tint (true, false), pressed = tint (false, true);
@@ -563,9 +557,7 @@ TEST_CASE ("A Knob's outer ring lane reports presses, drags and hovers to its ha
     CHECK_THAT (position (gain), WithinAbs (0.5, 1.0e-6));
     CHECK (kit.history.undoSteps() == 0);
 
-    juce::Image image (juce::Image::ARGB, gain.getWidth(), gain.getHeight(), true);
-    juce::Graphics g (image);
-    gain.paintEntireComponent (g, false);
+    harness::paintImage (gain.getWidth(), gain.getHeight(), [&] (juce::Graphics& g) { gain.paintEntireComponent (g, false); });
     CHECK (ring.paints == 1);
     CHECK_THAT (ring.inner, WithinAbs (33.0 + 4.0, 1.0e-4));
     CHECK_THAT (ring.outer, WithinAbs (33.0 + 16.0, 1.0e-4));

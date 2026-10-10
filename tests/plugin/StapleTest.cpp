@@ -1,3 +1,4 @@
+#include "EditorHarness.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
@@ -126,21 +127,18 @@ TEST_CASE ("Staple's LookAndFeel draws a stock knob's and slider thumb's shadows
     juce::Slider slider;
     slider.setLookAndFeel (&lookAndFeel);
     slider.setRange (0.0, 1.0);
-    juce::Image drawn (juce::Image::ARGB, 100, 100, true), shadow (juce::Image::ARGB, 100, 100, true);
 
     SECTION ("A rotary slider's knob")
     {
         slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-        {
-            juce::Graphics g (drawn);
+        const auto drawn = harness::paintImage (100, 100, [&] (juce::Graphics& g) {
             lookAndFeel.drawRotarySlider (g, 0, 0, 100, 100, 0.0f, -2.5f, 2.5f, slider);
-        }
+        });
         // drawRotarySlider insets the knob's face 10 px.
         const auto face = juce::Rectangle<float> (10.0f, 10.0f, 80.0f, 80.0f);
-        {
-            juce::Graphics g (shadow);
+        const auto shadow = harness::paintImage (100, 100, [&] (juce::Graphics& g) {
             staple::drawSoftShadow (g, face, face.getWidth() / 2.0f, staple::tokens::shadow::knob);
-        }
+        });
         CHECK (largestAlphaDifference (drawn, shadow, [&] (juce::Point<float> p) {
                    return p.getDistanceFrom (face.getCentre()) > face.getWidth() / 2.0f + 1.5f;
                }) <= 1);
@@ -149,16 +147,14 @@ TEST_CASE ("Staple's LookAndFeel draws a stock knob's and slider thumb's shadows
     SECTION ("A linear slider's thumb")
     {
         slider.setSliderStyle (juce::Slider::LinearHorizontal);
-        {
-            juce::Graphics g (drawn);
+        const auto drawn = harness::paintImage (100, 100, [&] (juce::Graphics& g) {
             lookAndFeel.drawLinearSlider (g, 0, 0, 100, 100, 50.0f, 0.0f, 100.0f, juce::Slider::LinearHorizontal, slider);
-        }
+        });
         const float thumbSize = 2.0f * static_cast<float> (lookAndFeel.getSliderThumbRadius (slider));
         const auto thumb = juce::Rectangle<float> (thumbSize, thumbSize).withCentre ({ 50.0f, 50.0f });
-        {
-            juce::Graphics g (shadow);
+        const auto shadow = harness::paintImage (100, 100, [&] (juce::Graphics& g) {
             staple::drawSoftShadow (g, thumb, thumbSize / 2.0f, staple::tokens::shadow::handle);
-        }
+        });
         // Away from the thumb and from the 2 px track through its centre.
         CHECK (largestAlphaDifference (drawn, shadow, [&] (juce::Point<float> p) {
                    return p.getDistanceFrom (thumb.getCentre()) > thumbSize / 2.0f + 1.5f && std::abs (p.y - 50.0f) > 2.5f;

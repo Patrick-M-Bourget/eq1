@@ -57,6 +57,21 @@ inline void writeSnapshot (juce::Component& component, const juce::String& name,
     writeSnapshot (component.createComponentSnapshot (area.isEmpty() ? component.getLocalBounds() : area, true, scale), name);
 }
 
+// A width x height image that paint draws on, ready to read: a software image whose Graphics is gone
+// before it's returned. A GPU-backed image (Direct2D on Windows) holds its drawing until its context
+// ends, so a pixel read while the Graphics is open sees nothing there, on Windows only. The one place
+// a test opens a Graphics on an image.
+template <typename Paint>
+juce::Image paintImage (int width, int height, Paint&& paint)
+{
+    juce::Image image (juce::Image::ARGB, width, height, true, juce::SoftwareImageType());
+    {
+        juce::Graphics g (image);
+        paint (g);
+    }
+    return image;
+}
+
 // A mouse event on target at position, in its own pixels, with mods held: pressed at downAt
 // (position unless given), and the clicks-th click.
 inline juce::MouseEvent mouseEvent (juce::Component& target, juce::Point<float> position, juce::ModifierKeys mods = {},
