@@ -4,6 +4,7 @@
 #include "BandMenu.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ShapeIcon.h"
 #include "staple/Fonts.h"
 #include "staple/Tokens.h"
 #include "staple/controls/KnobTooltip.h"
@@ -41,25 +42,6 @@ constexpr float bellSigma = 0.14f;
 constexpr float bypassedAlpha = 0.38f;
 // The wash of the Band's colour from the top centre, and the hairline along the top edge.
 constexpr float washTop = 0.14f, washMid = 0.035f, hairlineAlpha = 0.45f;
-
-staple::Icon iconOf (Shape shape)
-{
-    using staple::Icon;
-    switch (shape)
-    {
-        case Shape::Bell: return Icon::bell;
-        case Shape::LowShelf: return Icon::lowShelf;
-        case Shape::LowCut: return Icon::lowCut;
-        case Shape::HighShelf: return Icon::highShelf;
-        case Shape::HighCut: return Icon::highCut;
-        case Shape::Notch: return Icon::notch;
-        case Shape::BandPass: return Icon::bandPass;
-        case Shape::TiltShelf: return Icon::tiltShelf;
-        case Shape::FlatTilt: return Icon::flatTilt;
-        case Shape::AllPass: return Icon::allPass;
-    }
-    return Icon::bell;
-}
 
 // Each Stereo Placement's icon, the side it leaves alone (drawn under it at 30 %) and its dot.
 struct PlacementLook
@@ -264,7 +246,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
         addAndMakeVisible (*button);
 
     for (int i = 0; i < parameters::shapeNames().size(); ++i)
-        shape.addItem (parameters::shapeNames()[i], i + 1, iconOf (static_cast<Shape> (i)));
+        shape.addItem (parameters::shapeNames()[i], i + 1, shapeIcon (static_cast<Shape> (i)));
     for (int i = 0; i < parameters::placementNames().size(); ++i)
     {
         const auto look = lookOf (static_cast<StereoPlacement> (i));
