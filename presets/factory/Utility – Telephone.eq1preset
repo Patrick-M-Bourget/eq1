@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<eq1 version="3">
+  <PARAM id="band1_in_use" value="1.0"/>
+  <PARAM id="band1_shape" value="6.0"/>
+  <PARAM id="band1_q" value="0.333"/>
+  <PARAM id="band1_slope" value="24.0"/>
+  <PARAM id="band2_in_use" value="1.0"/>
+  <PARAM id="band2_frequency" value="1600.0"/>
+  <PARAM id="band2_gain" value="3.0"/>
+  <PARAM id="band2_q" value="1.4"/>
+  <PARAM id="band3_in_use" value="1.0"/>
+  <PARAM id="band3_shape" value="4.0"/>
+  <PARAM id="band3_frequency" value="3600.0"/>
+  <PARAM id="band3_brickwall" value="1.0"/>
+</eq1>

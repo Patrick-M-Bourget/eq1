@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<eq1 version="3">
+  <PARAM id="band1_in_use" value="1.0"/>
+  <PARAM id="band1_shape" value="7.0"/>
+  <PARAM id="band1_gain" value="3.0"/>
+  <PARAM id="band1_slope" value="6.0"/>
+</eq1>
