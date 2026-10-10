@@ -39,6 +39,8 @@ public:
 private:
     void timerCallback() override;
     void updateVisibility();
+    // Each control's accessible title, from its parameter's name ("Band 4 Gain"), and its spoken value.
+    void describe();
     // Threshold and Auto Threshold, two host parameters, on one slider.
     void showThreshold();
     void storeThreshold();

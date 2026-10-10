@@ -1,7 +1,9 @@
 #include "EqDisplay.h"
 
+#include "Accessibility.h"
 #include "BandClipboard.h"
 #include "BandMenu.h"
+#include "Parameters.h"
 #include "PluginProcessor.h"
 #include "eq1/Response.h"
 #include "staple/Fonts.h"
@@ -59,6 +61,7 @@ public:
     BandHandle (EqDisplay& d, int s) : display (d), slot (s)
     {
         setName ("Band " + juce::String (slot));
+        setTitle (getName());
         setInterceptsMouseClicks (false, false);
         setWantsKeyboardFocus (true);
     }
@@ -70,13 +73,34 @@ public:
     }
     void focusLost (FocusChangeType) override { display.endHeldNudge(); }
 
+    // Tells a screen reader when what it reads has changed: the Band moved, by any means.
+    void announce()
+    {
+        auto text = display.spokenBand (slot);
+        if (text == spoken)
+            return;
+        spoken = std::move (text);
+        if (auto* handler = getAccessibilityHandler())
+            handler->notifyAccessibilityEvent (juce::AccessibilityEvent::valueChanged);
+    }
+
     EqDisplay& display;
     const int slot;
+
+private:
+    // Read-only: the keys and the Band panel adjust the Band.
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
+    {
+        return accessibility::handler (*this, juce::AccessibilityRole::slider, [this] { return display.spokenBand (slot); });
+    }
+
+    juce::String spoken;
 };
 
 EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
 {
     setName ("EQ Display");
+    setTitle ("EQ display");
     setWantsKeyboardFocus (true);
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
@@ -166,6 +190,7 @@ void EqDisplay::placeHandles()
         if (! band.inUse)
             continue;
         inUse.push_back (slot);
+        handle.announce();
         handle.setBounds (juce::Rectangle<float> (handleRadius * 2.0f, handleRadius * 2.0f).withCentre (handleOf (band)).getSmallestIntegerContainer());
     }
     if (! reorder)
@@ -176,6 +201,30 @@ void EqDisplay::placeHandles()
     });
     for (size_t i = 0; i < inUse.size(); ++i)
         handles[static_cast<size_t> (inUse[i] - 1)]->setExplicitFocusOrder (static_cast<int> (i) + 1);
+}
+
+juce::String EqDisplay::spokenBand (int slot) const
+{
+    auto& state = processor.parameterState();
+    const auto band = editing.band (slot);
+    const auto value = [&state] (const juce::String& id) {
+        const auto& parameter = *state.getParameter (id);
+        return accessibility::spokenValue (parameter, parameter.getValue());
+    };
+    juce::StringArray parts { parameters::shapeNames()[static_cast<int> (band.shape)], value (parameters::frequencyId (slot)) };
+    if (hasGain (band.shape))
+        parts.add (value (parameters::gainId (slot)));
+    parts.add ("Q " + value (parameters::qId (slot)));
+    if (band.bypass)
+        parts.add ("Bypassed");
+    if (isDynamic (band))
+        parts.add ("Dynamic Band");
+    return parts.joinIntoString (", ");
+}
+
+std::unique_ptr<juce::AccessibilityHandler> EqDisplay::createAccessibilityHandler()
+{
+    return accessibility::handler (*this, juce::AccessibilityRole::group, nullptr);
 }
 
 int EqDisplay::focusedSlot() const

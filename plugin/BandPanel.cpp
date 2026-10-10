@@ -58,6 +58,8 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
         slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 18);
         label->setText (names[i], juce::dontSendNotification);
         label->setJustificationType (juce::Justification::centred);
+        // The knob is titled with its parameter's name, so a screen reader doesn't stop at the label too.
+        label->setAccessible (false);
         addAndMakeVisible (*slider);
         addAndMakeVisible (*label);
     }
@@ -184,15 +186,51 @@ void BandPanel::show (int newSlot)
     thresholdAutoAttachment = std::make_unique<juce::ParameterAttachment> (*state.getParameter (parameters::thresholdAutoId (slot)),
                                                                            [this] (float) { showThreshold(); });
     showThreshold();
+    describe();
     updateVisibility();
+}
+
+void BandPanel::describe()
+{
+    auto& state = processor.parameterState();
+    const auto name = [&state] (const juce::String& id) { return state.getParameter (id)->getName (100); };
+    const std::pair<KeyboardSlider*, juce::String> sliders[] = { { &frequency, parameters::frequencyId (slot) },
+                                                                 { &gain, parameters::gainId (slot) },
+                                                                 { &q, parameters::qId (slot) },
+                                                                 { &slope, parameters::slopeId (slot) },
+                                                                 { &dynamicRange, parameters::dynamicRangeId (slot) },
+                                                                 { &attack, parameters::attackId (slot) },
+                                                                 { &release, parameters::releaseId (slot) },
+                                                                 { &detectionLow, parameters::detectionLowId (slot) },
+                                                                 { &detectionHigh, parameters::detectionHighId (slot) } };
+    for (const auto& [slider, id] : sliders)
+        slider->describe (*state.getParameter (id));
+    // Read as it shows: Auto at its top, else its dB.
+    threshold.setTitle (name (parameters::thresholdId (slot)));
+    const std::pair<juce::Component*, juce::String> others[] = { { &shape, parameters::shapeId (slot) },
+                                                                  { &placement, parameters::placementId (slot) },
+                                                                  { &detectionSource, parameters::detectionSourceId (slot) },
+                                                                  { &detectionRange, parameters::detectionRangeId (slot) },
+                                                                  { &brickwall, parameters::brickwallId (slot) },
+                                                                  { &bypass, parameters::bypassId (slot) },
+                                                                  { &dynamicsBypass, parameters::dynamicsBypassId (slot) } };
+    for (const auto& [control, id] : others)
+        control->setTitle (name (id));
+    const auto band = "Band " + juce::String (slot) + " ";
+    deleteButton.setTitle (band + "Delete");
+    audition.setTitle (band + "Detection Audition");
 }
 
 void BandPanel::showThreshold()
 {
     if (slot == 0)
         return;
-    const auto band = editing.band (slot);
-    threshold.setValue (band.thresholdAuto ? thresholdAutoPosition : band.threshold, juce::dontSendNotification);
+    // From the parameters themselves: while their listeners are told of a change, the raw values that
+    // BandEditing reads may not have caught up yet.
+    auto& state = processor.parameterState();
+    const auto& level = *state.getParameter (parameters::thresholdId (slot));
+    const bool automatic = state.getParameter (parameters::thresholdAutoId (slot))->getValue() >= 0.5f;
+    threshold.setValue (automatic ? thresholdAutoPosition : level.convertFrom0to1 (level.getValue()), juce::dontSendNotification);
 }
 
 void BandPanel::storeThreshold()

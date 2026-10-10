@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Accessibility.h"
 #include "PresetBrowser.h"
 #include "PresetLibrary.h"
 
@@ -18,7 +19,8 @@ class PluginProcessor;
 // (PresetBrowser), ‹ › stepping to the previous and next Preset in browser order over the whole
 // library, the A and B sides and Copy A to B. Each load, save, switch and copy is one undo step; a
 // load replaces a Modified side's settings without asking, as undo brings them back. The Presets
-// button shows the side's Loaded Preset, followed by * when Modified, with its full name in a tooltip.
+// button shows the side's Loaded Preset, followed by * when Modified, with its full name in a tooltip;
+// a screen reader reads it as the Presets button's value, with "Modified", or "No Preset".
 class PresetBar final : public juce::Component, private juce::Timer
 {
 public:
@@ -52,7 +54,8 @@ private:
     PluginProcessor& processor;
     PresetLibrary library;
     PresetBrowser browser { library };
-    juce::TextButton presets { "Presets" }, previous { juce::String::charToString (0x2039) }, next { juce::String::charToString (0x203a) }, a { "A" },
+    accessibility::ValuedButton presets { "Presets" };
+    juce::TextButton previous { juce::String::charToString (0x2039) }, next { juce::String::charToString (0x203a) }, a { "A" },
         b { "B" }, copyAToB { "Copy A to B" };
     // The listing entry last loaded or saved, through the browser, ‹ › or saving, which ‹ › step from
     // while its name is still the Loaded Preset's: a name can be listed more than once. Kept in memory

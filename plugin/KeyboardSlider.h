@@ -1,5 +1,6 @@
 #pragma once
 
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
@@ -13,6 +14,9 @@ namespace eq1
 // Frequency and Q step evenly in log), within its range and at least one interval. A key held, with
 // its repeats, is one drag: one gesture on a host parameter, so one undo step, ended by the key's
 // release or by losing focus.
+//
+// A screen reader reads it as one element: its title and its value with the unit (its text box isn't
+// another).
 class KeyboardSlider : public juce::Slider
 {
 public:
@@ -23,12 +27,19 @@ public:
     // by default, to.
     std::function<double (double from, double to)> landStep;
 
+    // What a screen reader reads as its value; by default, its text.
+    std::function<juce::String (double value)> spokenValue;
+    // Titled with the parameter's name, and read with its value and unit (accessibility::spokenValue).
+    void describe (const juce::RangedAudioParameter& parameter);
+
     bool keyPressed (const juce::KeyPress& key) override;
     bool keyStateChanged (bool isKeyDown) override;
     void focusLost (FocusChangeType cause) override;
 
 private:
     void endHeldStep();
+    void childrenChanged() override;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     std::optional<ScopedDragNotification> held; // while an arrow key is held
 };

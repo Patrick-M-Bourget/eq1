@@ -1,5 +1,6 @@
 #include "PresetBrowser.h"
 
+#include "Accessibility.h"
 #include "staple/Tokens.h"
 
 #include <algorithm>
@@ -16,7 +17,10 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
     addAndMakeVisible (search);
 
     setName ("Preset Browser");
+    setTitle ("Preset browser");
+    search.setTitle ("Search Presets");
     list.setName ("Presets List");
+    list.setTitle ("Presets");
     list.setRowHeight (22);
     // Tab reaches it from the search; the arrow keys move through it and Return loads.
     list.setWantsKeyboardFocus (true);
@@ -36,6 +40,7 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
     };
     for (auto* button : { &save, &loadFile, &showFolder })
     {
+        button->setTitle (button->getButtonText());
         button->setMouseClickGrabsKeyboardFocus (false);
         addAndMakeVisible (*button);
     }
@@ -147,6 +152,22 @@ void PresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int width, int
         area.removeFromLeft (12); // Indented under its folder's name.
     g.setColour (staple::tokens::colour::text1);
     g.drawText (text, area, juce::Justification::centredLeft, true);
+}
+
+juce::String PresetBrowser::getNameForRow (int row)
+{
+    if (row < 0 || row >= getNumRows())
+        return {};
+    const auto& [text, folder, entry] = rows[static_cast<std::size_t> (row)];
+    auto name = folder.isEmpty() ? text : text + ", " + folder;
+    if (entry != nullptr && isLoaded (*entry))
+        name << ", Loaded Preset";
+    return name;
+}
+
+std::unique_ptr<juce::AccessibilityHandler> PresetBrowser::createAccessibilityHandler()
+{
+    return accessibility::handler (*this, juce::AccessibilityRole::group, nullptr);
 }
 
 void PresetBrowser::listBoxItemClicked (int row, const juce::MouseEvent&)

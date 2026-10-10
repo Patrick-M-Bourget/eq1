@@ -58,6 +58,7 @@ target_sources(eq1 PRIVATE
     staple/Fonts.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
+    Accessibility.cpp
     KeyboardSlider.cpp
     KeyboardControl.cpp
     UserSettings.cpp)

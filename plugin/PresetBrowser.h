@@ -50,6 +50,11 @@ private:
     void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected) override;
     void listBoxItemClicked (int row, const juce::MouseEvent& event) override;
     void returnKeyPressed (int row) override;
+    // What a screen reader reads for a row: the Preset's name, with its folder while searching and
+    // "Loaded Preset" for the Loaded Preset's entry, or a folder's name.
+    juce::String getNameForRow (int row) override;
+    // A group titled "Preset browser".
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     // Loads the Preset on row; nothing for a folder's name.
     void loadRow (int row);
 

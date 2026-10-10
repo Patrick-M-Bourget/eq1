@@ -79,6 +79,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         content.addAndMakeVisible (*combo);
     }
     analyzerTiltLabel.setText ("Analyzer Tilt", juce::dontSendNotification);
+    analyzerTiltLabel.setAccessible (false); // the slider carries the name
     content.addAndMakeVisible (analyzerTiltLabel);
     analyzerTilt.setSliderStyle (juce::Slider::LinearHorizontal);
     // In 0.5 dB/oct steps (the Staple Analyzer popover, #84, cycles Off, 3, 4.5 and 6): an arrow key
@@ -89,6 +90,22 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     analyzerTilt.onValueChange = [this] { storeAnalyzerSettings(); };
     content.addAndMakeVisible (analyzerTilt);
     showAnalyzerSettings();
+
+    // What a screen reader calls each control, in the glossary's terms.
+    const std::pair<juce::Component*, const char*> titles[] = { { &undoButton, "Undo" },
+                                                                 { &redoButton, "Redo" },
+                                                                 { &showPreEq, "Analyzer Pre-EQ" },
+                                                                 { &showPostEq, "Analyzer Post-EQ" },
+                                                                 { &showSidechain, "Analyzer Sidechain" },
+                                                                 { &peakHold, "Analyzer Peak Hold" },
+                                                                 { &analyzerRange, "Analyzer Range" },
+                                                                 { &analyzerSpeed, "Analyzer Speed" },
+                                                                 { &analyzerResolution, "Analyzer Resolution" },
+                                                                 { &analyzerTilt, "Analyzer Tilt" },
+                                                                 { &showMeter, "Output Meter" },
+                                                                 { &displayRange, "Display Range" } };
+    for (auto [control, title] : titles)
+        control->setTitle (title);
 
     // Tab's order: the header, the Analyzer, Display Range and UI Scale, the display and its Bands, the
     // Output Meter, the Band panel and the output panel. Within a row, left to right.

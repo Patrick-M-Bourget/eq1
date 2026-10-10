@@ -45,7 +45,20 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
         side->setColour (juce::TextButton::buttonOnColourId, staple::tokens::colour::fill3);
     previous.setName ("Previous Preset");
     next.setName ("Next Preset");
-    for (auto* button : { &presets, &previous, &next, &a, &b, &copyAToB })
+    presets.setTitle ("Presets");
+    presets.spokenValue = [this] {
+        const auto name = processor.loadedPresetName();
+        return name.isEmpty() ? juce::String ("No Preset") : name + (processor.isLoadedPresetModified() ? ", Modified" : "");
+    };
+    const std::pair<juce::Button*, const char*> titles[] = {
+        { &previous, "Previous Preset" }, { &next, "Next Preset" }, { &a, "A/B Compare A" }, { &b, "A/B Compare B" }, { &copyAToB, "Copy A to B" }
+    };
+    for (auto [button, title] : titles)
+        button->setTitle (title);
+    // A screen reader reads which side is on.
+    a.setToggleable (true);
+    b.setToggleable (true);
+    for (juce::TextButton* button : std::initializer_list<juce::TextButton*> { &presets, &previous, &next, &a, &b, &copyAToB })
     {
         // Tab reaches them, but a click leaves focus where it was, so Delete still reaches the display.
         button->setMouseClickGrabsKeyboardFocus (false);

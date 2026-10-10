@@ -29,7 +29,9 @@ class PluginProcessor;
 // from the handles, grabs its peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
 // with its Live Gain's movement inside it, and its curve follows its Live Gain. The curve comes from
 // the Engine's own response maths (eq1/Response.h). A handle beyond the Display Range sits at its
-// edge; a heard Gain changed to beyond it zooms the range out, once any drag has ended.
+// edge; a heard Gain changed to beyond it zooms the range out, once any drag has ended. A screen reader
+// reads the display as a group, "EQ display", of the Bands in use, each named "Band 4" with its
+// stored settings as its value (spokenBand), announced again whenever the Band moves.
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
@@ -50,7 +52,12 @@ public:
     void focusLost (FocusChangeType cause) override;
     void resized() override;
 
+    // What a screen reader reads as a Band's value: "Bell, 1000.0 Hz, +3.50 dB, Q 0.707", Gain left
+    // out on Shapes without one, then "Bypassed" and "Dynamic Band" when they apply.
+    juce::String spokenBand (int slot) const;
+
 private:
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     // A Band's place in Tab's order: an element at its handle that takes keyboard focus. The display
     // keeps the mouse.
     class BandHandle;

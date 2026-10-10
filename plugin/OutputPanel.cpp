@@ -21,6 +21,8 @@ OutputPanel::OutputPanel (PluginProcessor& p) : processor (p)
         slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 20);
         label->setText (names[i], juce::dontSendNotification);
         label->setJustificationType (juce::Justification::centredRight);
+        // The slider is titled with its parameter's name, so a screen reader doesn't stop at the label too.
+        label->setAccessible (false);
         addAndMakeVisible (*slider);
         addAndMakeVisible (*label);
     }
@@ -37,6 +39,16 @@ OutputPanel::OutputPanel (PluginProcessor& p) : processor (p)
     autoGainAttachment = std::make_unique<ButtonAttachment> (state, parameters::autoGainId, autoGain);
     phaseInvertAttachment = std::make_unique<ButtonAttachment> (state, parameters::phaseInvertId, phaseInvert);
     globalBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::globalBypassId, globalBypass);
+
+    gainScale.describe (*state.getParameter (parameters::gainScaleId));
+    outputGain.describe (*state.getParameter (parameters::outputGainId));
+    outputPan.describe (*state.getParameter (parameters::outputPanId));
+    const std::pair<juce::Component*, juce::String> others[] = { { &panMode, parameters::panModeId },
+                                                                  { &autoGain, parameters::autoGainId },
+                                                                  { &phaseInvert, parameters::phaseInvertId },
+                                                                  { &globalBypass, parameters::globalBypassId } };
+    for (const auto& [control, id] : others)
+        control->setTitle (state.getParameter (id)->getName (100));
 
     timerCallback();
     startTimerHz (4);
