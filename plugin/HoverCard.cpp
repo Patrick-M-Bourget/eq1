@@ -2,9 +2,15 @@
 
 #include "BandEditing.h"
 #include "BandMenu.h"
+#include "Parameters.h"
 #include "PluginProcessor.h"
+#include "staple/Fonts.h"
 #include "staple/Tokens.h"
+#include "staple/controls/Knob.h"
 #include "staple/controls/Overlay.h"
+#include "staple/controls/TypeIn.h"
+
+#include <algorithm>
 
 namespace eq1
 {
@@ -16,9 +22,124 @@ namespace colour = tokens::colour;
 namespace card = tokens::hoverCard;
 
 // The columns, inside the padding (HANDOFF.md §5.2): Bypass over the Shape, the values, Delete over ▾.
-constexpr int button = 22, leftColumn = 26, rightColumn = button;
+constexpr int button = 22, leftColumn = 26, rightColumn = button, valuesWidth = 84, valueHeight = 18;
+constexpr int columnGap = (card::width - 2 * card::padding - leftColumn - valuesWidth - rightColumn) / 2;
 } // namespace
 
+//==============================================================================
+HoverCard::Value::Value (Kind k) : kind (k)
+{
+    setSliderStyle (juce::Slider::LinearBarVertical);
+    setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+    setWantsKeyboardFocus (false);
+    setMouseClickGrabsKeyboardFocus (false);
+    const char* names[] = { "Frequency", "Gain", "Q" };
+    setTooltip (juce::String (names[static_cast<int> (kind)]) + juce::String::fromUTF8 (" \xc2\xb7 drag up/down \xc2\xb7 double-click to type"));
+    setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+}
+
+HoverCard::Value::~Value() { stop(); }
+
+juce::String HoverCard::Value::text()
+{
+    if (! isEnabled() && readOnlyText.isNotEmpty())
+        return readOnlyText;
+    const double value = getValue();
+    switch (kind)
+    {
+        case Kind::frequency:
+            if (value >= 1000.0)
+                return juce::String (value / 1000.0, 2) + " kHz";
+            return juce::String (value, value < 100.0 ? 1 : 0) + " Hz";
+        case Kind::gain:
+            return (value > 0.0 ? "+" : "") + juce::String (value, 2) + " dB";
+        case Kind::q:
+            return "Q " + juce::String (value, value < 1.0 ? 3 : 2);
+    }
+    return {};
+}
+
+void HoverCard::Value::stop()
+{
+    if (isMouseDragging())
+        endMouseDrag();
+    closeField (false);
+}
+
+void HoverCard::Value::paint (juce::Graphics& g)
+{
+    if (isTypingIn())
+        return;
+    const auto area = getLocalBounds().toFloat();
+    if (isMouseDragging())
+    {
+        g.setColour (colour::fill2);
+        g.fillRoundedRectangle (area, tokens::size::r1);
+    }
+    g.setFont (staple::font (tokens::size::fs3, kind == Kind::frequency ? staple::Weight::semiBold : staple::Weight::regular));
+    g.setColour (! isEnabled() ? colour::text3 : kind == Kind::q ? colour::text2 : colour::text1);
+    g.drawText (text(), area.withTrimmedLeft (4.0f), juce::Justification::centredLeft, false);
+}
+
+void HoverCard::Value::resized()
+{
+    if (field != nullptr)
+        field->setBounds (getLocalBounds());
+}
+
+void HoverCard::Value::mouseDown (const juce::MouseEvent& e)
+{
+    if (isEnabled() && ! isTypingIn())
+        startMouseDrag (e);
+    repaint();
+}
+
+void HoverCard::Value::mouseDrag (const juce::MouseEvent& e)
+{
+    if (isMouseDragging())
+        continueMouseDrag (e);
+}
+
+void HoverCard::Value::mouseUp (const juce::MouseEvent&)
+{
+    if (isMouseDragging())
+        endMouseDrag();
+    repaint();
+}
+
+void HoverCard::Value::mouseDoubleClick (const juce::MouseEvent&)
+{
+    if (! isEnabled() || isTypingIn())
+        return;
+    if (isMouseDragging())
+        endMouseDrag();
+    field = staple::makeTypeInField (getTitle() + " value", textToType (getTextFromValue (getValue())), [this] { closeField (true); },
+                                     [this] { closeField (false); });
+    addAndMakeVisible (*field);
+    resized();
+    repaint();
+    staple::focusTypeInField (*field);
+}
+
+void HoverCard::Value::closeField (bool commit)
+{
+    if (field == nullptr)
+        return;
+    const auto typed = staple::closeTypeInField (field);
+    if (commit)
+        commitTypedText (typed);
+    repaint();
+}
+
+void HoverCard::Value::enablementChanged()
+{
+    setMouseCursor (isEnabled() ? juce::MouseCursor::UpDownResizeCursor : juce::MouseCursor::NormalCursor);
+    repaint();
+}
+
+double HoverCard::Value::valueDraggedBy (double from, float pixels, bool fine) { return staple::draggedAlongRange (*this, from, pixels, fine); }
+
+//==============================================================================
 HoverCard::HoverCard (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
 {
     setWantsKeyboardFocus (false);
@@ -46,16 +167,52 @@ HoverCard::HoverCard (PluginProcessor& p, BandEditing& e) : processor (p), editi
         b->setMouseClickGrabsKeyboardFocus (false);
         addAndMakeVisible (*b);
     }
+
+    frequency = std::make_unique<Value> (Value::Kind::frequency);
+    gain = std::make_unique<Value> (Value::Kind::gain);
+    q = std::make_unique<Value> (Value::Kind::q);
+    for (auto* value : values())
+    {
+        value->onValueChange = [value] { value->repaint(); };
+        addAndMakeVisible (*value);
+    }
+    fade.apply = [this] (float alpha) {
+        for (auto* value : values())
+            value->setAlpha (alpha);
+    };
+
     // Its controls report entering and leaving it.
     addMouseListener (this, true);
 }
 
-HoverCard::~HoverCard() { removeMouseListener (this); }
+HoverCard::~HoverCard()
+{
+    removeMouseListener (this);
+    for (auto* value : values())
+        value->stop();
+    frequencyAttachment.reset();
+    gainAttachment.reset();
+    qAttachment.reset();
+}
+
+bool HoverCard::isFrozen() const
+{
+    const auto all = values();
+    return std::any_of (all.begin(), all.end(), [] (const Value* value) { return value->isBusy(); });
+}
+
+bool HoverCard::isHeld() const { return menuOpen || isFrozen(); }
 
 void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<int> within)
 {
-    const bool changed = newSlot != slot;
-    slot = newSlot;
+    if (newSlot != slot)
+        attach (newSlot);
+    else if (isFrozen())
+    {
+        // It stays where it opened while a value is dragged or typed in.
+        refresh();
+        return;
+    }
     const auto x = juce::roundToInt (handle.x), y = juce::roundToInt (handle.y);
     above = y - within.getY() > card::roomAbove;
     auto area = juce::Rectangle<int> (card::width, card::height).withCentre ({ x, 0 });
@@ -64,7 +221,7 @@ void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<in
                              area.getX()));
     const float newTipX = handle.x - static_cast<float> (area.getX() - margin);
     setBounds (area.expanded (margin));
-    if (changed || ! juce::approximatelyEqual (newTipX, tipX))
+    if (! juce::approximatelyEqual (newTipX, tipX))
     {
         tipX = newTipX;
         repaint();
@@ -75,21 +232,58 @@ void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<in
 
 void HoverCard::hide()
 {
-    slot = 0;
+    attach (0);
     pointerOver = false;
     setVisible (false);
+}
+
+void HoverCard::attach (int newSlot)
+{
+    for (auto* value : values())
+        value->stop();
+    // The old attachments go first, so they let go of the values.
+    frequencyAttachment.reset();
+    gainAttachment.reset();
+    qAttachment.reset();
+    slot = newSlot;
+    if (slot == 0)
+        return;
+
+    auto& state = processor.parameterState();
+    frequencyAttachment = std::make_unique<SliderAttachment> (state, parameters::frequencyId (slot), *frequency);
+    gainAttachment = std::make_unique<SliderAttachment> (state, parameters::gainId (slot), *gain);
+    qAttachment = std::make_unique<SliderAttachment> (state, parameters::qId (slot), *q);
+    const std::pair<Value*, juce::String> attached[] = { { frequency.get(), parameters::frequencyId (slot) },
+                                                         { gain.get(), parameters::gainId (slot) },
+                                                         { q.get(), parameters::qId (slot) } };
+    for (const auto& [value, id] : attached)
+    {
+        // No reset gesture: a double-click types a value.
+        value->setDoubleClickReturnValue (false, 0.0);
+        value->describe (*state.getParameter (id));
+    }
+
+    const auto band = "Band " + juce::String (slot);
+    setTitle (band + " quick controls");
+    bypass.setTitle (band + " Bypass");
+    deleteButton.setTitle ("Delete " + band);
+    more.setTitle (band + " menu");
+    fade.jump (editing.band (slot).bypass ? card::bypassedAlpha : 1.0f);
+    repaint();
 }
 
 void HoverCard::refresh()
 {
     if (slot == 0)
         return;
-    const auto band = "Band " + juce::String (slot);
-    setTitle (band + " quick controls");
-    bypass.setTitle (band + " Bypass");
-    deleteButton.setTitle ("Delete " + band);
-    more.setTitle (band + " menu");
-    bypass.setToggleState (editing.band (slot).bypass, juce::dontSendNotification);
+    const auto band = editing.band (slot);
+    bypass.setToggleState (band.bypass, juce::dontSendNotification);
+    // Gain's place shows a Cut's Slope, or that the Shape has no Gain.
+    gain->setEnabled (hasGain (band.shape));
+    gain->readOnlyText = isCut (band.shape) ? slopeText (band.slope, band.brickwall) : "No Gain";
+    // Flat Tilt's design ignores Q.
+    q->setEnabled (band.shape != Shape::FlatTilt);
+    fade.towards (band.bypass ? card::bypassedAlpha : 1.0f);
 }
 
 juce::PopupMenu HoverCard::menu()
@@ -139,6 +333,9 @@ void HoverCard::resized()
     bypass.setBounds (left.removeFromTop (button).withSizeKeepingCentre (button, button));
     deleteButton.setBounds (right.removeFromTop (button));
     more.setBounds (right.removeFromBottom (button));
+    auto middle = area.withTrimmedLeft (columnGap).withWidth (valuesWidth);
+    for (auto* value : values())
+        value->setBounds (middle.removeFromTop (valueHeight));
 }
 
 void HoverCard::paint (juce::Graphics& g)

@@ -508,7 +508,7 @@ TEST_CASE ("A held arrow key's undo step on a Band ends when the Band loses focu
     const int steps = history.undoSteps();
     host.hold (up);
     host.hold (up);
-    host.findAll<juce::Slider>().front()->grabKeyboardFocus();
+    host.findAll<juce::Slider> ([] (juce::Slider& s) { return s.getWantsKeyboardFocus(); }).front()->grabKeyboardFocus();
     CHECK (history.undoSteps() == steps + 1);
 }
 

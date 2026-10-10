@@ -325,3 +325,129 @@ TEST_CASE ("The Hover Card is a group named for its Band, its controls are named
     }
     CHECK_FALSE (card.getWantsKeyboardFocus());
 }
+
+TEST_CASE ("The Hover Card's values read \"1.00 kHz\", \"+3.00 dB\" and \"Q 0.707\", and are named for the Band")
+{
+    OpenEditor host;
+    host.addBand (4, 1000.0f, 3.0f);
+    host.set (4, "q", 0.707f);
+    host.settle();
+    rest (host, host.at (1000.0, 3.0));
+    host.settle (400);
+    auto& card = cardOf (host);
+    REQUIRE (card.shownSlot() == 4);
+    CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Frequency").text() == "1.00 kHz");
+    CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Gain").text() == "+3.00 dB");
+    CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Q").text() == "Q 0.707");
+    host.set (4, "frequency", 85.0f);
+    host.set (4, "gain", -2.5f);
+    host.settle();
+    CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Frequency").text() == "85.0 Hz");
+    CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Gain").text() == "-2.50 dB");
+    for (const juce::String title : { "Band 4 Frequency", "Band 4 Gain", "Band 4 Q" })
+        CHECK_FALSE (control (card, title).getWantsKeyboardFocus());
+}
+
+TEST_CASE ("Dragging a Hover Card value moves its Band alone as one undo step, over the Band panel's range and scaling, while the card stays put")
+{
+    CardOnBand4 f;
+    auto& host = f.host;
+    auto& card = *f.card;
+    auto& history = host.processor.editHistory();
+    auto& frequency = control<eq1::HoverCard::Value> (card, "Band 4 Frequency");
+    const auto body = card.body();
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    const auto press = frequency.getLocalBounds().getCentre().toFloat();
+    const int steps = history.undoSteps();
+
+    // A knob's whole range over 200 px: 50 px up is a quarter of it.
+    frequency.mouseDown (harness::mouseEvent (frequency, press, left));
+    frequency.mouseDrag (harness::mouseEvent (frequency, press.translated (0.0f, -50.0f), left, press));
+    host.settle();
+    const auto& parameter = host.parameter ("band4_frequency");
+    CHECK_THAT (parameter.getValue(), WithinAbs (parameter.convertTo0to1 (1000.0f) + 0.25f, 1.0e-3));
+    CHECK (card.shownSlot() == 4);
+    CHECK (card.body() == body);
+    // Shift: 800 px for the range, so 40 px down is a twentieth of it.
+    const auto fine = left.withFlags (juce::ModifierKeys::shiftModifier);
+    frequency.mouseDrag (harness::mouseEvent (frequency, press.translated (0.0f, -50.0f), fine, press));
+    frequency.mouseDrag (harness::mouseEvent (frequency, press.translated (0.0f, -10.0f), fine, press));
+    CHECK_THAT (parameter.getValue(), WithinAbs (parameter.convertTo0to1 (1000.0f) + 0.25f - 0.05f, 1.0e-3));
+    frequency.mouseUp (harness::mouseEvent (frequency, press.translated (0.0f, -10.0f), {}, press));
+    CHECK (history.undoSteps() == steps + 1);
+    CHECK (host.display.selection() == std::set<int> { 2, 4 });
+    CHECK_THAT (host.value (2, "frequency"), WithinAbs (200.0, 1.0e-3));
+
+    // Once the drag ends it goes back to its handle, which the drag moved.
+    host.settle();
+    CHECK (card.body() != body);
+}
+
+TEST_CASE ("Double-clicking a Hover Card value types it: Enter sets it as one undo step, Esc and a click away cancel")
+{
+    CardOnBand4 f;
+    auto& host = f.host;
+    auto& card = *f.card;
+    auto& history = host.processor.editHistory();
+    auto& gain = control<eq1::HoverCard::Value> (card, "Band 4 Gain");
+    const auto at = gain.getLocalBounds().getCentre().toFloat();
+    const auto body = card.body();
+
+    const auto open = [&] {
+        gain.mouseDoubleClick (harness::mouseEvent (gain, at, {}, at, 2));
+        REQUIRE (gain.isTypingIn());
+        REQUIRE (gain.getTypeInField() != nullptr);
+    };
+    open();
+    CHECK (gain.getTypeInField()->getText() == "0.00");
+    CHECK (card.isHeld());
+    const int steps = history.undoSteps();
+    gain.getTypeInField()->setText ("4.5");
+    gain.getTypeInField()->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+    CHECK_THAT (host.value (4, "gain"), WithinAbs (4.5, 1.0e-4));
+    CHECK_FALSE (gain.isTypingIn());
+    CHECK (history.undoSteps() == steps + 1);
+    CHECK (host.display.selection() == std::set<int> { 2, 4 });
+
+    open();
+    gain.getTypeInField()->setText ("-9");
+    gain.getTypeInField()->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+    CHECK_THAT (host.value (4, "gain"), WithinAbs (4.5, 1.0e-4));
+    CHECK_FALSE (gain.isTypingIn());
+
+    open();
+    gain.getTypeInField()->setText ("-9");
+    gain.getTypeInField()->onFocusLost();
+    CHECK_THAT (host.value (4, "gain"), WithinAbs (4.5, 1.0e-4));
+    CHECK_FALSE (gain.isTypingIn());
+    CHECK (card.body() == body);
+}
+
+TEST_CASE ("On a Cut the Hover Card shows its Slope in Gain's place, on other gainless Shapes \"No Gain\", read-only; a Bypassed Band's values fade and stay editable")
+{
+    OpenEditor host;
+    host.addBand (4, 1000.0f, 0.0f, static_cast<float> (eq1::Shape::LowCut));
+    host.set (4, "slope", 24.0f);
+    host.settle();
+    rest (host, host.at (1000.0, 0.0));
+    host.settle (400);
+    auto& card = cardOf (host);
+    REQUIRE (card.shownSlot() == 4);
+    auto& gain = control<eq1::HoverCard::Value> (card, "Band 4 Gain");
+    CHECK (gain.text() == "24 dB/oct");
+    CHECK_FALSE (gain.isEnabled());
+
+    host.set (4, "shape", static_cast<float> (eq1::Shape::Notch));
+    host.settle();
+    CHECK (gain.text() == "No Gain");
+    CHECK_FALSE (gain.isEnabled());
+
+    host.set (4, "shape", static_cast<float> (eq1::Shape::Bell));
+    host.set (4, "bypass", 1.0f);
+    host.settle (300);
+    CHECK (gain.isEnabled());
+    auto& frequency = control<eq1::HoverCard::Value> (card, "Band 4 Frequency");
+    CHECK_THAT (frequency.getAlpha(), WithinAbs (0.38, 1.0e-3));
+    CHECK (frequency.isEnabled());
+    CHECK (control (card, "Band 4 Bypass").getAlpha() == 1.0f);
+}

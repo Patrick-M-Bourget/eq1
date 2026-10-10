@@ -33,6 +33,14 @@ bool hasDynamicsToClear (const BandSettings& band)
 bool isBrickwall (const BandSettings& band) { return isCut (band.shape) && band.brickwall; }
 } // namespace
 
+juce::String slopeText (double slope, bool brickwall)
+{
+    if (brickwall)
+        return "Brickwall";
+    const bool whole = std::abs (slope - std::round (slope)) < 0.05;
+    return juce::String (slope, whole ? 0 : 1) + " dB/oct";
+}
+
 juce::PopupMenu slopeMenu (BandEditing& edit, const std::vector<int>& slots)
 {
     std::vector<BandSettings> bands;

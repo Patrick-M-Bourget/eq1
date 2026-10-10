@@ -23,6 +23,8 @@ namespace eq1
 // 18, 24, 30, 36, 48, 72 and 96 dB/oct, then Brickwall on Cuts. Each item sets the given Bands, as one
 // edit, and is ticked as the Band menu ticks. The items keep editing by reference.
 juce::PopupMenu slopeMenu (BandEditing& editing, const std::vector<int>& slots);
+// A Slope as the Band panel and the Hover Card show it: "12 dB/oct", "37.5 dB/oct", or "Brickwall".
+juce::String slopeText (double slope, bool brickwall);
 
 struct BandMenu
 {

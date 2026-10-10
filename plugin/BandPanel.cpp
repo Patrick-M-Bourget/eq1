@@ -74,12 +74,8 @@ BandPanel::SlopeButton::SlopeButton (BandPanel& p) : staple::Knob (tokens::knob:
 
 juce::String BandPanel::SlopeButton::text()
 {
-    if (panel.slot != 0)
-        if (const auto band = panel.editing.band (panel.slot); isCut (band.shape) && band.brickwall)
-            return "Brickwall";
-    const double value = getValue();
-    const bool whole = std::abs (value - std::round (value)) < 0.05;
-    return juce::String (value, whole ? 0 : 1) + " dB/oct";
+    const auto band = panel.slot != 0 ? panel.editing.band (panel.slot) : BandSettings {};
+    return slopeText (getValue(), panel.slot != 0 && isCut (band.shape) && band.brickwall);
 }
 
 void BandPanel::SlopeButton::paint (juce::Graphics& g)
