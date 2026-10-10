@@ -366,7 +366,7 @@ TEST_CASE ("The Slope button reads the Slope or Brickwall, and opens the Slope l
     CHECK (juce::PopupMenu::dismissAllActiveMenus());
 }
 
-TEST_CASE ("The Slope list's last item, Type a value…, opens the type-in, and a typed Slope is one undo step")
+TEST_CASE ("The Slope list's last item opens the type-in, and a typed Slope is one undo step")
 {
     PanelEditor host;
     const auto typeAValue = juce::String::fromUTF8 ("Type a value\xe2\x80\xa6");
