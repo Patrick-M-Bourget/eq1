@@ -37,9 +37,10 @@ private:
 };
 
 // One of the Analyzer popover's rows (Range, Resolution, Speed, Analyzer Tilt): a ComboBox drawn as a
-// row, its label on the left in text3 and its value on the right in text1, with a box on hover. A click,
-// Space or Return moves it to its next value, wrapping, rather than opening a menu; the arrow keys step
-// it as every ComboBox's do (KeyboardControl).
+// row, its label on the left in text3 and its value on the right in text1, with a box on hover. Its items
+// run from the largest value down, so the up key, which steps a ComboBox to its previous item
+// (KeyboardControl), moves to the larger value. A click, Space or Return moves it to the next larger
+// value, wrapping, rather than opening a menu.
 class AnalyzerRow : public juce::ComboBox
 {
 public:
@@ -56,7 +57,7 @@ public:
     void showPopup() override { cycle(); }
 
 protected:
-    // The item index a click moves to; by default the next one, wrapping.
+    // The item index a click moves to; by default the previous one (the next larger value), wrapping.
     virtual int nextIndex() const;
 
 private:

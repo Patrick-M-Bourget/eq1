@@ -106,7 +106,11 @@ AnalyzerRow::AnalyzerRow (const juce::String& title, const juce::String& l) : ju
     setRepaintsOnMouseActivity (true);
 }
 
-int AnalyzerRow::nextIndex() const { return getNumItems() > 0 ? (getSelectedItemIndex() + 1) % getNumItems() : -1; }
+int AnalyzerRow::nextIndex() const
+{
+    const int n = getNumItems();
+    return n > 0 ? (getSelectedItemIndex() + n - 1) % n : -1;
+}
 
 void AnalyzerRow::cycle()
 {
@@ -250,10 +254,15 @@ AnalyzerPopover::AnalyzerPopover (PluginProcessor& p)
     showPreEq->setTooltip ("Show the spectrum before the EQ");
     showPostEq->setTooltip ("Show the spectrum after the EQ");
     showSidechain->setTooltip ("Show the Sidechain spectrum");
-    for (int db : { 60, 90, 120 })
+    // Largest value first, so the up key steps to the larger one (KeyboardControl steps up to the
+    // previous item); the ids are the settings' values.
+    for (int db : { 120, 90, 60 })
         range.addItem (juce::String (db) + " dB", db);
-    resolution.addItemList ({ "Low", "Medium", "High", "Maximum" }, 1);
-    speed.addItemList ({ "Very Slow", "Slow", "Medium", "Fast", "Very Fast" }, 1);
+    const juce::StringArray resolutions { "Low", "Medium", "High", "Maximum" }, speeds { "Very Slow", "Slow", "Medium", "Fast", "Very Fast" };
+    for (int i = resolutions.size(); --i >= 0;)
+        resolution.addItem (resolutions[i], i + 1);
+    for (int i = speeds.size(); --i >= 0;)
+        speed.addItem (speeds[i], i + 1);
 
     int order = 0;
     for (juce::Button* button : { showPreEq.get(), showPostEq.get(), showSidechain.get() })

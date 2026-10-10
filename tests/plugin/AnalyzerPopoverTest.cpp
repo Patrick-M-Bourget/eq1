@@ -158,7 +158,7 @@ TEST_CASE ("Pre, Post, Sidechain and Peak Hold each toggle their setting, and Pr
     CHECK (host.undoSteps() == steps);
 }
 
-TEST_CASE ("A click on Range, Resolution or Speed moves it to the next value in the code's list, wrapping")
+TEST_CASE ("A click on Range, Resolution or Speed moves it to the next value in the code's list, wrapping; up steps to the larger value")
 {
     Analyzer host;
     host.open();
@@ -195,17 +195,34 @@ TEST_CASE ("A click on Range, Resolution or Speed moves it to the next value in 
     Analyzer::click (speed);
     CHECK (host.settings().speed == eq1::AnalyzerSpeed::fast);
 
-    // Space and Return move it on too; the arrows step it without wrapping.
+    // Space and Return move it on too; the arrows step it without wrapping, up to the faster.
     speed.grabKeyboardFocus();
     REQUIRE (speed.hasKeyboardFocus (false));
     CHECK (host.press (space));
     CHECK (host.settings().speed == eq1::AnalyzerSpeed::veryFast);
     CHECK (host.press (returnKey));
     CHECK (host.settings().speed == eq1::AnalyzerSpeed::verySlow);
-    CHECK (host.press (up));
-    CHECK (host.settings().speed == eq1::AnalyzerSpeed::verySlow);
     CHECK (host.press (down));
+    CHECK (host.settings().speed == eq1::AnalyzerSpeed::verySlow);
+    CHECK (host.press (up));
     CHECK (host.settings().speed == eq1::AnalyzerSpeed::slow);
+
+    // Up to the larger value on Range and Resolution too.
+    for (const juce::String title : { "Analyzer Range", "Analyzer Resolution" })
+    {
+        CAPTURE (title);
+        auto& row = host.titled<juce::ComboBox> (title);
+        row.grabKeyboardFocus();
+        REQUIRE (row.hasKeyboardFocus (false));
+        for (int i = 0; i < 4; ++i)
+            host.press (down);
+        const juce::String lowest = title == "Analyzer Range" ? "60 dB" : "Low";
+        CHECK (row.getText() == lowest);
+        CHECK (host.press (up));
+        CHECK (row.getText() == (title == "Analyzer Range" ? "90 dB" : "Medium"));
+    }
+    CHECK (host.settings().rangeDb == 90);
+    CHECK (host.settings().resolution == eq1::AnalyzerResolution::medium);
 
     CHECK (host.undoSteps() == steps);
 }
