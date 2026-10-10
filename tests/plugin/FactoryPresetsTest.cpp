@@ -262,6 +262,18 @@ TEST_CASE ("The Factory Presets are renamed into Categories, Default kept")
         CHECK_FALSE (names.contains (old));
 }
 
+TEST_CASE ("The Factory library has the Utility and Drums Presets")
+{
+    juce::StringArray names;
+    for (const auto& preset : PresetLibrary::factoryPresets())
+        names.add (preset.name);
+    for (const auto* name : { "Utility \xe2\x80\x93 Rumble Cut", "Utility \xe2\x80\x93 Low Cut 80 Hz", "Utility \xe2\x80\x93 Mono Bass",
+                              "Utility \xe2\x80\x93 Telephone", "Utility \xe2\x80\x93 Tilt Brighter", "Drums \xe2\x80\x93 Kick In Punch",
+                              "Drums \xe2\x80\x93 Kick Out Sub", "Drums \xe2\x80\x93 Snare Top Crack", "Drums \xe2\x80\x93 Snare Ring Tamer",
+                              "Drums \xe2\x80\x93 Toms Punch", "Drums \xe2\x80\x93 Overheads Air", "Drums \xe2\x80\x93 Room Darken" })
+        CHECK (names.contains (named (name)));
+}
+
 TEST_CASE ("The Factory gate rejects a name outside the scheme")
 {
     CHECK (namingProblem (preset ("Default")) == "");
