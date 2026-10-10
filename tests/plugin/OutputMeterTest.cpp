@@ -1,4 +1,5 @@
 #include "EqDisplay.h"
+#include "FooterBar.h"
 #include "OutputMeter.h"
 #include "PluginProcessor.h"
 
@@ -229,7 +230,7 @@ TEST_CASE ("The Output Meter's scale runs linearly in dB from -60 dBFS at the bo
     CHECK_THAT (eq1::OutputMeter::position (12.0), WithinAbs (1.0, 1.0e-9));
 }
 
-TEST_CASE ("The footer's Meter button hides the Output Meter, the EQ display taking its rail, and a reopened editor follows the choice")
+TEST_CASE ("The output popover's Output Meter toggle hides the Output Meter, the EQ display taking its rail, and a reopened editor follows the choice")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
@@ -240,7 +241,8 @@ TEST_CASE ("The footer's Meter button hides the Output Meter, the EQ display tak
 
     auto* display = findChild<eq1::EqDisplay> (*editor);
     auto* meter = findChild<eq1::OutputMeter> (*editor);
-    auto* button = findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getButtonText() == "Meter"; });
+    findChild<eq1::OutputReadout> (*editor)->onClick();
+    auto* button = findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getTitle() == "Output Meter"; });
     REQUIRE (display != nullptr);
     REQUIRE (meter != nullptr);
     REQUIRE (button != nullptr);
@@ -262,5 +264,5 @@ TEST_CASE ("The footer's Meter button hides the Output Meter, the EQ display tak
     editor.reset (processor.createEditor());
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
     CHECK_FALSE (findChild<eq1::OutputMeter> (*editor)->isVisible());
-    CHECK_FALSE (findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getButtonText() == "Meter"; })->getToggleState());
+    CHECK_FALSE (findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getTitle() == "Output Meter"; })->getToggleState());
 }

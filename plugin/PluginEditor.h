@@ -31,8 +31,8 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
-    // Cmd-Z undoes, Shift-Cmd-Z (or Cmd-Y) redoes; Ctrl on Windows. With nothing focused, Tab focuses
-    // the first control and Shift+Tab the last.
+    // Cmd-Z undoes, Shift-Cmd-Z (or Cmd-Y) redoes and Cmd-B toggles Global Bypass; Ctrl on Windows.
+    // With nothing focused, Tab focuses the first control and Shift+Tab the last.
     bool keyPressed (const juce::KeyPress& key) override;
     // Any click in the editor hides the focus ring until a key brings it back.
     void mouseDown (const juce::MouseEvent& e) override;

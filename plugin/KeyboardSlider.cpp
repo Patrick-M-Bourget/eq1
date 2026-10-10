@@ -33,8 +33,11 @@ bool KeyboardSlider::keyPressed (const juce::KeyPress& key)
     staple::LookAndFeel::keyUsed (*this);
 
     const double from = getValue();
-    const double proportion = valueToProportionOfLength (from) + direction * (mods.isShiftDown() ? 0.002 : 0.01);
-    double to = proportionOfLengthToValue (juce::jlimit (0.0, 1.0, proportion));
+    double to;
+    if (arrowSteps)
+        to = juce::jlimit (getMinimum(), getMaximum(), from + direction * (mods.isShiftDown() ? arrowSteps->second : arrowSteps->first));
+    else
+        to = proportionOfLengthToValue (juce::jlimit (0.0, 1.0, valueToProportionOfLength (from) + direction * (mods.isShiftDown() ? 0.002 : 0.01)));
     // A step smaller than the interval would round back to where it started.
     if (const double interval = getInterval(); interval > 0.0 && std::abs (to - from) < interval)
         to = juce::jlimit (getMinimum(), getMaximum(), from + direction * interval);
@@ -62,6 +65,11 @@ void KeyboardSlider::focusLost (FocusChangeType cause)
 void KeyboardSlider::endHeldStep()
 {
     held.reset();
+}
+
+void KeyboardSlider::setArrowSteps (double step, double fineStep)
+{
+    arrowSteps.emplace (step, fineStep);
 }
 
 void KeyboardSlider::describe (const juce::RangedAudioParameter& parameter)

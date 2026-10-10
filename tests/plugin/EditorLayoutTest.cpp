@@ -74,7 +74,7 @@ TEST_CASE ("The Band panel floats over the display's bottom, centred, 36 px abov
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
     auto* display = findChild<eq1::EqDisplay> (*editor);
     auto* panel = findChild<eq1::BandPanel> (*editor);
-    auto* scaleMenu = findChild<juce::ComboBox> (*editor, [] (juce::ComboBox& c) { return c.getTitle() == "UI Scale"; });
+    auto* scaleMenu = findChild<eq1::UiScaleMenu> (*editor);
     REQUIRE (display != nullptr);
     REQUIRE (panel != nullptr);
     REQUIRE (scaleMenu != nullptr);
@@ -82,7 +82,7 @@ TEST_CASE ("The Band panel floats over the display's bottom, centred, 36 px abov
 
     const int percent = GENERATE (75, 100, 200);
     CAPTURE (percent);
-    scaleMenu->setSelectedId (percent, juce::sendNotificationSync);
+    scaleMenu->pick (percent);
     const auto scaled = [percent] (int logical) { return juce::roundToInt (logical * percent / 100.0); };
     for (const auto size : { juce::Point<int> (1200, 760), juce::Point<int> (960, 600), juce::Point<int> (1700, 1000) })
     {

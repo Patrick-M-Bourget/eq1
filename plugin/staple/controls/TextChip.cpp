@@ -40,6 +40,12 @@ void TextChip::setChevron (bool shown)
     repaint();
 }
 
+void TextChip::setInk (std::optional<juce::Colour> colour)
+{
+    fixedInk = colour;
+    repaint();
+}
+
 juce::Font TextChip::textFont() const { return font (fontSize, Weight::medium); }
 
 int TextChip::getIdealWidth() const
@@ -68,7 +74,8 @@ void TextChip::paintButton (juce::Graphics& g, bool highlighted, bool down)
         g.fillRoundedRectangle (bounds, tokens::size::r2);
     }
 
-    const auto ink = (look == Look::filled || highlighted || down || getToggleState() ? colour::text1 : colour::text2).withMultipliedAlpha (alpha);
+    const auto ink = fixedInk.value_or (look == Look::filled || highlighted || down || getToggleState() ? colour::text1 : colour::text2)
+                         .withMultipliedAlpha (alpha);
     auto area = bounds.reduced (look == Look::filled ? filledPadding : plainPadding, 0.0f);
     if (chevron)
         drawIcon (g, Icon::dropdown, area.removeFromRight (chevronSize).withSizeKeepingCentre (chevronSize, chevronSize),
