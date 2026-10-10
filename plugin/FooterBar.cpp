@@ -166,7 +166,7 @@ std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHand
 }
 
 FooterBar::FooterBar (PluginProcessor& p)
-    : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerSettings (p), popover (p)
+    : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerPopover (p), outputPopover (p)
 {
     bypassedFade.apply = [this] (float) { repaint(); };
     auto& state = processor.parameterState();
@@ -190,41 +190,41 @@ FooterBar::FooterBar (PluginProcessor& p)
     analyzerLabel.setAccessible (false); // the button carries the name
     addAndMakeVisible (analyzerLabel);
     analyzer.onClick = [this] {
-        if (analyzerSettings.isOpen())
-            analyzerSettings.close();
+        if (analyzerPopover.isOpen())
+            analyzerPopover.close();
         else
-            analyzerSettings.openFrom (analyzer, analyzerLabel);
+            analyzerPopover.openFrom (analyzer, analyzerLabel);
     };
     addAndMakeVisible (analyzer);
     // Back in the footer, hidden, once closed.
-    analyzerSettings.onClose = [this] { addChildComponent (analyzerSettings); };
-    analyzerSettings.onSettingsChanged = [this] { showAnalyzerSources(); };
-    addChildComponent (analyzerSettings);
+    analyzerPopover.onClose = [this] { addChildComponent (analyzerPopover); };
+    analyzerPopover.onSettingsChanged = [this] { showAnalyzerSources(); };
+    addChildComponent (analyzerPopover);
 
     gainScaleAttachment = std::make_unique<SliderAttachment> (state, parameters::gainScaleId, gainScale);
     gainScale.describe (*state.getParameter (parameters::gainScaleId));
     addAndMakeVisible (gainScale);
 
     output.onClick = [this] {
-        if (popover.isOpen())
-            popover.close();
+        if (outputPopover.isOpen())
+            outputPopover.close();
         else
         {
-            popover.openFrom (output);
-            output.setOpen (popover.isOpen());
+            outputPopover.openFrom (output);
+            output.setOpen (outputPopover.isOpen());
         }
     };
     addAndMakeVisible (output);
     // Back in the footer, hidden, once closed.
-    popover.onClose = [this] {
+    outputPopover.onClose = [this] {
         output.setOpen (false);
-        addChildComponent (popover);
+        addChildComponent (outputPopover);
     };
-    popover.onMeterToggled = [this] {
+    outputPopover.onMeterToggled = [this] {
         if (onMeterToggled != nullptr)
             onMeterToggled();
     };
-    addChildComponent (popover);
+    addChildComponent (outputPopover);
 
     uiScale.onPicked = [this] (int percent) {
         if (onUiScalePicked != nullptr)
@@ -246,8 +246,8 @@ FooterBar::FooterBar (PluginProcessor& p)
 FooterBar::~FooterBar()
 {
     stopTimer();
-    popover.onClose = nullptr;
-    analyzerSettings.onClose = nullptr;
+    outputPopover.onClose = nullptr;
+    analyzerPopover.onClose = nullptr;
 }
 
 void FooterBar::showUiScale (int percent)
@@ -257,7 +257,7 @@ void FooterBar::showUiScale (int percent)
 
 void FooterBar::showMeterShown (bool shown)
 {
-    popover.showMeterShown (shown);
+    outputPopover.showMeterShown (shown);
 }
 
 void FooterBar::toggleGlobalBypass()

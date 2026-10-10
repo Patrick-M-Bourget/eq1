@@ -21,9 +21,6 @@ constexpr int cardWidth = 176, paddingTop = 14, paddingSide = 12, paddingBottom 
 constexpr int knobDiameter = 64, panHeight = 14, panLabelGap = 4, panLabelHeight = 12, toggleHeight = 30, toggleGap = 4;
 constexpr int chipHeight = 20, chipPadding = 6;
 constexpr int cardHeight = paddingTop + knobDiameter + gap + panHeight + panLabelGap + panLabelHeight + gap + 1 + gap + toggleHeight + paddingBottom;
-
-// The thumb's small shadow.
-const juce::DropShadow thumbShadow { colour::shadow.withAlpha (0.5f), 3, { 0, 1 } };
 } // namespace
 
 juce::String outputPanText (double pan, bool midSide)
@@ -98,7 +95,7 @@ void OutputPanSlider::paint (juce::Graphics& g)
     g.fillRoundedRectangle ({ std::min (centreX, valueX), 4.0f, std::abs (valueX - centreX), 6.0f }, 3.0f);
 
     const juce::Rectangle<float> thumb { juce::jlimit (0.0f, width - 6.0f, valueX - 3.0f), 1.0f, 6.0f, 12.0f };
-    staple::drawSoftShadow (g, thumb, 2.0f, thumbShadow);
+    staple::drawSoftShadow (g, thumb, 2.0f, staple::tokens::shadow::panThumb);
     g.setColour (colour::text1.withMultipliedAlpha (alpha));
     g.fillRoundedRectangle (thumb, 2.0f);
 }

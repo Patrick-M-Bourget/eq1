@@ -862,7 +862,7 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     auto* readout = harness::findChild<eq1::OutputReadout> (*editor);
     REQUIRE (readout != nullptr);
     readout->onClick();
-    auto& popover = harness::findChild<eq1::FooterBar> (*editor)->outputPopover();
+    auto& popover = harness::findChild<eq1::FooterBar> (*editor)->getOutputPopover();
     REQUIRE (popover.isOpen());
     found = 0;
     visit (popover);

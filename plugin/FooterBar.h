@@ -115,8 +115,8 @@ public:
     void toggleGlobalBypass();
     bool isBypassedLabelShown() const { return bypassedShown; }
 
-    OutputPopover& outputPopover() { return popover; }
-    AnalyzerPopover& analyzerPopover() { return analyzerSettings; }
+    OutputPopover& getOutputPopover() { return outputPopover; }
+    AnalyzerPopover& getAnalyzerPopover() { return analyzerPopover; }
 
 private:
     void timerCallback() override;
@@ -146,8 +146,8 @@ private:
     bool estimated = false;
 
     // Hidden children of the footer while closed.
-    AnalyzerPopover analyzerSettings;
-    OutputPopover popover;
+    AnalyzerPopover analyzerPopover;
+    OutputPopover outputPopover;
 };
 
 } // namespace eq1

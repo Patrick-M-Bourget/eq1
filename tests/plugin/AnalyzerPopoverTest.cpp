@@ -15,7 +15,7 @@ struct Analyzer : harness::OpenEditor
 {
     eq1::FooterBar& footer = *harness::findChild<eq1::FooterBar> (*editor);
     eq1::AnalyzerButton& button = *harness::findChild<eq1::AnalyzerButton> (*editor);
-    eq1::AnalyzerPopover& popover = footer.analyzerPopover();
+    eq1::AnalyzerPopover& popover = footer.getAnalyzerPopover();
 
     template <typename T>
     T& titled (const juce::String& title)

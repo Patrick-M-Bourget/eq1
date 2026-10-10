@@ -111,7 +111,7 @@ void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyl
     g.setColour (style.fill);
     g.fillEllipse (circle);
     // A centred white sheen, gone at 70 % of the radius.
-    const auto sheen = colour::handleSelectedRing.withAlpha (handle::sheenAlpha);
+    const auto sheen = colour::sheen.withAlpha (handle::sheenAlpha);
     g.setGradientFill (juce::ColourGradient (sheen, centre, sheen.withAlpha (0.0f), centre.translated (r * handle::sheenReach, 0.0f), true));
     g.fillEllipse (circle);
     g.setColour (style.ring);

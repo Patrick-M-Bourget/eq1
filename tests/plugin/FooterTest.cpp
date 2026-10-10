@@ -33,7 +33,7 @@ struct Footer : harness::OpenEditor
     eq1::FooterBar& footer = *harness::findChild<eq1::FooterBar> (*editor);
     eq1::GainScaleReadout& gainScale = *harness::findChild<eq1::GainScaleReadout> (*editor);
     eq1::OutputReadout& output = *harness::findChild<eq1::OutputReadout> (*editor);
-    eq1::OutputPopover& popover = footer.outputPopover();
+    eq1::OutputPopover& popover = footer.getOutputPopover();
 
     template <typename T>
     T& titled (const juce::String& title)
