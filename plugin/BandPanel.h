@@ -88,7 +88,6 @@ private:
     void placeAtWidth();
     // The controls that fade while the Band is Bypassed: all but Bypass and Delete.
     std::vector<juce::Component*> faded();
-    void setFade (float alpha);
     juce::Colour bandColour() const;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
