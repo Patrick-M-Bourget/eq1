@@ -27,6 +27,30 @@ T* findChild (juce::Component& parent, std::function<bool (T&)> test = [] (T&) {
     return nullptr;
 }
 
+// Lets JUCE's timers run for milliseconds: until a timer started now with that interval has fired.
+// JUCE fires timers in the order they fall due, so every timer due sooner has fired by then, however
+// late a busy machine's timer thread runs them (giving up after 10 s). Tests wait with this, never a
+// loop of their own: a wall-clock wait ends before the timers run on a loaded CI runner.
+inline void settle (int milliseconds = 60)
+{
+    struct Probe final : juce::Timer
+    {
+        bool fired = false;
+        void timerCallback() override
+        {
+            fired = true;
+            stopTimer();
+        }
+    } probe;
+    probe.startTimer (milliseconds);
+    const auto giveUp = juce::Time::getMillisecondCounter() + static_cast<juce::uint32> (milliseconds + 10000);
+    while (! probe.fired && juce::Time::getMillisecondCounter() < giveUp)
+    {
+        juce::Timer::callPendingTimersSynchronously();
+        juce::Thread::sleep (5);
+    }
+}
+
 // The editor in a window of its own, as a host shows it, so it takes keyboard focus. Keys go through
 // the window, to the focused control and up through its parents, as the user's do; the mouse goes
 // straight to the EQ display.
@@ -64,29 +88,8 @@ struct OpenEditor
         set (slot, "in_use", 1.0f);
     }
 
-    // Lets the editor's timers run for milliseconds, so it shows what the parameters hold: until a timer
-    // started now with that interval has fired. JUCE fires timers in the order they fall due, so every
-    // timer due sooner has fired by then, however late a busy machine's timer thread runs them (giving
-    // up after 10 s).
-    void settle (int milliseconds = 60)
-    {
-        struct Probe final : juce::Timer
-        {
-            bool fired = false;
-            void timerCallback() override
-            {
-                fired = true;
-                stopTimer();
-            }
-        } probe;
-        probe.startTimer (milliseconds);
-        const auto giveUp = juce::Time::getMillisecondCounter() + static_cast<juce::uint32> (milliseconds + 10000);
-        while (! probe.fired && juce::Time::getMillisecondCounter() < giveUp)
-        {
-            juce::Timer::callPendingTimersSynchronously();
-            juce::Thread::sleep (5);
-        }
-    }
+    // Lets the editor's timers run for milliseconds, so it shows what the parameters hold (harness::settle).
+    void settle (int milliseconds = 60) { harness::settle (milliseconds); }
 
     // Where the display draws a Band at frequency with Gain 0: on a log scale from 10 Hz to 30 kHz,
     // halfway down.

@@ -1,3 +1,4 @@
+#include "EditorHarness.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
@@ -736,10 +737,7 @@ TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
     item1.setState (juce::Button::buttonOver);
     popover.open (opener);
     for (int frame = 0; frame < 20 && popover.getAlpha() < 1.0f; ++frame) // its pop-in, played to the end
-    {
-        juce::Thread::sleep (20);
-        juce::Timer::callPendingTimersSynchronously();
-    }
+        harness::settle (20);
 
     // The focus ring, as LookAndFeel's FocusOutline draws it after Tab (a window of its own, so drawn
     // here in its place).

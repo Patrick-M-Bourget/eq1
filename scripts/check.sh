@@ -4,8 +4,8 @@
 #
 #   scripts/check.sh            docs, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
-#                               glossary, no test reads a saved state as raw bytes, and no colour is hard-coded in plugin/
-#                               outside plugin/staple/
+#                               glossary, no test reads a saved state as raw bytes or runs timers itself, and no colour is
+#                               hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -83,7 +83,15 @@ docs() {
         printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, and no test reads a saved state as raw bytes"
+    # A test waits for the editor's timers with harness::settle (tests/plugin/EditorHarness.h): a loop of
+    # its own waits wall-clock time, which ends before the timers run on a loaded CI runner.
+    local loops
+    loops=$(git grep -n 'callPendingTimersSynchronously' -- tests ':!tests/plugin/EditorHarness.h' || true)
+    if [ -n "$loops" ]; then
+        printf '%s\n' "$loops" | sed 's/$/: runs timers itself; wait with harness::settle (tests\/plugin\/EditorHarness.h)/' >&2
+        broken=1
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes, and tests wait with harness::settle"
     return "$broken"
 }
 
