@@ -17,6 +17,7 @@ juce::Colour brightened (juce::Colour c, bool highlighted, bool down)
 IconButton::IconButton (const juce::String& name, Icon i) : juce::Button (name), icon (i)
 {
     setHasFocusOutline (true);
+    setMouseClickGrabsKeyboardFocus (false);
 }
 
 void IconButton::setIcon (Icon newIcon)

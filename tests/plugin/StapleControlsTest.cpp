@@ -439,6 +439,8 @@ TEST_CASE ("A Popover closes on an outside click and on Esc, returns focus to it
     };
     CHECK_FALSE (inFocusOrder (inside));
 
+    // Opened from the keyboard: focus moves in.
+    kit.lookAndFeel.showFocusRing (true);
     opener.grabKeyboardFocus();
     popover.open (opener);
     REQUIRE (popover.isOpen());
@@ -463,6 +465,16 @@ TEST_CASE ("A Popover closes on an outside click and on Esc, returns focus to it
     CHECK (closes == 2);
     CHECK (opener.hasKeyboardFocus (false));
     CHECK_FALSE (inFocusOrder (inside));
+
+    // Opened by a click: focus stays where it was, Esc from there still closes it, and closing leaves
+    // focus there.
+    kit.lookAndFeel.showFocusRing (false);
+    elsewhere.grabKeyboardFocus();
+    popover.open (opener);
+    CHECK (elsewhere.hasKeyboardFocus (false));
+    CHECK (kit.window.getPeer()->handleKeyPress (juce::KeyPress (juce::KeyPress::escapeKey)));
+    CHECK_FALSE (popover.isOpen());
+    CHECK (elsewhere.hasKeyboardFocus (false));
 }
 
 TEST_CASE ("A Popover opens above its opener where there is no room below")

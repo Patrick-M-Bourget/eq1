@@ -44,6 +44,7 @@ public:
     {
         setClickingTogglesState (true);
         setHasFocusOutline (true);
+        setMouseClickGrabsKeyboardFocus (false);
         setTitle ("Pan Mode");
         buttonStateChanged();
     }
@@ -145,6 +146,7 @@ OutputToggle::OutputToggle (const juce::String& title, std::optional<staple::Ico
 {
     setClickingTogglesState (true);
     setHasFocusOutline (true);
+    setMouseClickGrabsKeyboardFocus (false);
     setTitle (title);
     setButtonText (letter);
 }

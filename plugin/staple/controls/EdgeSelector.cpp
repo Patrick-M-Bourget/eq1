@@ -47,6 +47,7 @@ EdgeSelector::EdgeSelector (const juce::String& name, Side s) : juce::ComboBox (
     // The face draws the selected item itself, with its icon and dot.
     setColour (juce::ComboBox::textColourId, juce::Colours::transparentBlack);
     setHasFocusOutline (true);
+    setMouseClickGrabsKeyboardFocus (false);
 }
 
 void EdgeSelector::setSide (Side newSide)

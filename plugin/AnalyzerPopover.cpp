@@ -102,6 +102,7 @@ AnalyzerRow::AnalyzerRow (const juce::String& title, const juce::String& l) : ju
     // The row draws its value itself.
     setColour (juce::ComboBox::textColourId, colour::text1.withAlpha (0.0f));
     setHasFocusOutline (true);
+    setMouseClickGrabsKeyboardFocus (false);
     setRepaintsOnMouseActivity (true);
 }
 
@@ -179,6 +180,7 @@ public:
         setTitle (title);
         setClickingTogglesState (true);
         setHasFocusOutline (true);
+        setMouseClickGrabsKeyboardFocus (false);
     }
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override
@@ -213,6 +215,7 @@ public:
         setTooltip ("Peak Hold: the slower outline above the live spectrum");
         setClickingTogglesState (true);
         setHasFocusOutline (true);
+        setMouseClickGrabsKeyboardFocus (false);
     }
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override

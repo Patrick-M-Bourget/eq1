@@ -20,6 +20,7 @@ constexpr float chevronSize = 8.0f, chevronGap = 5.0f, chevronAlpha = 0.55f;
 TextChip::TextChip (const juce::String& text, Look l, float size) : juce::Button (text), look (l), fontSize (size)
 {
     setHasFocusOutline (true);
+    setMouseClickGrabsKeyboardFocus (false);
 }
 
 void TextChip::setLook (Look newLook)

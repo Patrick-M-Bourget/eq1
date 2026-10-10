@@ -106,10 +106,13 @@ TEST_CASE ("The Analyzer button opens its popover above it, left-aligned to it, 
     host.button.onClick();
     CHECK_FALSE (host.popover.isOpen());
 
+    // Opened by a click, it leaves focus on the display, where Escape closes it.
+    host.display.grabKeyboardFocus();
     host.open();
+    CHECK (host.display.hasKeyboardFocus (false));
     CHECK (host.press (escape));
     CHECK_FALSE (host.popover.isOpen());
-    CHECK (host.button.hasKeyboardFocus (false));
+    CHECK (host.display.hasKeyboardFocus (false));
 
     host.open();
     host.popover.mouseDown (Analyzer::mouse (host.display, { 20.0f, 20.0f }, juce::ModifierKeys::leftButtonModifier));

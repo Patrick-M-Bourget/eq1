@@ -22,6 +22,9 @@ void KeyboardControl::adopt (juce::Component& root)
         if (child->getWantsKeyboardFocus())
         {
             child->setHasFocusOutline (true);
+            // A click on a button or a list leaves focus where it was, so Delete and undo keep working.
+            if (dynamic_cast<juce::Button*> (child) != nullptr || dynamic_cast<juce::ComboBox*> (child) != nullptr)
+                child->setMouseClickGrabsKeyboardFocus (false);
             child->addKeyListener (this);
             adopted.emplace_back (child);
         }

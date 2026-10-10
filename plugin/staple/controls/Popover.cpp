@@ -1,5 +1,6 @@
 #include "Popover.h"
 
+#include "../LookAndFeel.h"
 #include "../Tokens.h"
 #include "Overlay.h"
 
@@ -26,6 +27,8 @@ Popover::Popover()
 
 Popover::~Popover()
 {
+    if (escapeFrom != nullptr)
+        escapeFrom->removeKeyListener (this);
     juce::Desktop::getInstance().removeGlobalMouseListener (this);
 }
 
@@ -60,13 +63,23 @@ void Popover::open (juce::Component& newOpener, Placement preferred)
     setVisible (true);
     juce::Desktop::getInstance().addGlobalMouseListener (this);
 
-    // Focus moves to its first control, or to the popover itself when it has none, so Esc reaches it.
-    const auto first = createKeyboardFocusTraverser()->getDefaultComponent (this);
-    setWantsKeyboardFocus (first == nullptr);
-    if (first != nullptr)
-        first->grabKeyboardFocus();
-    else
-        grabKeyboardFocus();
+    // Opened from the keyboard, focus moves to its first control, or to the popover itself when it has
+    // none. Opened by a click, focus stays where it was, and Esc reaches it from there.
+    const auto* lookAndFeel = dynamic_cast<LookAndFeel*> (&newOpener.getLookAndFeel());
+    if (lookAndFeel != nullptr && lookAndFeel->isFocusRingShown())
+    {
+        const auto first = createKeyboardFocusTraverser()->getDefaultComponent (this);
+        setWantsKeyboardFocus (first == nullptr);
+        if (first != nullptr)
+            first->grabKeyboardFocus();
+        else
+            grabKeyboardFocus();
+    }
+    if (auto* top = newOpener.getTopLevelComponent())
+    {
+        escapeFrom = top;
+        top->addKeyListener (this);
+    }
 
     openedAt = juce::Time::getMillisecondCounterHiRes();
     timerCallback();
@@ -79,14 +92,20 @@ void Popover::close()
         return;
     auto returnTo = opener;
     opener = nullptr;
+    // Focus inside it goes back to the opener; focus elsewhere stays there.
+    auto* focused = getCurrentlyFocusedComponent();
+    const bool focusInside = focused != nullptr && (focused == this || isParentOf (focused));
     stopTimer();
     juce::Desktop::getInstance().removeGlobalMouseListener (this);
     setTransform ({});
     setAlpha (1.0f);
     setVisible (false);
+    if (escapeFrom != nullptr)
+        escapeFrom->removeKeyListener (this);
+    escapeFrom = nullptr;
     if (auto* layer = getParentComponent())
         layer->removeChildComponent (this);
-    if (returnTo != nullptr && returnTo->isShowing())
+    if (focusInside && returnTo != nullptr && returnTo->isShowing())
         returnTo->grabKeyboardFocus();
     if (onClose != nullptr)
         onClose();
@@ -128,6 +147,11 @@ bool Popover::keyPressed (const juce::KeyPress& key)
         return false;
     close();
     return true;
+}
+
+bool Popover::keyPressed (const juce::KeyPress& key, juce::Component*)
+{
+    return keyPressed (key);
 }
 
 void Popover::mouseDown (const juce::MouseEvent& event)

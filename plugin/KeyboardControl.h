@@ -14,7 +14,8 @@ namespace eq1
 // Space or Return is pressed in it. Space or Return toggles a toggle button or presses a button; a
 // button stays down while Space is held, so Detection Audition plays until it is released. Up and
 // down (left and right too) step a ComboBox to the previous or next item at once, a held key being
-// one undo step. Sliders and the EQ display step themselves (KeyboardSlider, EqDisplay).
+// one undo step. Sliders and the EQ display step themselves (KeyboardSlider, EqDisplay). A click on a
+// button or a ComboBox doesn't take keyboard focus.
 //
 // A held key's step ends with the key's release, or with a key pressed in another control.
 class KeyboardControl final : private juce::KeyListener

@@ -161,7 +161,11 @@ double ThresholdFader::valueDraggedBy (double from, float pixels, bool)
 class DynamicsSection::DetectionRangeButton final : public juce::Button
 {
 public:
-    DetectionRangeButton() : juce::Button ("Detection Range") { setHasFocusOutline (true); }
+    DetectionRangeButton() : juce::Button ("Detection Range")
+    {
+        setHasFocusOutline (true);
+        setMouseClickGrabsKeyboardFocus (false);
+    }
 
     void setFree (bool isFree)
     {

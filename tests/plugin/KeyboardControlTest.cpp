@@ -48,11 +48,13 @@ struct EveryControl : OpenEditor
         return findAll<juce::Slider> ([] (juce::Slider& s) { return s.isShowing() && s.isEnabled(); });
     }
 
-    // Opens what the button titled title shows, as a click does: the footer's Analyzer or output popover.
+    // Opens what the button titled title shows from the keyboard, as Return on it does: the footer's
+    // Analyzer or output popover.
     void openCallOut (const juce::String& title)
     {
         auto* button = findAll<juce::Button> ([&title] (juce::Button& b) { return b.getTitle() == title; }).front();
-        button->onClick();
+        button->grabKeyboardFocus();
+        press (juce::KeyPress (juce::KeyPress::returnKey));
         REQUIRE ((harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); }) != nullptr
                   || harness::findChild<staple::Popover> (*editor, [] (staple::Popover& p) { return p.isOpen(); }) != nullptr));
     }
@@ -524,6 +526,40 @@ TEST_CASE ("Clicking Undo, Redo, A/B Compare, Copy or Presets leaves keyboard fo
     }
     CHECK (host.display.hasKeyboardFocus (false));
     host.click (host.at (200.0));
+    host.press (juce::KeyPress (juce::KeyPress::deleteKey));
+    CHECK (host.value (2, "in_use") == 0.0f);
+}
+
+TEST_CASE ("A click on the panel's and footer's controls, or on a popover's opener, leaves keyboard focus where it was, so Delete still deletes")
+{
+    EveryControl host;
+    host.addBand (2, 200.0f, 0.0f);
+    host.settle();
+    host.display.grabKeyboardFocus();
+    host.click (host.at (200.0));
+    host.settle();
+    const auto titled = [&host] (const juce::String& title) -> juce::Component& {
+        auto found = host.findAll<juce::Component> ([&title] (juce::Component& c) { return c.getTitle() == title && c.isShowing(); });
+        REQUIRE_FALSE (found.empty());
+        return *found.front();
+    };
+    // A click, as the editor sees it: the press hides the focus ring, then the control's own click. (A
+    // real click, through the OS window, can't be made here, so a control taking focus on a click is
+    // checked by its flag.)
+    const auto click = [&] (const juce::String& title) {
+        CAPTURE (title);
+        auto& control = titled (title);
+        CHECK_FALSE (control.getMouseClickGrabsKeyboardFocus());
+        dynamic_cast<staple::LookAndFeel&> (host.editor->getLookAndFeel()).showFocusRing (false);
+        if (auto* button = dynamic_cast<juce::Button*> (&control); button != nullptr && button->onClick != nullptr)
+            button->onClick();
+        host.settle();
+        CHECK (host.display.hasKeyboardFocus (true));
+    };
+    // An Icon Button, an Edge Selector and a Text Chip; the popovers' openers, opened and closed, and
+    // a popover's own control.
+    for (const juce::String title : { "Band 2 Solo", "Band 2 Shape", "Display Range", "Output", "Output", "Analyzer", "Analyzer Pre-EQ", "Analyzer" })
+        click (title);
     host.press (juce::KeyPress (juce::KeyPress::deleteKey));
     CHECK (host.value (2, "in_use") == 0.0f);
 }
