@@ -71,6 +71,7 @@ target_sources(eq1 PRIVATE
     staple/Fonts.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
+    staple/WindowBackground.cpp
     Accessibility.cpp
     staple/controls/EdgeSelector.cpp
     staple/controls/IconButton.cpp

@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include "staple/Tokens.h"
+#include "staple/WindowBackground.h"
 #include "staple/controls/Overlay.h"
 
 #include "eq1/Engine.h"
@@ -129,31 +130,10 @@ void PluginEditor::timerCallback()
         applyUiScale();
 }
 
-namespace
-{
-// A soft elliptical highlight over the window: colour at centre (a proportion of the window's size),
-// fading to nothing at fadeOut of the radii, as CSS's radial-gradient (rx ry at x y, colour, transparent fadeOut).
-void paintHighlight (juce::Graphics& g, juce::Rectangle<float> window, juce::Point<float> at, float rx, float ry, juce::Colour colour, float fadeOut)
-{
-    const juce::Point<float> centre { window.getWidth() * at.x, window.getHeight() * at.y };
-    const juce::Graphics::ScopedSaveState saved (g);
-    // A circle of radius rx, squashed to ry vertically.
-    const auto squash = juce::AffineTransform::scale (1.0f, ry / rx, centre.x, centre.y);
-    g.addTransform (squash);
-    g.setGradientFill (juce::ColourGradient (colour, centre, colour.withAlpha (0.0f), centre.translated (rx * fadeOut, 0.0f), true));
-    g.fillRect (window.transformedBy (squash.inverted()));
-}
-} // namespace
-
 void PluginEditor::paint (juce::Graphics& g)
 {
-    namespace colour = staple::tokens::colour;
-    g.fillAll (colour::bg0);
     g.addTransform (juce::AffineTransform::scale (scale));
-    const auto window = content.getLocalBounds().toFloat();
-    paintHighlight (g, window, { 0.12f, 0.04f }, 700.0f, 480.0f, colour::windowHighlight1, 0.70f);
-    paintHighlight (g, window, { 0.92f, 0.32f }, 800.0f, 560.0f, colour::windowHighlight2, 0.66f);
-    paintHighlight (g, window, { 0.45f, 1.12f }, 720.0f, 480.0f, colour::windowHighlight3, 0.66f);
+    staple::paintWindowBackground (g, content.getLocalBounds().toFloat());
 }
 
 void PluginEditor::resized()
