@@ -330,3 +330,29 @@ TEST_CASE ("A version 2 session loads with no Loaded Preset on either side")
     processor.selectCompareSide (eq1::CompareSide::B);
     CHECK (processor.loadedPresetName().isEmpty());
 }
+
+TEST_CASE ("Whether the Output Meter is shown is saved with the session, isn't undoable and doesn't make a side Modified")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    CHECK (saved.isOutputMeterShown());
+    saved.setOutputMeterShown (false);
+    CHECK_FALSE (saved.editHistory().canUndo());
+    CHECK_FALSE (saved.isLoadedPresetModified());
+    const auto xml = savedXml (saved);
+    REQUIRE (xml != nullptr);
+    CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
+
+    eq1::PluginProcessor restored;
+    load (restored, *xml);
+    CHECK_FALSE (restored.isOutputMeterShown());
+}
+
+TEST_CASE ("A session saved before the Output Meter loads with it shown")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.setOutputMeterShown (false);
+    load (processor, *fixture ("state-v0.xml"));
+    CHECK (processor.isOutputMeterShown());
+}

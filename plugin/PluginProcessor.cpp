@@ -62,7 +62,7 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 
 namespace
 {
-const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" };
+const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" }, outputMeterShownProperty { "outputMeterShown" };
 
 // Brings a saved state from an older version up to stateVersion, one version at a time.
 void migrate (juce::ValueTree& state)
@@ -175,6 +175,7 @@ void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
     auto state = compare.savedState();
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
+    state.setProperty (outputMeterShownProperty, isOutputMeterShown(), nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -193,6 +194,9 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         state.removeProperty (versionProperty, nullptr);
         setDisplayRangeDb (state.getProperty (displayRangeProperty, 12));
         state.removeProperty (displayRangeProperty, nullptr);
+        // Shown in a session saved before the Output Meter.
+        setOutputMeterShown (state.getProperty (outputMeterShownProperty, true));
+        state.removeProperty (outputMeterShownProperty, nullptr);
         if (auto saved = state.getChildWithName (analyzerType); saved.isValid())
         {
             setAnalyzerSettings (fromTree (saved));
