@@ -12,6 +12,7 @@
 #include "display/HandlesLayer.h"
 #include "staple/LookAndFeel.h"
 #include "staple/WindowBackground.h"
+#include "staple/controls/Overlay.h"
 
 #include <cmath>
 
@@ -142,7 +143,7 @@ private:
     juce::String spoken;
 };
 
-EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
+EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e), card (p, e)
 {
     setName ("EQ Display");
     setTitle ("EQ display");
@@ -351,6 +352,7 @@ void EqDisplay::timerCallback()
         releaseSolo();
     // Solo held here or on the Band panel draws its cue.
     showSolo();
+    updateCard();
     // A heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
     const bool fading = stepFades();
@@ -427,7 +429,8 @@ bool EqDisplay::stepFades()
 std::optional<display::Ghost> EqDisplay::ghost() const
 {
     // A menu is modal while it shows.
-    if (dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency || juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0)
+    if (dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency || juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0
+        || card.shownSlot() != 0)
         return std::nullopt;
     int inUse = 0;
     for (const auto& band : shown.bands)
@@ -445,9 +448,59 @@ std::optional<display::Ghost> EqDisplay::ghost() const
     return std::nullopt;
 }
 
+void EqDisplay::parentHierarchyChanged()
+{
+    auto& layer = staple::overlayLayerFor (*this);
+    if (&layer != this && card.getParentComponent() != &layer)
+        layer.addChildComponent (card);
+}
+
+void EqDisplay::showCard (int slot)
+{
+    const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
+    auto* layer = card.getParentComponent();
+    if (layer == nullptr)
+        return;
+    card.show (slot, layer->getLocalPoint (this, handleOf (band)), layer->getLocalArea (this, getLocalBounds()));
+}
+
+void EqDisplay::hideCard()
+{
+    card.hide();
+    restingSlot = 0;
+    cardLeftSince.reset();
+}
+
+void EqDisplay::updateCard()
+{
+    const auto now = juce::Time::getMillisecondCounter();
+    if (const int slot = card.shownSlot(); slot != 0)
+    {
+        if (card.isPointerOver() || (pointer && slotAt (*pointer) == slot))
+            cardLeftSince.reset();
+        else if (! cardLeftSince)
+            cardLeftSince = now;
+        else if (now - *cardLeftSince >= static_cast<juce::uint32> (staple::tokens::motion::hoverFadeMs))
+            hideCard();
+        return;
+    }
+    const bool pressed = dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency;
+    if (restingSlot != 0 && ! pressed && now - restingSince >= hoverCardRestMilliseconds)
+        showCard (std::exchange (restingSlot, 0));
+}
+
 void EqDisplay::mouseMove (const juce::MouseEvent& e)
 {
+    // The pointer resting on a handle shows its card; moving on or off starts the rest afresh.
+    if (const int handle = slotAt (e.position); handle != restingSlot || pointer != e.position)
+    {
+        restingSlot = handle;
+        restingSince = juce::Time::getMillisecondCounter();
+    }
     pointer = e.position;
+    // While a card is up, another handle's replaces it at once.
+    if (card.shownSlot() != 0 && restingSlot != 0 && restingSlot != card.shownSlot())
+        showCard (std::exchange (restingSlot, 0));
     if (ghost() || ghostFade > 0.0f)
         repaint();
     // A handle, or else a Band's filled curve.
@@ -459,6 +512,7 @@ void EqDisplay::mouseMove (const juce::MouseEvent& e)
 void EqDisplay::mouseExit (const juce::MouseEvent&)
 {
     hoveredSlot = 0;
+    restingSlot = 0;
     pointer.reset();
     repaint();
 }
@@ -569,6 +623,8 @@ void EqDisplay::paint (juce::Graphics& g)
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)
 {
+    // Any press here hides the card; a handle's then selects and drags as ever.
+    hideCard();
     // Right-click, or Ctrl-click on macOS: never a Solo, a drag or a marquee.
     if (e.mods.isPopupMenu())
     {

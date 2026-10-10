@@ -48,6 +48,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/EditHistoryTest.cpp
         plugin/EditorLayoutTest.cpp
         plugin/EqDisplayTest.cpp
+        plugin/HoverCardTest.cpp
         plugin/FooterTest.cpp
         plugin/HeaderTest.cpp
         plugin/HostSessionTest.cpp

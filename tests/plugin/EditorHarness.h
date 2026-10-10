@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EqDisplay.h"
+#include "display/DisplayGeometry.h"
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -191,6 +192,13 @@ struct OpenEditor
     {
         return { static_cast<float> (std::log (frequency / 10.0) / std::log (3000.0) * display.getWidth()),
                  static_cast<float> (display.getHeight()) * 0.5f };
+    }
+
+    // Where the display draws a Band at frequency with heard Gain db, under the Display Range.
+    juce::Point<float> at (double frequency, double db) const
+    {
+        const eq1::display::DisplayGeometry geometry { .width = display.getWidth(), .height = display.getHeight(), .rangeDb = processor.displayRangeDb() };
+        return { geometry.xOf (frequency), geometry.yOf (db) };
     }
 
     // A mouse event on the display (harness::mouseEvent).

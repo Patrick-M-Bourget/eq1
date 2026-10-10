@@ -41,6 +41,7 @@ target_sources(eq1 PRIVATE
     BandEditing.cpp
     BandMenu.cpp
     BandPanel.cpp
+    HoverCard.cpp
     DetectionRangeBar.cpp
     DynamicRangeRing.cpp
     DynamicsSection.cpp

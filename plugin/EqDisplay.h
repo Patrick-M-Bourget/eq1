@@ -2,6 +2,7 @@
 
 #include "AnalyzerSettings.h"
 #include "BandEditing.h"
+#include "HoverCard.h"
 #include "AnalyzerSpectrum.h"
 #include "display/DisplayFrame.h"
 #include "display/DisplayGeometry.h"
@@ -70,6 +71,7 @@ public:
     bool keyStateChanged (bool isKeyDown) override;
     void focusLost (FocusChangeType cause) override;
     void resized() override;
+    void parentHierarchyChanged() override;
 
     // What a screen reader reads as a Band's value: "Bell, 1000.0 Hz, +3.50 dB, Q 0.707", Gain left
     // out on Shapes without one, then "Bypassed" and "Dynamic Band" when they apply.
@@ -77,7 +79,7 @@ public:
 
     // The ghost Bell, while it shows: following the mouse over empty space (no handle, Dynamic Range
     // Handle or Band's curve under it), or resting at 1 kHz with no Bands; never while the mouse is pressed, a menu is
-    // open or every Band Slot is in use.
+    // open, the Hover Card is up or every Band Slot is in use.
     std::optional<display::Ghost> ghost() const;
 
     // The Band whose handle draws the Solo cue: the Soloed one, whichever holder Solos it, or 0.
@@ -191,6 +193,20 @@ private:
     float globalBypassFade = 0.0f;
     juce::uint32 lastFadeStep = 0;
     bool isGlobalBypassOn() const;
+
+    // The Hover Card, in the editor's overlay layer so it draws over the Band panel. It shows once the
+    // pointer has rested on a handle (restingSlot's, from restingSince) for hoverCardRestMilliseconds.
+    HoverCard card;
+    static constexpr juce::uint32 hoverCardRestMilliseconds = 300;
+    int restingSlot = 0;
+    juce::uint32 restingSince = 0;
+    // Since when the pointer has been off the shown card and its handle: it hides hoverFadeMs later.
+    std::optional<juce::uint32> cardLeftSince;
+    // Shows the card for a Band at its handle, or moves it there; hides it.
+    void showCard (int slot);
+    void hideCard();
+    // On the timer: shows the card once the pointer has rested long enough, and keeps it at its handle.
+    void updateCard();
 
     // The window's background under the display's edges (display::edgeFadeOverlay), built again only
     // when the display's place in the window, the window's size or the scale it is drawn at changes.
