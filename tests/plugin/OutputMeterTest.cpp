@@ -1,3 +1,4 @@
+#include "EqDisplay.h"
 #include "OutputMeter.h"
 #include "PluginProcessor.h"
 
@@ -6,6 +7,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
+#include <functional>
 #include <numbers>
 
 using Catch::Matchers::WithinAbs;
@@ -58,6 +60,20 @@ void readAll (eq1::PluginProcessor& processor)
 {
     for (int ch = 0; ch < processor.outputLevelChannels(); ++ch)
         processor.readOutputLevel (ch);
+}
+
+// The first child of the editor, at any depth, that is a T and passes test.
+template <typename T>
+T* findChild (juce::Component& parent, std::function<bool (T&)> test = [] (T&) { return true; })
+{
+    for (auto* child : parent.getChildren())
+    {
+        if (auto* found = dynamic_cast<T*> (child); found != nullptr && test (*found))
+            return found;
+        if (auto* found = findChild<T> (*child, test))
+            return found;
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -211,4 +227,40 @@ TEST_CASE ("The Output Meter's scale runs linearly in dB from -60 dBFS at the bo
     CHECK_THAT (eq1::OutputMeter::position (-90.0), WithinAbs (0.0, 1.0e-9));
     CHECK_THAT (eq1::OutputMeter::position (eq1::levelFloorDb), WithinAbs (0.0, 1.0e-9));
     CHECK_THAT (eq1::OutputMeter::position (12.0), WithinAbs (1.0, 1.0e-9));
+}
+
+TEST_CASE ("The toolbar's Meter button hides the Output Meter, widening the EQ display, and a reopened editor follows the choice")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    const auto* constrainer = editor->getConstrainer();
+    REQUIRE (constrainer != nullptr);
+    editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
+
+    auto* display = findChild<eq1::EqDisplay> (*editor);
+    auto* meter = findChild<eq1::OutputMeter> (*editor);
+    auto* button = findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getButtonText() == "Meter"; });
+    REQUIRE (display != nullptr);
+    REQUIRE (meter != nullptr);
+    REQUIRE (button != nullptr);
+    CHECK (button->getToggleState());
+    CHECK (editor->getLocalBounds().contains (editor->getLocalArea (button->getParentComponent(), button->getBounds())));
+    // Beside the EQ display, its full height.
+    CHECK (meter->isVisible());
+    CHECK (meter->getX() == display->getRight());
+    CHECK (meter->getY() == display->getY());
+    CHECK (meter->getHeight() == display->getHeight());
+    CHECK (meter->getWidth() == 40);
+    const int shownWidth = display->getWidth();
+
+    button->setToggleState (false, juce::sendNotificationSync);
+    CHECK_FALSE (processor.isOutputMeterShown());
+    CHECK_FALSE (meter->isVisible());
+    CHECK (display->getWidth() == shownWidth + 40);
+
+    editor.reset (processor.createEditor());
+    editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
+    CHECK_FALSE (findChild<eq1::OutputMeter> (*editor)->isVisible());
+    CHECK_FALSE (findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getButtonText() == "Meter"; })->getToggleState());
 }
