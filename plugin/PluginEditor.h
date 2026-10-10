@@ -45,7 +45,7 @@ private:
     void showUndoState();
 
     // The Analyzer's controls, above the display.
-    juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" }, showSidechain { "Sidechain" };
+    juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" }, showSidechain { "Sidechain" }, peakHold { "Peak Hold" };
     juce::ComboBox analyzerRange, analyzerSpeed, analyzerResolution;
     juce::Label analyzerTiltLabel;
     juce::Slider analyzerTilt;

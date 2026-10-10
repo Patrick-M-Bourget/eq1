@@ -28,6 +28,9 @@ constexpr double silence = 1.0e-20; // -200 dB
 // How long a tap may send nothing before the spectrum falls away: longer than the largest host
 // blocks take to arrive (8192 samples at 44.1 kHz is 186 ms), so those don't flicker it.
 constexpr double hold = 0.25;
+
+// How fast Peak Hold falls, whatever the speed.
+constexpr double peakHoldFallDbPerSecond = 6.0;
 } // namespace
 
 int AnalyzerSpectrum::fftSize (double sampleRate, AnalyzerResolution resolution)
@@ -58,6 +61,7 @@ void AnalyzerSpectrum::prepare (double newSampleRate, AnalyzerResolution newReso
     secondsSilent = 0.0;
     transform.assign (static_cast<size_t> (2 * size), 0.0f);
     power.assign (static_cast<size_t> (size / 2 + 1), silence);
+    held.assign (power.size(), silence);
 }
 
 void AnalyzerSpectrum::push (const float* samples, int count)
@@ -89,25 +93,43 @@ void AnalyzerSpectrum::update (double seconds, AnalyzerSpeed speed)
     }
 
     const double amount = 1.0 - std::exp (-seconds / timeConstantOf (speed));
+    const double fall = std::pow (10.0, -peakHoldFallDbPerSecond * seconds / 10.0);
     for (size_t bin = 0; bin < power.size(); ++bin)
     {
         const double amplitude = heard ? transform[bin] / windowGain : 0.0;
-        power[bin] += (std::max (amplitude * amplitude, silence) - power[bin]) * amount;
+        const double framePower = std::max (amplitude * amplitude, silence);
+        power[bin] += (framePower - power[bin]) * amount;
+        held[bin] = std::max ({ held[bin] * fall, framePower, silence });
     }
+}
+
+double AnalyzerSpectrum::levelDbOf (const std::vector<double>& perBin, double frequency, double tiltDbPerOctave) const
+{
+    double shown = silence;
+    if (! perBin.empty())
+    {
+        const double bin = std::clamp (binOf (frequency), 0.0, static_cast<double> (perBin.size() - 1));
+        const auto below = static_cast<size_t> (bin);
+        const auto above = std::min (below + 1, perBin.size() - 1);
+        const double fraction = bin - static_cast<double> (below);
+        shown = perBin[below] + (perBin[above] - perBin[below]) * fraction;
+    }
+    return 10.0 * std::log10 (shown) + tiltDbPerOctave * std::log2 (frequency / 1000.0);
 }
 
 double AnalyzerSpectrum::levelDb (double frequency, double tiltDbPerOctave) const
 {
-    double shown = silence;
-    if (! power.empty())
-    {
-        const double bin = std::clamp (binOf (frequency), 0.0, static_cast<double> (power.size() - 1));
-        const auto below = static_cast<size_t> (bin);
-        const auto above = std::min (below + 1, power.size() - 1);
-        const double fraction = bin - static_cast<double> (below);
-        shown = power[below] + (power[above] - power[below]) * fraction;
-    }
-    return 10.0 * std::log10 (shown) + tiltDbPerOctave * std::log2 (frequency / 1000.0);
+    return levelDbOf (power, frequency, tiltDbPerOctave);
+}
+
+double AnalyzerSpectrum::heldLevelDb (double frequency, double tiltDbPerOctave) const
+{
+    return levelDbOf (held, frequency, tiltDbPerOctave);
+}
+
+void AnalyzerSpectrum::clearPeakHold()
+{
+    std::fill (held.begin(), held.end(), silence);
 }
 
 double AnalyzerSpectrum::peakNear (double frequency) const

@@ -15,6 +15,7 @@ struct AnalyzerSettings
     AnalyzerSpeed speed = AnalyzerSpeed::medium;
     AnalyzerResolution resolution = AnalyzerResolution::medium;
     double tiltDbPerOctave = 4.5; // Analyzer Tilt, 0 to 6 dB/oct around 1 kHz
+    bool peakHold = true; // Peak Hold over the post-EQ spectrum, or the pre-EQ one when only it is shown
 
     JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
     bool operator== (const AnalyzerSettings&) const = default;
