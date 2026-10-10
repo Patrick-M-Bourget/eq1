@@ -62,6 +62,7 @@ AnalyzerButton::AnalyzerButton() : staple::TextChip (analyzerButtonText ({}), Lo
 {
     setName ("Analyzer");
     setTitle ("Analyzer");
+    setTextIsValue (true);
     setTooltip ("Analyzer: what it shows and how. Click for its settings");
     setChevron (Chevron { .icon = staple::Icon::chevronUp, .size = 10.0f, .gap = 10.0f, .alpha = 0.6f });
     setPadding (buttonPaddingLeft, buttonPaddingRight);

@@ -23,6 +23,7 @@ DisplayRangeChip::DisplayRangeChip (PluginProcessor& p)
     setName ("Display Range");
     setTitle ("Display Range");
     setChevron (true);
+    setTextIsValue (true);
     startTimerHz (10);
 }
 

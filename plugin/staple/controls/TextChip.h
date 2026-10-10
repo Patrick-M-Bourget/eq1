@@ -15,7 +15,8 @@ namespace staple
 // with an optional chevron after it (the Display Range chip's 8 px dropdown, the Analyzer button's
 // chevron up). Plain: text only, with a fill1 box on hover (A/B Compare, Copy, the footer readouts, the
 // Preset browser's actions). Numbers keep their width (Manrope's tabular figures). Hover lights it
-// (staple::lit); disabled, it dims to 35 %. A screen reader reads its text as its value.
+// (staple::lit); disabled, it dims to 35 %. A screen reader reads it as a button by its title, or,
+// for a chip whose text is a value (setTextIsValue), reads that text as its value.
 class TextChip : public juce::Button
 {
 public:
@@ -39,6 +40,9 @@ public:
     void setChevron (Chevron look);
     // The space either side of its text (by default 8 px filled, 6 px plain).
     void setPadding (float left, float right);
+    // Whether its text is a value a screen reader reads (the Display Range chip's "±12 dB"), rather
+    // than an action's name (Copy).
+    void setTextIsValue (bool isValue) { textIsValue = isValue; }
     // Its text in this colour whatever its state (the footer readouts' text1, or text4 while not
     // applied), rather than text2 lit to text1.
     void setInk (std::optional<juce::Colour> colour);
@@ -48,7 +52,6 @@ public:
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
 
 protected:
-    // A button whose value a screen reader reads is its text, and a press clicks it.
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
 private:
@@ -59,6 +62,7 @@ private:
     Weight weight;
     float paddingLeft, paddingRight;
     std::optional<Chevron> chevron;
+    bool textIsValue = false;
     std::optional<juce::Colour> fixedInk;
 };
 

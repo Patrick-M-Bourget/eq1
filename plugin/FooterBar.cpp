@@ -104,6 +104,7 @@ OutputReadout::OutputReadout() : staple::TextChip (outputReadoutText (0.0), Look
 {
     setName ("Output");
     setTitle ("Output");
+    setTextIsValue (true);
     setTooltip ("Output: Output Gain, with Auto Gain's estimate while Auto Gain is on. Click for the output controls");
     setInk (colour::text1);
 }

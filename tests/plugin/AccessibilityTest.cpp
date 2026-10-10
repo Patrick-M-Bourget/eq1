@@ -3,6 +3,7 @@
 #include "PresetLibrary.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/Popover.h"
+#include "staple/controls/TextChip.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -395,6 +396,24 @@ TEST_CASE ("The Presets button reads the Loaded Preset, with Modified, or No Pre
     host.settle();
     REQUIRE (host.processor.isLoadedPresetModified());
     CHECK (presets() == name + ", Modified");
+}
+
+TEST_CASE ("A chip whose text is a value reads it as its value; an action chip is a plain button")
+{
+    Editor host;
+    host.settle();
+    const auto chip = [&host] (const juce::String& title) {
+        auto found = host.findAll<staple::TextChip> ([&title] (staple::TextChip& c) { return c.getTitle() == title; });
+        REQUIRE (found.size() == 1);
+        auto* handler = found.front()->getAccessibilityHandler();
+        REQUIRE (handler != nullptr);
+        CHECK (handler->getRole() == juce::AccessibilityRole::button);
+        return handler;
+    };
+    const auto* range = chip ("Display Range")->getValueInterface();
+    REQUIRE (range != nullptr);
+    CHECK (range->getCurrentValueAsString() == juce::String::charToString (0x00B1) + "12 dB");
+    CHECK (chip ("Copy A to B")->getValueInterface() == nullptr);
 }
 
 TEST_CASE ("Each Clip Light reads Lit or Off, and pressing either puts out both")

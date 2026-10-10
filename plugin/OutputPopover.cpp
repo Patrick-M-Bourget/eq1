@@ -39,6 +39,7 @@ public:
     {
         setClickingTogglesState (true);
         setTitle ("Pan Mode");
+        setTextIsValue (true);
         buttonStateChanged();
     }
 

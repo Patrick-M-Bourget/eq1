@@ -89,6 +89,8 @@ void TextChip::paintButton (juce::Graphics& g, bool highlighted, bool down)
 
 std::unique_ptr<juce::AccessibilityHandler> TextChip::createAccessibilityHandler()
 {
+    if (! textIsValue)
+        return juce::Button::createAccessibilityHandler();
     return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
 }
 
