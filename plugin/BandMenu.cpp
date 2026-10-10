@@ -11,8 +11,8 @@ namespace eq1
 
 namespace
 {
-// The Slope submenu's values, in dB/oct; Brickwall follows them.
-constexpr std::array<double, 8> listedSlopes { 6.0, 12.0, 18.0, 24.0, 36.0, 48.0, 72.0, 96.0 };
+// The Slope list's values, in dB/oct; Brickwall follows them.
+constexpr std::array<double, 9> listedSlopes { 6.0, 12.0, 18.0, 24.0, 30.0, 36.0, 48.0, 72.0, 96.0 };
 
 // Off a default by more than its parameter's round trip through a normalised value: the Free limits'
 // log ranges don't give their defaults back exactly.
@@ -32,6 +32,29 @@ bool hasDynamicsToClear (const BandSettings& band)
 
 bool isBrickwall (const BandSettings& band) { return isCut (band.shape) && band.brickwall; }
 } // namespace
+
+juce::PopupMenu slopeMenu (BandEditing& edit, const std::vector<int>& slots)
+{
+    std::vector<BandSettings> bands;
+    for (int slot : slots)
+        bands.push_back (edit.band (slot));
+    const auto any = [&] (auto&& predicate) { return std::any_of (bands.begin(), bands.end(), predicate); };
+    // Ticked when at least one Band is one the item applies to, and every such Band has its value.
+    const auto shared = [&] (auto&& appliesTo, auto&& hasValue) {
+        return any (appliesTo) && std::all_of (bands.begin(), bands.end(), [&] (const BandSettings& b) { return ! appliesTo (b) || hasValue (b); });
+    };
+    // The Slope parameter is continuous: a listed value is ticked only where every Band exactly equals it.
+    const auto withSlope = [] (const BandSettings& b) { return hasSlope (b.shape); };
+    const auto cut = [] (const BandSettings& b) { return isCut (b.shape); };
+    juce::PopupMenu slopes;
+    for (double slope : listedSlopes)
+        slopes.addItem (juce::String (juce::roundToInt (slope)) + " dB/oct",
+                        true,
+                        shared (withSlope, [slope] (const BandSettings& b) { return ! isBrickwall (b) && juce::exactlyEqual (b.slope, slope); }),
+                        [&edit, slots, slope] { edit.setSlope (slots, slope); });
+    slopes.addItem ("Brickwall", any (cut), shared (cut, isBrickwall), [&edit, slots] { edit.setBrickwall (slots); });
+    return slopes;
+}
 
 juce::PopupMenu BandMenu::build() const
 {
@@ -79,17 +102,7 @@ juce::PopupMenu BandMenu::build() const
         }
         menu.addSubMenu ("Shape", shapes);
 
-        // The Slope parameter is continuous: a listed value is ticked only where every Band exactly equals it.
-        const auto withSlope = [] (const BandSettings& b) { return hasSlope (b.shape); };
-        const auto cut = [] (const BandSettings& b) { return isCut (b.shape); };
-        juce::PopupMenu slopes;
-        for (double slope : listedSlopes)
-            slopes.addItem (juce::String (juce::roundToInt (slope)) + " dB/oct",
-                            true,
-                            shared (withSlope, [slope] (const BandSettings& b) { return ! isBrickwall (b) && juce::exactlyEqual (b.slope, slope); }),
-                            [&edit, slots, slope] { edit.setSlope (slots, slope); });
-        slopes.addItem ("Brickwall", any (cut), shared (cut, isBrickwall), [&edit, slots] { edit.setBrickwall (slots); });
-        menu.addSubMenu ("Slope", slopes, any (withSlope));
+        menu.addSubMenu ("Slope", slopeMenu (editing, selection), any ([] (const BandSettings& b) { return hasSlope (b.shape); }));
 
         juce::PopupMenu placements;
         for (int i = 0; i < parameters::placementNames().size(); ++i)

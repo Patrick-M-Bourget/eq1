@@ -1,6 +1,7 @@
 #include "FooterBar.h"
 
 #include "Accessibility.h"
+#include "LentPanel.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "UiScale.h"
@@ -15,56 +16,6 @@
 namespace eq1
 {
 
-namespace
-{
-// A footer panel shown in a call-out while it is open. The call-out hides itself as it closes, and is
-// deleted later: the panel goes back to the footer, hidden, as soon as it hides.
-class Lent final : public juce::Component, private juce::ComponentListener
-{
-public:
-    Lent (juce::Component& p, juce::Component& h) : panel (&p), home (&h)
-    {
-        setSize (p.getWidth(), p.getHeight());
-        p.setTopLeftPosition (0, 0);
-        addAndMakeVisible (p);
-    }
-
-    ~Lent() override
-    {
-        if (callOut != nullptr)
-            callOut->removeComponentListener (this);
-        giveBack();
-    }
-
-    // Once in the call-out, follows it.
-    void parentHierarchyChanged() override
-    {
-        if (callOut == nullptr && getParentComponent() != nullptr)
-        {
-            callOut = getParentComponent();
-            callOut->addComponentListener (this);
-        }
-    }
-
-private:
-    void componentVisibilityChanged (juce::Component& component) override
-    {
-        if (! component.isVisible())
-            giveBack();
-    }
-
-    void giveBack()
-    {
-        if (panel != nullptr && home != nullptr && panel->getParentComponent() == this)
-        {
-            panel->setVisible (false);
-            home->addChildComponent (*panel);
-        }
-    }
-
-    juce::Component::SafePointer<juce::Component> panel, home, callOut;
-};
-} // namespace
 
 // The Analyzer's settings: Pre, Post, Sidechain and Peak Hold, its Range, Speed and Resolution, and
 // Analyzer Tilt. Follows settings restored with the plugin's state.
@@ -418,7 +369,7 @@ void FooterBar::openCallOut (juce::Component& panel, juce::Component& from)
     auto* parent = getParentComponent();
     if (parent == nullptr || panel.isShowing())
         return;
-    callOut = &juce::CallOutBox::launchAsynchronously (std::make_unique<Lent> (panel, *this), parent->getLocalArea (this, from.getBounds()), parent);
+    callOut = &juce::CallOutBox::launchAsynchronously (std::make_unique<LentPanel> (panel, *this), parent->getLocalArea (this, from.getBounds()), parent);
 }
 
 void FooterBar::showUiScale (int percent)

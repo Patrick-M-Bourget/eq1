@@ -31,6 +31,18 @@ void IconButton::setLitColour (juce::Colour colour)
     repaint();
 }
 
+void IconButton::setRestColour (juce::Colour colour)
+{
+    restColour = colour;
+    repaint();
+}
+
+void IconButton::setIconSize (float size)
+{
+    iconSize = size;
+    repaint();
+}
+
 void IconButton::setOffLook (bool o)
 {
     offLook = o;
@@ -54,7 +66,8 @@ void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     const float side = static_cast<float> (std::min (getWidth(), getHeight()));
     const auto square = getLocalBounds().toFloat().withSizeKeepingCentre (side, side);
     // The icon's 16 px grid in a 24 px button, in proportion at other sizes.
-    const auto iconArea = square.withSizeKeepingCentre (side * 2.0f / 3.0f, side * 2.0f / 3.0f);
+    const float iconSide = iconSize > 0.0f ? iconSize : side * 2.0f / 3.0f;
+    const auto iconArea = square.withSizeKeepingCentre (iconSide, iconSide);
 
     juce::Colour ink;
     if (isOff())
@@ -66,7 +79,7 @@ void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     else if (isLit())
         ink = brightened (litColour, highlighted, down);
     else
-        ink = highlighted || down ? colour::text1 : colour::text3;
+        ink = highlighted || down ? colour::text1 : restColour;
     drawIcon (g, icon, iconArea, ink.withMultipliedAlpha (alpha));
 }
 

@@ -83,9 +83,12 @@ public:
     void enablementChanged() override;
     void parentHierarchyChanged() override;
 
+protected:
+    // Shows the tooltip in the knob's overlay layer, where its type-in field opens.
+    void showTooltip();
+
 private:
     friend class KnobTooltip;
-    void showTooltip();
     void hideTooltipUnlessHovered (juce::Point<int> screenPosition);
     void hideTooltip();
     float arcRadius() const;

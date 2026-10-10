@@ -14,17 +14,31 @@ constexpr float iconWidth = 20.0f, iconHeight = 12.0f, dotSize = 5.0f;
 constexpr float flushPadding = 14.0f, iconGap = 9.0f, dotGap = 8.0f;
 // The hairline's alpha at the inner edge, at 45 % of the width from it, and 0 from 90 %.
 constexpr float hairlineInner = 0.6f, hairlineMid = 0.18f;
+constexpr float contextAlpha = 0.3f;
 constexpr float washAlpha = 0.12f, washReach = 0.49f; // the wash fades out at this fraction of the width
 
-std::unique_ptr<juce::Drawable> menuIcon (Icon icon)
+std::unique_ptr<juce::DrawablePath> iconPath (Icon icon, juce::Colour ink)
 {
     auto drawable = std::make_unique<juce::DrawablePath>();
     drawable->setPath (pathOf (icon));
     drawable->setFill (juce::FillType());
-    drawable->setStrokeFill (colour::text1);
+    drawable->setStrokeFill (ink);
     drawable->setStrokeType (juce::PathStrokeType (tokens::size::iconStroke * gridOf (icon).getWidth() / iconWidth,
                                                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     return drawable;
+}
+
+std::unique_ptr<juce::Drawable> menuIcon (Icon icon, std::optional<Icon> context)
+{
+    if (! context.has_value())
+        return iconPath (icon, colour::text1);
+    // Both in one grid, so they keep their places relative to each other.
+    auto both = std::make_unique<juce::DrawableComposite>();
+    both->addChild (iconPath (*context, colour::text1.withMultipliedAlpha (contextAlpha)));
+    both->addChild (iconPath (icon, colour::text1));
+    both->setContentArea (gridOf (icon));
+    both->setBoundingBox (gridOf (icon));
+    return both;
 }
 } // namespace
 
@@ -53,13 +67,15 @@ void EdgeSelector::setIconColour (juce::Colour colour)
     repaint();
 }
 
-void EdgeSelector::addItem (const juce::String& text, int itemId, Icon icon, std::optional<juce::Colour> dot)
+void EdgeSelector::addItem (const juce::String& text, int itemId, Icon icon, std::optional<juce::Colour> dot, std::optional<Icon> context)
 {
     juce::PopupMenu::Item item (text);
     item.itemID = itemId;
-    item.image = menuIcon (icon);
+    item.image = menuIcon (icon, context);
     getRootMenu()->addItem (std::move (item));
     icons[itemId] = icon;
+    if (context.has_value())
+        contexts[itemId] = *context;
     if (dot.has_value())
         dots[itemId] = *dot;
 }
@@ -117,7 +133,10 @@ void EdgeSelector::paint (juce::Graphics& g)
     auto row = content.withSizeKeepingCentre (std::min (width, content.getWidth()), bounds.getHeight());
     if (icon != icons.end())
     {
-        drawIcon (g, icon->second, row.removeFromLeft (iconWidth).withSizeKeepingCentre (iconWidth, iconHeight), iconColour);
+        const auto iconArea = row.removeFromLeft (iconWidth).withSizeKeepingCentre (iconWidth, iconHeight);
+        if (const auto context = contexts.find (id); context != contexts.end())
+            drawIcon (g, context->second, iconArea, iconColour.withMultipliedAlpha (contextAlpha));
+        drawIcon (g, icon->second, iconArea, iconColour);
         row.removeFromLeft (iconGap);
     }
     if (dot != dots.end())
