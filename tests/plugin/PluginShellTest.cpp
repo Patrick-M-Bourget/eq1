@@ -780,7 +780,7 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     };
     visit (*editor);
     // The header's, Display Range, the Clip Lights and the footer's, with no Band selected.
-    CHECK (found >= 16);
+    CHECK (found >= 15);
     // And the output popover's, open above the footer.
     auto* readout = harness::findChild<eq1::OutputReadout> (*editor);
     REQUIRE (readout != nullptr);

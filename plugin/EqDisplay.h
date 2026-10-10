@@ -28,7 +28,9 @@ class PluginProcessor;
 // selection, which a Band outside it becomes first; on empty space it offers Paste and Select All.
 // Holding a handle still Solos its Band until the mouse is released. Pressing on the spectrum, away
 // from the handles, grabs its peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
-// with its Live Gain's movement inside it, and its curve follows its Live Gain. The curve comes from
+// with its Live Gain's movement inside it, and its curve follows its Live Gain; the selected one has a
+// wash between its curves at Gain and Gain + Dynamic Range. Hovering a handle lights its Band's curve,
+// and Global Bypass fades every curve to its bypassed look (plugin/display/). The curve comes from
 // the Engine's own response maths (eq1/Response.h). A handle beyond the Display Range sits at its
 // edge; a heard Gain changed to beyond it zooms the range out, once any drag has ended. A screen reader
 // reads the display as a group, "EQ display", of the Bands in use, each named "Band 4" with its
@@ -46,6 +48,8 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
+    void mouseMove (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
     void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed (const juce::KeyPress& key) override;
@@ -137,6 +141,16 @@ private:
     juce::Point<float> dragStart;
     int shownRangeDb = 0;
     juce::uint32 allInUseMessageUntil = 0; // shows "All 24 Bands are in use" until this time
+
+    // The curves' fades, all run from the display's one timer: each Band's hover (the handle under the
+    // mouse) and Global Bypass's, read from its parameter each frame. Each runs from 0 to 1.
+    int hoveredSlot = 0;
+    std::array<float, numBandSlots> hoverFades {};
+    float globalBypassFade = 0.0f;
+    juce::uint32 lastFadeStep = 0;
+    bool isGlobalBypassOn() const;
+    // Moves every fade on by the time since the last step; true while any of them moved.
+    bool stepFades();
 };
 
 } // namespace eq1

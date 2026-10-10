@@ -7,6 +7,7 @@
 #include "PluginProcessor.h"
 #include "display/AnalyzerLayer.h"
 #include "display/CurvesLayer.h"
+#include "display/EdgeFadeLayer.h"
 #include "display/GridLayer.h"
 #include "display/HandlesLayer.h"
 #include "staple/LookAndFeel.h"
@@ -94,6 +95,9 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editi
     }
     shown = heardSettings();
     tapSamples.resize (1 << 16);
+    // An editor opened under Global Bypass shows it at once.
+    globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
+    lastFadeStep = juce::Time::getMillisecondCounter();
     startTimerHz (60);
 }
 
@@ -241,6 +245,7 @@ void EqDisplay::timerCallback()
         releaseSolo();
     // A heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
+    const bool fading = stepFades();
 
     if (updateAnalyzer())
     {
@@ -266,6 +271,8 @@ void EqDisplay::timerCallback()
         liveGainsMoved = liveGainsMoved || ! juce::exactlyEqual (live, shownLiveGains[static_cast<size_t> (slot - 1)]);
         shownLiveGains[static_cast<size_t> (slot - 1)] = live;
     }
+    if (fading)
+        repaint();
     if (same (latest, shown) && range == shownRangeDb && ! messageExpired && ! liveGainsMoved)
         return;
     shown = latest;
@@ -278,6 +285,40 @@ void EqDisplay::timerCallback()
         select (stillInUse);
     placeHandles();
     repaint();
+}
+
+bool EqDisplay::isGlobalBypassOn() const
+{
+    return processor.parameterState().getRawParameterValue (parameters::globalBypassId)->load() >= 0.5f;
+}
+
+bool EqDisplay::stepFades()
+{
+    const auto now = juce::Time::getMillisecondCounter();
+    const auto elapsed = static_cast<float> (now - lastFadeStep);
+    lastFadeStep = now;
+    const auto toward = [elapsed] (float& fade, bool on, int milliseconds) {
+        const float target = on ? 1.0f : 0.0f;
+        const float moved = juce::jlimit (fade - elapsed / static_cast<float> (milliseconds), fade + elapsed / static_cast<float> (milliseconds), target);
+        const bool changed = ! juce::exactlyEqual (moved, fade);
+        fade = moved;
+        return changed;
+    };
+    namespace motion = staple::tokens::motion;
+    bool moved = toward (globalBypassFade, isGlobalBypassOn(), motion::globalBypassFadeMs);
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        moved = toward (hoverFades[static_cast<size_t> (slot - 1)], slot == hoveredSlot, motion::hoverFadeMs) || moved;
+    return moved;
+}
+
+void EqDisplay::mouseMove (const juce::MouseEvent& e)
+{
+    hoveredSlot = slotAt (e.position);
+}
+
+void EqDisplay::mouseExit (const juce::MouseEvent&)
+{
+    hoveredSlot = 0;
 }
 
 display::DisplayGeometry EqDisplay::geometry() const
@@ -327,14 +368,20 @@ void EqDisplay::paint (juce::Graphics& g)
                                   .allInUseMessage = allInUseMessageUntil != 0,
                                   // Before the host has prepared the plugin, the curves are drawn as at 48 kHz.
                                   .sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
-                                  .mono = ! processor.isStereoPlacementAvailable() };
+                                  .mono = ! processor.isStereoPlacementAvailable(),
+                                  .hover = hoverFades,
+                                  .globalBypass = globalBypassFade };
     for (int slot = 1; slot <= numBandSlots; ++slot)
         frame.drawnGains[static_cast<size_t> (slot - 1)] = drawnGain (slot, shown.bands[static_cast<size_t> (slot - 1)]);
 
-    display::paintGridBehindAnalyzer (g, shape);
+    g.fillAll (staple::tokens::colour::bg0);
+    display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
-    display::paintGridOverAnalyzer (g, shape);
     display::paintCurves (g, shape, frame);
+    // The handles and labels go over the edge fades, unfaded.
+    display::paintEdgeFades (g, shape);
+    display::paintLabels (g, display::gridLabels (shape));
+    display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
     display::paintHandles (g, shape, frame);
 }
 

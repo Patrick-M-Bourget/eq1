@@ -28,6 +28,8 @@ struct DisplayFrame
     bool allInUseMessage = false; // "All 24 Bands are in use"
     double sampleRate = 48000.0;
     bool mono = false;
+    std::array<float, numBandSlots> hover {}; // each Band's hover fade, 0 to 1
+    float globalBypass = 0.0f;                 // Global Bypass's fade, 0 to 1
 };
 
 // The Analyzer's spectra this frame.

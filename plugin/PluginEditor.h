@@ -2,6 +2,7 @@
 
 #include "BandEditing.h"
 #include "BandPanel.h"
+#include "DisplayRangeChip.h"
 #include "EqDisplay.h"
 #include "FooterBar.h"
 #include "HeaderBar.h"
@@ -38,8 +39,7 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
 
 private:
-    // Follows the Display Range, restored with the plugin's state or zoomed out, the window's size and
-    // UI Scale, restored with it, and what can be undone.
+    // Follows the window's size and UI Scale, restored with the plugin's state, and what can be undone.
     void timerCallback() override;
 
     PluginProcessor& eqProcessor;
@@ -54,7 +54,7 @@ private:
     HeaderBar header;
     FooterBar footer;
     juce::TooltipWindow tooltips { &content };
-    juce::ComboBox displayRange;
+    DisplayRangeChip displayRange;
     OutputMeter meter;
     // Sizes the window to the processor's logical size and UI Scale, kept within limits.
     void applyUiScale();

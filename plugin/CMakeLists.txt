@@ -46,9 +46,11 @@ target_sources(eq1 PRIVATE
     display/AnalyzerLayer.cpp
     display/CurvesLayer.cpp
     display/DisplayGeometry.cpp
+    display/EdgeFadeLayer.cpp
     display/GridLayer.cpp
     display/HandlesLayer.cpp
     DisplayRange.cpp
+    DisplayRangeChip.cpp
     EditHistory.cpp
     ABCompare.cpp
     PresetSettings.cpp
