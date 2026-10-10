@@ -24,6 +24,7 @@ namespace colour
     inline const juce::Colour line1 { 0x0DFFFFFF };
     inline const juce::Colour line2 { 0x1AFFFFFF };
     inline const juce::Colour line3 { 0x2EFFFFFF };
+    inline const juce::Colour hoverCardLine { 0x17FFFFFF }; // white at 9 %
     inline const juce::Colour focus { 0xBFFFFFFF };
     inline const juce::Colour curveMain { 0xFFF5B930 };
     inline const juce::Colour curveMainHalo { 0x1AF5B930 };
@@ -199,6 +200,17 @@ namespace ghost
     constexpr int fadeInMs = 600;
 } // namespace ghost
 
+// The Hover Card over a Band's handle (HANDOFF.md §2 "HoverCard", §5.2), in px.
+namespace hoverCard
+{
+    constexpr int width = 172, height = 70, padding = 8;
+    constexpr int gap = 18;       // between the card and its handle's centre
+    constexpr int inset = 6;      // from the display's left and right
+    constexpr int roomAbove = 100; // above its handle when the handle is further than this from the display's top
+    constexpr float tip = 9.0f;   // the arrow tip's square, turned 45° and half showing
+    constexpr int restMs = 300;   // the pointer's rest on a handle before the card shows
+} // namespace hoverCard
+
 // Curves on the display (HANDOFF.md §4 "Display", §5.12): widths in px, alphas 0 to 1.
 namespace curve
 {
@@ -230,12 +242,13 @@ namespace shadow
 namespace motion
 {
     constexpr int dur1Ms = 120, dur2Ms = 180, dur3Ms = 240; // hover/press, menus/cards, panels
-    constexpr int hoverFadeMs = 220;                        // a Band curve's hover fade, and the hover card's hide delay
+    constexpr int hoverFadeMs = 220;                        // a Band curve's hover fade, and the Hover Card's hide delay
     constexpr int globalBypassFadeMs = 150;                 // the display's curves fading into and out of Global Bypass
     // The one easing curve: cubic-bezier (0.2, 0.7, 0.2, 1).
     constexpr float easeX1 = 0.2f, easeY1 = 0.7f, easeX2 = 0.2f, easeY2 = 1.0f;
     // Menus, popovers and cards pop in from 3 px lower at 98.5 % scale.
     constexpr float popInOffset = 3.0f, popInScale = 0.985f;
     constexpr float hoverBrightness = 1.18f, pressedBrightness = 1.3f, disabledAlpha = 0.35f;
+    constexpr float bypassedAlpha = 0.38f; // a Bypassed Band's Band panel and Hover Card values
 } // namespace motion
 } // namespace staple::tokens

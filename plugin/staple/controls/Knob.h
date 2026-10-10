@@ -11,6 +11,10 @@ namespace staple
 
 class KnobTooltip;
 
+// Where a vertical drag of pixels from a slider's value from lands, as on a Knob: the whole range over
+// knob::dragPixels, or knob::fineDragPixels when fine (Shift), within the range.
+double draggedAlongRange (juce::Slider& slider, double from, float pixels, bool fine);
+
 // Staple's knob (HANDOFF.md §4 "Knobs", §5.3): a rotary Slider of any diameter, drawn as a lit face with
 // a value arc in a caller-set colour and no track. A vertical drag covers the whole range over 200 px, or
 // 800 px with Shift, as one gesture; a double-click resets it to the value its attachment set
@@ -72,10 +76,6 @@ public:
     juce::String tooltipValue();
     bool isTooltipShown() const;
     KnobTooltip* getKnobTooltip() const { return tooltip.get(); }
-
-    // Text typed into the tooltip: read by parseValue in the value suffix's unit, else by the parameter's
-    // own text, clamped to the range and set as one gesture. False if the knob is disabled.
-    bool commitTypedText (const juce::String& text);
 
     void paint (juce::Graphics& g) override;
     bool hitTest (int x, int y) override;

@@ -41,6 +41,8 @@ target_sources(eq1 PRIVATE
     BandEditing.cpp
     BandMenu.cpp
     BandPanel.cpp
+    ShapeIcon.cpp
+    HoverCard.cpp
     DetectionRangeBar.cpp
     DynamicRangeRing.cpp
     DynamicsSection.cpp
@@ -83,6 +85,7 @@ target_sources(eq1 PRIVATE
     staple/controls/Popover.cpp
     staple/controls/TextChip.cpp
     staple/controls/Tween.cpp
+    staple/controls/TypeIn.cpp
     KeyboardSlider.cpp
     KeyboardControl.cpp
     UserSettings.cpp)

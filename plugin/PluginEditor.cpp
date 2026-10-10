@@ -83,9 +83,10 @@ PluginEditor::~PluginEditor()
     setLookAndFeel (nullptr);
 }
 
-void PluginEditor::mouseDown (const juce::MouseEvent&)
+void PluginEditor::mouseDown (const juce::MouseEvent& e)
 {
     lookAndFeel.showFocusRing (false);
+    display.pressedInEditor (e.eventComponent);
 }
 
 bool PluginEditor::keyPressed (const juce::KeyPress& key)

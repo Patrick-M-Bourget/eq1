@@ -2,7 +2,6 @@
 
 #include "KnobTooltip.h"
 #include "Overlay.h"
-#include "ParseValue.h"
 
 #include <cmath>
 
@@ -208,11 +207,13 @@ void Knob::mouseDrag (const juce::MouseEvent& e)
     continueMouseDrag (e);
 }
 
-double Knob::valueDraggedBy (double from, float pixels, bool fine)
+double draggedAlongRange (juce::Slider& slider, double from, float pixels, bool fine)
 {
-    const double proportion = valueToProportionOfLength (from) + pixels / (fine ? knobs::fineDragPixels : knobs::dragPixels);
-    return proportionOfLengthToValue (juce::jlimit (0.0, 1.0, proportion));
+    const double proportion = slider.valueToProportionOfLength (from) + pixels / (fine ? knobs::fineDragPixels : knobs::dragPixels);
+    return slider.proportionOfLengthToValue (juce::jlimit (0.0, 1.0, proportion));
 }
+
+double Knob::valueDraggedBy (double from, float pixels, bool fine) { return draggedAlongRange (*this, from, pixels, fine); }
 
 void Knob::mouseUp (const juce::MouseEvent& e)
 {
@@ -299,17 +300,6 @@ void Knob::hideTooltip()
 {
     if (tooltip != nullptr)
         tooltip->disappear();
-}
-
-bool Knob::commitTypedText (const juce::String& text)
-{
-    if (! isEnabled() || text.trim().isEmpty())
-        return false;
-    const auto parsed = parseValue (text, getTextValueSuffix().trim());
-    const double value = juce::jlimit (getMinimum(), getMaximum(), parsed.has_value() ? *parsed : getValueFromText (text));
-    const ScopedDragNotification gesture (*this);
-    setValue (value, juce::sendNotificationSync);
-    return true;
 }
 
 } // namespace staple

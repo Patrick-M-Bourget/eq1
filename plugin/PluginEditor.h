@@ -36,7 +36,8 @@ public:
     // Cmd-Z undoes, Shift-Cmd-Z (or Cmd-Y) redoes and Cmd-B toggles Global Bypass; Ctrl on Windows.
     // With nothing focused, Tab focuses the first control and Shift+Tab the last.
     bool keyPressed (const juce::KeyPress& key) override;
-    // Any click in the editor hides the focus ring until a key brings it back.
+    // Any click in the editor hides the focus ring until a key brings it back, and the Hover Card unless
+    // it is on the card.
     void mouseDown (const juce::MouseEvent& e) override;
 
 private:
