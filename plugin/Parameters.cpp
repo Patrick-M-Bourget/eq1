@@ -29,6 +29,23 @@ juce::NormalisableRange<float> logRange (float minimum, float maximum)
              [] (float, float, float value) { return value; } };
 }
 
+// Output Gain: -inf (its silent bottom) to +36 dB, skewed so 0 dB sits at the centre. The skew's float maths
+// misses 0 dB by a few float steps (the centre reads 1.4e-6 dB), so anything that close is exactly 0 dB:
+// the default passes audio through bit for bit (#75).
+juce::NormalisableRange<float> outputGainRange()
+{
+    juce::NormalisableRange<float> skewed (outputGainSilentDb, 36.0f);
+    skewed.setSkewForCentre (0.0f);
+    return { skewed.start,
+             skewed.end,
+             [skewed] (float, float, float normalised) {
+                 const float value = skewed.convertFrom0to1 (normalised);
+                 return std::abs (value) < 1.0e-4f ? 0.0f : value;
+             },
+             [skewed] (float, float, float value) { return value == 0.0f ? 0.5f : skewed.convertTo0to1 (value); },
+             [] (float, float, float value) { return value; } };
+}
+
 // Fixed-precision text, so value -> text -> value -> text round-trips.
 juce::AudioParameterFloatAttributes withText (int decimals, const juce::String& label = {})
 {
@@ -197,8 +214,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // Gain Scale 0 to 200%, Output Gain -inf to +36 dB as in Pro-Q 4, with 0 dB at the centre and its
     // bottom (-80 dB) silent; Output Pan -100% (left, or Mid) to 100% (right, or Side).
-    juce::NormalisableRange<float> outputGainRange (outputGainSilentDb, 36.0f);
-    outputGainRange.setSkewForCentre (0.0f);
     const auto outputGainText = juce::AudioParameterFloatAttributes()
                                     .withLabel ("dB")
                                     .withStringFromValueFunction ([] (float value, int) {
@@ -213,7 +228,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                              100.0f,
                                                              withText (1, "%")),
                 std::make_unique<juce::AudioParameterBool> (juce::ParameterID { autoGainId, 1 }, "Auto Gain", false),
-                std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { outputGainId, 1 }, "Output Gain", outputGainRange, 0.0f, outputGainText),
+                std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { outputGainId, 1 }, "Output Gain", outputGainRange(), 0.0f, outputGainText),
                 std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { outputPanId, 1 },
                                                              "Output Pan",
                                                              juce::NormalisableRange<float> (-100.0f, 100.0f),

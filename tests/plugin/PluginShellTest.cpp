@@ -636,6 +636,34 @@ TEST_CASE ("Output Gain on the host parameters sets the output level, its bottom
     CHECK_THAT (outputGain->getValueForText ("-inf"), WithinAbs (0.0, 1.0e-6));
 }
 
+TEST_CASE ("Output Gain at its default, and at the centre of its host range, is exactly 0 dB")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    juce::RangedAudioParameter* outputGain = nullptr;
+    for (auto* parameter : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter); ranged != nullptr && ranged->getParameterID() == "output_gain")
+            outputGain = ranged;
+    REQUIRE (outputGain != nullptr);
+    auto* raw = processor.parameterState().getRawParameterValue ("output_gain");
+
+    CHECK (raw->load() == 0.0f);
+    outputGain->setValueNotifyingHost (0.25f);
+    REQUIRE (raw->load() != 0.0f);
+    outputGain->setValueNotifyingHost (0.5f);
+    CHECK (raw->load() == 0.0f);
+    CHECK (outputGain->getCurrentValueAsText() == "0.00");
+
+    // A host a float step either side of the centre, or a session saved with the rounded-off default
+    // (1.4e-6 dB), also gets 0 dB.
+    outputGain->setValueNotifyingHost (std::nextafter (0.5f, 1.0f));
+    CHECK (raw->load() == 0.0f);
+    outputGain->setValueNotifyingHost (std::nextafter (0.5f, 0.0f));
+    CHECK (raw->load() == 0.0f);
+    setParameter (processor, "output_gain", 1.43051147e-6f);
+    CHECK (raw->load() == 0.0f);
+}
+
 TEST_CASE ("Auto Gain on the host parameters compensates the Bands' level by its estimate")
 {
     juce::ScopedJuceInitialiser_GUI juce;
