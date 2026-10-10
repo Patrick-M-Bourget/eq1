@@ -26,32 +26,12 @@ struct Analyzer : harness::OpenEditor
         return *found.front();
     }
 
-    static juce::MouseEvent mouse (juce::Component& component, juce::Point<float> position, juce::ModifierKeys mods)
-    {
-        const auto now = juce::Time::getCurrentTime();
-        return { juce::Desktop::getInstance().getMainMouseSource(),
-                 position,
-                 mods,
-                 juce::MouseInputSource::defaultPressure,
-                 juce::MouseInputSource::defaultOrientation,
-                 juce::MouseInputSource::defaultRotation,
-                 juce::MouseInputSource::defaultTiltX,
-                 juce::MouseInputSource::defaultTiltY,
-                 &component,
-                 &component,
-                 now,
-                 position,
-                 now,
-                 1,
-                 false };
-    }
-
     // A left-click in the middle of component.
     static void click (juce::Component& component)
     {
         const auto centre = component.getLocalBounds().toFloat().getCentre();
-        component.mouseDown (mouse (component, centre, juce::ModifierKeys::leftButtonModifier));
-        component.mouseUp (mouse (component, centre, {}));
+        component.mouseDown (harness::mouseEvent (component, centre, juce::ModifierKeys::leftButtonModifier));
+        component.mouseUp (harness::mouseEvent (component, centre, {}));
     }
 
     void open()
@@ -115,7 +95,7 @@ TEST_CASE ("The Analyzer button opens its popover above it, left-aligned to it, 
     CHECK (host.display.hasKeyboardFocus (false));
 
     host.open();
-    host.popover.mouseDown (Analyzer::mouse (host.display, { 20.0f, 20.0f }, juce::ModifierKeys::leftButtonModifier));
+    host.popover.mouseDown (harness::mouseEvent (host.display, { 20.0f, 20.0f }, juce::ModifierKeys::leftButtonModifier));
     CHECK_FALSE (host.popover.isOpen());
     host.open();
 }

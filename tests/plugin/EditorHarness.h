@@ -8,6 +8,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace harness
@@ -50,6 +51,47 @@ inline juce::Image writeSnapshot (juce::Component& component, const juce::String
     auto image = component.createComponentSnapshot (area.isEmpty() ? component.getLocalBounds() : area, true, scale);
     writeSnapshot (image, name);
     return image;
+}
+
+// A mouse event on target at position, in its own pixels, with mods held: pressed at downAt
+// (position unless given), and the clicks-th click.
+inline juce::MouseEvent mouseEvent (juce::Component& target, juce::Point<float> position, juce::ModifierKeys mods = {},
+                                    std::optional<juce::Point<float>> downAt = std::nullopt, int clicks = 1)
+{
+    const auto now = juce::Time::getCurrentTime();
+    const auto pressedAt = downAt.value_or (position);
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             mods,
+             juce::MouseInputSource::defaultPressure,
+             juce::MouseInputSource::defaultOrientation,
+             juce::MouseInputSource::defaultRotation,
+             juce::MouseInputSource::defaultTiltX,
+             juce::MouseInputSource::defaultTiltY,
+             &target,
+             &target,
+             now,
+             pressedAt,
+             now,
+             clicks,
+             position != pressedAt };
+}
+
+// The key with Shift held.
+inline juce::KeyPress withShift (juce::KeyPress key) { return { key.getKeyCode(), juce::ModifierKeys::shiftModifier, 0 }; }
+
+// Switches the main input and output to channels, with sidechain, and prepares to play at 48 kHz in
+// blocks of 512, as a host does.
+inline void useLayout (juce::AudioProcessor& processor,
+                       const juce::AudioChannelSet& channels,
+                       const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
+{
+    juce::AudioProcessor::BusesLayout layout;
+    layout.inputBuses.add (channels);
+    layout.inputBuses.add (sidechain);
+    layout.outputBuses.add (channels);
+    REQUIRE (processor.setBusesLayout (layout));
+    processor.prepareToPlay (48000.0, 512);
 }
 
 // Lets JUCE's timers run for milliseconds: until a timer started now with that interval has fired.
@@ -124,24 +166,10 @@ struct OpenEditor
                  static_cast<float> (display.getHeight()) * 0.5f };
     }
 
+    // A mouse event on the display (harness::mouseEvent).
     juce::MouseEvent mouseEvent (juce::Point<float> position, juce::ModifierKeys mods, juce::Point<float> downAt)
     {
-        const auto now = juce::Time::getCurrentTime();
-        return { juce::Desktop::getInstance().getMainMouseSource(),
-                 position,
-                 mods,
-                 juce::MouseInputSource::defaultPressure,
-                 juce::MouseInputSource::defaultOrientation,
-                 juce::MouseInputSource::defaultRotation,
-                 juce::MouseInputSource::defaultTiltX,
-                 juce::MouseInputSource::defaultTiltY,
-                 &display,
-                 &display,
-                 now,
-                 downAt,
-                 now,
-                 1,
-                 position != downAt };
+        return harness::mouseEvent (display, position, mods, downAt);
     }
 
     // A press at from, a drag to to and a release.

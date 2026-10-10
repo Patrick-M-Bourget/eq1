@@ -98,13 +98,7 @@ struct PanelEditor : harness::OpenEditor
 {
     explicit PanelEditor (bool mono = false)
     {
-        juce::AudioProcessor::BusesLayout layout;
-        const auto channels = mono ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo();
-        layout.inputBuses.add (channels);
-        layout.inputBuses.add (juce::AudioChannelSet::disabled());
-        layout.outputBuses.add (channels);
-        REQUIRE (processor.setBusesLayout (layout));
-        processor.prepareToPlay (48000.0, 512);
+        harness::useLayout (processor, mono ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo());
         addBand (1, 1000.0f, 0.0f);
         addBand (2, 100.0f, 0.0f, 2.0f);
         addBand (3, 5000.0f, 0.0f, 3.0f);
@@ -369,13 +363,8 @@ TEST_CASE ("The Slope button reads the Slope or Brickwall, and opens the Slope l
     juce::PopupMenu::dismissAllActiveMenus();
     const auto centre = slope.getLocalBounds().getCentre().toFloat();
     const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
-    const auto now = juce::Time::getCurrentTime();
-    const auto event = [&] (juce::ModifierKeys mods) {
-        return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), centre, mods, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &slope, &slope, now,
-                                 centre, now, 1, false);
-    };
-    slope.mouseDown (event (left));
-    slope.mouseUp (event ({}));
+    slope.mouseDown (harness::mouseEvent (slope, centre, left));
+    slope.mouseUp (harness::mouseEvent (slope, centre));
     // At once, without waiting for a double-click.
     CHECK (juce::PopupMenu::dismissAllActiveMenus());
 
@@ -434,11 +423,7 @@ TEST_CASE ("Dragging or typing a Slope is one undo step, and on a Brickwall Cut 
     {
         const auto at = [&slope] (float dy) { return slope.getLocalBounds().getCentre().toFloat().translated (0.0f, dy); };
         const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
-        const auto now = juce::Time::getCurrentTime();
-        const auto event = [&] (juce::Point<float> p, juce::ModifierKeys mods) {
-            return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), p, mods, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &slope, &slope, now,
-                                     at (0.0f), now, 1, p != at (0.0f));
-        };
+        const auto event = [&] (juce::Point<float> p, juce::ModifierKeys mods) { return harness::mouseEvent (slope, p, mods, at (0.0f)); };
         slope.mouseDown (event (at (0.0f), left));
         slope.mouseDrag (event (at (-10.0f), left));
         slope.mouseDrag (event (at (-25.0f), left));
@@ -478,35 +463,27 @@ TEST_CASE ("The Edge selectors set Shape and Stereo Placement through their para
 namespace
 {
 
-// A mouse event on c at position in its own coordinates, pressed at downAt.
-juce::MouseEvent eventOn (juce::Component& c, juce::Point<float> position, juce::ModifierKeys mods, juce::Point<float> downAt, int clicks = 1)
-{
-    const auto now = juce::Time::getCurrentTime();
-    return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), position, mods, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, downAt,
-                             now, clicks, position != downAt);
-}
-
 const juce::ModifierKeys leftButton (juce::ModifierKeys::leftButtonModifier);
 
 // A press at from on c, a drag by (dx, dy), halfway first unless c moves as it is dragged, and a release.
 void dragOn (juce::Component& c, juce::Point<float> from, juce::Point<float> by, juce::ModifierKeys mods = {}, bool moves = false)
 {
     const auto down = mods.withFlags (juce::ModifierKeys::leftButtonModifier);
-    c.mouseDown (eventOn (c, from, down, from));
+    c.mouseDown (harness::mouseEvent (c, from, down, from));
     if (! moves)
-        c.mouseDrag (eventOn (c, from + by * 0.5f, down, from));
-    c.mouseDrag (eventOn (c, from + by, down, from));
-    c.mouseUp (eventOn (c, from + by, mods, from));
+        c.mouseDrag (harness::mouseEvent (c, from + by * 0.5f, down, from));
+    c.mouseDrag (harness::mouseEvent (c, from + by, down, from));
+    c.mouseUp (harness::mouseEvent (c, from + by, mods, from));
 }
 
 // A double-click at position on c: two presses, the second one's double-click, and its release.
 void doubleClickOn (juce::Component& c, juce::Point<float> position)
 {
-    c.mouseDown (eventOn (c, position, leftButton, position));
-    c.mouseUp (eventOn (c, position, {}, position));
-    c.mouseDown (eventOn (c, position, leftButton, position, 2));
-    c.mouseDoubleClick (eventOn (c, position, leftButton, position, 2));
-    c.mouseUp (eventOn (c, position, {}, position, 2));
+    c.mouseDown (harness::mouseEvent (c, position, leftButton, position));
+    c.mouseUp (harness::mouseEvent (c, position, {}, position));
+    c.mouseDown (harness::mouseEvent (c, position, leftButton, position, 2));
+    c.mouseDoubleClick (harness::mouseEvent (c, position, leftButton, position, 2));
+    c.mouseUp (harness::mouseEvent (c, position, {}, position, 2));
 }
 
 juce::KeyPress withMods (int key, int mods) { return { key, juce::ModifierKeys (mods), 0 }; }
@@ -564,11 +541,11 @@ TEST_CASE ("Dragging the Gain knob's ring sets Dynamic Range, 60 dB per 200 px, 
     }
     SECTION ("hovering the ring shows Dynamic Range in the Gain knob's tooltip")
     {
-        gain.mouseEnter (eventOn (gain, host.onRing(), {}, host.onRing()));
+        gain.mouseEnter (harness::mouseEvent (gain, host.onRing(), {}, host.onRing()));
         CHECK (gain.tooltipTitle() == "Band 1 Dynamic Range");
         CHECK (gain.tooltipValue() == "+9.00 dB");
         const auto face = gain.getFaceCentre();
-        gain.mouseMove (eventOn (gain, face, {}, face));
+        gain.mouseMove (harness::mouseEvent (gain, face, {}, face));
         CHECK (gain.tooltipTitle() == "Band 1 Gain");
     }
 }
@@ -778,8 +755,8 @@ TEST_CASE ("The Threshold fader's top step is Auto: a double-click sets Auto, an
 
     // A click doesn't move it.
     const juce::Point<float> middle { 13.0f, 40.0f };
-    fader.mouseDown (eventOn (fader, middle, leftButton, middle));
-    fader.mouseUp (eventOn (fader, middle, {}, middle));
+    fader.mouseDown (harness::mouseEvent (fader, middle, leftButton, middle));
+    fader.mouseUp (harness::mouseEvent (fader, middle, {}, middle));
     CHECK (host.value (1, "threshold_auto") == 1.0f);
 
     // Dragged down from Auto by half the travel: out of Auto, in one undo step.

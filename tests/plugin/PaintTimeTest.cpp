@@ -17,15 +17,8 @@ TEST_CASE ("Paint time: the editor at 1200 x 760 and 2x with 24 Dynamic Bells, e
     harness::OpenEditor host;
     host.editor->setSize (1200, 760);
     auto& processor = host.processor;
-    const auto stereo = juce::AudioChannelSet::stereo();
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (stereo);
-    layout.inputBuses.add (stereo); // the Sidechain
-    layout.outputBuses.add (stereo);
-    REQUIRE (processor.setBusesLayout (layout));
-    constexpr double sampleRate = 48000.0;
+    harness::useLayout (processor, juce::AudioChannelSet::stereo(), juce::AudioChannelSet::stereo()); // with a stereo Sidechain
     constexpr int blockSize = 512;
-    processor.prepareToPlay (sampleRate, blockSize);
 
     // 24 Dynamic Bells, a third of an octave apart from 30 Hz, Gains alternating; Band 12 at 0 dB, selected.
     for (int slot = 1; slot <= 24; ++slot)

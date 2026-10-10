@@ -36,16 +36,6 @@ bool isInteractive (juce::Component& c, juce::AccessibilityRole role)
            || role == Role::editableText || isBandHandle (c);
 }
 
-void setLayout (juce::AudioProcessor& processor, const juce::AudioChannelSet& channels)
-{
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (channels);
-    layout.inputBuses.add (juce::AudioChannelSet::disabled());
-    layout.outputBuses.add (channels);
-    REQUIRE (processor.setBusesLayout (layout));
-    processor.prepareToPlay (48000.0, 512);
-}
-
 struct Editor : OpenEditor
 {
     // Every element showing, at any depth, that a screen reader is told about.
@@ -137,7 +127,7 @@ struct EveryControl : Editor
 {
     EveryControl()
     {
-        setLayout (processor, juce::AudioChannelSet::stereo());
+        harness::useLayout (processor, juce::AudioChannelSet::stereo());
         addBand (4, 1000.0f, 3.0f, 0.0f);
         set (4, "dynamic_range", 6.0f);
         set (4, "detection_range", 1.0f);
@@ -281,7 +271,7 @@ TEST_CASE ("Every control is named on mono, and with no Band selected")
     const bool mono = GENERATE (true, false);
     Editor host;
     if (mono)
-        setLayout (host.processor, juce::AudioChannelSet::mono());
+        harness::useLayout (host.processor, juce::AudioChannelSet::mono());
     host.addBand (2, 500.0f, 0.0f);
     host.settle();
     host.openPresetBrowser();
@@ -410,7 +400,7 @@ TEST_CASE ("The Presets button reads the Loaded Preset, with Modified, or No Pre
 TEST_CASE ("Each Clip Light reads Lit or Off, and pressing either puts out both")
 {
     Editor host;
-    setLayout (host.processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (host.processor, juce::AudioChannelSet::stereo());
     juce::AudioBuffer<float> buffer (host.processor.getTotalNumInputChannels(), 512);
     juce::MidiBuffer midi;
     buffer.clear();

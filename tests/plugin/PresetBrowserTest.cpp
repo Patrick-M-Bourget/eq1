@@ -22,14 +22,6 @@ void click (juce::Button& button)
     button.onClick();
 }
 
-// A left-click at at in component.
-juce::MouseEvent clickAt (juce::Component& component, juce::Point<float> at = {})
-{
-    const auto now = juce::Time::getCurrentTime();
-    return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier),
-                             1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &component, &component, now, at, now, 1, false);
-}
-
 // The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Room,
 // and an empty Drums/Brushes.
 struct Browser
@@ -164,7 +156,7 @@ TEST_CASE ("A single click on a Preset loads it, and the browser stays open")
     Browser host;
     host.browser.open ({}, nullptr);
     click (host.button ("Drums"));
-    host.list().getListBoxModel()->listBoxItemClicked (0, clickAt (host.list()));
+    host.list().getListBoxModel()->listBoxItemClicked (0, harness::mouseEvent (host.list(), {}, juce::ModifierKeys::leftButtonModifier));
     CHECK (host.loads == std::vector<juce::String> { "User/Drums: Kick" });
     CHECK (host.browser.isVisible());
 }
@@ -273,7 +265,7 @@ TEST_CASE ("The Preset browser opens as a modal over the whole editor; the scrim
 
     SECTION ("A click on the scrim")
     {
-        browser.mouseDown (clickAt (browser, { 20.0f, 700.0f }));
+        browser.mouseDown (harness::mouseEvent (browser, { 20.0f, 700.0f }, juce::ModifierKeys::leftButtonModifier));
     }
     SECTION ("Its close button")
     {
@@ -308,7 +300,7 @@ TEST_CASE ("A click on a Preset in the browser loads it as one undo step")
     const int steps = history.undoSteps();
     auto* list = findChild<juce::ListBox> (host.browser());
     REQUIRE (list != nullptr);
-    list->getListBoxModel()->listBoxItemClicked (0, clickAt (*list));
+    list->getListBoxModel()->listBoxItemClicked (0, harness::mouseEvent (*list, {}, juce::ModifierKeys::leftButtonModifier));
     CHECK (host.processor.loadedPresetName() == PresetLibrary::factoryPresets().front().name);
     CHECK (history.undoSteps() == steps + 1);
     CHECK (host.browser().isVisible());
