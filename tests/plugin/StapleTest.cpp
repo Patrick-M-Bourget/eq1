@@ -3,6 +3,7 @@
 #include "staple/Icons.h"
 #include "staple/LookAndFeel.h"
 #include "staple/Tokens.h"
+#include "staple/controls/Overlay.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -99,4 +100,68 @@ TEST_CASE ("The editor draws every stock widget with Staple's LookAndFeel, token
     CHECK (sliders > 0);
     CHECK (combos > 0);
     CHECK (labels > 0);
+}
+
+namespace
+{
+// The largest difference in alpha between two images, over the pixels a predicate keeps.
+int largestAlphaDifference (const juce::Image& a, const juce::Image& b, const std::function<bool (juce::Point<float>)>& compared)
+{
+    int largest = 0;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (compared ({ x + 0.5f, y + 0.5f }))
+                largest = std::max (largest, std::abs (a.getPixelAt (x, y).getAlpha() - b.getPixelAt (x, y).getAlpha()));
+    return largest;
+}
+} // namespace
+
+// A shadow that blurs renders an image on every paint; the kit's controls repaint at frame rate, so
+// their shadows are drawSoftShadow's stacked shapes instead (HANDOFF.md §4). Outside the control, what
+// the LookAndFeel draws is that shadow and nothing else.
+TEST_CASE ("Staple's LookAndFeel draws a stock knob's and slider thumb's shadows without blur")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    staple::LookAndFeel lookAndFeel;
+    juce::Slider slider;
+    slider.setLookAndFeel (&lookAndFeel);
+    slider.setRange (0.0, 1.0);
+    juce::Image drawn (juce::Image::ARGB, 100, 100, true), shadow (juce::Image::ARGB, 100, 100, true);
+
+    SECTION ("A rotary slider's knob")
+    {
+        slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
+        {
+            juce::Graphics g (drawn);
+            lookAndFeel.drawRotarySlider (g, 0, 0, 100, 100, 0.0f, -2.5f, 2.5f, slider);
+        }
+        // drawRotarySlider insets the knob's face 10 px.
+        const auto face = juce::Rectangle<float> (10.0f, 10.0f, 80.0f, 80.0f);
+        {
+            juce::Graphics g (shadow);
+            staple::drawSoftShadow (g, face, face.getWidth() / 2.0f, staple::tokens::shadow::knob);
+        }
+        CHECK (largestAlphaDifference (drawn, shadow, [&] (juce::Point<float> p) {
+                   return p.getDistanceFrom (face.getCentre()) > face.getWidth() / 2.0f + 1.5f;
+               }) <= 1);
+    }
+
+    SECTION ("A linear slider's thumb")
+    {
+        slider.setSliderStyle (juce::Slider::LinearHorizontal);
+        {
+            juce::Graphics g (drawn);
+            lookAndFeel.drawLinearSlider (g, 0, 0, 100, 100, 50.0f, 0.0f, 100.0f, juce::Slider::LinearHorizontal, slider);
+        }
+        const float thumbSize = 2.0f * static_cast<float> (lookAndFeel.getSliderThumbRadius (slider));
+        const auto thumb = juce::Rectangle<float> (thumbSize, thumbSize).withCentre ({ 50.0f, 50.0f });
+        {
+            juce::Graphics g (shadow);
+            staple::drawSoftShadow (g, thumb, thumbSize / 2.0f, staple::tokens::shadow::handle);
+        }
+        // Away from the thumb and from the 2 px track through its centre.
+        CHECK (largestAlphaDifference (drawn, shadow, [&] (juce::Point<float> p) {
+                   return p.getDistanceFrom (thumb.getCentre()) > thumbSize / 2.0f + 1.5f && std::abs (p.y - 50.0f) > 2.5f;
+               }) <= 1);
+    }
 }

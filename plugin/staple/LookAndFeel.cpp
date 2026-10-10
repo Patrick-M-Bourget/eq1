@@ -2,6 +2,7 @@
 
 #include "Icons.h"
 #include "Tokens.h"
+#include "controls/Overlay.h"
 
 #include <cmath>
 #include <utility>
@@ -324,9 +325,7 @@ void LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, 
         return;
     const auto face = area.withSizeKeepingCentre (diameter, diameter);
 
-    juce::Path circle;
-    circle.addEllipse (face);
-    tokens::shadow::knob.drawForPath (g, circle);
+    drawSoftShadow (g, face, diameter / 2.0f, tokens::shadow::knob);
 
     // Lit from the top: the face's gradient is centred 12 % down from its top edge.
     juce::ColourGradient gradient (colour::knobFaceTop, face.getCentreX(), face.getY() + 0.12f * diameter,
@@ -389,12 +388,10 @@ void LookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, 
 
     const float thumbSize = 2.0f * static_cast<float> (getSliderThumbRadius (slider));
     const auto knob = juce::Rectangle<float> (thumbSize, thumbSize).withCentre (thumb);
-    juce::Path dot;
-    dot.addEllipse (knob);
-    tokens::shadow::handle.drawForPath (g, dot);
+    drawSoftShadow (g, knob, thumbSize / 2.0f, tokens::shadow::handle);
     g.setColour (lit (slider.findColour (juce::Slider::thumbColourId), slider.isMouseOverOrDragging(), slider.isMouseButtonDown())
                      .withMultipliedAlpha (alpha));
-    g.fillPath (dot);
+    g.fillEllipse (knob);
 }
 
 int LookAndFeel::getSliderThumbRadius (juce::Slider&)
