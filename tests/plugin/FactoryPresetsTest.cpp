@@ -83,6 +83,24 @@ juce::String loadingProblem (const FactoryPreset& preset)
     return {};
 }
 
+// Rule: it is written at the current state version, holding only the settings that differ from their
+// defaults.
+juce::String formatProblem (const FactoryPreset& preset)
+{
+    if (static_cast<int> (preset.preset.getProperty ("version", 0)) != eq1::PluginProcessor::stateVersion)
+        return "not at state version " + juce::String (eq1::PluginProcessor::stateVersion);
+    Host host;
+    for (const auto& setting : preset.preset)
+    {
+        const auto id = setting.getProperty ("id").toString();
+        if (const auto* parameter = host.processor.parameterState().getParameter (id);
+            parameter != nullptr
+            && juce::exactlyEqual (parameter->convertFrom0to1 (parameter->getDefaultValue()), static_cast<float> (setting.getProperty ("value"))))
+            return id + " is at its default";
+    }
+    return {};
+}
+
 FactoryPreset preset (const char* nameUtf8, std::initializer_list<std::pair<const char*, float>> settings = {})
 {
     juce::ValueTree tree ("eq1");
@@ -104,6 +122,7 @@ TEST_CASE ("Every Factory Preset passes the gate")
         CAPTURE (preset.name);
         CHECK (loadingProblem (preset) == "");
         CHECK (namingProblem (preset) == "");
+        CHECK (formatProblem (preset) == "");
     }
 }
 
@@ -157,4 +176,13 @@ TEST_CASE ("The Factory gate rejects a Preset that doesn't load as written")
     CHECK (loadingProblem (preset ("Drums \xe2\x80\x93 Kick", { { "band1_frequency", 50000.0f } })).isNotEmpty()); // beyond its range
     CHECK (loadingProblem (preset ("Drums \xe2\x80\x93 Kick", { { "band1_nonsense", 1.0f } })).isNotEmpty());
     CHECK (loadingProblem ({ named ("Drums \xe2\x80\x93 Kick"), juce::ValueTree ("other") }).isNotEmpty());
+}
+
+TEST_CASE ("The Factory gate rejects a Preset at an older version, or holding a default")
+{
+    CHECK (formatProblem (preset ("Drums \xe2\x80\x93 Kick", { { "band1_in_use", 1.0f }, { "output_gain", 3.0f } })) == "");
+    CHECK (formatProblem (preset ("Drums \xe2\x80\x93 Kick", { { "output_gain", 0.0f } })).isNotEmpty());
+    auto older = preset ("Drums \xe2\x80\x93 Kick", { { "band1_in_use", 1.0f } });
+    older.preset.setProperty ("version", eq1::PluginProcessor::stateVersion - 1, nullptr);
+    CHECK (formatProblem (older).isNotEmpty());
 }
