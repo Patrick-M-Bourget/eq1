@@ -12,14 +12,22 @@
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
 #
-# BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden; CMake's
+# BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps, or the main checkout's .deps in a linked
+# worktree) can be overridden; CMake's
 # CMAKE_C_COMPILER_LAUNCHER and CMAKE_CXX_COMPILER_LAUNCHER environment variables (sccache in CI) apply. Validators
 # are downloaded into the dependencies folder with gh, which needs to be authenticated (GH_TOKEN in CI).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BUILD_DIR=${BUILD_DIR:-build}
-DEPS=${FETCHCONTENT_BASE_DIR:-$PWD/.deps}
+# A linked worktree shares the main checkout's dependencies rather than fetching its own over a slow link.
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2> /dev/null || true)
+main_checkout=${common_dir%/.git}
+if [ -z "${FETCHCONTENT_BASE_DIR:-}" ] && [ -n "$common_dir" ] && [ "$main_checkout" != "$PWD" ] && [ -d "$main_checkout/.deps" ]; then
+    DEPS=$main_checkout/.deps
+else
+    DEPS=${FETCHCONTENT_BASE_DIR:-$PWD/.deps}
+fi
 PLUGINVAL_VERSION=v1.0.4
 CLAP_VALIDATOR_VERSION=0.4.1
 ARTEFACTS=$BUILD_DIR/plugin/eq1_artefacts/Release
