@@ -107,9 +107,8 @@ public:
     std::function<void (int)> onUiScalePicked;
     // After the Output Meter's toggle shows or hides it.
     std::function<void()> onMeterToggled;
-    // The UI Scale, and whether the Output Meter is shown, as the processor holds them.
+    // The UI Scale as the processor holds it.
     void showUiScale (int percent);
-    void showMeterShown (bool shown);
 
     // Toggles Global Bypass as a click on its button does (Cmd/Ctrl+B).
     void toggleGlobalBypass();

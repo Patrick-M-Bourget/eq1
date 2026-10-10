@@ -21,12 +21,6 @@ float IconButton::getIconSide() const
     return iconSize > 0.0f ? iconSize : static_cast<float> (std::min (getWidth(), getHeight())) * 2.0f / 3.0f;
 }
 
-void IconButton::setIcon (Icon newIcon)
-{
-    icon = newIcon;
-    repaint();
-}
-
 void IconButton::setLitColour (juce::Colour colour)
 {
     litColour = colour;

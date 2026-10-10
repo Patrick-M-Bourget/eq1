@@ -23,7 +23,6 @@ class IconButton : public juce::Button
 public:
     IconButton (const juce::String& name, Icon icon);
 
-    void setIcon (Icon newIcon);
     Icon getIcon() const { return icon; }
     void setLitColour (juce::Colour colour);
     // The icon's colour at rest, text3 unless set (the Band panel's Bypass rests in text2).
@@ -51,7 +50,7 @@ public:
 private:
     void setHeld (bool nowHeld);
 
-    Icon icon;
+    const Icon icon;
     juce::Colour litColour = tokens::colour::text1, restColour = tokens::colour::text3;
     float iconSize = 0.0f, iconRotation = 0.0f;
     bool offLook = false, momentary = false, held = false;

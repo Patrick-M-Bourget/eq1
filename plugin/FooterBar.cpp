@@ -255,11 +255,6 @@ void FooterBar::showUiScale (int percent)
     uiScale.show (percent);
 }
 
-void FooterBar::showMeterShown (bool shown)
-{
-    outputPopover.showMeterShown (shown);
-}
-
 void FooterBar::toggleGlobalBypass()
 {
     globalBypass.setToggleState (! globalBypass.getToggleState(), juce::sendNotificationSync);

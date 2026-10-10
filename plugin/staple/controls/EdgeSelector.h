@@ -28,7 +28,6 @@ public:
 
     explicit EdgeSelector (const juce::String& name = {}, Side side = Side::left);
 
-    void setSide (Side newSide);
     Side getSide() const { return side; }
     // The hairline's and the wash's colour (the Band colour).
     void setEdgeColour (juce::Colour colour);
@@ -45,7 +44,7 @@ public:
     bool keyPressed (const juce::KeyPress& key) override;
 
 private:
-    Side side;
+    const Side side;
     juce::Colour edgeColour = tokens::colour::text1, iconColour = tokens::colour::text1;
     std::map<int, Icon> icons, contexts;
     std::map<int, juce::Colour> dots;

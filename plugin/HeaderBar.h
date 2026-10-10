@@ -48,7 +48,8 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
 
-    PresetBar& presets() { return presetBar; }
+    // The Preset browser, for the editor to place over its whole content.
+    juce::Component& presetBrowser() { return presetBar.browserPanel(); }
     juce::Rectangle<int> wordmarkArea() const { return wordmark; }
 
     void undo();

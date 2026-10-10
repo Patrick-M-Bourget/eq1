@@ -50,12 +50,6 @@ EdgeSelector::EdgeSelector (const juce::String& name, Side s) : juce::ComboBox (
     setMouseClickGrabsKeyboardFocus (false);
 }
 
-void EdgeSelector::setSide (Side newSide)
-{
-    side = newSide;
-    repaint();
-}
-
 void EdgeSelector::setEdgeColour (juce::Colour colour)
 {
     edgeColour = colour;
