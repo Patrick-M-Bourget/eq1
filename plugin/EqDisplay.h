@@ -5,12 +5,14 @@
 #include "AnalyzerSpectrum.h"
 #include "display/DisplayFrame.h"
 #include "display/DisplayGeometry.h"
+#include "display/EdgeFadeLayer.h"
 #include "display/GhostLayer.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -40,7 +42,9 @@ class PluginProcessor;
 // Range sits at its edge; a heard Gain changed to beyond it zooms the range out, once any drag has
 // ended. A screen reader reads the display as a group, "EQ display", of the Bands in use, each named
 // "Band 4" with its stored settings as its value (spokenBand), announced again whenever the Band moves,
-// and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle".
+// and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle". It paints no background: the
+// window's (staple/WindowBackground.h) shows through, and its edges fade into it, so its parent is the
+// window's content.
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
@@ -187,6 +191,18 @@ private:
     float globalBypassFade = 0.0f;
     juce::uint32 lastFadeStep = 0;
     bool isGlobalBypassOn() const;
+
+    // The window's background under the display's edges (display::edgeFadeOverlay), built again only
+    // when the display's place in the window, the window's size or the scale it is drawn at changes.
+    struct EdgeFadeFor
+    {
+        juce::Rectangle<int> display, window;
+        float scale = 0.0f;
+        bool operator== (const EdgeFadeFor& other) const { return display == other.display && window == other.window && juce::exactlyEqual (scale, other.scale); }
+    };
+    display::EdgeFadeOverlay edgeFade;
+    std::optional<EdgeFadeFor> edgeFadeFor;
+    const display::EdgeFadeOverlay& edgeFadeAt (float scale);
     // Moves every fade on by the time since the last step; true while any of them moved.
     bool stepFades();
 };

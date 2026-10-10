@@ -142,23 +142,28 @@ TEST_CASE ("The Analyzer's dB scale runs in 10 dB steps at 60 and 90 dB, 20 dB a
     }
 }
 
-TEST_CASE ("The display's edges fade to bg0 over 18 px at the top, 84 at the bottom, 36 on the left and 56 on the right")
+TEST_CASE ("The display's edges fade into what lies behind it over 18 px at the top, 84 at the bottom, 36 on the left and 56 on the right")
 {
-    const auto background = staple::tokens::colour::bg0;
+    const float scale = GENERATE (1.0f, 1.25f, 2.0f);
     const DisplayGeometry geometry { .width = 600, .height = 400 };
-    juce::Image image (juce::Image::ARGB, geometry.width, geometry.height, true);
+    // Behind the display: black on the left to blue on the right, so not flat.
+    const auto behind = [] (juce::Graphics& g) {
+        g.setGradientFill (juce::ColourGradient (juce::Colours::black, 0.0f, 0.0f, juce::Colours::blue, 600.0f, 0.0f, false));
+        g.fillAll();
+    };
+    const auto overlay = eq1::display::edgeFadeOverlay (geometry, scale, behind);
+    juce::Image image (juce::Image::ARGB, juce::roundToInt (600 * scale), juce::roundToInt (400 * scale), true);
     {
         juce::Graphics g (image);
+        g.addTransform (juce::AffineTransform::scale (scale));
         g.fillAll (juce::Colours::white);
-        eq1::display::paintEdgeFades (g, geometry);
+        eq1::display::paintEdgeFades (g, overlay);
     }
-    // How much of the white is left: 1 untouched, 0 covered by bg0.
-    const auto whiteLeft = [&] (int x, int y) {
-        const auto c = image.getPixelAt (x, y);
-        return (c.getFloatRed() - background.getFloatRed()) / (1.0f - background.getFloatRed());
-    };
+    const auto pixel = [&] (int x, int y) { return image.getPixelAt (juce::roundToInt (static_cast<float> (x) * scale), juce::roundToInt (static_cast<float> (y) * scale)); };
+    // How much of the white is left: 1 untouched, 0 covered by what lies behind (which has no red).
+    const auto whiteLeft = [&] (int x, int y) { return pixel (x, y).getFloatRed(); };
     CHECK (whiteLeft (300, 200) > 0.99f);
-    // Opaque at each edge, half-way across each fade's distance, and untouched just past it.
+    // Clear at each edge, half-way across each fade's distance, and untouched just past it.
     const int cx = 300, cy = 200;
     CHECK (whiteLeft (cx, 0) < 0.06f);
     CHECK_THAT (whiteLeft (cx, 9), WithinAbs (0.5, 0.08));
@@ -172,6 +177,40 @@ TEST_CASE ("The display's edges fade to bg0 over 18 px at the top, 84 at the bot
     CHECK (whiteLeft (599, cy) < 0.03f);
     CHECK_THAT (whiteLeft (600 - 28, cy), WithinAbs (0.5, 0.05));
     CHECK (whiteLeft (600 - 57, cy) > 0.97f);
+    // At an edge, what lies behind shows as it is there: half blue in the middle, nearly all at the right.
+    CHECK_THAT (pixel (cx, 0).getFloatBlue(), WithinAbs (0.5, 0.06));
+    CHECK (pixel (599, cy).getFloatBlue() > 0.95f);
+}
+
+TEST_CASE ("The display's edge fades are drawn back pixel for pixel at a UI Scale whose display isn't whole device pixels")
+{
+    // 601 x 401 at 1.25: 751.25 x 501.25 device pixels.
+    const float scale = 1.25f;
+    const DisplayGeometry geometry { .width = 601, .height = 401 };
+    const auto overlay = eq1::display::edgeFadeOverlay (geometry, scale, [] (juce::Graphics& g) {
+        g.setGradientFill (juce::ColourGradient (juce::Colours::black, 0.0f, 0.0f, juce::Colours::blue, 601.0f, 0.0f, false));
+        g.fillAll();
+    });
+    juce::Image image (juce::Image::ARGB, 752, 502, true);
+    {
+        juce::Graphics g (image);
+        g.addTransform (juce::AffineTransform::scale (scale));
+        g.fillAll (juce::Colours::white);
+        eq1::display::paintEdgeFades (g, overlay);
+    }
+    // Each strip's pixels land on the device pixels they were made for, where the fades change fastest.
+    for (const auto& strip : overlay.strips)
+    {
+        REQUIRE (strip.image.isValid());
+        for (int y = 0; y < strip.image.getHeight(); y += 3)
+            for (int x = 0; x < strip.image.getWidth(); x += 3)
+            {
+                const auto expected = juce::Colours::white.overlaidWith (strip.image.getPixelAt (x, y));
+                const auto drawn = image.getPixelAt (strip.at.x + x, strip.at.y + y);
+                CHECK (std::abs (drawn.getRed() - expected.getRed()) <= 1);
+                CHECK (std::abs (drawn.getBlue() - expected.getBlue()) <= 1);
+            }
+    }
 }
 
 TEST_CASE ("A Band's curve takes its colour from the 24-slot palette by Band Slot, the bypassed palette when Bypassed")

@@ -59,10 +59,10 @@ TEST_CASE ("Cmd/Ctrl+A on the display selects every Band in use")
 
 namespace
 {
-// The display drawn at 2x, as on a Retina screen.
+// The display as the window shows it, over the window's background, drawn at 2x as on a Retina screen.
 juce::Image snapshot (OpenEditor& host)
 {
-    return host.display.createComponentSnapshot (host.display.getLocalBounds(), true, 2.0f);
+    return host.editor->createComponentSnapshot (host.editor->getLocalArea (&host.display, host.display.getLocalBounds()), true, 2.0f);
 }
 
 // The brightest pixel in area (in the display's own pixels) of an image drawn at 2x.
@@ -94,6 +94,38 @@ TEST_CASE ("The display's edges fade, but not a handle or a label there")
     CHECK (brightest (image, { x20k - 40.0f, height - 24.0f, 30.0f, 14.0f }) > 0.5f);
     // The 0 dB line is faded at the very right edge, but not inside it.
     CHECK (brightest (image, { width - 2.0f, height / 2.0f - 1.0f, 2.0f, 2.0f }) < brightest (image, { width / 2.0f + 3.0f, height / 2.0f - 1.0f, 2.0f, 2.0f }));
+}
+
+TEST_CASE ("The display paints no background: the window shows through it, with no edge at its top or right")
+{
+    OpenEditor host;
+    host.processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = false });
+    host.processor.setOutputMeterShown (true);
+    host.settle();
+
+    // On its own, with no Band in use, most of the display is left clear.
+    const auto alone = host.display.createComponentSnapshot (host.display.getLocalBounds(), true, 2.0f);
+    int clear = 0;
+    for (int y = 0; y < alone.getHeight(); y += 3)
+        for (int x = 0; x < alone.getWidth(); x += 3)
+            clear += alone.getPixelAt (x, y).getAlpha() == 0 ? 1 : 0;
+    CHECK (clear > (alone.getWidth() / 3) * (alone.getHeight() / 3) / 2);
+
+    // In the window, the display's first row and column match the window just outside them: above its
+    // top, and in the gap before the Output Meter's rail on its right.
+    const auto window = host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, 2.0f);
+    const auto display = host.editor->getLocalArea (host.display.getParentComponent(), host.display.getBounds()) * 2;
+    const auto difference = [&window] (juce::Point<int> a, juce::Point<int> b) {
+        const auto ca = window.getPixelAt (a.x, a.y), cb = window.getPixelAt (b.x, b.y);
+        return std::max ({ std::abs (ca.getRed() - cb.getRed()), std::abs (ca.getGreen() - cb.getGreen()), std::abs (ca.getBlue() - cb.getBlue()) });
+    };
+    int top = 0, right = 0;
+    for (int x = display.getX() + 80; x < display.getRight() - 120; x += 5)
+        top = std::max (top, difference ({ x, display.getY() }, { x, display.getY() - 1 }));
+    for (int y = display.getY() + 40; y < display.getBottom() - 170; y += 5)
+        right = std::max (right, difference ({ display.getRight() - 1, y }, { display.getRight(), y }));
+    CHECK (top <= 2);
+    CHECK (right <= 2);
 }
 
 namespace
@@ -136,8 +168,10 @@ TEST_CASE ("A selected Dynamic Band shows a red wash between its curves at Gain 
     host.set (1, "dynamic_range", 12.0f);
     host.settle();
     const auto inside = atDb (host, 1000.0, 6.0);
+    // No red over the window's neutral background, whose blue is never below its red.
+    const auto noWash = [] (juce::Colour c) { return c.getFloatRed() <= c.getFloatBlue(); };
     const auto unselected = colourAt (snapshot (host), inside);
-    CHECK (unselected.getFloatRed() < 0.1f);
+    CHECK (noWash (unselected));
 
     host.click (host.at (1000.0));
     host.settle();
@@ -147,7 +181,7 @@ TEST_CASE ("A selected Dynamic Band shows a red wash between its curves at Gain 
 
     host.set (1, "dynamics_bypass", 1.0f);
     host.settle();
-    CHECK (colourAt (snapshot (host), inside).getFloatRed() < 0.1f);
+    CHECK (noWash (colourAt (snapshot (host), inside)));
 }
 
 TEST_CASE ("Global Bypass fades the curves to their bypassed style and the sum to 30 %, and back when it is turned off")
