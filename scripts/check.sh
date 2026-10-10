@@ -5,8 +5,8 @@
 #   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
 #                               glossary, no test reads a saved state as raw bytes, runs timers itself, has a non-ASCII
-#                               title or reads an EQ1_ environment variable outside tests/plugin/EditorHarness.h, and no
-#                               colour is hard-coded in plugin/ outside plugin/staple/
+#                               title, reads an EQ1_ environment variable or opens a Graphics on an image outside
+#                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh hooks      the Claude Code worktree hook's tests (not run by git hooks, which run docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
@@ -113,7 +113,15 @@ docs() {
         printf '%s\n' "$variables" | sed 's/$/: reads an EQ1_ environment variable; write renders with harness::writeSnapshot (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes or an EQ1_ environment variable, tests wait with harness::settle and have ASCII titles"
+    # A pixel read while an image's Graphics is open sees nothing on Windows (Direct2D draws when the
+    # context ends): tests draw on images through harness::paintImage, which closes it first.
+    local graphics
+    graphics=$(git grep -nE 'Graphics +[A-Za-z_]+ *[({] *[A-Za-z_]' -- tests ':!tests/plugin/EditorHarness.h' || true)
+    if [ -n "$graphics" ]; then
+        printf '%s\n' "$graphics" | sed 's/$/: opens a Graphics on an image; draw with harness::paintImage (tests\/plugin\/EditorHarness.h)/' >&2
+        broken=1
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes or an EQ1_ environment variable or opens a Graphics on an image, tests wait with harness::settle and have ASCII titles"
     return "$broken"
 }
 

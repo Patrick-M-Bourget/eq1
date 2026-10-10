@@ -1,3 +1,4 @@
+#include "EditorHarness.h"
 #include "display/CurvesLayer.h"
 #include "display/EdgeFadeLayer.h"
 #include "display/GridLayer.h"
@@ -152,13 +153,11 @@ TEST_CASE ("The display's edges fade into what lies behind it over 18 px at the 
         g.fillAll();
     };
     const auto overlay = eq1::display::edgeFadeOverlay (geometry, scale, behind);
-    juce::Image image (juce::Image::ARGB, juce::roundToInt (600 * scale), juce::roundToInt (400 * scale), true);
-    {
-        juce::Graphics g (image);
+    const auto image = harness::paintImage (juce::roundToInt (600 * scale), juce::roundToInt (400 * scale), [&] (juce::Graphics& g) {
         g.addTransform (juce::AffineTransform::scale (scale));
         g.fillAll (juce::Colours::white);
         eq1::display::paintEdgeFades (g, overlay);
-    }
+    });
     const auto pixel = [&] (int x, int y) { return image.getPixelAt (juce::roundToInt (static_cast<float> (x) * scale), juce::roundToInt (static_cast<float> (y) * scale)); };
     // How much of the white is left: 1 untouched, 0 covered by what lies behind (which has no red).
     const auto whiteLeft = [&] (int x, int y) { return pixel (x, y).getFloatRed(); };
@@ -191,13 +190,11 @@ TEST_CASE ("The display's edge fades are drawn back pixel for pixel at a UI Scal
         g.setGradientFill (juce::ColourGradient (juce::Colours::black, 0.0f, 0.0f, juce::Colours::blue, 601.0f, 0.0f, false));
         g.fillAll();
     });
-    juce::Image image (juce::Image::ARGB, 752, 502, true);
-    {
-        juce::Graphics g (image);
+    const auto image = harness::paintImage (752, 502, [&] (juce::Graphics& g) {
         g.addTransform (juce::AffineTransform::scale (scale));
         g.fillAll (juce::Colours::white);
         eq1::display::paintEdgeFades (g, overlay);
-    }
+    });
     // Each strip's pixels land on the device pixels they were made for, where the fades change fastest.
     for (const auto& strip : overlay.strips)
     {

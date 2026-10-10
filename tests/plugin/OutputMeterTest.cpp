@@ -251,10 +251,7 @@ namespace
 juce::Image paintMeter (eq1::OutputMeter& meter, int height)
 {
     meter.setBounds (0, 0, 40, height);
-    juce::Image image (juce::Image::ARGB, 40, height, true);
-    juce::Graphics g (image);
-    meter.paintEntireComponent (g, false);
-    return image;
+    return harness::paintImage (40, height, [&] (juce::Graphics& g) { meter.paintEntireComponent (g, false); });
 }
 
 // The columns of row y painted in colour, give or take tolerance on each channel and alpha.

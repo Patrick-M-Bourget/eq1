@@ -3,8 +3,18 @@
 # Stops, saying why, on a conflict with main, failed checks, a changes verdict or a new push.
 #
 #   scripts/merge-on-green.sh <PR number>
+#   scripts/merge-on-green.sh <PR number> --user-approved "<the user's words>"
+#
+# --user-approved stands for the verdict when the session that built the PR merges it on the user's
+# go-ahead: it waits for CI as usual and records the user's words in the squash commit.
 set -uo pipefail
-pr=${1:?usage: scripts/merge-on-green.sh <PR number>}
+usage='usage: scripts/merge-on-green.sh <PR number> [--user-approved "<the user'"'"'s words>"]'
+pr=${1:?$usage}
+approval=
+if [ $# -gt 1 ]; then
+    [ "$2" = --user-approved ] && [ -n "${3:-}" ] || { echo "$usage" >&2; exit 2; }
+    approval=$3
+fi
 
 sleep 30 # let the checks register
 # GitHub runs no CI on a PR that conflicts with main: say so at once rather than wait.
@@ -29,6 +39,12 @@ if ! gh pr checks "$pr" --json name,bucket -q "$green" | grep -qx true; then
 fi
 
 head=$(gh pr view "$pr" --json headRefOid -q .headRefOid)
+title=$(gh pr view "$pr" --json title -q .title)
+if [ -n "$approval" ]; then
+    gh pr merge "$pr" --squash --match-head-commit "$head" --subject "$title (#$pr)" \
+        --body "Squashed from #$pr"$'\n\n'"Approved by the user: \"$approval\"" && echo "MERGED #$pr: $title"
+    exit
+fi
 verdicts() { gh pr view "$pr" --json comments -q '.comments[].body'; }
 until verdicts | grep -q "qa-verdict: pass sha=${head:0:7}"; do
     if verdicts | grep -q "qa-verdict: changes sha=${head:0:7}"; then
@@ -42,5 +58,4 @@ until verdicts | grep -q "qa-verdict: pass sha=${head:0:7}"; do
     sleep 60
 done
 
-title=$(gh pr view "$pr" --json title -q .title)
 gh pr merge "$pr" --squash --match-head-commit "$head" --subject "$title (#$pr)" --body "Squashed from #$pr" && echo "MERGED #$pr: $title"
