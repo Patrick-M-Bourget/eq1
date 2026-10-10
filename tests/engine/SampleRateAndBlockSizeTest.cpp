@@ -16,7 +16,8 @@ namespace
 {
 
 // 24 Bands of every Shape and Stereo Placement, with Auto Gain and Output Pan; every third one a
-// Dynamic Band when dynamic.
+// Dynamic Band when dynamic: under Auto and set Threshold, one External, one with a Free Detection
+// Range and one metered.
 Settings scene (bool dynamic)
 {
     constexpr Shape shapes[] = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
@@ -35,18 +36,25 @@ Settings scene (bool dynamic)
                                  .dynamicRange = dynamic && slot % 3 == 0 ? -9.0 : 0.0,
                                  .threshold = -30.0,
                                  .thresholdAuto = slot % 2 == 0 };
+    settings.bands[3].detectionSource = DetectionSource::External;
+    settings.bands[18].detectionRange = DetectionRange::Free;
+    settings.bands[18].detectionLow = 200.0;
+    settings.bands[18].detectionHigh = 2000.0;
+    settings.meteredSlot = 22;
     settings.autoGain = true;
     settings.outputPan = 0.3;
     return settings;
 }
 
 // Plays half a second of stereo noise, loud and quiet in turn every 100 ms, through the scene, in
-// the blocks blockAt(n) gives for the nth block, and returns the left output then the right.
+// the blocks blockAt(n) gives for the nth block, and returns the left output then the right. The
+// Sidechain plays noise too, loud and quiet every 70 ms, and the Detection Level is read after every block.
 std::vector<float> play (double sampleRate, bool dynamic, const std::function<int (int)>& blockAt)
 {
     const auto length = static_cast<size_t> (0.5 * sampleRate);
     const auto burst = static_cast<size_t> (0.1 * sampleRate);
-    std::vector<float> left (length), right (length);
+    const auto sidechainBurst = static_cast<size_t> (0.07 * sampleRate);
+    std::vector<float> left (length), right (length), sidechainLeft (length), sidechainRight (length);
     std::mt19937 random (3);
     std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
     for (size_t i = 0; i < length; ++i)
@@ -54,6 +62,9 @@ std::vector<float> play (double sampleRate, bool dynamic, const std::function<in
         const float level = i / burst % 2 == 0 ? 0.05f : 0.5f;
         left[i] = level * noise (random);
         right[i] = level * noise (random);
+        const float sidechainLevel = i / sidechainBurst % 2 == 0 ? 0.5f : 0.02f;
+        sidechainLeft[i] = sidechainLevel * noise (random);
+        sidechainRight[i] = sidechainLevel * noise (random);
     }
 
     Engine engine;
@@ -63,23 +74,14 @@ std::vector<float> play (double sampleRate, bool dynamic, const std::function<in
     {
         const auto count = std::min (static_cast<size_t> (blockAt (static_cast<int> (n))), length - start);
         float* main[] = { left.data() + start, right.data() + start };
-        engine.process ({ main, 2, static_cast<int> (count) });
+        const float* sidechain[] = { sidechainLeft.data() + start, sidechainRight.data() + start };
+        const ConstAudioBlock sidechainBlock { sidechain, 2, static_cast<int> (count) };
+        engine.process ({ main, 2, static_cast<int> (count) }, &sidechainBlock);
+        engine.readDetectionLevel();
         start += count;
     }
     left.insert (left.end(), right.begin(), right.end());
     return left;
-}
-
-// The largest difference between two outputs, in dB below the first's peak.
-double differenceDb (const std::vector<float>& reference, const std::vector<float>& output)
-{
-    double peak = 0.0, difference = 0.0;
-    for (size_t i = 0; i < reference.size(); ++i)
-    {
-        peak = std::max (peak, static_cast<double> (std::abs (reference[i])));
-        difference = std::max (difference, static_cast<double> (std::abs (output[i] - reference[i])));
-    }
-    return 20.0 * std::log10 (difference / peak + 1.0e-30);
 }
 
 struct Blocks
@@ -140,16 +142,14 @@ TEST_CASE ("Without Dynamic Bands, the output is the same sample for sample howe
     REQUIRE (play (sampleRate, false, blocks.at) == reference);
 }
 
-TEST_CASE ("Dynamic Bands sound the same, to within 40 dB below the peak, however the host cuts the audio into blocks", "[sweep]")
+TEST_CASE ("With Dynamic Bands, the output is the same sample for sample however the host cuts it into blocks", "[sweep]")
 {
     const double sampleRate = anySampleRate();
     const auto blocks = anyBlocks();
     const auto reference = play (sampleRate, true, [] (int) { return 512; });
 
-    // Not to the sample: a Dynamic Band's gain moves once per run the Engine processes, which is
-    // shorter than its usual 16 samples where a host block ends (eq1/Engine.h).
     CAPTURE (sampleRate, blocks.name);
-    REQUIRE (differenceDb (reference, play (sampleRate, true, blocks.at)) < -40.0);
+    REQUIRE (play (sampleRate, true, blocks.at) == reference);
 }
 
 TEST_CASE ("A Dynamic Band's Live Gain follows the same course in time at every sample rate", "[sweep]")

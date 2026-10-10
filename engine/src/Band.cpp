@@ -19,68 +19,69 @@ void Band::Chain::clear()
         channel = {};
 }
 
-void Band::Chain::run (size_t channel, float* samples, int numSamples, const Cascade* from)
+void Band::Chain::run (size_t channel, float* samples, const Piece& piece)
 {
     auto& channelStates = states[channel];
     for (size_t s = 0; s < static_cast<size_t> (cascade.count); ++s)
     {
         auto& state = channelStates[s];
         const auto& to = cascade.sections[s];
-        if (from == nullptr)
+        if (piece.from == nullptr)
         {
-            for (int i = 0; i < numSamples; ++i)
+            for (int i = 0; i < piece.numSamples; ++i)
                 samples[i] = state.process (to, samples[i]);
             continue;
         }
-        // Designed once per sub-block, interpolated sample by sample in between.
-        const auto& start = from->sections[s];
-        for (int i = 0; i < numSamples; ++i)
-            samples[i] = state.process (interpolate (start, to, (i + 1.0) / numSamples), samples[i]);
+        // Designed once per run, interpolated sample by sample by position in the run.
+        const auto& start = piece.from->sections[s];
+        for (int i = 0; i < piece.numSamples; ++i)
+            samples[i] = state.process (interpolate (start, to, (piece.position + i + 1.0) / maxSubBlock), samples[i]);
     }
 }
 
-void Band::Chain::runPlaced (float* const* channels, int numChannels, int numSamples, const Cascade* from)
+void Band::Chain::runPlaced (float* const* channels, int numChannels, const Piece& piece)
 {
     switch (setup.placement)
     {
         case StereoPlacement::Stereo:
             for (int ch = 0; ch < numChannels; ++ch)
-                run (static_cast<size_t> (ch), channels[ch], numSamples, from);
+                run (static_cast<size_t> (ch), channels[ch], piece);
             return;
-        case StereoPlacement::Left: run (0, channels[0], numSamples, from); return;
+        case StereoPlacement::Left: run (0, channels[0], piece); return;
         case StereoPlacement::Right:
         {
             // On mono, Left and Right are the same signal.
             const int right = numChannels > 1 ? 1 : 0;
-            run (static_cast<size_t> (right), channels[right], numSamples, from);
+            run (static_cast<size_t> (right), channels[right], piece);
             return;
         }
         // On mono the signal is all Mid: a Mid Band processes it and a Side Band has nothing to process.
         case StereoPlacement::Mid:
             if (numChannels > 1)
-                runMidSide (channels, numSamples, from, true);
+                runMidSide (channels, piece, true);
             else
-                run (0, channels[0], numSamples, from);
+                run (0, channels[0], piece);
             return;
         case StereoPlacement::Side:
             if (numChannels > 1)
-                runMidSide (channels, numSamples, from, false);
+                runMidSide (channels, piece, false);
             return;
     }
 }
 
-void Band::Chain::runMidSide (float* const* channels, int numSamples, const Cascade* from, bool mid)
+void Band::Chain::runMidSide (float* const* channels, const Piece& piece, bool mid)
 {
     std::array<float, maxSubBlock> midSamples, sideSamples;
     float* left = channels[0];
     float* right = channels[1];
-    for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
+    const auto numSamples = static_cast<size_t> (piece.numSamples);
+    for (size_t i = 0; i < numSamples; ++i)
     {
         midSamples[i] = 0.5f * (left[i] + right[i]);
         sideSamples[i] = 0.5f * (left[i] - right[i]);
     }
-    run (0, mid ? midSamples.data() : sideSamples.data(), numSamples, from);
-    for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
+    run (0, mid ? midSamples.data() : sideSamples.data(), piece);
+    for (size_t i = 0; i < numSamples; ++i)
     {
         left[i] = midSamples[i] + sideSamples[i];
         right[i] = midSamples[i] - sideSamples[i];
@@ -127,25 +128,17 @@ void Band::setSettings (const BandSettings& settings, bool snap)
         current.clear();
         shapeCrossfade.reset (1.0);
         pending.reset();
-        design();
+        designNow();
     }
     else
     {
         logFrequency.setTarget (std::log (settings.frequency));
         gain.setTarget (settings.gain);
         logQ.setTarget (std::log (settings.q));
+        // The crossfade starts with the next run.
         pending.reset();
         if (setup != current.setup)
-        {
-            if (shapeCrossfade.isMoving())
-            {
-                pending = setup;
-            }
-            else
-            {
-                crossfadeTo (setup);
-            }
-        }
+            pending = setup;
     }
 
     if (snap)
@@ -166,7 +159,13 @@ void Band::crossfadeTo (const Setup& setup)
     shapeCrossfade.setTarget (1.0);
 }
 
+// Between the run's start and end as the coefficients are: near enough, for the display.
 double Band::liveGainDb() const
+{
+    return runStartGainDb + (runEndGainDb - runStartGainDb) * runPosition / maxSubBlock;
+}
+
+double Band::targetGainDb() const
 {
     return std::clamp (gain.value() + dynamicOffset, -liveGainLimitDb, liveGainLimitDb);
 }
@@ -174,15 +173,20 @@ double Band::liveGainDb() const
 void Band::design()
 {
     designedOffset = dynamicOffset;
-    current.cascade = designShape ({ current.setup.structure, std::exp (logFrequency.value()), liveGainDb(), std::exp (logQ.value()) },
+    runEndGainDb = targetGainDb();
+    current.cascade = designShape ({ current.setup.structure, std::exp (logFrequency.value()), runEndGainDb, std::exp (logQ.value()) },
                                    sampleRate);
 }
 
-void Band::process (float* const* channels, int numChannels, int numSamples)
+void Band::designNow()
 {
-    if (isSilent())
-        return;
+    design();
+    runGliding = false;
+    runStartGainDb = runEndGainDb;
+}
 
+void Band::startRun()
+{
     if (pending && ! shapeCrossfade.isMoving())
     {
         crossfadeTo (*pending);
@@ -190,22 +194,40 @@ void Band::process (float* const* channels, int numChannels, int numSamples)
     }
 
     // A Dynamic Band's moving Live Gain glides its filter as a Gain change does.
-    const bool gliding = logFrequency.isMoving() || gain.isMoving() || logQ.isMoving() || dynamicOffset != designedOffset;
-    const bool fading = mix.isMoving();
-    const bool crossfading = shapeCrossfade.isMoving();
-
-    const auto from = current.cascade;
-    if (gliding)
+    runGliding = logFrequency.isMoving() || gain.isMoving() || logQ.isMoving() || dynamicOffset != designedOffset;
+    runStartGainDb = runEndGainDb;
+    if (runGliding)
     {
-        logFrequency.skip (numSamples);
-        gain.skip (numSamples);
-        logQ.skip (numSamples);
+        runFrom = current.cascade;
+        logFrequency.skip (maxSubBlock);
+        gain.skip (maxSubBlock);
+        logQ.skip (maxSubBlock);
         design();
     }
+}
+
+void Band::process (float* const* channels, int numChannels, int position, int numSamples)
+{
+    const bool joinedLate = position != 0 && position != runPosition;
+    runPosition = position + numSamples;
+    if (isSilent())
+        return;
+
+    if (position == 0)
+        startRun();
+    else if (joinedLate)
+    {
+        runGliding = false;
+        runStartGainDb = runEndGainDb;
+    }
+
+    const bool fading = mix.isMoving();
+    const bool crossfading = shapeCrossfade.isMoving();
+    const Chain::Piece piece { position, numSamples, runGliding ? &runFrom : nullptr };
 
     if (! fading && ! crossfading && mix.value() == 1.0)
     {
-        current.runPlaced (channels, numChannels, numSamples, gliding ? &from : nullptr);
+        current.runPlaced (channels, numChannels, piece);
         return;
     }
 
@@ -222,11 +244,11 @@ void Band::process (float* const* channels, int numChannels, int numSamples)
             std::copy (channels[ch], channels[ch] + numSamples, to[static_cast<size_t> (ch)]);
     };
     copyInput (wetChannels);
-    current.runPlaced (wetChannels.data(), numChannels, numSamples, gliding ? &from : nullptr);
+    current.runPlaced (wetChannels.data(), numChannels, piece);
     if (crossfading)
     {
         copyInput (previousWetChannels);
-        previous.runPlaced (previousWetChannels.data(), numChannels, numSamples, nullptr);
+        previous.runPlaced (previousWetChannels.data(), numChannels, { position, numSamples });
     }
     for (int ch = 0; ch < numChannels; ++ch)
     {

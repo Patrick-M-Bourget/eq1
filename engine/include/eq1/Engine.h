@@ -59,8 +59,9 @@ public:
 
     // Processes main in place. sidechain may be null when nothing is connected. Blocks may be of any
     // size, changing from call to call. The output doesn't depend on how the host cuts the audio into
-    // blocks, sample for sample, except a Dynamic Band's: its gain moves once per run of at most 16
-    // samples, and a run also ends where a block does.
+    // blocks, sample for sample, Dynamic Bands included: they move on a grid of 16-sample runs that
+    // starts at prepare() and carries across calls, and a Dynamic Band's gain over a run follows what
+    // its detector heard up to the run's start, so it reacts up to one run later, with no latency.
     void process (AudioBlock main, const ConstAudioBlock* sidechain = nullptr);
 
     // Copies up to maxSamples of the tap's mono signal, oldest first, and returns how many were copied.
