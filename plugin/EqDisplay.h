@@ -143,7 +143,8 @@ private:
     void selectAll();
     void deleteSelection();
     // The selected Bands onto the system clipboard, and the clipboard's Bands into the free Band
-    // Slots, selected; false when there was nothing to paste or no free slot.
+    // Slots, selected; false when the clipboard holds no eq1 Bands (true with them, even when no free
+    // slot leaves nothing to paste).
     void copySelection();
     bool paste();
     void showMenu (const juce::MouseEvent& e);
