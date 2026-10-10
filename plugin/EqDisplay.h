@@ -18,10 +18,10 @@ class PluginProcessor;
 
 // The EQ curve with a handle per Band, over the Analyzer's pre-EQ, post-EQ and Sidechain spectra. Double-click
 // adds a Band; drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box
-// around them, or Cmd/Ctrl+A for all); the wheel changes Q; Delete removes the selected Bands. Right-click
-// opens the Band menu (BandMenu.h) for the selection, which a Band outside it becomes first; on empty
-// space, it offers Select All. Holding a handle still Solos
-// its Band until the mouse is released. Pressing on the spectrum, away from the handles, grabs its
+// around them, or Cmd/Ctrl+A for all); the wheel changes Q; Delete removes the selected Bands.
+// Right-click opens the Band menu (BandMenu.h) for the selection, which a Band outside it becomes
+// first; on empty space it offers Select All. Holding a handle still Solos its Band until the mouse
+// is released. Pressing on the spectrum, away from the handles, grabs its
 // peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
 // with its Live Gain's movement inside it, and its curve follows its Live Gain. The curve comes from
 // the Engine's own response maths (eq1/Response.h).

@@ -43,7 +43,7 @@ juce::PopupMenu BandMenu::build() const
         return any (appliesTo) && std::all_of (bands.begin(), bands.end(), [&] (const BandSettings& b) { return ! appliesTo (b) || hasValue (b); });
     };
     const auto all = [] (const BandSettings&) { return true; };
-    // Copies, so the actions outlive this BandMenu.
+    // The actions keep the selection by copy and BandEditing by reference: they outlive this BandMenu.
     auto& edit = editing;
     const auto slots = selection;
 
