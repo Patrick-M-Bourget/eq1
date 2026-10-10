@@ -564,3 +564,195 @@ TEST_CASE ("Tab skips a disabled Knob")
     knob.setEnabled (false);
     CHECK (focusStops().empty());
 }
+
+// Not run by ctest: draws every kit control in its states into the PNG at $EQ1_GALLERY_PNG, for
+// checking by hand against the prototype (docs/staple-handoff/prototype/Main.dc.html).
+//   build/tests/eq1_plugin_tests "[.gallery]"
+TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
+{
+    const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_GALLERY_PNG", {});
+    if (path.isEmpty())
+        SKIP ("EQ1_GALLERY_PNG names the file to write");
+
+    Kit kit;
+    auto& w = kit.window;
+    w.setSize (760, 520);
+    w.setOpaque (true);
+    struct Background final : juce::Component
+    {
+        void paint (juce::Graphics& g) override { g.fillAll (staple::tokens::colour::bg0); }
+    } background;
+    kit.add (background, w.getLocalBounds());
+
+    struct Lane final : staple::Knob::RingHandler
+    {
+        void paintRing (juce::Graphics& g, staple::Knob&, juce::Point<float> c, float inner, float outer) override
+        {
+            juce::Path lane;
+            const float r = (inner + outer) / 2.0f;
+            lane.addCentredArc (c.x, c.y, r, r, 0.0f, juce::degreesToRadians (-135.0f), juce::degreesToRadians (135.0f), true);
+            g.setColour (staple::tokens::colour::knobRingLane);
+            g.strokePath (lane, juce::PathStrokeType (outer - inner));
+        }
+    } lane;
+
+    namespace t = staple::tokens;
+    std::vector<std::unique_ptr<juce::Component>> owned;
+    const auto keep = [&] (auto* c) {
+        owned.emplace_back (c);
+        return c;
+    };
+
+    // Knobs: Frequency, Gain (bipolar, with its ring lane), Q, a 30 px dynamics knob, Output Gain from
+    // 0 dB on its skewed range, and a disabled one.
+    auto* frequency = keep (new staple::Knob (t::knob::frequency, "Frequency"));
+    auto* gain = keep (new staple::Knob (t::knob::gain, "Gain"));
+    auto* q = keep (new staple::Knob (t::knob::q, "Q"));
+    auto* small = keep (new staple::Knob (t::knob::small, "Attack"));
+    auto* output = keep (new staple::Knob (64.0f, "Output Gain"));
+    auto* disabled = keep (new staple::Knob (t::knob::q, "Q"));
+    Attachment::SliderAttachment a1 (kit.state(), "band4_frequency", *frequency), a2 (kit.state(), "band4_gain", *gain),
+        a3 (kit.state(), "band4_q", *q), a4 (kit.state(), eq1::parameters::outputGainId, *output);
+    for (auto* k : { frequency, gain, q, small, disabled })
+        k->setArcColour (t::band[3]);
+    output->setArcColour (t::colour::curveMain);
+    output->setArcOrigin (0.0);
+    gain->setBipolar (true);
+    gain->setRing (&lane);
+    gain->setTitle ("Band 4 Gain");
+    gain->setTextValueSuffix (" dB");
+    frequency->setTitle ("Band 4 Frequency");
+    frequency->setTextValueSuffix (" Hz");
+    frequency->setValue (2400.0, juce::sendNotificationSync);
+    gain->setValue (-11.42, juce::sendNotificationSync);
+    q->setValue (2.0, juce::sendNotificationSync);
+    small->setRange (0.0, 100.0);
+    small->setValue (30.0);
+    output->setValue (3.0, juce::sendNotificationSync);
+    disabled->setEnabled (false);
+    int x = 20;
+    for (auto* k : { frequency, gain, q, small, output, disabled })
+    {
+        const int s = k->getIdealSize();
+        kit.add (*k, { x, 150 - s / 2, s, s });
+        x += s + 16;
+    }
+    frequency->mouseEnter (Kit::event (*frequency, centreOf (*frequency), {}, centreOf (*frequency)));
+    gain->mouseEnter (Kit::event (*gain, centreOf (*gain), {}, centreOf (*gain)));
+    gain->getKnobTooltip()->startEditing();
+
+    // Icon buttons: normal, hover, pressed, lit, Off, Off hovered, disabled, focused.
+    x = 20;
+    std::vector<staple::IconButton*> icons;
+    for (int i = 0; i < 8; ++i)
+    {
+        auto* b = keep (new staple::IconButton ("icon", i == 4 || i == 5 ? staple::Icon::power : staple::Icon::headphones));
+        b->setLitColour (t::band[3]);
+        kit.add (*b, { x, 230, 24, 24 });
+        icons.push_back (b);
+        x += 40;
+    }
+    icons[1]->setState (juce::Button::buttonOver);
+    icons[2]->setState (juce::Button::buttonDown);
+    icons[3]->setToggleState (true, juce::dontSendNotification);
+    for (int i : { 4, 5 })
+    {
+        icons[static_cast<size_t> (i)]->setOffLook (true);
+        icons[static_cast<size_t> (i)]->setToggleState (true, juce::dontSendNotification);
+    }
+    icons[5]->setState (juce::Button::buttonOver);
+    icons[6]->setEnabled (false);
+
+    // Text chips: filled with a chevron (normal, hover, pressed), plain (normal, hover), disabled.
+    x = 20;
+    std::vector<staple::TextChip*> chips;
+    for (int i = 0; i < 6; ++i)
+    {
+        const bool filled = i < 3 || i == 5;
+        auto* c = keep (new staple::TextChip (filled ? "12 dB" : "A/B", filled ? staple::TextChip::Look::filled : staple::TextChip::Look::plain));
+        c->setChevron (filled);
+        kit.add (*c, { x, 290, c->getIdealWidth(), 22 });
+        chips.push_back (c);
+        x += c->getIdealWidth() + 16;
+    }
+    chips[1]->setState (juce::Button::buttonOver);
+    chips[2]->setState (juce::Button::buttonDown);
+    chips[4]->setState (juce::Button::buttonOver);
+    chips[5]->setEnabled (false);
+
+    // Edge selectors: Shape on a panel's left side, Stereo Placement on its right, and a disabled one.
+    struct Panel final : juce::Component
+    {
+        void paint (juce::Graphics& g) override
+        {
+            g.setColour (staple::tokens::colour::raised);
+            g.fillRoundedRectangle (getLocalBounds().toFloat(), staple::tokens::size::r3);
+        }
+    } panel;
+    kit.add (panel, { 20, 340, 480, 60 });
+    staple::EdgeSelector shape ("Shape", staple::EdgeSelector::Side::left);
+    addShapes (shape);
+    shape.setSelectedId (1);
+    shape.setEdgeColour (t::band[3]);
+    shape.setIconColour (t::band[3]);
+    staple::EdgeSelector placement ("Stereo Placement", staple::EdgeSelector::Side::right);
+    placement.addItem ("Stereo", 1, staple::Icon::placementStereo, t::colour::placeStereo);
+    placement.setSelectedId (1);
+    placement.setEdgeColour (t::band[3]);
+    staple::EdgeSelector off ("Shape", staple::EdgeSelector::Side::left);
+    addShapes (off);
+    off.setSelectedId (3);
+    off.setEdgeColour (t::band[3]);
+    off.setIconColour (t::band[3]);
+    off.setEnabled (false);
+    panel.addAndMakeVisible (shape);
+    panel.addAndMakeVisible (placement);
+    shape.setBounds (0, 13, 104, 34);
+    placement.setBounds (480 - 104, 13, 104, 34);
+    kit.add (off, { 560, 353, 104, 34 });
+
+    // A popover, opened under a chip.
+    staple::TextChip opener ("Analyzer", staple::TextChip::Look::filled);
+    opener.setChevron (true);
+    kit.add (opener, { 540, 230, opener.getIdealWidth(), 22 });
+    staple::Popover popover;
+    staple::TextChip item1 ("Pre + Post", staple::TextChip::Look::plain), item2 ("Post", staple::TextChip::Look::plain);
+    popover.setCardSize (150, 74);
+    popover.addAndMakeVisible (item1);
+    popover.addAndMakeVisible (item2);
+    item1.setBounds (popover.getCardBounds().reduced (6).withHeight (30));
+    item2.setBounds (item1.getBounds().translated (0, 32));
+    item1.setState (juce::Button::buttonOver);
+    popover.open (opener);
+    for (int frame = 0; frame < 20 && popover.getAlpha() < 1.0f; ++frame) // its pop-in, played to the end
+    {
+        juce::Thread::sleep (20);
+        juce::Timer::callPendingTimersSynchronously();
+    }
+
+    // The focus ring, as LookAndFeel's FocusOutline draws it after Tab (a window of its own, so drawn
+    // here in its place).
+    struct FocusRing final : juce::Component
+    {
+        void paint (juce::Graphics& g) override
+        {
+            namespace size = staple::tokens::size;
+            g.setColour (staple::tokens::colour::focus);
+            g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (size::focusWidth / 2.0f),
+                                    size::r2 + size::focusOffset + size::focusWidth / 2.0f, size::focusWidth);
+        }
+    } focusRing;
+    focusRing.setInterceptsMouseClicks (false, false);
+    kit.add (focusRing, icons[7]->getBounds().expanded (4));
+    juce::Desktop::getInstance().getAnimator().cancelAllAnimations (true);
+
+    CHECK (popover.isOpen());
+    CHECK (popover.isVisible());
+    CHECK (popover.getAlpha() == 1.0f);
+    const auto image = w.createComponentSnapshot (w.getLocalBounds(), true, 2.0f);
+    juce::File file (path);
+    file.deleteFile();
+    juce::FileOutputStream out (file);
+    REQUIRE (out.openedOk());
+    CHECK (juce::PNGImageFormat().writeImageToStream (image, out));
+}
