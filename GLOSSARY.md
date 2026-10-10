@@ -104,6 +104,10 @@ _Avoid_: Sidechain solo, listen, Solo (for detection)
 The level of a Band's detection signal, as its detector compares it with the Threshold, in dB where a full-scale sine reads 0.
 _Avoid_: Input level, sidechain level
 
+**Metered Band**:
+The one Band whose Detection Level is shown, whatever its dynamics state: a Band in use, not Bypassed, whose Shape has dynamics.
+_Avoid_: Monitored Band, Band meter
+
 **Clear Dynamics**:
 Putting every dynamics setting of a Band back to its default, so it stops being a Dynamic Band.
 _Avoid_: Reset (unqualified), remove dynamics
