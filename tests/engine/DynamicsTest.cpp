@@ -564,10 +564,11 @@ double levelOf (const std::vector<float>& samples, double frequency)
 
 TEST_CASE ("An External Band whose Sidechain drops out for exactly one run start rejoins on its last design, not a stale glide")
 {
-    // While the Band's Frequency glides, the Sidechain drops out over the start of the grid's third run
-    // (samples 32 to 39). Silence until then, so the Detection Range filter's history is the same
-    // whether its last piece ended at position 8 (rejoining where it left off, a run later) or 7
-    // (rejoining visibly late): either way it missed a run's start and must play what it last designed.
+    // While the Band's Frequency glides, the Sidechain drops out from sample 24 (or 23) until 40, over
+    // the start of the grid's third run at 32. Silence until then, so the Detection Range filter's
+    // history is the same whether its last piece ended at position 8 (rejoining where it left off, a
+    // run later) or 7 (rejoining visibly late): either way it missed a run's start and must play what
+    // it last designed.
     const auto auditionAfterDropout = [] (int lastConnectedBlock) {
         auto band = externalBell();
         auto settings = withBand (band);
@@ -578,7 +579,7 @@ TEST_CASE ("An External Band whose Sidechain drops out for exactly one run start
         float* main[] = { mainSamples.data() };
         const float* sidechainChannels[] = { sidechainSamples.data() };
         int n = 0;
-        const auto play = [&] (int numSamples, bool connected) {
+        const auto playBlock = [&] (int numSamples, bool connected) {
             std::fill (mainSamples.begin(), mainSamples.end(), 0.0f);
             for (int i = 0; i < numSamples; ++i)
                 sidechainSamples[static_cast<size_t> (i)] = n + i < 40 ? 0.0f : static_cast<float> (sine (1000.0, -6.0, n + i));
@@ -588,13 +589,13 @@ TEST_CASE ("An External Band whose Sidechain drops out for exactly one run start
             n += numSamples;
         };
         engine.setSettings (settings);
-        play (16, true);
+        playBlock (16, true);
         settings.bands[0].frequency = 4000.0;
         engine.setSettings (settings);
-        play (lastConnectedBlock, true);
-        play (40 - n, false);
+        playBlock (lastConnectedBlock, true);
+        playBlock (40 - n, false);
         for (int b = 0; b < 8; ++b)
-            play (16, true);
+            playBlock (16, true);
         return output;
     };
     const auto rejoinedWhereItLeftOff = auditionAfterDropout (8), rejoinedLate = auditionAfterDropout (7);
