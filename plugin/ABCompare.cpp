@@ -79,18 +79,14 @@ void ABCompare::select (CompareSide side)
     history.endTransaction();
 }
 
-void ABCompare::copyAToB()
+void ABCompare::copyToOther()
 {
     history.beginTransaction();
     auto next = current();
-    next.loadedOn (CompareSide::B) = next.loadedOn (CompareSide::A);
-    if (next.active == CompareSide::A)
-    {
-        next.other = capturePresetSettings (parameters, sideType);
-        set (std::move (next));
-    }
-    else if (const auto a = next.other; a.isValid())
-        putOnParameters (a, std::move (next));
+    const auto to = next.active == CompareSide::A ? CompareSide::B : CompareSide::A;
+    next.loadedOn (to) = next.loadedOn (next.active);
+    next.other = capturePresetSettings (parameters, sideType);
+    set (std::move (next));
     history.endTransaction();
 }
 

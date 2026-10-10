@@ -37,7 +37,7 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
         edited();
     };
     copyAToB.onClick = [this] {
-        processor.copyAToB();
+        processor.copyToOther();
         edited();
     };
     // The side you're on is lit.

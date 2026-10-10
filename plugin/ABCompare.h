@@ -31,8 +31,9 @@ public:
     // Puts the side's settings on the host parameters, inside gestures, as one undo step.
     void select (CompareSide side);
 
-    // Overwrites B with A's settings and Loaded Preset, from either side, as one undo step.
-    void copyAToB();
+    // Overwrites the other side with the settings and Loaded Preset of the side you're on, as one undo
+    // step. You stay on your side, and the host parameters don't change.
+    void copyToOther();
 
     // Puts a Preset's settings on the side you're on, inside gestures, and makes it the side's Loaded
     // Preset, named name, as one undo step.
@@ -50,7 +51,7 @@ public:
     // is a copy of the parameters' state with a child of type stateType added: the side you're on, the
     // other side's settings, and each side's Loaded Preset with its settings as loaded, so a session
     // keeps it whatever later happens to the Preset's file. Both sides are whole in it, even when a
-    // host saves while select(), copyAToB() or loadPreset() is putting settings on the parameters.
+    // host saves while select() or loadPreset() is putting settings on the parameters.
     // restore() takes that child back; an invalid one puts the settings on A, with B a copy, and no
     // Loaded Preset on either.
     static const juce::Identifier stateType;

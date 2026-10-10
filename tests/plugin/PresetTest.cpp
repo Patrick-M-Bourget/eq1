@@ -272,7 +272,7 @@ TEST_CASE ("Undo of a Preset load puts back the side's previous Loaded Preset, o
     CHECK_FALSE (host.processor.isLoadedPresetModified());
 }
 
-TEST_CASE ("Copy A to B, and B's first selection, give B A's Loaded Preset and Modified state")
+TEST_CASE ("Copy to the other side, and B's first selection, give the other side the Loaded Preset and Modified state")
 {
     const auto vocal = presetWith ({ { "band2_in_use", 1.0f } });
     const auto kick = presetWith ({ { "band1_in_use", 1.0f } });
@@ -280,24 +280,22 @@ TEST_CASE ("Copy A to B, and B's first selection, give B A's Loaded Preset and M
     const auto how = GENERATE (Catch::Generators::as<std::string> {}, "first selection", "copy from A", "copy from B");
     CAPTURE (modified, how);
     Host host;
+    // The side copied from holds Vocal; the other side Kick, until the copy.
+    const auto from = how == "copy from B" ? CompareSide::B : CompareSide::A;
+    const auto to = from == CompareSide::A ? CompareSide::B : CompareSide::A;
     if (how != "first selection")
     {
-        host.processor.selectCompareSide (CompareSide::B);
+        host.processor.selectCompareSide (to);
         host.processor.loadPreset (kick, "Kick");
-        host.processor.selectCompareSide (CompareSide::A);
     }
+    host.processor.selectCompareSide (from);
     host.processor.loadPreset (vocal, "Vocal");
     if (modified)
         host.edit ("band2_gain", 4.0f);
 
-    if (how == "copy from A")
-        host.processor.copyAToB();
-    else if (how == "copy from B")
-    {
-        host.processor.selectCompareSide (CompareSide::B);
-        host.processor.copyAToB();
-    }
-    host.processor.selectCompareSide (CompareSide::B);
+    if (how != "first selection")
+        host.processor.copyToOther();
+    host.processor.selectCompareSide (to);
     CHECK (host.processor.loadedPresetName() == "Vocal");
     CHECK (host.processor.isLoadedPresetModified() == modified);
 }

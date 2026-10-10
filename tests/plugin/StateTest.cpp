@@ -214,7 +214,7 @@ TEST_CASE ("A session from a newer version loads the settings this version knows
     CHECK (processor.compareSide() == eq1::CompareSide::A);
 }
 
-TEST_CASE ("A session saved in the middle of an A/B switch, a copy or a Preset load holds both sides whole")
+TEST_CASE ("A session saved in the middle of an A/B switch or a Preset load holds both sides whole")
 {
     // A host saving from its own thread can save while the editor is switching sides. A listener on
     // the parameters saves at the first change the switch makes, as such a host might.
@@ -233,9 +233,9 @@ TEST_CASE ("A session saved in the middle of an A/B switch, a copy or a Preset l
     };
 
     juce::ScopedJuceInitialiser_GUI juce;
-    const auto change = GENERATE (Catch::Generators::as<std::string> {}, "switch", "copy", "load");
+    const auto change = GENERATE (Catch::Generators::as<std::string> {}, "switch", "load");
     CAPTURE (change);
-    const bool copy = change == "copy", loadOnB = change == "load";
+    const bool loadOnB = change == "load";
     eq1::PluginProcessor maker;
     set (maker, "band1_gain", 6.0f);
     set (maker, "band2_gain", 2.0f);
@@ -249,9 +249,7 @@ TEST_CASE ("A session saved in the middle of an A/B switch, a copy or a Preset l
     std::unique_ptr<juce::XmlElement> xml;
     {
         SaveDuringChange host (processor);
-        if (copy)
-            processor.copyAToB();
-        else if (loadOnB)
+        if (loadOnB)
             processor.loadPreset (preset, "Preset");
         else
             processor.selectCompareSide (eq1::CompareSide::A);
@@ -262,8 +260,8 @@ TEST_CASE ("A session saved in the middle of an A/B switch, a copy or a Preset l
     // Reloaded, the side being switched to is whole on the parameters, and the other side whole too.
     eq1::PluginProcessor restored;
     load (restored, *xml);
-    // A's settings are on the side the change ends on, and on the other side too unless it was a switch.
-    const auto ending = copy || loadOnB ? eq1::CompareSide::B : eq1::CompareSide::A;
+    // A's settings are on the side the change ends on, and on the other side too after a load.
+    const auto ending = loadOnB ? eq1::CompareSide::B : eq1::CompareSide::A;
     CHECK (restored.compareSide() == ending);
     CHECK_THAT (value (restored, "band1_gain"), WithinAbs (6.0, 1.0e-4));
     CHECK_THAT (value (restored, "band2_gain"), WithinAbs (2.0, 1.0e-4));

@@ -58,11 +58,11 @@ public:
     // The undo history of the editor's edits. It outlives the editor, and restoring a session empties it.
     EditHistory& editHistory() { return history; }
 
-    // A/B Compare: which side the host parameters hold, from any thread; selecting a side and Copy A
-    // to B, each one undo step, from the message thread only.
+    // A/B Compare: which side the host parameters hold, from any thread; selecting a side and copying
+    // the side you're on to the other side, each one undo step, from the message thread only.
     CompareSide compareSide() const { return compare.side(); }
     void selectCompareSide (CompareSide side) { compare.select (side); }
-    void copyAToB() { compare.copyAToB(); }
+    void copyToOther() { compare.copyToOther(); }
 
     // The settings a Preset holds, from the side you're on, in the saved state's format.
     juce::ValueTree presetState();
