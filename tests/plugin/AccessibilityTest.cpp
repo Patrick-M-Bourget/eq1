@@ -359,7 +359,7 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     auto* segment = harness::findChild<eq1::DetectionRangeBar::Segment> (*host.editor);
     REQUIRE (segment != nullptr);
     CHECK (segment->getAccessibilityHandler()->getTitle() == "Band 4 Detection Range");
-    CHECK (segment->getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == juce::String::fromUTF8 ("20 Hz \u2013 20.00 kHz"));
+    CHECK (segment->getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == juce::String::fromUTF8 ("20 Hz \xe2\x80\x93 20.00 kHz"));
 
     // Output Gain: -inf dB at its bottom.
     host.parameter ("output_gain").setValueNotifyingHost (0.0f);

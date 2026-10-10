@@ -94,7 +94,7 @@ DetectionRangeBar::Segment::Segment (DetectionRangeBar& b) : bar (b)
 
 juce::String DetectionRangeBar::Segment::valueText() const
 {
-    return frequencyText (bar.low->getValue()) + juce::String::fromUTF8 (" – ") + frequencyText (bar.high->getValue());
+    return frequencyText (bar.low->getValue()) + juce::String::fromUTF8 (" \xe2\x80\x93 ") + frequencyText (bar.high->getValue());
 }
 
 void DetectionRangeBar::Segment::paint (juce::Graphics& g)

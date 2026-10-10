@@ -895,7 +895,7 @@ TEST_CASE ("Dragging a Detection Range handle or the segment is one undo step, k
     {
         auto& segment = *host.findAll<eq1::DetectionRangeBar::Segment>().front();
         CHECK (segment.getTitle() == "Band 1 Detection Range");
-        CHECK (segment.valueText() == juce::String::fromUTF8 ("120 Hz – 4.50 kHz"));
+        CHECK (segment.valueText() == juce::String::fromUTF8 ("120 Hz \xe2\x80\x93 4.50 kHz"));
         const auto from = centreOf (segment);
         const double startFrequency = bar.frequencyAt (static_cast<float> (segment.getX()) + from.x);
         dragOn (segment, from, { bar.xOf (startFrequency * 2.0) - bar.xOf (startFrequency), 0.0f }, {}, true);
