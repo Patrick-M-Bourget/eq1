@@ -3,6 +3,7 @@
 #include "EditorHarness.h"
 #include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
+#include "staple/controls/KnobTooltip.h"
 #include "DetectionRangeBar.h"
 #include "DynamicRangeRing.h"
 #include "DynamicsSection.h"
@@ -13,6 +14,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <functional>
 #include <memory>
 
 using Catch::Matchers::WithinAbs;
@@ -330,7 +332,7 @@ TEST_CASE ("The Band selector steps through the Bands in Frequency order, wrappi
     CHECK (host.control ("Band 1 Gain").isShowing());
 }
 
-TEST_CASE ("The Slope button reads the Slope or Brickwall, and opens the Slope list on a click")
+TEST_CASE ("The Slope button reads the Slope or Brickwall, and opens the Slope list at once on a click, Space or Return")
 {
     PanelEditor host;
     host.click (host.at (100.0)); // the Low Cut
@@ -356,10 +358,47 @@ TEST_CASE ("The Slope button reads the Slope or Brickwall, and opens the Slope l
     };
     slope.mouseDown (event (left));
     slope.mouseUp (event ({}));
-    // After the double-click time, as a double-click types a value instead.
-    CHECK_FALSE (juce::PopupMenu::dismissAllActiveMenus());
-    host.settle (juce::MouseEvent::getDoubleClickTimeout() + 100);
+    // At once, without waiting for a double-click.
     CHECK (juce::PopupMenu::dismissAllActiveMenus());
+
+    SECTION ("Space") { CHECK (slope.keyPressed (juce::KeyPress (juce::KeyPress::spaceKey))); }
+    SECTION ("Return") { CHECK (slope.keyPressed (juce::KeyPress (juce::KeyPress::returnKey))); }
+    CHECK (juce::PopupMenu::dismissAllActiveMenus());
+}
+
+TEST_CASE ("The Slope list's last item, Type a value…, opens the type-in, and a typed Slope is one undo step")
+{
+    PanelEditor host;
+    const auto typeAValue = juce::String::fromUTF8 ("Type a value\xe2\x80\xa6");
+    auto& history = host.processor.editHistory();
+    // On every Band's list, a Bell's (no Slope) too.
+    for (const int slot : { 1, 2 })
+    {
+        host.panel().show (slot);
+        auto& slope = host.control<eq1::BandPanel::SlopeButton> ("Band " + juce::String (slot) + " Slope");
+        const auto list = slope.list();
+        juce::String last;
+        for (juce::PopupMenu::MenuItemIterator it (list); it.next();)
+            last = it.getItem().text;
+        CHECK (last == typeAValue);
+    }
+
+    auto& slope = host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope");
+    const int steps = history.undoSteps();
+    const auto list = slope.list();
+    std::function<void()> typeIn;
+    for (juce::PopupMenu::MenuItemIterator it (list); it.next();)
+        if (it.getItem().text == typeAValue)
+            typeIn = it.getItem().action;
+    REQUIRE (typeIn != nullptr);
+    typeIn();
+    auto* tooltip = slope.getKnobTooltip();
+    REQUIRE (tooltip != nullptr);
+    REQUIRE (tooltip->isEditing());
+    tooltip->getEditor()->setText ("30");
+    tooltip->getEditor()->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+    CHECK_THAT (host.value (2, "slope"), WithinAbs (30.0, 1.0e-4));
+    CHECK (history.undoSteps() == steps + 1);
 }
 
 TEST_CASE ("Dragging or typing a Slope is one undo step, and on a Brickwall Cut clears Brickwall in it")
