@@ -39,6 +39,7 @@ target_sources(eq1 PRIVATE
     PluginProcessor.cpp
     Parameters.cpp
     BandEditing.cpp
+    BandMenu.cpp
     BandPanel.cpp
     EqDisplay.cpp
     EditHistory.cpp

@@ -1,0 +1,101 @@
+#include "BandMenu.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+
+namespace eq1
+{
+
+namespace
+{
+// The Slope submenu's values, in dB/oct; Brickwall follows them.
+constexpr std::array<double, 8> listedSlopes { 6.0, 12.0, 18.0, 24.0, 36.0, 48.0, 72.0, 96.0 };
+
+// Off a default by more than its parameter's round trip through a normalised value: the Free limits'
+// log ranges don't give their defaults back exactly.
+bool differs (double value, double defaultValue) { return std::abs (value - defaultValue) > 1.0e-5 * std::max (1.0, std::abs (defaultValue)); }
+
+// A Shape with dynamics whose every dynamics setting is already its default has nothing to clear.
+bool hasDynamicsToClear (const BandSettings& band)
+{
+    const BandSettings defaults;
+    return hasDynamics (band.shape)
+           && (differs (band.dynamicRange, defaults.dynamicRange) || differs (band.threshold, defaults.threshold)
+               || band.thresholdAuto != defaults.thresholdAuto || differs (band.attack, defaults.attack)
+               || differs (band.release, defaults.release) || band.dynamicsBypass != defaults.dynamicsBypass
+               || band.detectionSource != defaults.detectionSource || band.detectionRange != defaults.detectionRange
+               || differs (band.detectionLow, defaults.detectionLow) || differs (band.detectionHigh, defaults.detectionHigh));
+}
+
+bool isBrickwall (const BandSettings& band) { return isCut (band.shape) && band.brickwall; }
+} // namespace
+
+juce::PopupMenu BandMenu::build() const
+{
+    juce::PopupMenu menu;
+    std::vector<BandSettings> bands;
+    for (int slot : selection)
+        bands.push_back (editing.band (slot));
+    const auto any = [&] (auto&& predicate) { return std::any_of (bands.begin(), bands.end(), predicate); };
+    // Ticked when at least one selected Band is one the item applies to, and every such Band has its value.
+    const auto shared = [&] (auto&& appliesTo, auto&& hasValue) {
+        return any (appliesTo) && std::all_of (bands.begin(), bands.end(), [&] (const BandSettings& b) { return ! appliesTo (b) || hasValue (b); });
+    };
+    const auto all = [] (const BandSettings&) { return true; };
+    // Copies, so the actions outlive this BandMenu.
+    auto& edit = editing;
+    const auto slots = selection;
+
+    if (! bands.empty())
+    {
+        const bool allBypassed = ! any ([] (const BandSettings& b) { return ! b.bypass; });
+        menu.addItem (allBypassed ? "Remove Bypass" : "Bypass", [&edit, slots, allBypassed] { edit.setBypass (slots, ! allBypassed); });
+        menu.addItem ("Invert Gain", any ([] (const BandSettings& b) { return hasGain (b.shape); }), false, [&edit, slots] {
+            edit.invertGain (slots);
+        });
+        menu.addItem ("Clear Dynamics", any (hasDynamicsToClear), false, [&edit, slots] { edit.clearDynamics (slots); });
+
+        menu.addSeparator();
+        juce::PopupMenu shapes;
+        for (int i = 0; i < parameters::shapeNames().size(); ++i)
+        {
+            const auto shape = static_cast<Shape> (i);
+            shapes.addItem (parameters::shapeNames()[i], true, shared (all, [shape] (const BandSettings& b) { return b.shape == shape; }),
+                            [&edit, slots, shape] { edit.setShape (slots, shape); });
+        }
+        menu.addSubMenu ("Shape", shapes);
+
+        // The Slope parameter is continuous: a listed value is ticked only where every Band exactly equals it.
+        const auto withSlope = [] (const BandSettings& b) { return hasSlope (b.shape); };
+        const auto cut = [] (const BandSettings& b) { return isCut (b.shape); };
+        juce::PopupMenu slopes;
+        for (double slope : listedSlopes)
+            slopes.addItem (juce::String (juce::roundToInt (slope)) + " dB/oct",
+                            true,
+                            shared (withSlope, [slope] (const BandSettings& b) { return ! isBrickwall (b) && juce::exactlyEqual (b.slope, slope); }),
+                            [&edit, slots, slope] { edit.setSlope (slots, slope); });
+        slopes.addItem ("Brickwall", any (cut), shared (cut, isBrickwall), [&edit, slots] { edit.setBrickwall (slots); });
+        menu.addSubMenu ("Slope", slopes, any (withSlope));
+
+        juce::PopupMenu placements;
+        for (int i = 0; i < parameters::placementNames().size(); ++i)
+        {
+            const auto placement = static_cast<StereoPlacement> (i);
+            placements.addItem (parameters::placementNames()[i],
+                                true,
+                                shared (all, [placement] (const BandSettings& b) { return b.placement == placement; }),
+                                [&edit, slots, placement] { edit.setPlacement (slots, placement); });
+        }
+        menu.addSubMenu ("Stereo Placement", placements, stereoPlacementAvailable);
+
+        // Split (#42) joins as its own group here, and Cut, Copy and Paste (#43) at the top of the next.
+        menu.addSeparator();
+        menu.addItem ("Delete", deleteSelection);
+        menu.addSeparator();
+    }
+    menu.addItem ("Select All", selectAll);
+    return menu;
+}
+
+} // namespace eq1
