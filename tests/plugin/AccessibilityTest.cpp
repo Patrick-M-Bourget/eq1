@@ -1,3 +1,4 @@
+#include "DetectionRangeBar.h"
 #include "EditorHarness.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/Popover.h"
@@ -129,8 +130,8 @@ struct Editor : OpenEditor
     }
 };
 
-// A Dynamic Bell in Band 4 on a Free Detection Range, on stereo and selected, so the Band panel and
-// its Dynamics call-out show every control (Slope dimmed).
+// A Dynamic Bell in Band 4 on a Free Detection Range, on stereo and selected, so the Band panel, its
+// dynamics section and the Detection Range bar show every control (Slope dimmed).
 struct EveryControl : Editor
 {
     EveryControl()
@@ -162,8 +163,8 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
     host.openPresetBrowser();
     checkEveryControlIsNamed (host);
     auto names = host.names();
-    // And what the footer's call-outs and the Band panel's Dynamics show while open.
-    for (const juce::String title : { "Analyzer", "Output", "Band 4 Dynamics" })
+    // And what the footer's call-outs show while open.
+    for (const juce::String title : { "Analyzer", "Output" })
     {
         CAPTURE (title);
         host.openCallOut (title);
@@ -191,6 +192,7 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Band 4",
                                          "Band 4 Attack",
                                          "Band 4 Bypass",
+                                         "Band 4 Clear Dynamics",
                                          "Band 4 Delete",
                                          "Band 4 Detection Audition",
                                          "Band 4 Detection High",
@@ -198,7 +200,6 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Band 4 Detection Range",
                                          "Band 4 Detection Source",
                                          "Band 4 Dynamic Range",
-                                         "Band 4 Dynamics",
                                          "Band 4 Dynamics Bypass",
                                          "Band 4 Frequency",
                                          "Band 4 Gain",
@@ -215,6 +216,7 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Display Range",
                                          "Gain Scale",
                                          "Global Bypass",
+                                         "Hide Band 4 dynamics",
                                          "Load Preset File...",
                                          "Next Band",
                                          "Next Preset",
@@ -323,7 +325,6 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     CHECK (host.element ("Band 4 Q").value == "0.707");
     CHECK (host.element ("Band 4 Slope").value == "12.0 dB/oct");
     CHECK (host.element ("Gain Scale").value == "100.0 %");
-    host.openCallOut ("Band 4 Dynamics");
     CHECK (host.element ("Band 4 Dynamic Range").value == "+6.00 dB");
     CHECK (host.element ("Band 4 Attack").value == "Auto");
     CHECK (host.element ("Band 4 Detection High").value == "20000.0 Hz");
@@ -336,16 +337,20 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
 
     // Threshold: Auto at its top, else its dB.
     host.set (4, "threshold_auto", 1.0f);
-    host.closeCallOut();
-    host.settle();
-    host.openCallOut ("Band 4 Dynamics");
     host.settle();
     CHECK (host.element ("Band 4 Threshold").value == "Auto");
     host.set (4, "threshold", -20.0f);
     host.set (4, "threshold_auto", 0.0f);
     host.settle();
     CHECK (host.element ("Band 4 Threshold").value == "-20.0 dB");
-    host.closeCallOut();
+    // The Detection Range: Band or Free, and the bar's segment with its limits.
+    auto* rangeButton = harness::findChild<juce::Button> (*host.editor, [] (juce::Button& b) { return b.getTitle() == "Band 4 Detection Range"; });
+    REQUIRE (rangeButton != nullptr);
+    CHECK (rangeButton->getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == "Free");
+    auto* segment = harness::findChild<eq1::DetectionRangeBar::Segment> (*host.editor);
+    REQUIRE (segment != nullptr);
+    CHECK (segment->getAccessibilityHandler()->getTitle() == "Band 4 Detection Range");
+    CHECK (segment->getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == juce::String::fromUTF8 ("20 Hz \u2013 20.00 kHz"));
 
     // Output Gain: -inf dB at its bottom.
     host.parameter ("output_gain").setValueNotifyingHost (0.0f);

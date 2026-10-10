@@ -5,7 +5,7 @@
 namespace eq1
 {
 
-// A panel shown in a call-out while it is open (the footer's, the Band panel's dynamics). The call-out
+// A panel shown in a call-out while it is open (the footer's). The call-out
 // hides itself as it closes, and is deleted later: the panel goes back to its home component, hidden,
 // as soon as it hides.
 class LentPanel final : public juce::Component, private juce::ComponentListener

@@ -64,8 +64,16 @@ void Knob::setArcOrigin (double value)
 void Knob::setRing (RingHandler* handler, float width, float offset)
 {
     ring = handler;
+    ringHovered = ringDragging = false;
     ringWidth = width;
     ringOffset = offset;
+    repaint();
+}
+
+void Knob::ringChanged()
+{
+    if (tooltip != nullptr && isTooltipOnRing())
+        tooltip->refresh();
     repaint();
 }
 
@@ -158,6 +166,8 @@ void Knob::mouseMove (const juce::MouseEvent& e)
     {
         ringHovered = over;
         ring->ringHover (*this, over);
+        if (tooltip != nullptr)
+            tooltip->refresh();
     }
 }
 
@@ -181,6 +191,7 @@ void Knob::mouseDown (const juce::MouseEvent& e)
     {
         ringDragging = true;
         ring->ringMouseDown (*this, e);
+        showTooltip();
         return;
     }
     drag = std::make_unique<Drag> (*this, e.position.y, e.mods.isShiftDown());
@@ -215,6 +226,8 @@ void Knob::mouseUp (const juce::MouseEvent& e)
     {
         ringDragging = false;
         ring->ringMouseUp (*this, e);
+        if (tooltip != nullptr)
+            tooltip->refresh();
     }
     drag.reset();
     if (! isMouseOver (true))
@@ -270,9 +283,19 @@ void Knob::parentHierarchyChanged()
 }
 
 //==============================================================================
-juce::String Knob::tooltipTitle() const { return getTitle().isNotEmpty() ? getTitle() : getName(); }
+juce::String Knob::tooltipTitle() const
+{
+    if (isTooltipOnRing())
+        return ring->ringTitle();
+    return getTitle().isNotEmpty() ? getTitle() : getName();
+}
 
-juce::String Knob::tooltipValue() { return spokenValue != nullptr ? spokenValue (getValue()) : getTextFromValue (getValue()); }
+juce::String Knob::tooltipValue()
+{
+    if (isTooltipOnRing())
+        return ring->ringValue();
+    return spokenValue != nullptr ? spokenValue (getValue()) : getTextFromValue (getValue());
+}
 
 bool Knob::isTooltipShown() const { return tooltip != nullptr && tooltip->isVisible() && tooltip->getParentComponent() != nullptr; }
 

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "DetectionArc.h"
+#include "DynamicRangeRing.h"
+#include "DynamicsSection.h"
 #include "KeyboardSlider.h"
 #include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/Knob.h"
-#include "staple/controls/TextChip.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -31,19 +31,22 @@ class BandEditing;
 // and Frequency, Gain and Q knobs sit between them, each attached to its host parameter. Controls a
 // Band's Shape or the track doesn't offer dim and are disabled, so Tab skips them: Gain on Shapes without
 // Gain, Slope on Shapes without one, Q on Flat Tilt and Stereo Placement on mono. A Bypassed Band's
-// panel fades to 38 % but Bypass and Delete, and stays editable. The panel keeps one width whatever it
-// shows, and is hidden while no Band is selected.
+// panel fades to 38 % but Bypass and Delete, and stays editable. The panel is hidden while no Band is
+// selected.
 //
-// The dynamics (Dynamic Range, Threshold with its Detection Level arc, Attack, Release, Dynamics Bypass,
-// Detection Source, Detection Range and its Free limits, Detection Audition) open in a call-out from a
-// Dynamics button above Gain, on Shapes with dynamics. Threshold's top position is Auto, its own host
-// parameter (ADR 0003). Holding Detection Audition plays the Band's detection signal until it is
-// released. The Band shown is the Metered Band while its Shape has dynamics.
+// Dynamics (HANDOFF.md §4, §5.3): Dynamic Range is a ring round the Gain knob (DynamicRangeRing). On a
+// Dynamic Band, Clear Dynamics, Dynamics Bypass and » show above Gain, and » opens and closes the
+// dynamics section between Gain and Q (DynamicsSection) with a slide, the panel widening by the
+// section's width about its centre; nothing else changes its width. The section is open unless closed
+// by », for as long as the editor is open, and absent on a Band that isn't dynamic. The Band shown is
+// the Metered Band while its Shape has dynamics.
 class BandPanel final : public juce::Component, private juce::Timer
 {
 public:
-    // The panel's size at 100 % UI Scale: the slab and the bell above it.
+    // The panel's size at 100 % UI Scale: the slab and the bell above it; wider by the section while
+    // the dynamics section is open.
     static constexpr int width = 492, height = 137;
+    static constexpr int openWidth = width + staple::tokens::layout::dynamicsSectionWidth + 8;
 
     BandPanel (PluginProcessor& processor, BandEditing& editing);
     ~BandPanel() override;
@@ -51,6 +54,11 @@ public:
     // The Band Slot to show, or 0 for none.
     void show (int slot);
     int shownSlot() const { return slot; }
+
+    // Where the panel's bottom centre sits in its parent; it keeps it as its width changes.
+    void setAnchor (juce::Point<int> bottomCentre);
+    // The dynamics section is open, or opening.
+    bool isDynamicsOpen() const;
 
     // Called with the Band to select when ‹ or › is pressed; the editor selects it on the display, which
     // shows it here. Without it, the panel shows that Band itself.
@@ -72,14 +80,12 @@ private:
     void updateAvailability();
     // Each control's accessible title, from its parameter's name ("Band 4 Gain"), and its spoken value.
     void describe();
-    // Threshold and Auto Threshold, two host parameters, on one slider.
-    void showThreshold();
-    void storeThreshold();
-    void releaseAudition();
     void releaseSolo();
     // The previous (-1) or next (1) Band in use by Frequency, wrapping.
     void step (int direction);
-    void openDynamics();
+    // The dynamics icons and section for the Band as it is now, sliding the section if animate.
+    void showDynamics (bool animate);
+    void placeAtWidth();
     // The controls that fade while the Band is Bypassed: all but Bypass and Delete.
     std::vector<juce::Component*> faded();
     void setFade (float alpha);
@@ -101,46 +107,38 @@ private:
     staple::Knob frequency { staple::tokens::knob::frequency, "Frequency" }, gain { staple::tokens::knob::gain, "Gain" },
         q { staple::tokens::knob::q, "Q" };
     juce::Label frequencyLabel, gainLabel, qLabel;
-    staple::TextChip dynamicsButton { "Dynamics", staple::TextChip::Look::filled, staple::tokens::size::fs2 };
     bool soloHeld = false;
 
-    // Until the dynamics section (#82): today's dynamics controls, lent to a call-out while it is open.
-    struct Dynamics final : juce::Component
-    {
-        Dynamics (PluginProcessor& processor);
-        void resized() override;
-        // The rotary controls, left to right, with their labels.
-        std::array<std::pair<juce::Slider*, juce::Label*>, 6> rotaries();
+    DynamicRangeRing ring;
+    // Above Gain on a Dynamic Band: Clear Dynamics, Dynamics Bypass and the section's chevron.
+    juce::Component dynamicsIcons;
+    staple::IconButton clearDynamics { "Clear Dynamics", staple::Icon::close }, dynamicsBypass { "Dynamics Bypass", staple::Icon::power },
+        dynamicsOpen { "Dynamics", staple::Icon::dynamicsOpen };
+    DynamicsSection section;
+    bool sectionWanted = true; // open unless closed by », while the editor is open
+    std::optional<juce::Point<int>> anchor;
 
-        juce::ComboBox detectionSource, detectionRange;
-        KeyboardSlider dynamicRange, threshold, attack, release, detectionLow, detectionHigh;
-        juce::Label dynamicRangeLabel, thresholdLabel, attackLabel, releaseLabel, detectionLowLabel, detectionHighLabel;
-        DetectionArc detectionArc;
-        juce::ToggleButton dynamicsBypass { "Dynamics Bypass" };
-        juce::TextButton audition { "Detection Audition" };
-    } dynamics;
-    juce::Component::SafePointer<juce::CallOutBox> dynamicsCallOut;
-
-    // The Bypassed fade, eased over dur2.
-    struct Fade final : juce::Timer
+    // A value eased from one target to the next over durationMs: the Bypassed fade, the section's slide.
+    struct Tween final : juce::Timer
     {
+        explicit Tween (int ms, float start) : durationMs (ms), from (start), to (start), now (start) {}
         std::function<void (float)> apply;
-        float from = 1.0f, to = 1.0f, now = 1.0f;
+        int durationMs;
+        float from, to, now;
         double startedMs = 0.0;
         void towards (float target);
+        void jump (float target);
         void timerCallback() override;
-    } fade;
+    };
+    Tween fade { staple::tokens::motion::dur2Ms, 1.0f }, slide { staple::tokens::motion::dur3Ms, 1.0f };
 
     juce::Path slab; // the body and its bell, in the panel's coordinates
     std::array<int, 2> dividers {}; // their x
     juce::Rectangle<int> numberArea;
 
-    std::unique_ptr<ComboBoxAttachment> shapeAttachment, placementAttachment, detectionSourceAttachment, detectionRangeAttachment;
-    std::unique_ptr<SliderAttachment> frequencyAttachment, gainAttachment, qAttachment, slopeAttachment, dynamicRangeAttachment,
-        attackAttachment, releaseAttachment, detectionLowAttachment, detectionHighAttachment;
+    std::unique_ptr<ComboBoxAttachment> shapeAttachment, placementAttachment;
+    std::unique_ptr<SliderAttachment> frequencyAttachment, gainAttachment, qAttachment, slopeAttachment;
     std::unique_ptr<ButtonAttachment> bypassAttachment, dynamicsBypassAttachment;
-    std::unique_ptr<juce::ParameterAttachment> thresholdAttachment, thresholdAutoAttachment;
-    bool thresholdDragging = false;
 };
 
 class BandPanel::SlopeButton final : public staple::Knob

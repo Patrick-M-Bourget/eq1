@@ -2,7 +2,6 @@
 
 #include "BandEditing.h"
 #include "BandMenu.h"
-#include "LentPanel.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
@@ -22,11 +21,6 @@ namespace tokens = staple::tokens;
 namespace colour = tokens::colour;
 namespace layout = tokens::layout;
 
-// Threshold's slider runs from -60 dB to 0 dB, then one more step at the top for Auto.
-constexpr double thresholdAutoPosition = 3.0;
-// Positions above 0 dB are Auto. The slider's 0.1 dB steps put 0 dB a rounding error away from 0.
-bool isAuto (double position) { return position > 0.05; }
-
 // The layout, in the panel's coordinates at 100 % (HANDOFF.md §4, prototype Main.dc.html): the bell
 // rises bandPanelBell above the slab, whose content starts bandPanelPaddingTop below the slab's top.
 constexpr int bell = layout::bandPanelBell;
@@ -40,6 +34,7 @@ constexpr int rowHeight = 22;
 static_assert (BandPanel::height == contentTop + contentHeight + layout::bandPanelPaddingBottom);
 static_assert (BandPanel::width
                == 2 * layout::edgeSelectorWidth + 4 * columnGap + 2 + frequencyColumn + gainColumn + qColumn + 2 * knobGap);
+static_assert (BandPanel::openWidth == BandPanel::width + layout::dynamicsSectionWidth + knobGap);
 
 // The bell's spread, as a proportion of the width, and the panel's Bypassed opacity.
 constexpr float bellSigma = 0.14f;
@@ -223,79 +218,7 @@ void BandPanel::SlopeButton::stoppedDragging()
 }
 
 //==============================================================================
-BandPanel::Dynamics::Dynamics (PluginProcessor& processor) : detectionArc (processor, threshold)
-{
-    detectionSource.addItemList (parameters::detectionSourceNames(), 1);
-    detectionRange.addItemList (parameters::detectionRangeNames(), 1);
-    detectionSource.setName ("Detection Source");
-    detectionRange.setName ("Detection Range");
-    addAndMakeVisible (detectionSource);
-    addAndMakeVisible (detectionRange);
-
-    const auto controls = rotaries();
-    const char* names[] = { "Dynamic Range", "Threshold", "Attack", "Release", "Detection Low", "Detection High" };
-    static_assert (std::size (names) == std::tuple_size_v<decltype (controls)>);
-    for (size_t i = 0; i < std::size (controls); ++i)
-    {
-        auto [slider, label] = controls[i];
-        slider->setName (names[i]);
-        slider->setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-        slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 18);
-        label->setText (names[i], juce::dontSendNotification);
-        label->setJustificationType (juce::Justification::centred);
-        // The knob is titled with its parameter's name, so a screen reader doesn't stop at the label too.
-        label->setAccessible (false);
-        addAndMakeVisible (*slider);
-        addAndMakeVisible (*label);
-    }
-    addAndMakeVisible (detectionArc);
-    addAndMakeVisible (dynamicsBypass);
-    addAndMakeVisible (audition);
-
-    // Tab's order: the top row, then the knobs, each as laid out.
-    int order = 0;
-    for (juce::Component* control : std::initializer_list<juce::Component*> { &dynamicsBypass, &audition, &detectionSource, &detectionRange })
-        control->setExplicitFocusOrder (++order);
-    for (auto [slider, label] : controls)
-        slider->setExplicitFocusOrder (++order);
-    setSize (6 * 84, 150);
-}
-
-std::array<std::pair<juce::Slider*, juce::Label*>, 6> BandPanel::Dynamics::rotaries()
-{
-    return { { { &dynamicRange, &dynamicRangeLabel },
-               { &threshold, &thresholdLabel },
-               { &attack, &attackLabel },
-               { &release, &releaseLabel },
-               { &detectionLow, &detectionLowLabel },
-               { &detectionHigh, &detectionHighLabel } } };
-}
-
-void BandPanel::Dynamics::resized()
-{
-    auto area = getLocalBounds().reduced (8, 6);
-    auto top = area.removeFromTop (24);
-    dynamicsBypass.setBounds (top.removeFromLeft (140));
-    top.removeFromLeft (6);
-    audition.setBounds (top.removeFromLeft (140));
-    top.removeFromLeft (6);
-    detectionSource.setBounds (top.removeFromLeft (100));
-    top.removeFromLeft (6);
-    detectionRange.setBounds (top);
-    area.removeFromTop (6);
-    const auto controls = rotaries();
-    const int columnWidth = area.getWidth() / static_cast<int> (std::size (controls));
-    for (auto [slider, label] : controls)
-    {
-        auto column = area.removeFromLeft (columnWidth);
-        label->setBounds (column.removeFromTop (16));
-        slider->setBounds (column);
-    }
-    detectionArc.setBounds (threshold.getBounds());
-}
-
-//==============================================================================
-void BandPanel::Fade::towards (float target)
+void BandPanel::Tween::towards (float target)
 {
     if (juce::exactlyEqual (target, to))
         return;
@@ -305,9 +228,17 @@ void BandPanel::Fade::towards (float target)
     startTimerHz (60);
 }
 
-void BandPanel::Fade::timerCallback()
+void BandPanel::Tween::jump (float target)
 {
-    const auto elapsed = static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - startedMs) / tokens::motion::dur2Ms);
+    from = to = now = target;
+    stopTimer();
+    if (apply != nullptr)
+        apply (now);
+}
+
+void BandPanel::Tween::timerCallback()
+{
+    const auto elapsed = static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - startedMs) / durationMs);
     now = from + (to - from) * staple::ease (elapsed);
     if (elapsed >= 1.0f)
     {
@@ -319,7 +250,7 @@ void BandPanel::Fade::timerCallback()
 }
 
 //==============================================================================
-BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editing (e), dynamics (p)
+BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editing (e), ring (p, gain), section (p)
 {
     slope = std::make_unique<SlopeButton> (*this);
 
@@ -387,50 +318,39 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
     for (auto* knob : { &frequency, &gain, &q })
         addAndMakeVisible (*knob);
 
-    dynamicsButton.onClick = [this] { openDynamics(); };
-    addAndMakeVisible (dynamicsButton);
+    addAndMakeVisible (ring);
 
-    // Threshold and Auto, on one slider.
-    auto& threshold = dynamics.threshold;
-    threshold.setRange (-60.0, thresholdAutoPosition, 0.1);
-    threshold.textFromValueFunction = [] (double value) {
-        return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB";
+    // The dynamics icons above Gain, and the section they open.
+    clearDynamics.setIconSize (10.0f);
+    clearDynamics.onClick = [this] {
+        if (slot != 0)
+            editing.clearDynamics ({ slot });
     };
-    threshold.valueFromTextFunction = [] (const juce::String& text) {
-        return text.trim().equalsIgnoreCase ("Auto") ? thresholdAutoPosition : juce::jmin (0.0, text.getDoubleValue());
+    dynamicsBypass.setClickingTogglesState (true);
+    dynamicsBypass.setOffLook (true);
+    dynamicsBypass.setRestColour (colour::text2);
+    dynamicsBypass.setIconSize (12.0f);
+    dynamicsOpen.setIconSize (11.0f);
+    dynamicsOpen.onClick = [this] {
+        sectionWanted = ! sectionWanted;
+        showDynamics (true);
     };
-    // Between 0 dB and Auto there are no values: a step up from 0 dB is Auto, a step down from Auto 0 dB.
-    threshold.landStep = [] (double from, double to) {
-        if (isAuto (from))
-            return to < from ? 0.0 : from;
-        return isAuto (to) ? thresholdAutoPosition : to;
-    };
-    threshold.onDragStart = [this] {
-        thresholdDragging = true;
-        thresholdAttachment->beginGesture();
-        thresholdAutoAttachment->beginGesture();
-    };
-    threshold.onDragEnd = [this] {
-        thresholdAttachment->endGesture();
-        thresholdAutoAttachment->endGesture();
-        thresholdDragging = false;
-    };
-    threshold.onValueChange = [this] { storeThreshold(); };
-    // Detection Audition lasts while the button is held.
-    dynamics.audition.onStateChange = [this] {
-        if (dynamics.audition.isDown() && slot != 0)
-            processor.setDetectionAudition (slot);
-        else
-            releaseAudition();
-    };
-    addChildComponent (dynamics);
+    int iconOrder = 0;
+    for (auto* button : { &clearDynamics, &dynamicsBypass, &dynamicsOpen })
+    {
+        button->setExplicitFocusOrder (++iconOrder);
+        dynamicsIcons.addAndMakeVisible (*button);
+    }
+    dynamicsIcons.setInterceptsMouseClicks (false, true);
+    addChildComponent (dynamicsIcons);
+    addChildComponent (section);
 
-    // Tab's order: the top row, the left column, the knobs with the Dynamics button over Gain, then the
-    // right column, each as laid out.
+    // Tab's order: the top row, the left column, the knobs with the dynamics icons over Gain, its ring
+    // and the dynamics section after it, then the right column, each as laid out.
     int order = 0;
     for (juce::Component* control : std::initializer_list<juce::Component*> { &bypass, &solo, &previous, &next, &deleteButton, &shape,
-                                                                                slope.get(), &frequency, &dynamicsButton, &gain, &q,
-                                                                                &placement })
+                                                                                slope.get(), &frequency, &dynamicsIcons, &gain, &ring, &section,
+                                                                                &q, &placement })
         control->setExplicitFocusOrder (++order);
 
     fade.apply = [this] (float alpha) {
@@ -439,28 +359,21 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
         repaint();
     };
 
+    slide.apply = [this] (float) {
+        placeAtWidth();
+        if (slide.now <= 0.0f && slide.to <= 0.0f)
+            section.setVisible (false);
+    };
+
     show (0);
     startTimerHz (10);
 }
 
 BandPanel::~BandPanel()
 {
-    if (dynamicsCallOut != nullptr)
-    {
-        dynamicsCallOut->exitModalState (0);
-        dynamicsCallOut->setVisible (false);
-        if (auto* parent = dynamicsCallOut->getParentComponent())
-            parent->removeChildComponent (dynamicsCallOut);
-    }
     releaseSolo();
-    releaseAudition();
+    section.releaseAudition();
     processor.setMeteredBand (0);
-}
-
-void BandPanel::releaseAudition()
-{
-    if (processor.detectionAuditionSlot() != 0)
-        processor.setDetectionAudition (0);
 }
 
 void BandPanel::releaseSolo()
@@ -474,7 +387,8 @@ void BandPanel::releaseSolo()
 
 std::vector<juce::Component*> BandPanel::faded()
 {
-    return { &solo, &previous, &next, &shape, slope.get(), &frequency, &gain, &q, &frequencyLabel, &gainLabel, &qLabel, &placement, &dynamicsButton };
+    return { &solo,           &previous,       &next,         &shape,   slope.get(), &frequency, &gain,          &q,
+             &frequencyLabel, &gainLabel,      &qLabel,       &placement, &clearDynamics, &dynamicsBypass, &dynamicsOpen, &section };
 }
 
 juce::Colour BandPanel::bandColour() const
@@ -485,28 +399,18 @@ juce::Colour BandPanel::bandColour() const
 void BandPanel::show (int newSlot)
 {
     releaseSolo();
-    releaseAudition();
-    if (dynamicsCallOut != nullptr && newSlot != slot)
-        dynamicsCallOut->dismiss();
     slot = newSlot;
     // Attachments are rebuilt for the new slot; the old ones go first so they let go of the controls.
     shapeAttachment.reset();
     placementAttachment.reset();
-    detectionSourceAttachment.reset();
-    detectionRangeAttachment.reset();
-    detectionLowAttachment.reset();
-    detectionHighAttachment.reset();
     frequencyAttachment.reset();
     gainAttachment.reset();
     qAttachment.reset();
     slopeAttachment.reset();
     bypassAttachment.reset();
-    dynamicRangeAttachment.reset();
-    attackAttachment.reset();
-    releaseAttachment.reset();
     dynamicsBypassAttachment.reset();
-    thresholdAttachment.reset();
-    thresholdAutoAttachment.reset();
+    ring.show (0);
+    section.show (0);
 
     setVisible (slot != 0);
     if (slot == 0)
@@ -523,18 +427,9 @@ void BandPanel::show (int newSlot)
     qAttachment = std::make_unique<SliderAttachment> (state, parameters::qId (slot), q);
     slopeAttachment = std::make_unique<SliderAttachment> (state, parameters::slopeId (slot), *slope);
     bypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::bypassId (slot), bypass);
-    dynamicRangeAttachment = std::make_unique<SliderAttachment> (state, parameters::dynamicRangeId (slot), dynamics.dynamicRange);
-    attackAttachment = std::make_unique<SliderAttachment> (state, parameters::attackId (slot), dynamics.attack);
-    releaseAttachment = std::make_unique<SliderAttachment> (state, parameters::releaseId (slot), dynamics.release);
-    dynamicsBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::dynamicsBypassId (slot), dynamics.dynamicsBypass);
-    detectionSourceAttachment = std::make_unique<ComboBoxAttachment> (state, parameters::detectionSourceId (slot), dynamics.detectionSource);
-    detectionRangeAttachment = std::make_unique<ComboBoxAttachment> (state, parameters::detectionRangeId (slot), dynamics.detectionRange);
-    detectionLowAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionLowId (slot), dynamics.detectionLow);
-    detectionHighAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionHighId (slot), dynamics.detectionHigh);
-    thresholdAttachment = std::make_unique<juce::ParameterAttachment> (*state.getParameter (parameters::thresholdId (slot)),
-                                                                       [this] (float) { showThreshold(); });
-    thresholdAutoAttachment = std::make_unique<juce::ParameterAttachment> (*state.getParameter (parameters::thresholdAutoId (slot)),
-                                                                           [this] (float) { showThreshold(); });
+    dynamicsBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::dynamicsBypassId (slot), dynamicsBypass);
+    ring.show (slot);
+    section.show (slot);
 
     const auto band = bandColour();
     shape.setEdgeColour (band);
@@ -543,14 +438,13 @@ void BandPanel::show (int newSlot)
     solo.setLitColour (band);
     for (auto* knob : { &frequency, &gain, &q })
         knob->setArcColour (band);
-    showThreshold();
+    section.setBandColour (band);
     describe();
-    // A Band shown afresh shows its Bypassed state at once.
+    // A Band shown afresh shows its Bypassed state and its dynamics at once.
     const bool bypassed = editing.band (slot).bypass;
-    fade.from = fade.to = fade.now = bypassed ? bypassedAlpha : 1.0f;
-    fade.stopTimer();
-    fade.apply (fade.now);
+    fade.jump (bypassed ? bypassedAlpha : 1.0f);
     updateAvailability();
+    showDynamics (false);
     resized();
     repaint();
 }
@@ -562,12 +456,7 @@ void BandPanel::describe()
     const std::pair<KeyboardSlider*, juce::String> sliders[] = { { &frequency, parameters::frequencyId (slot) },
                                                                  { &gain, parameters::gainId (slot) },
                                                                  { &q, parameters::qId (slot) },
-                                                                 { slope.get(), parameters::slopeId (slot) },
-                                                                 { &dynamics.dynamicRange, parameters::dynamicRangeId (slot) },
-                                                                 { &dynamics.attack, parameters::attackId (slot) },
-                                                                 { &dynamics.release, parameters::releaseId (slot) },
-                                                                 { &dynamics.detectionLow, parameters::detectionLowId (slot) },
-                                                                 { &dynamics.detectionHigh, parameters::detectionHighId (slot) } };
+                                                                 { slope.get(), parameters::slopeId (slot) } };
     for (const auto& [slider, id] : sliders)
         slider->describe (*state.getParameter (id));
     // Read as it shows: Brickwall on a Brickwall Cut.
@@ -575,62 +464,16 @@ void BandPanel::describe()
         const auto text = slope->text();
         return text == "Brickwall" || spoken == nullptr ? text : spoken (value);
     };
-    // Read as it shows: Auto at its top, else its dB.
-    dynamics.threshold.setTitle (name (parameters::thresholdId (slot)));
     const std::pair<juce::Component*, juce::String> others[] = { { &shape, parameters::shapeId (slot) },
                                                                   { &placement, parameters::placementId (slot) },
-                                                                  { &dynamics.detectionSource, parameters::detectionSourceId (slot) },
-                                                                  { &dynamics.detectionRange, parameters::detectionRangeId (slot) },
                                                                   { &bypass, parameters::bypassId (slot) },
-                                                                  { &dynamics.dynamicsBypass, parameters::dynamicsBypassId (slot) } };
+                                                                  { &dynamicsBypass, parameters::dynamicsBypassId (slot) } };
     for (const auto& [control, id] : others)
         control->setTitle (name (id));
     const auto band = "Band " + juce::String (slot) + " ";
     solo.setTitle (band + "Solo");
     deleteButton.setTitle (band + "Delete");
-    dynamicsButton.setTitle (band + "Dynamics");
-    dynamics.audition.setTitle (band + "Detection Audition");
-}
-
-void BandPanel::showThreshold()
-{
-    if (slot == 0)
-        return;
-    // From the parameters themselves: while their listeners are told of a change, the raw values that
-    // BandEditing reads may not have caught up yet.
-    auto& state = processor.parameterState();
-    const auto& level = *state.getParameter (parameters::thresholdId (slot));
-    const bool automatic = state.getParameter (parameters::thresholdAutoId (slot))->getValue() >= 0.5f;
-    dynamics.threshold.setValue (automatic ? thresholdAutoPosition : level.convertFrom0to1 (level.getValue()), juce::dontSendNotification);
-}
-
-void BandPanel::storeThreshold()
-{
-    if (slot == 0 || thresholdAttachment == nullptr)
-        return;
-    auto& threshold = dynamics.threshold;
-    const double value = threshold.getValue();
-    const bool automatic = isAuto (value);
-    // A drag is one gesture on both parameters; a typed value is a gesture of its own.
-    if (thresholdDragging)
-    {
-        thresholdAutoAttachment->setValueAsPartOfGesture (automatic ? 1.0f : 0.0f);
-        if (! automatic)
-            thresholdAttachment->setValueAsPartOfGesture (static_cast<float> (value));
-    }
-    else
-    {
-        // One undo step, though Auto and Threshold are each set as a gesture.
-        processor.editHistory().beginTransaction();
-        thresholdAutoAttachment->setValueAsCompleteGesture (automatic ? 1.0f : 0.0f);
-        if (! automatic)
-            thresholdAttachment->setValueAsCompleteGesture (static_cast<float> (value));
-        processor.editHistory().endTransaction();
-    }
-    // The attachments don't call back for their own changes: a key step or a typed value shows what
-    // was stored, such as Auto at its top position. A mouse drag carries on from where it is.
-    if (! threshold.isMouseButtonDown())
-        showThreshold();
+    clearDynamics.setTitle (band + "Clear Dynamics");
 }
 
 void BandPanel::updateAvailability()
@@ -653,16 +496,10 @@ void BandPanel::updateAvailability()
     // Flat Tilt's design ignores Q.
     offer ({ &q, &qLabel }, band.shape != Shape::FlatTilt);
     offer ({ &placement }, processor.isStereoPlacementAvailable());
-    // Cut, Notch, Band Pass and All Pass keep their dynamics settings but don't offer them.
-    offer ({ &dynamicsButton }, hasDynamics (band.shape));
-    if (! hasDynamics (band.shape) && dynamicsCallOut != nullptr)
-        dynamicsCallOut->dismiss();
-    for (auto* c : std::initializer_list<juce::Component*> { &dynamics.detectionLow, &dynamics.detectionLowLabel, &dynamics.detectionHigh,
-                                                             &dynamics.detectionHighLabel })
-        c->setVisible (band.detectionRange == DetectionRange::Free);
-    // A Shape without dynamics has no detection signal to audition or meter.
-    if (! hasDynamics (band.shape))
-        releaseAudition();
+    // The ring goes with Gain: Cut, Notch, Band Pass and All Pass keep their dynamics settings but
+    // don't offer them.
+    ring.setAvailable (hasGain (band.shape));
+    showDynamics (true);
     processor.setMeteredBand (hasDynamics (band.shape) ? slot : 0);
     fade.towards (band.bypass ? bypassedAlpha : 1.0f);
     slope->repaint();
@@ -688,13 +525,47 @@ void BandPanel::step (int direction)
         show (target);
 }
 
-void BandPanel::openDynamics()
+void BandPanel::showDynamics (bool animate)
 {
-    auto* parent = getParentComponent();
-    if (parent == nullptr || slot == 0 || dynamics.isShowing())
+    if (slot == 0)
         return;
-    dynamicsCallOut = &juce::CallOutBox::launchAsynchronously (std::make_unique<LentPanel> (dynamics, *this),
-                                                               parent->getLocalArea (this, dynamicsButton.getBounds()), parent);
+    const bool dynamic = isDynamic (editing.band (slot));
+    if (dynamic && ! dynamicsIcons.isVisible())
+        juce::Desktop::getInstance().getAnimator().fadeIn (&dynamicsIcons, tokens::motion::dur2Ms);
+    else if (! dynamic)
+        dynamicsIcons.setVisible (false);
+
+    const bool open = sectionWanted && dynamic;
+    // A section that isn't there has no detection signal to audition.
+    if (! open)
+        section.releaseAudition();
+    const auto band = "Band " + juce::String (slot) + " dynamics";
+    dynamicsOpen.setTitle ((sectionWanted ? "Hide " : "Show ") + band);
+    dynamicsOpen.setIconRotation (sectionWanted ? juce::MathConstants<float>::pi : 0.0f);
+    dynamicsOpen.setRestColour (sectionWanted ? colour::text1 : colour::text3);
+    if (open)
+        section.setVisible (true);
+    if (animate)
+        slide.towards (open ? 1.0f : 0.0f);
+    else
+        slide.jump (open ? 1.0f : 0.0f);
+}
+
+bool BandPanel::isDynamicsOpen() const { return slide.to > 0.0f; }
+
+void BandPanel::setAnchor (juce::Point<int> bottomCentre)
+{
+    anchor = bottomCentre;
+    placeAtWidth();
+}
+
+void BandPanel::placeAtWidth()
+{
+    const int w = width + juce::roundToInt (slide.now * static_cast<float> (openWidth - width));
+    if (anchor.has_value())
+        setBounds (anchor->x - w / 2, anchor->y - height, w, height);
+    else
+        setSize (w, height);
 }
 
 void BandPanel::timerCallback()
@@ -706,7 +577,8 @@ void BandPanel::timerCallback()
 bool BandPanel::hitTest (int x, int y)
 {
     const auto p = juce::Point<int> (x, y);
-    return slab.contains (p.toFloat()) || dynamicsButton.getBounds().contains (p);
+    return slab.contains (p.toFloat()) || (dynamicsIcons.isVisible() && dynamicsIcons.getBounds().contains (p))
+           || (section.isVisible() && section.getBounds().contains (p));
 }
 
 void BandPanel::resized()
@@ -763,9 +635,23 @@ void BandPanel::resized()
         label->setBounds (x, labelTop, columnWidth, labelHeight);
         if (knob == &gain)
         {
-            // The row above Gain, inside the bell.
-            const int chipWidth = dynamicsButton.getIdealWidth();
-            dynamicsButton.setBounds (x + (columnWidth - chipWidth) / 2, contentTop - 42, chipWidth, rowHeight);
+            ring.setBounds (knob->getBounds());
+            // The dynamics icons in a row above Gain, inside the bell.
+            constexpr int icon = layout::dynamicsIcon, iconGap = layout::dynamicsIconGap;
+            const int rowWidth = 3 * icon + 2 * iconGap;
+            dynamicsIcons.setBounds (x + (columnWidth - rowWidth) / 2, contentTop - layout::dynamicsIconsAbove, rowWidth, icon);
+            int iconX = 0;
+            for (auto* iconButton : { &clearDynamics, &dynamicsBypass, &dynamicsOpen })
+            {
+                iconButton->setBounds (iconX, 0, icon, icon);
+                iconX += icon + iconGap;
+            }
+            // The dynamics section after it, as wide as the panel has opened, centred down the content
+            // and lifted; Q and what follows move right by as much.
+            const int opened = getWidth() - width;
+            const int sectionTop = contentTop + (contentHeight - layout::dynamicsSectionHeight) / 2 - layout::dynamicsSectionLift;
+            section.setBounds (x + columnWidth + knobGap, sectionTop, std::max (0, opened - knobGap), layout::dynamicsSectionHeight);
+            x += opened;
         }
         x += columnWidth + knobGap;
     }

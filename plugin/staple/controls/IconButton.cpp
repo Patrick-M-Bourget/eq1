@@ -43,6 +43,12 @@ void IconButton::setIconSize (float size)
     repaint();
 }
 
+void IconButton::setIconRotation (float radians)
+{
+    iconRotation = radians;
+    repaint();
+}
+
 void IconButton::setOffLook (bool o)
 {
     offLook = o;
@@ -80,6 +86,9 @@ void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
         ink = brightened (litColour, highlighted, down);
     else
         ink = highlighted || down ? colour::text1 : restColour;
+    const juce::Graphics::ScopedSaveState saved (g);
+    if (iconRotation != 0.0f)
+        g.addTransform (juce::AffineTransform::rotation (iconRotation, iconArea.getCentreX(), iconArea.getCentreY()));
     drawIcon (g, icon, iconArea, ink.withMultipliedAlpha (alpha));
 }
 

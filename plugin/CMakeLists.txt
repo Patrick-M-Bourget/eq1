@@ -41,7 +41,9 @@ target_sources(eq1 PRIVATE
     BandEditing.cpp
     BandMenu.cpp
     BandPanel.cpp
-    DetectionArc.cpp
+    DetectionRangeBar.cpp
+    DynamicRangeRing.cpp
+    DynamicsSection.cpp
     EqDisplay.cpp
     display/AnalyzerLayer.cpp
     display/CurvesLayer.cpp

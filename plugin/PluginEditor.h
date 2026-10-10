@@ -2,6 +2,7 @@
 
 #include "BandEditing.h"
 #include "BandPanel.h"
+#include "DetectionRangeBar.h"
 #include "DisplayRangeChip.h"
 #include "EqDisplay.h"
 #include "FooterBar.h"
@@ -51,6 +52,7 @@ private:
     BandEditing editing;
     EqDisplay display;
     BandPanel panel;
+    DetectionRangeBar detectionRange; // over the display, under the panel
     HeaderBar header;
     FooterBar footer;
     juce::TooltipWindow tooltips { &content };

@@ -49,19 +49,26 @@ public:
         virtual void ringMouseUp (Knob&, const juce::MouseEvent&) {}
         virtual void ringDoubleClick (Knob&, const juce::MouseEvent&) {}
         virtual void ringHover (Knob&, bool over) { juce::ignoreUnused (over); }
+        // What the tooltip shows while the lane is hovered or dragged ("Band 4 Dynamic Range", "+6.0 dB").
+        virtual juce::String ringTitle() { return {}; }
+        virtual juce::String ringValue() { return {}; }
     };
     // A lane width wide, centred offset outside the face's edge (the Gain knob's 12 px lane at r + 10).
     // nullptr removes it.
     void setRing (RingHandler* handler, float width = tokens::knob::ringLane, float offset = tokens::knob::ringOffset);
     bool isOnRing (juce::Point<float> position) const;
+    // The ring's value changed: repaints it, and the tooltip while it shows the ring.
+    void ringChanged();
 
     // The face's centre and radius in the knob's coordinates.
     juce::Point<float> getFaceCentre() const;
     float getFaceRadius() const { return diameter / 2.0f; }
 
     // What the tooltip shows: the title (#48's, or the name) and the value text with its unit, as a
-    // screen reader reads it (KeyboardSlider::describe), else its text.
+    // screen reader reads it (KeyboardSlider::describe), else its text; the ring's while its lane is
+    // hovered or dragged.
     juce::String tooltipTitle() const;
+    bool isTooltipOnRing() const { return ring != nullptr && (ringHovered || ringDragging); }
     juce::String tooltipValue();
     bool isTooltipShown() const;
     KnobTooltip* getKnobTooltip() const { return tooltip.get(); }

@@ -30,6 +30,8 @@ public:
     void setRestColour (juce::Colour colour);
     // The icon's size in px; by default 2/3 of the button's side (16 px in 24).
     void setIconSize (float size);
+    // Turns the icon clockwise about its centre (the dynamics chevron, 180° while the section is open).
+    void setIconRotation (float radians);
     // While on, Off rather than lit.
     void setOffLook (bool offLook);
     void setMomentary (bool momentary);
@@ -49,7 +51,7 @@ private:
 
     Icon icon;
     juce::Colour litColour = tokens::colour::text1, restColour = tokens::colour::text3;
-    float iconSize = 0.0f;
+    float iconSize = 0.0f, iconRotation = 0.0f;
     bool offLook = false, momentary = false, held = false;
 };
 

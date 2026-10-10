@@ -1,4 +1,5 @@
 #include "BandPanel.h"
+#include "DetectionRangeBar.h"
 #include "EditorHarness.h"
 #include "FooterBar.h"
 #include "HeaderBar.h"
@@ -22,13 +23,14 @@ const juce::KeyPress left (juce::KeyPress::leftKey), right (juce::KeyPress::righ
     down (juce::KeyPress::downKey);
 juce::KeyPress withShift (juce::KeyPress key) { return { key.getKeyCode(), juce::ModifierKeys::shiftModifier, 0 }; }
 
-// The editor with a Low Shelf in Band 1 on a Free Detection Range, selected, so the Band panel and its
-// Dynamics call-out show every control.
+// The editor with a dynamic Low Shelf in Band 1 on a Free Detection Range, selected, so the Band panel,
+// its dynamics section and the Detection Range bar show every control.
 struct EveryControl : OpenEditor
 {
     EveryControl()
     {
         addBand (1, 1000.0f, 3.0f, 1.0f);
+        set (1, "dynamic_range", -6.0f);
         set (1, "detection_range", 1.0f);
         settle();
         click (at (1000.0).translated (0.0f, -yOffsetOf (3.0)));
@@ -79,9 +81,10 @@ void checkArrowSteps (OpenEditor& host, const std::vector<juce::Slider*>& slider
     for (auto* slider : sliders)
     {
         if (slider->getName() == "Threshold" || slider->getName() == "Analyzer Tilt" || slider->getName() == "Gain Scale"
-            || slider->getName() == "Output Pan")
+            || slider->getName() == "Output Pan" || slider->getName() == "Dynamic Range" || slider->getName().startsWith ("Detection "))
             continue; // Auto is Threshold's top position, and Analyzer Tilt has steps; Gain Scale and Output Pan step
-                      // by 5 (FooterTest): each has its own test
+                      // by 5 (FooterTest), Dynamic Range by 1 dB and the Detection Range's limits by 1/6 octave
+                      // (BandPanelTest): each has its own test
         CAPTURE (slider->getName());
         slider->grabKeyboardFocus();
         REQUIRE (slider->hasKeyboardFocus (false));
@@ -109,18 +112,11 @@ void checkArrowSteps (OpenEditor& host, const std::vector<juce::Slider*>& slider
 TEST_CASE ("Arrow keys step every slider 1% of its range, 0.2% with Shift, within its range")
 {
     EveryControl host;
-    // The Band panel's Frequency, Gain, Q and Slope, and Gain Scale.
+    // The Band panel's Frequency, Gain, Q and Slope, the Dynamic Range ring, Threshold, Attack and
+    // Release, the Detection Range bar's two limits, and Gain Scale.
     const auto sliders = host.sliders();
-    CHECK (sliders.size() == 5);
+    CHECK (sliders.size() == 11);
     checkArrowSteps (host, sliders);
-
-    // The Band's dynamics, in their call-out.
-    host.openCallOut ("Band 1 Dynamics");
-    auto dynamics = host.sliders();
-    std::erase_if (dynamics, [&sliders] (juce::Slider* s) { return std::find (sliders.begin(), sliders.end(), s) != sliders.end(); });
-    CHECK (dynamics.size() == 6);
-    checkArrowSteps (host, dynamics);
-    host.closeCallOut();
 
     // Output Gain and Output Pan, in the output popover.
     host.openCallOut ("Output");
@@ -157,7 +153,6 @@ TEST_CASE ("Arrow keys step Analyzer Tilt by its 0.5 dB/oct steps, with or witho
 TEST_CASE ("Threshold steps from 0 dB into Auto, its top position, and from Auto back to 0 dB")
 {
     EveryControl host;
-    host.openCallOut ("Band 1 Dynamics");
     auto* threshold = host.findAll<juce::Slider> ([] (juce::Slider& s) { return s.getName() == "Threshold"; }).front();
     threshold->grabKeyboardFocus();
     REQUIRE (threshold->hasKeyboardFocus (false));
@@ -179,21 +174,11 @@ TEST_CASE ("Each arrow press on a slider is one undo step, and so is a held key 
 {
     EveryControl host;
     auto& history = host.processor.editHistory();
-    // The Band panel's and footer's sliders, then the Band's dynamics in their call-out (which is modal).
-    auto sliders = host.sliders();
-    const auto inPanel = sliders.size();
-    host.openCallOut ("Band 1 Dynamics");
+    // The Band panel's, the Detection Range bar's and the footer's sliders.
     for (auto* slider : host.sliders())
-        if (std::find (sliders.begin(), sliders.end(), slider) == sliders.end())
-            sliders.push_back (slider);
-    host.closeCallOut();
-    for (size_t i = 0; i < sliders.size(); ++i)
     {
-        auto* slider = sliders[i];
-        if (i == inPanel)
-            host.openCallOut ("Band 1 Dynamics");
-        if (slider->getName() == "Analyzer Tilt")
-            continue; // display only, never undone
+        if (slider->getName().startsWith ("Detection "))
+            continue; // stepped by left and right only (BandPanelTest)
         CAPTURE (slider->getName());
         slider->grabKeyboardFocus();
         const double start = slider->getValue();
@@ -301,7 +286,7 @@ int groupOf (juce::Component& component)
             return 5;
         if (dynamic_cast<eq1::FooterBar*> (c) != nullptr)
             return 4;
-        if (dynamic_cast<eq1::BandPanel*> (c) != nullptr)
+        if (dynamic_cast<eq1::BandPanel*> (c) != nullptr || dynamic_cast<eq1::DetectionRangeBar*> (c) != nullptr)
             return 3;
         if (dynamic_cast<eq1::EqDisplay*> (c) != nullptr || dynamic_cast<eq1::OutputMeter*> (c) != nullptr)
             return 2;
@@ -636,7 +621,6 @@ TEST_CASE ("Space or Return toggles a toggle and presses a button, each press on
 TEST_CASE ("Detection Audition plays while Space is held on it")
 {
     EveryControl host;
-    host.openCallOut ("Band 1 Dynamics");
     auto& audition = buttonWithText (host, "Detection Audition");
     audition.grabKeyboardFocus();
     REQUIRE (audition.hasKeyboardFocus (false));
