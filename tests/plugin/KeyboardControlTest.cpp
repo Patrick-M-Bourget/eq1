@@ -49,8 +49,8 @@ TEST_CASE ("Arrow keys step every slider 1% of its range, 0.2% with Shift, withi
     CHECK (sliders.size() == 14);
     for (auto* slider : sliders)
     {
-        if (slider->getName() == "Threshold")
-            continue; // Auto is its top position: it has its own test
+        if (slider->getName() == "Threshold" || slider->getName() == "Analyzer Tilt")
+            continue; // Auto is Threshold's top position, and Analyzer Tilt has steps: each has its own test
         CAPTURE (slider->getName());
         slider->grabKeyboardFocus();
         REQUIRE (slider->hasKeyboardFocus (false));
@@ -72,6 +72,29 @@ TEST_CASE ("Arrow keys step every slider 1% of its range, 0.2% with Shift, withi
         host.press (right);
         CHECK_THAT (position(), WithinAbs (1.0, 1.0e-4));
     }
+}
+
+TEST_CASE ("Arrow keys step Analyzer Tilt by its 0.5 dB/oct steps, with or without Shift, within 0 to 6")
+{
+    EveryControl host;
+    auto* tilt = host.findAll<juce::Slider> ([] (juce::Slider& s) { return s.getName() == "Analyzer Tilt"; }).front();
+    tilt->setValue (3.0, juce::sendNotificationSync);
+    tilt->grabKeyboardFocus();
+    REQUIRE (tilt->hasKeyboardFocus (false));
+
+    CHECK (host.press (down));
+    CHECK (tilt->getValue() == 2.5);
+    CHECK (host.press (withShift (up)));
+    CHECK (tilt->getValue() == 3.0);
+    CHECK (host.press (right));
+    CHECK (tilt->getValue() == 3.5);
+
+    tilt->setValue (6.0, juce::sendNotificationSync);
+    host.press (up);
+    CHECK (tilt->getValue() == 6.0);
+    tilt->setValue (0.0, juce::sendNotificationSync);
+    host.press (down);
+    CHECK (tilt->getValue() == 0.0);
 }
 
 TEST_CASE ("Threshold steps from 0 dB into Auto, its top position, and from Auto back to 0 dB")
