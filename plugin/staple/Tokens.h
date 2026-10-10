@@ -47,6 +47,14 @@ namespace colour
     inline const juce::Colour knobRimSmall { 0x33FFFFFF }; // white 20 %, on knobs of 30 px and below
     inline const juce::Colour knobRingLane { 0x0FFFFFFF }; // white 6 %
     inline const juce::Colour dynRangeInner { 0xFF9C3344 }, dynLiveInner { 0xFFC49A34 };
+    inline const juce::Colour ringHint { 0xCCFFFFFF };     // the ring's ▲▼ grab hint, white 80 %
+    // The Threshold fader: its track, its thumb (a grey gradient with a 1 px top highlight) and the
+    // thumb's line, and the Detection Range bar's pill handles.
+    inline const juce::Colour faderTrack { 0x59000000 };   // black 35 %
+    inline const juce::Colour thumbTop { 0xFF4A4D55 }, thumbBottom { 0xFF34373E };
+    inline const juce::Colour thumbHighlight { 0x2EFFFFFF }; // white 18 %
+    inline const juce::Colour thumbLine { 0xD9F1EEE8 };      // rgba (241, 238, 232, 0.85)
+    inline const juce::Colour pillTop { 0xFF5A5D64 }, pillBottom { 0xFF3A3D44 };
     inline const juce::Colour shadow { 0xFF000000 };
     // The window's three soft neutral highlights over bg0 (HANDOFF.md §4, "Window").
     inline const juce::Colour windowHighlight1 { 0x14E2E6EE }; // rgba (226, 230, 238, 0.08)
@@ -106,6 +114,15 @@ namespace layout
     constexpr int detectionRangeBarAbovePanel = 30;
     constexpr int edgeSelectorWidth = 104, edgeSelectorHeight = 34, slopeButtonWidth = 90;
     constexpr int iconButton = 24;
+    // The dynamics: the icon row above Gain, the section between Gain and Q, and its Threshold fader.
+    constexpr int dynamicsIcon = 22, dynamicsIconsAbove = 42, dynamicsIconGap = 6;
+    constexpr int dynamicsSectionWidth = 134, dynamicsSectionHeight = 108, dynamicsSectionLift = 14;
+    constexpr int dynamicsSectionPaddingY = 6, dynamicsSectionPaddingX = 10, dynamicsSectionGap = 10;
+    constexpr int faderWidth = 26, faderTrack = 80, faderTrackWidth = 7, faderThumbHeight = 16;
+    constexpr int dynamicsColumnWidth = 78, detectionRangeButtonHeight = 24;
+    // The Detection Range bar: its pill handles, the segment's hit height, the labels above and the column.
+    constexpr int pillWidth = 12, pillHeight = 20, segmentHitHeight = 12, segmentHeight = 3;
+    constexpr int detectionLabelAbove = 26, detectionColumnHeight = 190;
     constexpr int menuItemHeight = 30, menuPadding = 6, menuSeparatorMargin = 5;
 } // namespace layout
 
@@ -121,7 +138,18 @@ namespace knob
     constexpr float originStubDegrees = 0.5f;              // what the arc shows at its origin
     constexpr float dragPixels = 200.0f, fineDragPixels = 800.0f; // the full range, and with Shift
     constexpr float ringLane = 12.0f, ringOffset = 10.0f;
+    constexpr float ringRangeAlpha = 0.85f, ringRangeBypassedAlpha = 0.3f; // the range arc, and under Dynamics Bypass
+    constexpr float liveGainMinimum = 0.05f; // dB: the Live Gain arc hides below this movement
+    constexpr float ringDbPerDrag = 60.0f;   // dB per dragPixels (fineDragPixels with Shift)
 } // namespace knob
+
+// The dynamics section and the Detection Range bar: the meter gradient behind the Threshold fader's
+// track (its stops at 55 % and 78 % up), and the column of the Band's colour over the bar.
+namespace dynamics
+{
+    constexpr float meterBehindAlpha = 0.16f, meterStop2 = 0.55f, meterStop3 = 0.78f;
+    constexpr float columnAlpha = 0.16f;
+} // namespace dynamics
 
 // Band handles on the display.
 namespace handle
@@ -153,6 +181,7 @@ namespace shadow
     inline const juce::DropShadow knob { colour::shadow.withAlpha (0.4f), 14, { 0, 6 } };
     inline const juce::DropShadow knobSmall { colour::shadow.withAlpha (0.35f), 8, { 0, 3 } }; // 30 px and below
     inline const juce::DropShadow handle { colour::shadow.withAlpha (0.45f), 5, { 0, 0 } };
+    inline const juce::DropShadow thumb { colour::shadow.withAlpha (0.5f), 5, { 0, 2 } }; // the fader's thumb, the bar's pills
 } // namespace shadow
 
 namespace motion

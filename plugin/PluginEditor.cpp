@@ -12,7 +12,7 @@ namespace eq1
 namespace layout = staple::tokens::layout;
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), header (p),
+    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), detectionRange (p, editing, panel), header (p),
       footer (p), displayRange (p), meter (p), keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
@@ -21,7 +21,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     staple::markOverlayLayer (content);
     content.addAndMakeVisible (display);
     content.addChildComponent (meter);
-    // Over the display, so its clicks never reach it.
+    // Over the display, so its clicks never reach it, and over the Detection Range bar.
+    content.addChildComponent (detectionRange);
     content.addChildComponent (panel);
     content.addAndMakeVisible (header);
     content.addAndMakeVisible (footer);
@@ -37,10 +38,10 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     footer.onMeterToggled = [this] { resized(); };
 
     // Tab's order: the header (and the Preset browser while open), Display Range, the display and its
-    // Bands, the Output Meter, the Band panel and the footer.
+    // Bands, the Output Meter, the Band panel, its Detection Range bar and the footer.
     int order = 0;
     for (juce::Component* child : std::initializer_list<juce::Component*> { &header, &header.presets().browserPanel(), &displayRange, &display,
-                                                                             &meter, &panel, &footer })
+                                                                             &meter, &panel, &detectionRange, &footer })
         child->setExplicitFocusOrder (++order);
 
     startTimerHz (4);
@@ -185,8 +186,8 @@ void PluginEditor::resized()
     constexpr int displayRangeRight = 6, displayRangeTop = 8, displayRangeHeight = 24;
     const int displayRangeWidth = displayRange.getIdealWidth();
     displayRange.setBounds (area.getRight() - displayRangeRight - displayRangeWidth, area.getY() + displayRangeTop, displayRangeWidth, displayRangeHeight);
-    panel.setBounds (area.getCentreX() - BandPanel::width / 2, area.getBottom() - layout::bandPanelAboveBottom - BandPanel::height,
-                     BandPanel::width, BandPanel::height);
+    panel.setAnchor ({ area.getCentreX(), area.getBottom() - layout::bandPanelAboveBottom });
+    detectionRange.setDisplayBounds (area);
     header.presets().browserPanel().setBounds (area.reduced (40, 12));
 }
 

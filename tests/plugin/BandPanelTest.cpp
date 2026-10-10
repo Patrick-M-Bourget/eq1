@@ -3,7 +3,9 @@
 #include "EditorHarness.h"
 #include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
-#include "DetectionArc.h"
+#include "DetectionRangeBar.h"
+#include "DynamicRangeRing.h"
+#include "DynamicsSection.h"
 #include "LevelBallistics.h"
 #include "PluginProcessor.h"
 
@@ -14,6 +16,7 @@
 #include <memory>
 
 using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
 
 namespace
 {
@@ -82,29 +85,6 @@ TEST_CASE ("A level meter rises at once to a louder level and falls at 20 dB/s")
     CHECK_THAT (meter.update (-8.0, 1.0), WithinAbs (-8.0, 1.0e-9));
     meter.reset();
     CHECK_THAT (meter.update (eq1::levelFloorDb, 0.0), WithinAbs (eq1::levelFloorDb, 1.0e-9));
-}
-
-TEST_CASE ("The Detection Level arc reaches the Threshold knob's position for the Threshold it equals, and never Auto")
-{
-    juce::ScopedJuceInitialiser_GUI juce;
-    eq1::PluginProcessor processor;
-    eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
-    eq1::BandPanel panel (processor, editing);
-    // The Band panel's Threshold knob, with Auto as its top position.
-    auto* threshold = harness::findChild<juce::Slider> (panel, [] (juce::Slider& s) { return s.getMinimum() < -59.0; });
-    REQUIRE (threshold != nullptr);
-    const auto knobAt = [&] (double thresholdDb) { return threshold->valueToProportionOfLength (thresholdDb); };
-
-    for (double level : { -60.0, -42.5, -12.0, 0.0 })
-    {
-        CAPTURE (level);
-        CHECK_THAT (eq1::DetectionArc::sweepProportion (*threshold, level), WithinAbs (knobAt (level), 1.0e-9));
-    }
-    // Above 0 dB it stops at 0 dB, short of Auto; below the knob's bottom it's empty.
-    CHECK (knobAt (0.0) < 1.0);
-    CHECK_THAT (eq1::DetectionArc::sweepProportion (*threshold, 6.0), WithinAbs (knobAt (0.0), 1.0e-9));
-    CHECK_THAT (eq1::DetectionArc::sweepProportion (*threshold, -70.0), WithinAbs (0.0, 1.0e-9));
-    CHECK_THAT (eq1::DetectionArc::sweepProportion (*threshold, eq1::levelFloorDb), WithinAbs (0.0, 1.0e-9));
 }
 
 namespace
@@ -231,10 +211,12 @@ TEST_CASE ("Controls a Band's Shape or the track doesn't offer are shown dimmed,
 TEST_CASE ("A Bypassed Band's panel fades to 38 % but Bypass and Delete, and stays editable")
 {
     PanelEditor host;
+    host.set (1, "dynamic_range", -6.0f);
     host.set (1, "bypass", 1.0f);
     host.settle (300);
     for (const juce::String title : { "Band 1 Solo", "Band 1 Shape", "Band 1 Slope", "Band 1 Frequency", "Band 1 Gain", "Band 1 Q",
-                                      "Band 1 Stereo Placement", "Previous Band", "Next Band", "Band 1 Dynamics" })
+                                      "Band 1 Stereo Placement", "Previous Band", "Next Band", "Band 1 Clear Dynamics",
+                                      "Band 1 Dynamics Bypass" })
     {
         CAPTURE (title);
         CHECK_THAT (host.control (title).getAlpha(), WithinAbs (0.38, 0.01));
@@ -398,35 +380,462 @@ TEST_CASE ("The Edge selectors set Shape and Stereo Placement through their para
     CHECK (placement.getText() == "Right");
 }
 
-TEST_CASE ("Today's dynamics controls work from the Band panel's temporary Dynamics button")
+namespace
+{
+
+// A mouse event on c at position in its own coordinates, pressed at downAt.
+juce::MouseEvent eventOn (juce::Component& c, juce::Point<float> position, juce::ModifierKeys mods, juce::Point<float> downAt, int clicks = 1)
+{
+    const auto now = juce::Time::getCurrentTime();
+    return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), position, mods, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &c, &c, now, downAt,
+                             now, clicks, position != downAt);
+}
+
+const juce::ModifierKeys leftButton (juce::ModifierKeys::leftButtonModifier);
+
+// A press at from on c, a drag by (dx, dy), halfway first unless c moves as it is dragged, and a release.
+void dragOn (juce::Component& c, juce::Point<float> from, juce::Point<float> by, juce::ModifierKeys mods = {}, bool moves = false)
+{
+    const auto down = mods.withFlags (juce::ModifierKeys::leftButtonModifier);
+    c.mouseDown (eventOn (c, from, down, from));
+    if (! moves)
+        c.mouseDrag (eventOn (c, from + by * 0.5f, down, from));
+    c.mouseDrag (eventOn (c, from + by, down, from));
+    c.mouseUp (eventOn (c, from + by, mods, from));
+}
+
+// A double-click at position on c: two presses, the second one's double-click, and its release.
+void doubleClickOn (juce::Component& c, juce::Point<float> position)
+{
+    c.mouseDown (eventOn (c, position, leftButton, position));
+    c.mouseUp (eventOn (c, position, {}, position));
+    c.mouseDown (eventOn (c, position, leftButton, position, 2));
+    c.mouseDoubleClick (eventOn (c, position, leftButton, position, 2));
+    c.mouseUp (eventOn (c, position, {}, position, 2));
+}
+
+juce::KeyPress withMods (int key, int mods) { return { key, juce::ModifierKeys (mods), 0 }; }
+
+// The panel editor with Band 1 a Dynamic Bell (Dynamic Range -6 dB).
+struct DynamicEditor : PanelEditor
+{
+    DynamicEditor()
+    {
+        set (1, "dynamic_range", -6.0f);
+        settle (300);
+    }
+
+    staple::Knob& gain() { return control<staple::Knob> ("Band 1 Gain"); }
+    eq1::DynamicRangeRing& ring() { return control<eq1::DynamicRangeRing> ("Band 1 Dynamic Range"); }
+    // A point on the Gain knob's ring, at 12 o'clock.
+    juce::Point<float> onRing()
+    {
+        auto& knob = gain();
+        return knob.getFaceCentre().translated (0.0f, -(knob.getFaceRadius() + staple::tokens::knob::ringOffset));
+    }
+    bool shows (const juce::String& title)
+    {
+        auto found = findAll<juce::Component> ([&title] (juce::Component& c) { return c.getTitle() == title && c.isShowing(); });
+        return ! found.empty();
+    }
+};
+
+} // namespace
+
+TEST_CASE ("Dragging the Gain knob's ring sets Dynamic Range, 60 dB per 200 px, as one undo step; a double-click on it sets 0")
+{
+    DynamicEditor host;
+    auto& history = host.processor.editHistory();
+    auto& gain = host.gain();
+    const int steps = history.undoSteps();
+
+    dragOn (gain, host.onRing(), { 0.0f, -50.0f }); // up 50 px: +15 dB
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (9.0, 1.0e-4));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (0.0, 1.0e-4)); // the face's Gain is untouched
+    CHECK (history.undoSteps() == steps + 1);
+
+    SECTION ("with Shift, 60 dB per 800 px, rounded to 0.5 dB")
+    {
+        dragOn (gain, host.onRing(), { 0.0f, 31.0f }, juce::ModifierKeys::shiftModifier); // down 31 px: -2.325 dB
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (6.5, 1.0e-4));
+    }
+    SECTION ("a double-click sets 0, as one undo step")
+    {
+        doubleClickOn (gain, host.onRing());
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+        CHECK (history.undoSteps() == steps + 2);
+        history.undo();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (9.0, 1.0e-4));
+    }
+    SECTION ("hovering the ring shows Dynamic Range in the Gain knob's tooltip")
+    {
+        gain.mouseEnter (eventOn (gain, host.onRing(), {}, host.onRing()));
+        CHECK (gain.tooltipTitle() == "Band 1 Dynamic Range");
+        CHECK (gain.tooltipValue() == "+9.00 dB");
+        const auto face = gain.getFaceCentre();
+        gain.mouseMove (eventOn (gain, face, {}, face));
+        CHECK (gain.tooltipTitle() == "Band 1 Gain");
+    }
+}
+
+TEST_CASE ("Alt with the arrows on the Gain knob, and the arrows on the ring, step Dynamic Range 1 dB, 0.5 dB with Shift, one undo step a press")
+{
+    DynamicEditor host;
+    auto& history = host.processor.editHistory();
+    const int alt = juce::ModifierKeys::altModifier, shift = juce::ModifierKeys::shiftModifier;
+    auto& target = GENERATE (true, false) ? static_cast<juce::Component&> (host.gain()) : static_cast<juce::Component&> (host.ring());
+    const int mods = &target == &host.gain() ? alt : 0;
+    CAPTURE (target.getTitle());
+    target.grabKeyboardFocus();
+    REQUIRE (target.hasKeyboardFocus (false));
+    const int steps = history.undoSteps();
+
+    CHECK (host.press (withMods (juce::KeyPress::upKey, mods)));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-5.0, 1.0e-4));
+    CHECK (host.press (withMods (juce::KeyPress::leftKey, mods | shift)));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-5.5, 1.0e-4));
+    CHECK (history.undoSteps() == steps + 2);
+    for (int repeat = 0; repeat < 4; ++repeat)
+        host.hold (withMods (juce::KeyPress::downKey, mods));
+    host.release();
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-9.5, 1.0e-4));
+    CHECK (history.undoSteps() == steps + 3);
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (0.0, 1.0e-4));
+}
+
+TEST_CASE ("The ring follows Gain in Tab's order, and is absent while Gain is unavailable")
+{
+    DynamicEditor host;
+    const auto order = juce::KeyboardFocusTraverser().getAllComponents (host.editor.get());
+    const auto gain = std::find (order.begin(), order.end(), &host.gain());
+    REQUIRE (gain != order.end());
+    REQUIRE (gain + 1 != order.end());
+    CHECK (*(gain + 1) == &host.ring());
+    CHECK (host.ring().getAccessibilityHandler()->getRole() == juce::AccessibilityRole::slider);
+
+    host.set (1, "shape", 2.0f); // Low Cut
+    host.settle (120);
+    CHECK_FALSE (host.shows ("Band 1 Dynamic Range"));
+    CHECK_FALSE (host.gain().isOnRing (host.onRing()));
+}
+
+TEST_CASE ("The ring's range is faint under Dynamics Bypass, and its Live Gain arc follows Live Gain but not under Dynamics Bypass, Bypass or Global Bypass")
+{
+    DynamicEditor host;
+    auto& ring = host.ring();
+    CHECK_THAT (ring.rangeAlpha(), WithinAbs (0.85, 1.0e-6));
+    // Full-scale noise far above a -60 dB Threshold: Live Gain moves the whole range down.
+    host.set (1, "threshold_auto", 0.0f);
+    host.set (1, "threshold", -60.0f);
+    juce::Random random (1);
+    const auto play = [&] {
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer midi;
+        for (int block = 0; block < 40; ++block)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                for (int n = 0; n < 512; ++n)
+                    buffer.setSample (ch, n, random.nextFloat() - 0.5f);
+            host.processor.processBlock (buffer, midi);
+        }
+        host.settle (60);
+    };
+    play();
+    REQUIRE (host.processor.liveGainDb (1) < -1.0);
+    REQUIRE (ring.liveGainShown().has_value());
+    CHECK_THAT (*ring.liveGainShown(), WithinAbs (host.processor.liveGainDb (1), 0.05));
+
+    const juce::String hides = GENERATE ("band1_dynamics_bypass", "band1_bypass", "global_bypass");
+    CAPTURE (hides);
+    host.set (hides, 1.0f);
+    play();
+    CHECK_FALSE (ring.liveGainShown().has_value());
+    if (hides == "band1_dynamics_bypass")
+        CHECK_THAT (ring.rangeAlpha(), WithinAbs (0.3, 1.0e-6));
+}
+
+TEST_CASE ("The dynamics icons show only on a Dynamic Band: Clear Dynamics clears it in one undo step, Dynamics Bypass toggles")
 {
     PanelEditor host;
-    auto& dynamics = host.control<juce::Button> ("Band 1 Dynamics");
-    CHECK (dynamics.isEnabled());
-    CHECK (host.findAll<juce::Slider> ([] (juce::Slider& s) { return s.getTitle() == "Band 1 Dynamic Range" && s.isShowing(); }).empty());
-    dynamics.onClick();
-    auto* box = harness::findChild<juce::CallOutBox> (*host.editor, [] (juce::CallOutBox& b) { return b.isVisible(); });
-    REQUIRE (box != nullptr);
-    auto& range = host.control<juce::Slider> ("Band 1 Dynamic Range");
-    REQUIRE (range.isShowing());
-    range.setValue (-6.0, juce::sendNotificationSync);
-    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-6.0, 1.0e-4));
-    for (const juce::String title : { "Band 1 Threshold", "Band 1 Attack", "Band 1 Release", "Band 1 Dynamics Bypass", "Band 1 Detection Source",
-                                      "Band 1 Detection Range", "Band 1 Detection Audition" })
-    {
-        CAPTURE (title);
-        CHECK (host.control (title).isShowing());
-    }
-    box->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+    for (const juce::String title : { "Band 1 Clear Dynamics", "Band 1 Dynamics Bypass", "Hide Band 1 dynamics" })
+        CHECK (host.findAll<juce::Component> ([&title] (juce::Component& c) { return c.getTitle() == title && c.isShowing(); }).empty());
 
-    // Not on a Shape without dynamics.
-    host.set (1, "shape", 2.0f);
+    host.set (1, "dynamic_range", -6.0f);
+    host.set (1, "threshold_auto", 0.0f);
+    host.settle (300);
+    auto& history = host.processor.editHistory();
+    auto& bypass = host.control<staple::IconButton> ("Band 1 Dynamics Bypass");
+    CHECK (bypass.isShowing());
+    bypass.setToggleState (true, juce::sendNotificationSync); // as a click does
     host.settle (120);
-    CHECK_FALSE (dynamics.isEnabled());
+    CHECK (host.value (1, "dynamics_bypass") == 1.0f);
+    CHECK (bypass.isOff());
+
+    const int steps = history.undoSteps();
+    host.control<juce::Button> ("Band 1 Clear Dynamics").onClick();
+    CHECK (host.value (1, "dynamic_range") == 0.0f);
+    CHECK (host.value (1, "dynamics_bypass") == 0.0f);
+    CHECK (host.value (1, "threshold_auto") == 1.0f);
+    CHECK (history.undoSteps() == steps + 1);
+    host.settle (120);
+    CHECK_FALSE (bypass.isShowing());
+}
+
+TEST_CASE ("The dynamics section opens and closes, widening the panel alone; it is absent on a Band that isn't dynamic")
+{
+    PanelEditor host;
+    auto& panel = host.panel();
+    const auto closed = panel.getBounds();
+    const auto displayBounds = host.display.getBounds();
+    CHECK_FALSE (host.findAll<eq1::DynamicsSection> ().front()->isShowing());
+
+    host.set (1, "dynamic_range", -6.0f);
+    host.settle (400);
+    auto& section = *host.findAll<eq1::DynamicsSection>().front();
+    // Open by default: wider by the section, about the same centre.
+    CHECK (section.isShowing());
+    CHECK (panel.isDynamicsOpen());
+    CHECK (panel.getWidth() == eq1::BandPanel::openWidth);
+    CHECK (std::abs (panel.getBounds().getCentreX() - closed.getCentreX()) <= 1);
+    CHECK (panel.getY() == closed.getY());
+    CHECK (panel.getHeight() == closed.getHeight());
+    CHECK (host.display.getBounds() == displayBounds);
+    // Between Gain and Q.
+    const auto inPanel = [&panel] (juce::Component& c) { return panel.getLocalArea (c.getParentComponent(), c.getBounds()); };
+    CHECK (section.getX() > host.control ("Band 1 Gain").getX());
+    auto& q = host.control<staple::Knob> ("Band 1 Q");
+    CHECK (section.getRight() < inPanel (q).getCentreX() - q.getFaceRadius());
+
+    auto& chevron = host.control<juce::Button> ("Hide Band 1 dynamics");
+    chevron.onClick();
+    host.settle (400);
+    CHECK_FALSE (section.isShowing());
+    CHECK (panel.getBounds() == closed);
+    CHECK (chevron.getTitle() == "Show Band 1 dynamics");
+    // Remembered from Band to Band, and opened again.
+    host.click (host.at (100.0));
+    host.settle();
+    host.click (host.at (1000.0));
+    host.settle (300);
+    CHECK_FALSE (section.isShowing());
+    chevron.onClick();
+    host.settle (400);
+    CHECK (section.isShowing());
+
+    // Absent once the Band isn't dynamic.
+    host.set (1, "dynamic_range", 0.0f);
+    host.settle (400);
+    CHECK_FALSE (section.isShowing());
+    CHECK (panel.getBounds() == closed);
+}
+
+TEST_CASE ("The Threshold fader's top step is Auto: a double-click sets Auto, and a drag is one undo step across Threshold and Auto")
+{
+    DynamicEditor host;
+    auto& history = host.processor.editHistory();
+    auto& fader = host.control<eq1::ThresholdFader> ("Band 1 Threshold");
+    REQUIRE (host.value (1, "threshold_auto") == 1.0f);
+    const float thumbAuto = fader.thumbCentreY (eq1::ThresholdFader::autoPosition);
+    CHECK_THAT (thumbAuto, WithinAbs (8.0, 1.0e-4)); // the top of the travel
+
+    // A click doesn't move it.
+    const juce::Point<float> middle { 13.0f, 40.0f };
+    fader.mouseDown (eventOn (fader, middle, leftButton, middle));
+    fader.mouseUp (eventOn (fader, middle, {}, middle));
+    CHECK (host.value (1, "threshold_auto") == 1.0f);
+
+    // Dragged down from Auto by half the travel: out of Auto, in one undo step.
+    const int steps = history.undoSteps();
+    dragOn (fader, { 13.0f, thumbAuto }, { 0.0f, 32.0f });
+    CHECK (host.value (1, "threshold_auto") == 0.0f);
+    CHECK_THAT (host.value (1, "threshold"), WithinAbs (3.0 - 63.0 / 2.0, 0.1));
+    CHECK (history.undoSteps() == steps + 1);
+    history.undo();
+    CHECK (host.value (1, "threshold_auto") == 1.0f);
+    history.redo();
+
+    doubleClickOn (fader, middle);
+    CHECK (host.value (1, "threshold_auto") == 1.0f);
+    CHECK (history.undoSteps() == steps + 2);
+}
+
+TEST_CASE ("The Detection Level reaches the Threshold fader's thumb for the Threshold it equals, and never Auto")
+{
+    DynamicEditor host;
+    auto& fader = host.control<eq1::ThresholdFader> ("Band 1 Threshold");
+    for (double level : { -60.0, -42.5, -12.0, 0.0 })
+    {
+        CAPTURE (level);
+        CHECK_THAT (fader.levelTopY (level), WithinAbs (fader.thumbCentreY (level), 1.0e-4));
+    }
+    // Above 0 dB it stops at 0 dB, short of Auto; below the fader's bottom the track is empty.
+    CHECK (fader.thumbCentreY (0.0) > fader.thumbCentreY (eq1::ThresholdFader::autoPosition));
+    CHECK_THAT (fader.levelTopY (6.0), WithinAbs (fader.thumbCentreY (0.0), 1.0e-4));
+    CHECK_THAT (fader.levelTopY (-70.0), WithinAbs (fader.getHeight(), 1.0e-4));
+    CHECK_THAT (fader.levelTopY (eq1::levelFloorDb), WithinAbs (fader.getHeight(), 1.0e-4));
+}
+
+TEST_CASE ("Holding Detection Audition plays the detection signal and lights it; its release, a Band change and closing the editor let go")
+{
+    auto host = std::make_unique<DynamicEditor>();
+    auto* audition = &host->control<staple::IconButton> ("Band 1 Detection Audition");
+    const auto hold = [&] { audition->setState (juce::Button::buttonDown); };
+    hold();
+    CHECK (host->processor.detectionAuditionSlot() == 1);
+    CHECK (audition->isLit());
+    audition->setState (juce::Button::buttonNormal);
+    CHECK (host->processor.detectionAuditionSlot() == 0);
+    CHECK_FALSE (audition->isLit());
+
+    SECTION ("a Band change")
+    {
+        hold();
+        host->click (host->at (100.0));
+        host->settle();
+        CHECK (host->processor.detectionAuditionSlot() == 0);
+    }
+    SECTION ("closing the editor")
+    {
+        hold();
+        auto& processor = host->processor;
+        host->editor.reset();
+        CHECK (processor.detectionAuditionSlot() == 0);
+    }
+}
+
+TEST_CASE ("Detection Source and Detection Range switch with a click, each one undo step")
+{
+    DynamicEditor host;
+    auto& history = host.processor.editHistory();
+    const int steps = history.undoSteps();
+    auto& source = host.control<staple::IconButton> ("Band 1 Detection Source");
+    CHECK_FALSE (source.isLit());
+    source.onClick();
+    host.settle();
+    CHECK (host.value (1, "detection_source") == 1.0f);
+    CHECK (source.isLit());
+    auto& range = host.control<juce::Button> ("Band 1 Detection Range");
+    CHECK (range.getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == "Band");
+    range.onClick();
+    host.settle();
+    CHECK (host.value (1, "detection_range") == 1.0f);
+    CHECK (range.getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == "Free");
+    CHECK (history.undoSteps() == steps + 2);
+    // Attack and Release read Auto at their centres.
+    CHECK (host.control<staple::Knob> ("Band 1 Attack").tooltipValue() == "Auto");
+    CHECK (host.control<staple::Knob> ("Band 1 Release").tooltipValue() == "Auto");
+}
+
+namespace
+{
+// A Dynamic Bell on a Free Detection Range from 120 Hz to 4.5 kHz.
+struct FreeEditor : DynamicEditor
+{
+    FreeEditor()
+    {
+        set (1, "detection_range", 1.0f);
+        set (1, "detection_low", 120.0f);
+        set (1, "detection_high", 4500.0f);
+        settle (120);
+    }
+    eq1::DetectionRangeBar& bar() { return *findAll<eq1::DetectionRangeBar>().front(); }
+    juce::Slider& handle (const char* which) { return control<juce::Slider> (juce::String ("Band 1 Detection ") + which); }
+};
+} // namespace
+
+TEST_CASE ("The Detection Range bar shows on a Free Dynamic Band that isn't Bypassed, above the Band panel")
+{
+    PanelEditor host;
+    auto& bar = *host.findAll<eq1::DetectionRangeBar>().front();
+    CHECK_FALSE (bar.isVisible());
+    host.set (1, "detection_range", 1.0f);
+    host.settle (120);
+    CHECK_FALSE (bar.isVisible()); // not dynamic
+    host.set (1, "dynamic_range", -6.0f);
+    host.settle (120);
+    CHECK (bar.isVisible());
+    const auto& panel = host.panel();
+    CHECK (juce::roundToInt (bar.getY() + bar.lineY()) == panel.getY() - 30);
+    CHECK (bar.getX() == host.display.getX());
+    CHECK (bar.getWidth() == host.display.getWidth());
+    host.set (1, "bypass", 1.0f);
+    host.settle (120);
+    CHECK_FALSE (bar.isVisible());
+    host.set (1, "bypass", 0.0f);
+    host.settle (120);
+    CHECK (bar.isVisible());
+    host.click (host.at (100.0)); // a Low Cut
+    host.settle (120);
+    CHECK_FALSE (bar.isVisible());
+}
+
+TEST_CASE ("Dragging a Detection Range handle or the segment is one undo step, keeping low at most high / 1.25 within 20 Hz to 20 kHz")
+{
+    FreeEditor host;
+    auto& bar = host.bar();
+    auto& history = host.processor.editHistory();
+    const int steps = history.undoSteps();
+    auto& low = host.handle ("Low");
+    auto& high = host.handle ("High");
+    const auto centreOf = [] (juce::Component& c) { return c.getLocalBounds().getCentre().toFloat(); };
+    const auto to = [&] (juce::Component& c, double frequency) { return juce::Point<float> (bar.xOf (frequency) - static_cast<float> (c.getX()), centreOf (c).y) - centreOf (c); };
+
+    SECTION ("the low handle, stopped at high / 1.25")
+    {
+        dragOn (low, centreOf (low), to (low, 10000.0), {}, true);
+        CHECK_THAT (host.value (1, "detection_low"), WithinAbs (4500.0 / 1.25, 1.0));
+        CHECK (history.undoSteps() == steps + 1);
+    }
+    SECTION ("the high handle, stopped at 20 kHz")
+    {
+        dragOn (high, centreOf (high), to (high, 28000.0), {}, true);
+        CHECK_THAT (host.value (1, "detection_high"), WithinAbs (20000.0, 1.0));
+        CHECK (history.undoSteps() == steps + 1);
+    }
+    SECTION ("the segment moves both by one ratio, stopping at 20 Hz")
+    {
+        auto& segment = *host.findAll<eq1::DetectionRangeBar::Segment>().front();
+        CHECK (segment.getTitle() == "Band 1 Detection Range");
+        CHECK (segment.valueText() == juce::String::fromUTF8 ("120 Hz – 4.50 kHz"));
+        const auto from = centreOf (segment);
+        const double startFrequency = bar.frequencyAt (static_cast<float> (segment.getX()) + from.x);
+        dragOn (segment, from, { bar.xOf (startFrequency * 2.0) - bar.xOf (startFrequency), 0.0f }, {}, true);
+        CHECK_THAT (host.value (1, "detection_low"), WithinRel (240.0, 0.01));
+        CHECK_THAT (host.value (1, "detection_high"), WithinRel (9000.0, 0.01));
+        CHECK (history.undoSteps() == steps + 1);
+        history.undo();
+        CHECK_THAT (host.value (1, "detection_low"), WithinRel (120.0, 0.001));
+        CHECK_THAT (host.value (1, "detection_high"), WithinRel (4500.0, 0.001));
+        dragOn (segment, centreOf (segment), { -400.0f, 0.0f }, {}, true);
+        CHECK_THAT (host.value (1, "detection_low"), WithinRel (20.0, 0.001));
+        CHECK_THAT (host.value (1, "detection_high"), WithinRel (4500.0 * 20.0 / 120.0, 0.01));
+    }
+}
+
+TEST_CASE ("Left and right on a Detection Range handle nudge it 1/6 octave, one undo step a press, within the bar's limits")
+{
+    FreeEditor host;
+    auto& history = host.processor.editHistory();
+    auto& high = host.handle ("High");
+    high.grabKeyboardFocus();
+    REQUIRE (high.hasKeyboardFocus (false));
+    const int steps = history.undoSteps();
+    CHECK (host.press (juce::KeyPress (juce::KeyPress::rightKey)));
+    CHECK_THAT (host.value (1, "detection_high"), WithinRel (4500.0 * std::pow (2.0, 1.0 / 6.0), 0.001));
+    CHECK (host.press (juce::KeyPress (juce::KeyPress::leftKey)));
+    CHECK_THAT (host.value (1, "detection_high"), WithinRel (4500.0, 0.001));
+    CHECK (history.undoSteps() == steps + 2);
+    for (int repeat = 0; repeat < 30; ++repeat)
+        host.hold (juce::KeyPress (juce::KeyPress::leftKey));
+    host.release();
+    CHECK (history.undoSteps() == steps + 3);
+    CHECK_THAT (host.value (1, "detection_high"), WithinRel (120.0 * 1.25, 0.001));
+    CHECK_FALSE (host.press (juce::KeyPress (juce::KeyPress::upKey)));
 }
 
 // Renders the editor at 1200 x 760 and 2x with the Band panel on a Bell, a Low Cut with Brickwall, a
-// Bypassed Band and on mono, for checking by hand against the prototype. Hidden; run with
+// Bypassed Band, on mono, and on a Dynamic Bell with its dynamics section open, its Free Detection Range
+// bar, and under Dynamics Bypass, for checking by hand against the prototype. Hidden; run with
 //   EQ1_PANEL_SCREENS=/some/dir/81 build/tests/eq1_plugin_tests "[.screens]"
 TEST_CASE ("Band panel screenshots", "[.screens]")
 {
@@ -454,4 +863,23 @@ TEST_CASE ("Band panel screenshots", "[.screens]")
     PanelEditor mono (true);
     mono.set (1, "shape", 8.0f); // Flat Tilt: no Slope, no Q
     save (mono, "mono-flat-tilt");
+    FreeEditor dynamic;
+    dynamic.set (1, "gain", 4.0f);
+    dynamic.set (1, "dynamic_range", -9.0f);
+    dynamic.set (1, "threshold_auto", 0.0f);
+    dynamic.set (1, "threshold", -24.0f);
+    // Noise through the plugin, so the Live Gain arc and the Detection Level show.
+    juce::Random random (1);
+    juce::AudioBuffer<float> buffer (2, 512);
+    juce::MidiBuffer midi;
+    for (int block = 0; block < 40; ++block)
+    {
+        for (int ch = 0; ch < 2; ++ch)
+            for (int n = 0; n < 512; ++n)
+                buffer.setSample (ch, n, 0.2f * (random.nextFloat() - 0.5f));
+        dynamic.processor.processBlock (buffer, midi);
+    }
+    save (dynamic, "dynamic-free");
+    dynamic.set (1, "dynamics_bypass", 1.0f);
+    save (dynamic, "dynamics-bypass");
 }
