@@ -195,8 +195,8 @@ double Dynamics::autoReleaseSeconds() const
     return autoReleaseFastestSeconds + (autoReleaseSustainedSeconds - autoReleaseFastestSeconds) * sustain;
 }
 
-void Dynamics::hear (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int position,
-                     int numSamples)
+void Dynamics::hear (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, std::uint64_t run,
+                     int position, int numSamples)
 {
     loudestLevel = nothingHeardDb;
     const bool moving = running();
@@ -206,8 +206,8 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
     const int detectionCount = detectionChannelCount = takeDetectionSignal (input, numChannels, sidechain, sidechainChannels, numSamples);
     if (detectionCount > 0)
     {
-        rangeFilter.process (detectionChannels.data(), detectionCount, position, numSamples);
-        highLimit.process (detectionChannels.data(), detectionCount, position, numSamples);
+        rangeFilter.process (detectionChannels.data(), detectionCount, run, position, numSamples);
+        highLimit.process (detectionChannels.data(), detectionCount, run, position, numSamples);
     }
     else
         power = {}; // nothing heard: a Sidechain connected again starts afresh
