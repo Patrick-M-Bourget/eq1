@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "staple/LookAndFeel.h"
 #include "staple/controls/Knob.h"
+#include "staple/controls/KnobTooltip.h"
 #include "staple/controls/ParseValue.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -148,4 +149,118 @@ TEST_CASE ("parseValue reads nothing from text that isn't a number with a unit i
         CAPTURE (text);
         CHECK_FALSE (staple::parseValue (text, "dB").has_value());
     }
+}
+
+TEST_CASE ("A double-click on a Knob resets its parameter to the default as one undo step")
+{
+    Kit kit;
+    staple::Knob knob (staple::tokens::knob::frequency);
+    Attachment::SliderAttachment attachment (kit.state(), "band1_frequency", knob);
+    kit.add (knob, { 10, 10, knob.getIdealSize(), knob.getIdealSize() });
+    const float defaultFrequency = kit.value ("band1_frequency");
+    kit.drag (knob, centreOf (knob), -60.0f);
+    REQUIRE (kit.value ("band1_frequency") > defaultFrequency * 2.0f);
+    const int steps = kit.history.undoSteps();
+
+    kit.doubleClick (knob, centreOf (knob));
+    CHECK_THAT (kit.value ("band1_frequency"), WithinAbs (defaultFrequency, 1.0e-2));
+    CHECK (kit.history.undoSteps() == steps + 1);
+    kit.history.undo();
+    CHECK (kit.value ("band1_frequency") > defaultFrequency * 2.0f);
+}
+
+TEST_CASE ("A disabled Knob ignores drags, double-clicks and arrow keys, and shows no tooltip")
+{
+    Kit kit;
+    staple::Knob knob (staple::tokens::knob::gain);
+    Attachment::SliderAttachment attachment (kit.state(), "band1_gain", knob);
+    kit.add (knob, { 10, 10, knob.getIdealSize(), knob.getIdealSize() });
+    kit.processor.parameterState().getParameter ("band1_gain")->setValueNotifyingHost (0.6f);
+    knob.setEnabled (false);
+
+    kit.drag (knob, centreOf (knob), -50.0f);
+    kit.doubleClick (knob, centreOf (knob));
+    CHECK (knob.keyPressed (juce::KeyPress (juce::KeyPress::upKey)) == false);
+    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    CHECK_FALSE (knob.isTooltipShown());
+    CHECK_THAT (position (knob), WithinAbs (0.6, 1.0e-4));
+    CHECK (kit.history.undoSteps() == 0);
+}
+
+TEST_CASE ("A Knob's tooltip shows its title and its value text with the unit while hovered or dragged")
+{
+    Kit kit;
+    staple::Knob knob (staple::tokens::knob::gain);
+    Attachment::SliderAttachment attachment (kit.state(), "band4_gain", knob);
+    knob.setTitle ("Band 4 Gain"); // as #48 names it
+    knob.setTextValueSuffix (" dB");
+    kit.add (knob, { 150, 150, knob.getIdealSize(), knob.getIdealSize() });
+    knob.setValue (-11.42, juce::sendNotificationSync);
+    CHECK_FALSE (knob.isTooltipShown());
+
+    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    REQUIRE (knob.isTooltipShown());
+    auto& tooltip = *knob.getKnobTooltip();
+    CHECK (tooltip.getParentComponent() == &kit.window); // a child of the editor, not a window of its own
+    CHECK (tooltip.titleText() == "Band 4 Gain");
+    CHECK (tooltip.valueText() == "-11.42 dB");
+    CHECK (tooltip.getBottom() <= kit.window.getLocalArea (&knob, knob.getLocalBounds()).getCentreY() - 33); // above the face
+
+    // It follows a drag, and stays while the drag goes on outside the knob.
+    const auto left = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+    const auto from = centreOf (knob);
+    knob.mouseDown (Kit::event (knob, from, left, from));
+    knob.mouseExit (Kit::event (knob, from.translated (0.0f, -200.0f), left, from));
+    knob.mouseDrag (Kit::event (knob, from.translated (0.0f, -200.0f), left, from));
+    CHECK (knob.isTooltipShown());
+    CHECK (tooltip.valueText() == "30.00 dB");
+    knob.mouseUp (Kit::event (knob, from.translated (0.0f, -200.0f), {}, from));
+    CHECK_FALSE (knob.isTooltipShown());
+}
+
+TEST_CASE ("A Knob's tooltip sits below the knob where there is no room above")
+{
+    Kit kit;
+    staple::Knob knob (staple::tokens::knob::small);
+    kit.add (knob, { 10, 0, knob.getIdealSize(), knob.getIdealSize() });
+    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    REQUIRE (knob.isTooltipShown());
+    CHECK (knob.getKnobTooltip()->getY() >= knob.getBounds().getCentreY() + 15);
+}
+
+TEST_CASE ("A value typed into a Knob's tooltip commits as one undo step on Enter, and Esc cancels it")
+{
+    Kit kit;
+    staple::Knob knob (staple::tokens::knob::frequency);
+    Attachment::SliderAttachment attachment (kit.state(), "band1_frequency", knob);
+    knob.setTitle ("Band 1 Frequency");
+    knob.setTextValueSuffix (" Hz");
+    kit.add (knob, { 150, 150, knob.getIdealSize(), knob.getIdealSize() });
+    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    auto& tooltip = *knob.getKnobTooltip();
+
+    kit.doubleClick (tooltip, centreOf (tooltip));
+    REQUIRE (tooltip.isEditing());
+    auto* field = tooltip.getEditor();
+    CHECK (field->getTitle() == "Band 1 Frequency value");
+    CHECK (field->getWantsKeyboardFocus());
+    field->setText ("1.2k");
+    field->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+    CHECK_FALSE (tooltip.isEditing());
+    CHECK_THAT (kit.value ("band1_frequency"), WithinAbs (1200.0, 0.5));
+    CHECK (kit.history.undoSteps() == 1);
+
+    tooltip.startEditing();
+    tooltip.getEditor()->setText ("50 Hz");
+    tooltip.getEditor()->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+    CHECK_FALSE (tooltip.isEditing());
+    CHECK_THAT (kit.value ("band1_frequency"), WithinAbs (1200.0, 0.5));
+    CHECK (kit.history.undoSteps() == 1);
+
+    // Out of range, it stops at the end of the range.
+    tooltip.startEditing();
+    tooltip.getEditor()->setText ("90 kHz");
+    tooltip.getEditor()->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+    CHECK_THAT (position (knob), WithinAbs (1.0, 1.0e-6));
+    CHECK (kit.history.undoSteps() == 2);
 }

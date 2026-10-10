@@ -16,6 +16,27 @@ namespace size = tokens::size;
 constexpr int minimumWidth = 86, paddingTop = 5, paddingSide = 10, paddingBottom = 6;
 constexpr int titleLine = 14, valueLine = 18, gap = 6;
 constexpr int fieldWidth = 74, fieldHeight = 20;
+
+// The type-in field: Enter and Esc act at once, rather than in a message posted for later.
+struct TypeInField final : juce::TextEditor
+{
+    std::function<void()> onEnter, onCancel;
+
+    bool keyPressed (const juce::KeyPress& key) override
+    {
+        if (key == juce::KeyPress::returnKey && onEnter != nullptr)
+        {
+            onEnter();
+            return true;
+        }
+        if (key == juce::KeyPress::escapeKey && onCancel != nullptr)
+        {
+            onCancel();
+            return true;
+        }
+        return juce::TextEditor::keyPressed (key);
+    }
+};
 } // namespace
 
 KnobTooltip::KnobTooltip (Knob& k) : knob (k)
@@ -110,7 +131,10 @@ void KnobTooltip::startEditing()
 {
     if (isEditing())
         return;
-    editor = std::make_unique<juce::TextEditor> ("type-in");
+    auto field = std::make_unique<TypeInField>();
+    field->onEnter = [this] { stopEditing (true); };
+    field->onCancel = [this] { stopEditing (false); };
+    editor = std::move (field);
     editor->setTitle (title + " value");
     editor->setFont (font (size::fs3));
     editor->setJustification (juce::Justification::centred);
@@ -124,8 +148,6 @@ void KnobTooltip::startEditing()
     if (const auto suffix = knob.getTextValueSuffix(); suffix.isNotEmpty() && text.endsWith (suffix))
         text = text.dropLastCharacters (suffix.length());
     editor->setText (text, false);
-    editor->onReturnKey = [this] { stopEditing (true); };
-    editor->onEscapeKey = [this] { stopEditing (false); };
     editor->onFocusLost = [this] { stopEditing (false); };
     addAndMakeVisible (*editor);
     resized();
@@ -141,13 +163,10 @@ void KnobTooltip::stopEditing (bool commit)
 {
     if (editor == nullptr)
         return;
-    // Out of the way before anything else, so the focus it loses on the way out cancels nothing. It is
-    // deleted later, as this may be its own key handler running.
+    // Out of the way before anything else, so the focus it loses on the way out finds nothing to cancel.
+    // It is deleted later, as this may be its own key handler running.
     const auto text = editor->getText();
     std::shared_ptr<juce::TextEditor> closing (editor.release());
-    closing->onFocusLost = nullptr;
-    closing->onReturnKey = nullptr;
-    closing->onEscapeKey = nullptr;
     removeChildComponent (closing.get());
     juce::MessageManager::callAsync ([closing] {});
     if (commit)
