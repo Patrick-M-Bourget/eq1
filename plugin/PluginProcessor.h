@@ -104,6 +104,17 @@ public:
     // The Engine's analysis taps, for the Analyzer: from one reader thread, the message thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return engine.readAnalysis (tap, destination, maxSamples); }
 
+    // The Output Meter. The Engine's Output Level of a channel (0 to outputLevelChannels() - 1), from
+    // one reader thread, the message thread. A peak read above 0 dBFS lights that channel's Clip Light,
+    // which stays lit, editor or not, until clearClipLights() or a restored session puts both out.
+    int outputLevelChannels() const { return engine.outputLevelChannels(); }
+    OutputLevel readOutputLevel (int channel);
+    bool isClipLit (int channel) const;
+    void clearClipLights();
+    // Whether the editor shows the Output Meter. Saved with the session, not in Presets, not undoable.
+    bool isOutputMeterShown() const { return outputMeterShown.load(); }
+    void setOutputMeterShown (bool shown) { outputMeterShown = shown; }
+
     // The version of the saved state's format. setStateInformation() brings older states up to it one
     // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
     // version. Bump it, and add a step to the migration, whenever the format changes.
@@ -123,6 +134,9 @@ private:
     // Kept out of the parameter state, which a host may save from another thread, and written into
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
+    std::atomic<bool> outputMeterShown { true };
+    std::array<std::atomic<bool>, 2> clipLit {}; // per channel; mono and stereo only
+    static constexpr double clipThresholdDb = 1.0e-5;
     std::atomic<int> heldSoloSlot { 0 };
     std::atomic<int> heldAuditionSlot { 0 };
     std::atomic<int> heldMeteredSlot { 0 };

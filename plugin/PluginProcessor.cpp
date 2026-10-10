@@ -129,6 +129,27 @@ void PluginProcessor::setAnalyzerSettings (const AnalyzerSettings& settings)
     analyzer = settings;
 }
 
+OutputLevel PluginProcessor::readOutputLevel (int channel)
+{
+    const auto level = engine.readOutputLevel (channel);
+    // Above 0 dBFS: a sample beyond full scale. Full scale itself is not an over, nor the few float steps
+    // past it that rounding leaves on a full-scale input (Output Gain's default reads 1.4e-6 dB).
+    if (level.peakDb > clipThresholdDb && channel >= 0 && channel < static_cast<int> (clipLit.size()))
+        clipLit[static_cast<size_t> (channel)] = true;
+    return level;
+}
+
+bool PluginProcessor::isClipLit (int channel) const
+{
+    return channel >= 0 && channel < static_cast<int> (clipLit.size()) && clipLit[static_cast<size_t> (channel)].load();
+}
+
+void PluginProcessor::clearClipLights()
+{
+    for (auto& lit : clipLit)
+        lit = false;
+}
+
 void PluginProcessor::setDisplayRangeDb (int rangeDb)
 {
     displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
@@ -166,6 +187,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         setSolo (0);
         setDetectionAudition (0);
         setMeteredBand (0);
+        clearClipLights();
         auto state = juce::ValueTree::fromXml (*xml);
         migrate (state);
         state.removeProperty (versionProperty, nullptr);
