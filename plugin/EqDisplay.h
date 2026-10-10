@@ -47,8 +47,9 @@ private:
     // Where a spectrum is drawn at x, with Analyzer Tilt: the top of the display is 0 dB, the bottom
     // the Analyzer's range below.
     float spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const;
-    // The spectrum Spectrum Grab reads peaks from: post-EQ when shown, else pre-EQ, else none.
-    const AnalyzerSpectrum* spectrumToGrab() const;
+    // The spectrum Spectrum Grab reads peaks from, and Peak Hold holds: post-EQ when shown, else
+    // pre-EQ, else none.
+    AnalyzerSpectrum* spectrumToGrab();
 
     // Frequency runs on a log scale from 10 Hz to 30 kHz; dB over +/- the display range.
     float xOf (double frequency) const;
@@ -69,6 +70,7 @@ private:
 
     AnalyzerSpectrum preEq, postEq, sidechain;
     AnalyzerSettings analyzer; // taken once a frame
+    AnalyzerSpectrum* held = nullptr; // the spectrum Peak Hold is drawn for, if any
     std::vector<float> tapSamples; // read from the taps each frame
     juce::uint32 lastFrame = 0;
     // The Bands as heard: their Gain and Dynamic Range under Gain Scale. The display draws, and the

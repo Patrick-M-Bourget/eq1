@@ -61,6 +61,13 @@ bool EqDisplay::updateAnalyzer()
     const double seconds = lastFrame == 0 ? 1.0 / 60.0 : juce::jlimit (0.001, 0.25, (now - lastFrame) / 1000.0);
     lastFrame = now;
 
+    // Peak Hold starts afresh on a spectrum it wasn't held for last frame: switched to, or turned on.
+    // The spectrum forgets it too when prepared again for a new Resolution or sample rate.
+    auto* toHold = analyzer.peakHold ? spectrumToGrab() : nullptr;
+    if (toHold != nullptr && toHold != held)
+        toHold->clearPeakHold();
+    held = toHold;
+
     const std::pair<AnalysisTap, AnalyzerSpectrum*> taps[] = { { AnalysisTap::PreEq, &preEq },
                                                                { AnalysisTap::PostEq, &postEq },
                                                                { AnalysisTap::Sidechain, &sidechain } };
@@ -87,7 +94,7 @@ float EqDisplay::spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const
     return static_cast<float> (juce::jlimit (0.0, 1.0, -level / analyzer.rangeDb) * getHeight());
 }
 
-const AnalyzerSpectrum* EqDisplay::spectrumToGrab() const
+AnalyzerSpectrum* EqDisplay::spectrumToGrab()
 {
     return analyzer.showPostEq ? &postEq : analyzer.showPreEq ? &preEq : nullptr;
 }
@@ -269,6 +276,30 @@ void EqDisplay::paint (juce::Graphics& g)
         line.closeSubPath();
         return line;
     };
+    // Peak Hold under the spectra, faint, in its spectrum's colour; nothing where it is below the
+    // Analyzer's range, so silence leaves no flat line.
+    if (held != nullptr)
+    {
+        juce::Path line;
+        bool drawing = false;
+        for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
+        {
+            const double level = held->heldLevelDb (frequencyAt (x), analyzer.tiltDbPerOctave);
+            if (level <= -analyzer.rangeDb)
+            {
+                drawing = false;
+                continue;
+            }
+            const juce::Point<float> point { x, static_cast<float> (juce::jlimit (0.0, 1.0, -level / analyzer.rangeDb) * getHeight()) };
+            if (drawing)
+                line.lineTo (point);
+            else
+                line.startNewSubPath (point);
+            drawing = true;
+        }
+        g.setColour (held == &postEq ? juce::Colour (0x40a0d8ff) : juce::Colour (0x502f8fd0));
+        g.strokePath (line, juce::PathStrokeType (1.0f));
+    }
     if (analyzer.showPreEq)
     {
         g.setColour (juce::Colour (0x302f8fd0));

@@ -36,7 +36,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     }
     showUndoState();
 
-    for (auto* toggle : { &showPreEq, &showPostEq, &showSidechain })
+    for (auto* toggle : { &showPreEq, &showPostEq, &showSidechain, &peakHold })
     {
         toggle->onClick = [this] { storeAnalyzerSettings(); };
         addAndMakeVisible (*toggle);
@@ -74,6 +74,7 @@ void PluginEditor::showAnalyzerSettings()
     showPreEq.setToggleState (settings.showPreEq, juce::dontSendNotification);
     showPostEq.setToggleState (settings.showPostEq, juce::dontSendNotification);
     showSidechain.setToggleState (settings.showSidechain, juce::dontSendNotification);
+    peakHold.setToggleState (settings.peakHold, juce::dontSendNotification);
     analyzerRange.setSelectedId (settings.rangeDb, juce::dontSendNotification);
     analyzerSpeed.setSelectedId (static_cast<int> (settings.speed) + 1, juce::dontSendNotification);
     analyzerResolution.setSelectedId (static_cast<int> (settings.resolution) + 1, juce::dontSendNotification);
@@ -88,7 +89,8 @@ void PluginEditor::storeAnalyzerSettings()
                                        .rangeDb = analyzerRange.getSelectedId(),
                                        .speed = static_cast<AnalyzerSpeed> (analyzerSpeed.getSelectedId() - 1),
                                        .resolution = static_cast<AnalyzerResolution> (analyzerResolution.getSelectedId() - 1),
-                                       .tiltDbPerOctave = analyzerTilt.getValue() });
+                                       .tiltDbPerOctave = analyzerTilt.getValue(),
+                                       .peakHold = peakHold.getToggleState() });
 }
 
 void PluginEditor::undo()
@@ -157,6 +159,7 @@ void PluginEditor::resized()
     showPreEq.setBounds (toolbar.removeFromLeft (56));
     showPostEq.setBounds (toolbar.removeFromLeft (60));
     showSidechain.setBounds (toolbar.removeFromLeft (90));
+    peakHold.setBounds (toolbar.removeFromLeft (84));
     for (auto* combo : { &analyzerRange, &analyzerSpeed, &analyzerResolution })
     {
         toolbar.removeFromLeft (6);
