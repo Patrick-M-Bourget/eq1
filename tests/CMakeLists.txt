@@ -49,6 +49,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/PluginShellTest.cpp
         plugin/PresetLibraryTest.cpp
         plugin/PresetTest.cpp
+        plugin/StapleControlsTest.cpp
         plugin/StapleTest.cpp
         plugin/StateTest.cpp
         plugin/UiScaleTest.cpp
