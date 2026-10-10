@@ -505,3 +505,37 @@ TEST_CASE ("The Hover Card's Shape strip opens above the card when there is no r
     REQUIRE (card.shapeStrip() != nullptr);
     CHECK (card.shapeStrip()->getBottom() == card.body().getY() - 6);
 }
+
+TEST_CASE ("Hover Card screenshots", "[.screens]")
+{
+    OpenEditor host;
+    host.editor->setSize (1200, 760);
+    host.addBand (1, 120.0f, 4.0f);
+    host.addBand (4, 1000.0f, 3.0f);
+    host.addBand (6, 8000.0f, 0.0f, static_cast<float> (eq1::Shape::HighCut));
+    host.set (6, "slope", 24.0f);
+    host.settle (300);
+    auto& card = cardOf (host);
+    // The card and what is around it, in the editor's coordinates.
+    const auto save = [&] (const juce::String& name) {
+        host.settle (300);
+        auto area = host.editor->getLocalArea (card.getParentComponent(), card.body()).expanded (60, 30);
+        if (auto* strip = card.shapeStrip())
+            area = area.getUnion (host.editor->getLocalArea (card.getParentComponent(), strip->getBoundsInParent()).expanded (20));
+        harness::writeSnapshot (*host.editor, "hover-card-" + name, area);
+    };
+    const auto showOn = [&] (double frequency, double db) {
+        rest (host, host.at (frequency, db));
+        host.settle (400);
+    };
+
+    showOn (1000.0, 3.0);
+    save ("bell");
+    control<juce::Button> (card, "Band 4 Shape").onClick();
+    save ("shape-strip");
+    control<juce::Button> (card, "Band 4 Shape").onClick();
+    host.set (4, "bypass", 1.0f);
+    save ("bypassed");
+    showOn (8000.0, 0.0);
+    save ("high-cut");
+}

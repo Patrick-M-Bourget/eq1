@@ -39,7 +39,9 @@ class PluginProcessor;
 // the selected Band, and of each Dynamic Band, sets its Dynamic Range: drag it, double-click it to clear
 // it, or ↑/↓ while it has focus. A Dynamic Band's curve follows its Live Gain, and the selected one has
 // a wash between its curves at Gain and Gain + Dynamic Range. Hovering a handle or a curve lights the
-// Band's curve, and Global Bypass fades every curve and handle to its bypassed look (plugin/display/).
+// Band's curve; resting 300 ms on a handle shows its Hover Card (HoverCard.h), which another handle's
+// replaces at once and which hides 220 ms after the pointer leaves handle and card, unless held, or at
+// once on any press here or when its Band goes, and Global Bypass fades every curve and handle to its bypassed look (plugin/display/).
 // The curve comes from the Engine's own response maths (eq1/Response.h). A handle beyond the Display
 // Range sits at its edge; a heard Gain changed to beyond it zooms the range out, once any drag has
 // ended. A screen reader reads the display as a group, "EQ display", of the Bands in use, each named
