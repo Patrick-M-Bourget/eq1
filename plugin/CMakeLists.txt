@@ -58,6 +58,7 @@ target_sources(eq1 PRIVATE
     staple/Fonts.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
+    staple/controls/ParseValue.cpp
     KeyboardSlider.cpp)
 
 # The Factory Presets, bundled into the plugin.
