@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "PluginProcessor.h"
+#include "staple/Tokens.h"
 
 #include "eq1/Engine.h"
 
@@ -162,7 +163,7 @@ void PluginEditor::timerCallback()
 
 void PluginEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff15171c));
+    g.fillAll (staple::tokens::colour::bg0);
 }
 
 void PluginEditor::resized()

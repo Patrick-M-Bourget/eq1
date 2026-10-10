@@ -3,7 +3,8 @@
 #
 #   scripts/check.sh            docs, build, test, cpu, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
-#                               glossary, and no test reads a saved state as raw bytes
+#                               glossary, no test reads a saved state as raw bytes, and no colour is hard-coded in plugin/
+#                               outside plugin/staple/
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -81,6 +82,20 @@ docs() {
     fi
     [ "$broken" = 0 ] && echo "Every cited doc and section exists, and no test reads a saved state as raw bytes"
     return "$broken"
+}
+
+# Every colour in the editor comes from Staple's tokens (plugin/staple/Tokens.h): a colour written as a
+# number, or a named juce::Colours one, belongs in plugin/staple/ only.
+colours() {
+    step "Colours from tokens"
+    local found
+    found=$(git ls-files -z -- plugin ':!plugin/staple/' |
+        xargs -0 grep -nE 'Colour *[({] *0x|Colour::from(RGB|RGBA|HSV|HSL|FloatRGBA) *\(|Colours::' || true)
+    if [ -n "$found" ]; then
+        printf '%s\n' "$found" | sed 's/$/  <- hard-coded colour: use a token from plugin\/staple\/Tokens.h/' >&2
+        return 1
+    fi
+    echo "Every colour in plugin/ outside plugin/staple/ comes from a token"
 }
 
 # A CMake build folder keeps the generator it was made with, and refuses another. The dependencies'
@@ -263,8 +278,8 @@ case "${1:-all}" in
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     tsan) tsan ;;
     validate) validate ;;
-    docs) docs ;;
+    docs) docs; colours ;;
     # A busy machine skips the CPU budget (exit 3) but not the stages after it.
-    all) docs; build; run_tests; cpu || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,14p' "$0" >&2; exit 2 ;;
+    all) docs; colours; build; run_tests; cpu || [ $? -eq 3 ]; tsan; validate ;;
+    *) sed -n '2,16p' "$0" >&2; exit 2 ;;
 esac

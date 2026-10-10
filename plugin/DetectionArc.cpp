@@ -1,6 +1,7 @@
 #include "DetectionArc.h"
 
 #include "PluginProcessor.h"
+#include "staple/Tokens.h"
 
 #include <cmath>
 
@@ -57,7 +58,7 @@ void DetectionArc::paint (juce::Graphics& g)
     const float end = rotary.startAngleRadians + static_cast<float> (proportion) * (rotary.endAngleRadians - rotary.startAngleRadians);
     juce::Path arc;
     arc.addCentredArc (knob.getCentreX(), knob.getCentreY(), radius, radius, 0.0f, rotary.startAngleRadians, end, true);
-    g.setColour (juce::Colour (0xffe0a040));
+    g.setColour (staple::tokens::colour::dynLive);
     g.strokePath (arc, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
 }
 

@@ -484,6 +484,11 @@ void LookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int 
     layout.draw (g, bounds.reduced (10.0f, 6.0f));
 }
 
+void LookAndFeel::drawCornerResizer (juce::Graphics& g, int width, int height, bool isMouseOver, bool isMouseDragging)
+{
+    drawIcon (g, Icon::resizeGrip, juce::Rectangle<int> (width, height).toFloat(), isMouseOver || isMouseDragging ? colour::text1 : colour::text3);
+}
+
 //==============================================================================
 std::unique_ptr<juce::FocusOutline> LookAndFeel::createFocusOutlineForComponent (juce::Component&)
 {

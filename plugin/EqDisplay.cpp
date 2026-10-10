@@ -4,6 +4,8 @@
 #include "BandMenu.h"
 #include "PluginProcessor.h"
 #include "eq1/Response.h"
+#include "staple/Fonts.h"
+#include "staple/Tokens.h"
 
 #include <cmath>
 
@@ -17,10 +19,13 @@ constexpr float handleRadius = 9.0f;
 constexpr float pixelStep = 2.0f; // the curves are evaluated every this many pixels
 constexpr float ringRadius = handleRadius + 5.0f;
 
-// Hues a golden ratio apart, so Bands in neighbouring slots look different.
+namespace colour = staple::tokens::colour;
+namespace size = staple::tokens::size;
+
+// Each Band Slot keeps its own colour.
 juce::Colour colourOf (int slot)
 {
-    return juce::Colour::fromHSV (std::fmod (0.03f + 0.618034f * static_cast<float> (slot - 1), 1.0f), 0.65f, 0.95f, 1.0f);
+    return staple::tokens::band[slot - 1];
 }
 
 // Exactly the same, field by field: any change at all counts, so the comparison is exact. (Settings'
@@ -248,16 +253,16 @@ juce::Path EqDisplay::curve (const std::vector<double>& db) const
 
 void EqDisplay::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff15171c));
+    g.fillAll (colour::bg0);
 
     // Grid: decades and their halves, and Gain lines a quarter of the range apart.
-    g.setFont (11.0f);
+    g.setFont (staple::font (size::fs2));
     for (double f : { 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 })
     {
         const float x = xOf (f);
-        g.setColour (juce::Colour (0x20ffffff));
+        g.setColour (colour::gridMajor);
         g.drawVerticalLine (juce::roundToInt (x), 0.0f, static_cast<float> (getHeight()));
-        g.setColour (juce::Colour (0x60ffffff));
+        g.setColour (colour::text3);
         g.drawText (f >= 1000.0 ? juce::String (juce::roundToInt (f / 1000.0)) + "k" : juce::String (juce::roundToInt (f)),
                     juce::Rectangle<float> (x + 3.0f, static_cast<float> (getHeight()) - 16.0f, 40.0f, 14.0f), juce::Justification::left);
     }
@@ -301,25 +306,25 @@ void EqDisplay::paint (juce::Graphics& g)
                 line.startNewSubPath (point);
             drawing = true;
         }
-        g.setColour (held == &postEq ? juce::Colour (0x40a0d8ff) : juce::Colour (0x502f8fd0));
+        g.setColour (colour::anPeak);
         g.strokePath (line, juce::PathStrokeType (1.0f));
     }
     if (analyzer.showPreEq)
     {
-        g.setColour (juce::Colour (0x302f8fd0));
+        g.setColour (colour::anFillMid);
         g.fillPath (areaUnder (spectrumLine (preEq)));
     }
     if (analyzer.showPostEq)
     {
         const auto line = spectrumLine (postEq);
-        g.setColour (juce::Colour (0x18ffffff));
+        g.setColour (colour::anFillTop);
         g.fillPath (areaUnder (line));
-        g.setColour (juce::Colour (0x70a0d8ff));
+        g.setColour (colour::anLine);
         g.strokePath (line, juce::PathStrokeType (1.0f));
     }
     if (analyzer.showSidechain)
     {
-        g.setColour (juce::Colour (0xa0e0a040));
+        g.setColour (colour::anScLine);
         g.strokePath (spectrumLine (sidechain), juce::PathStrokeType (1.0f));
     }
 
@@ -328,9 +333,9 @@ void EqDisplay::paint (juce::Graphics& g)
     {
         const double db = range * step / 2.0;
         const float y = yOf (db);
-        g.setColour (step == 0 ? juce::Colour (0x40ffffff) : juce::Colour (0x18ffffff));
+        g.setColour (step == 0 ? colour::gridZero : colour::gridMajor);
         g.drawHorizontalLine (juce::roundToInt (y), 0.0f, static_cast<float> (getWidth()));
-        g.setColour (juce::Colour (0x60ffffff));
+        g.setColour (colour::text3);
         // Above its line, except at the top edge.
         const float labelY = y - 14.0f < 0.0f ? y + 2.0f : y - 14.0f;
         g.drawText ((db > 0 ? "+" : "") + juce::String (db, 0), juce::Rectangle<float> (4.0f, labelY, 40.0f, 12.0f),
@@ -362,7 +367,7 @@ void EqDisplay::paint (juce::Graphics& g)
         g.setColour (colourOf (slot).withAlpha (silent ? 0.12f : selected.contains (slot) ? 0.6f : 0.3f));
         g.strokePath (curve (bandDb), juce::PathStrokeType (1.2f));
     }
-    g.setColour (juce::Colours::white.withAlpha (0.9f));
+    g.setColour (colour::curveMain);
     g.strokePath (curve (total), juce::PathStrokeType (2.0f));
 
     // Handles, numbered by Band Slot.
@@ -377,10 +382,10 @@ void EqDisplay::paint (juce::Graphics& g)
         g.fillEllipse (circle);
         if (selected.contains (slot))
         {
-            g.setColour (juce::Colours::white);
+            g.setColour (colour::text1);
             g.drawEllipse (circle.expanded (2.0f), 1.5f);
         }
-        g.setColour (juce::Colours::black);
+        g.setColour (colour::onLight);
         g.drawText (juce::String (slot), circle, juce::Justification::centred);
         if (isDynamic (band))
         {
@@ -394,17 +399,17 @@ void EqDisplay::paint (juce::Graphics& g)
                 path.addCentredArc (centre.x, centre.y, ringRadius, ringRadius, 0.0f, 0.0f, angleOf (db), true);
                 return path;
             };
-            g.setColour (juce::Colour (0xffd04040).withAlpha (band.dynamicsBypass ? 0.35f : 0.9f));
+            g.setColour (colour::dynRange.withAlpha (band.dynamicsBypass ? 0.35f : 0.9f));
             g.strokePath (arc (reach), juce::PathStrokeType (3.0f));
             if (! band.dynamicsBypass)
             {
-                g.setColour (juce::Colours::yellow);
+                g.setColour (colour::dynLive);
                 g.strokePath (arc (drawnGain (slot, band) - band.gain), juce::PathStrokeType (3.0f));
             }
         }
         if (slot == soloedSlot)
         {
-            g.setColour (juce::Colours::yellow);
+            g.setColour (colour::text1);
             g.drawEllipse (circle.expanded (5.0f), 2.0f);
             g.drawText ("Solo", circle.withY (circle.getY() - 22.0f).expanded (20.0f, 0.0f), juce::Justification::centred);
         }
@@ -422,27 +427,27 @@ void EqDisplay::paint (juce::Graphics& g)
             const auto centre = handleOf (band);
             auto box = juce::Rectangle<float> (170.0f, 18.0f).withPosition (centre.x + 12.0f, centre.y - 26.0f);
             box = box.constrainedWithin (getLocalBounds().toFloat());
-            g.setColour (juce::Colour (0xd0000000));
+            g.setColour (colour::menu);
             g.fillRoundedRectangle (box, 4.0f);
-            g.setColour (juce::Colours::white);
+            g.setColour (colour::text1);
             g.drawText (text, box, juce::Justification::centred);
         }
 
     if (marquee)
     {
-        g.setColour (juce::Colours::white.withAlpha (0.12f));
+        g.setColour (colour::fill2);
         g.fillRect (*marquee);
-        g.setColour (juce::Colours::white.withAlpha (0.5f));
+        g.setColour (colour::text3);
         g.drawRect (*marquee, 1.0f);
     }
 
     if (allInUseMessageUntil != 0)
     {
         const auto box = getLocalBounds().toFloat().withSizeKeepingCentre (300.0f, 30.0f).withY (12.0f);
-        g.setColour (juce::Colour (0xe0402020));
+        g.setColour (colour::stateOffBg);
         g.fillRoundedRectangle (box, 6.0f);
-        g.setColour (juce::Colours::white);
-        g.setFont (14.0f);
+        g.setColour (colour::text1);
+        g.setFont (staple::font (size::fs4));
         g.drawText ("All 24 Bands are in use", box, juce::Justification::centred);
     }
 }

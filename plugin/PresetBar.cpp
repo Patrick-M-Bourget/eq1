@@ -1,6 +1,7 @@
 #include "PresetBar.h"
 
 #include "PluginProcessor.h"
+#include "staple/Tokens.h"
 
 namespace eq1
 {
@@ -39,9 +40,9 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
         processor.copyAToB();
         edited();
     };
-    // The side you're on is lit, in the display's blue.
+    // The side you're on is lit.
     for (auto* side : { &a, &b })
-        side->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2f8fd0));
+        side->setColour (juce::TextButton::buttonOnColourId, staple::tokens::colour::fill3);
     for (auto* button : { &presets, &previous, &next, &a, &b, &copyAToB })
     {
         button->setWantsKeyboardFocus (false);

@@ -66,6 +66,8 @@ public:
                                            juce::Rectangle<int> parentArea) override;
     void drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height) override;
 
+    void drawCornerResizer (juce::Graphics& g, int width, int height, bool isMouseOver, bool isMouseDragging) override;
+
     // A 2 px focus ring, 2 px outside the component.
     std::unique_ptr<juce::FocusOutline> createFocusOutlineForComponent (juce::Component& component) override;
 

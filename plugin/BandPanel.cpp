@@ -3,6 +3,7 @@
 #include "BandEditing.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "staple/Tokens.h"
 
 namespace eq1
 {
@@ -235,7 +236,7 @@ void BandPanel::timerCallback()
 
 void BandPanel::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff1d2027));
+    g.fillAll (staple::tokens::colour::raised);
 }
 
 void BandPanel::resized()
