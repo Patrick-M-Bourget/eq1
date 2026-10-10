@@ -991,20 +991,13 @@ TEST_CASE ("Left and right on a Detection Range handle nudge it 1/6 octave, one 
 
 // Renders the editor at 1200 x 760 and 2x with the Band panel on a Bell, a Low Cut with Brickwall, a
 // Bypassed Band, on mono, and on a Dynamic Bell with its dynamics section open, its Free Detection Range
-// bar, and under Dynamics Bypass, for checking by hand against the prototype. Hidden; run with
-//   EQ1_PANEL_SCREENS=/some/dir/81 build/tests/eq1_plugin_tests "[.screens]"
+// bar, and under Dynamics Bypass, for checking by hand against the prototype (harness::writeSnapshot).
 TEST_CASE ("Band panel screenshots", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_PANEL_SCREENS", {});
-    if (prefix.isEmpty())
-        SKIP ("EQ1_PANEL_SCREENS is not set");
-    const auto save = [&prefix] (PanelEditor& host, const juce::String& name) {
+    const auto save = [] (PanelEditor& host, const juce::String& name) {
         host.editor->setSize (1200, 760);
         host.settle (300);
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, 2.0f), stream);
+        harness::writeSnapshot (*host.editor, "panel-" + name);
     };
     {
         PanelEditor host;

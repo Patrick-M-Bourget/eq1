@@ -379,7 +379,6 @@ TEST_CASE ("A lit Clip Light draws in meterClip, and clicking either Clip Light 
 
 TEST_CASE ("Output Meter snapshots: a playing signal, and a lit Clip Light", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_METER_SNAPSHOT", {});
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     useLayout (processor, juce::AudioChannelSet::stereo());
@@ -387,15 +386,7 @@ TEST_CASE ("Output Meter snapshots: a playing signal, and a lit Clip Light", "[.
     editor->setSize (1200, 760);
     const auto write = [&] (const char* name) {
         harness::settle (51); // three frames
-        const auto right = editor->getLocalBounds().removeFromRight (160);
-        const auto image = editor->createComponentSnapshot (right, true, 2.0f);
-        CHECK (image.isValid());
-        if (prefix.isEmpty())
-            return;
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
+        harness::writeSnapshot (*editor, juce::String ("meter-") + name, editor->getLocalBounds().removeFromRight (160));
     };
     // Peaks at -4 dBFS on the left and -7 dBFS on the right.
     playSine (processor, 0.63f, { 1 });

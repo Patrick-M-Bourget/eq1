@@ -327,12 +327,10 @@ TEST_CASE ("At the 960 x 600 minimum the Preset browser fits inside the window w
     CHECK (browser.getLocalBounds().reduced (PresetBrowser::margin).contains (browser.getPanelBounds()));
 }
 
-// Renders the browser for checking by hand against the prototype: EQ1_BROWSER_SNAPSHOT=<path prefix>
-// writes <prefix>-folder.png (a Factory Preset loaded, its folder shown) and -search.png, each the
-// whole window.
+// Renders the browser for checking by hand against the prototype (harness::writeSnapshot):
+// browser-folder (a Factory Preset loaded, its folder shown) and browser-search, each the whole window.
 TEST_CASE ("Preset browser snapshots: a folder, and a search", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_BROWSER_SNAPSHOT", {});
     Editor host;
     const auto factory = PresetLibrary::factoryPresets();
     REQUIRE (factory.size() > 1);
@@ -340,16 +338,7 @@ TEST_CASE ("Preset browser snapshots: a folder, and a search", "[.screens]")
     host.settle (300);
     host.open();
     host.settle (300);
-    const auto write = [&] (const char* name) {
-        const auto image = host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, 1.0f);
-        CHECK (image.isValid());
-        if (prefix.isEmpty())
-            return;
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
-    };
+    const auto write = [&] (const char* name) { harness::writeSnapshot (*host.editor, juce::String ("browser-") + name, {}, 1.0f); };
     write ("folder");
     auto* search = findChild<juce::TextEditor> (host.browser(), [] (juce::TextEditor& t) { return t.getTitle() == "Search Presets"; });
     REQUIRE (search != nullptr);

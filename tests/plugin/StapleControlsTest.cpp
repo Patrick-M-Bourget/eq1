@@ -599,15 +599,10 @@ TEST_CASE ("Tab skips a disabled Knob")
     CHECK (focusStops().empty());
 }
 
-// Not run by ctest: draws every kit control in its states into the PNG at $EQ1_GALLERY_PNG, for
+// Not run by ctest: draws every kit control in its states as gallery (harness::writeSnapshot), for
 // checking by hand against the prototype (docs/staple-handoff/prototype/Main.dc.html).
-//   build/tests/eq1_plugin_tests "[.gallery]"
-TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
+TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
 {
-    const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_GALLERY_PNG", {});
-    if (path.isEmpty())
-        SKIP ("EQ1_GALLERY_PNG names the file to write");
-
     Kit kit;
     auto& w = kit.window;
     w.setSize (760, 520);
@@ -780,12 +775,7 @@ TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
     CHECK (popover.isOpen());
     CHECK (popover.isVisible());
     CHECK (popover.getAlpha() == 1.0f);
-    const auto image = w.createComponentSnapshot (w.getLocalBounds(), true, 2.0f);
-    juce::File file (path);
-    file.deleteFile();
-    juce::FileOutputStream out (file);
-    REQUIRE (out.openedOk());
-    CHECK (juce::PNGImageFormat().writeImageToStream (image, out));
+    harness::writeSnapshot (w, "gallery");
 }
 
 TEST_CASE ("A Knob's tooltip and a Popover open inside the editor's scaled content, so they scale with it")

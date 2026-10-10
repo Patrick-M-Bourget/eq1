@@ -314,22 +314,14 @@ TEST_CASE ("The popover shows settings restored with the session, and the sessio
     CHECK (host.button.getButtonText() == "Post");
 }
 
-// Renders the Analyzer popover for checking by hand against the prototype: EQ1_ANALYZER_SNAPSHOT=<path>
-// writes the window's bottom left at 2x with the popover open.
+// Renders the Analyzer popover for checking by hand against the prototype (harness::writeSnapshot):
+// analyzer, the window's bottom left at 2x with the popover open.
 TEST_CASE ("Analyzer popover snapshot", "[.screens]")
 {
-    const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_ANALYZER_SNAPSHOT", {});
     Analyzer host;
     host.settle (300);
     host.open();
     host.settle (300);
     const auto area = host.editor->getLocalBounds().removeFromBottom (340).removeFromLeft (520);
-    const auto image = host.editor->createComponentSnapshot (area, true, 2.0f);
-    CHECK (image.isValid());
-    if (path.isEmpty())
-        return;
-    juce::File file (path);
-    file.deleteFile();
-    juce::FileOutputStream stream (file);
-    juce::PNGImageFormat().writeImageToStream (image, stream);
+    harness::writeSnapshot (*host.editor, "analyzer", area);
 }

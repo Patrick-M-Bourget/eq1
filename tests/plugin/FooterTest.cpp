@@ -385,11 +385,10 @@ TEST_CASE ("The UI Scale menu, titled UI Scale, offers the five UI Scales, the c
     CHECK (items()[4] == std::pair<juce::String, bool> { "150%", true });
 }
 
-// Renders the footer for checking by hand against the prototype: EQ1_FOOTER_SNAPSHOT=<path prefix>
-// writes <prefix>-normal.png, -bypassed.png and -popover.png, each the window's bottom at 2x.
+// Renders the footer for checking by hand against the prototype (harness::writeSnapshot):
+// footer-normal, footer-bypassed and footer-popover, each the window's bottom at 2x.
 TEST_CASE ("Footer snapshots: normal, under Global Bypass and with the output popover open", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_FOOTER_SNAPSHOT", {});
     Footer host;
     setLayout (host.processor, juce::AudioChannelSet::stereo());
     host.addBand (1, 1000.0f, 6.0f);
@@ -397,15 +396,7 @@ TEST_CASE ("Footer snapshots: normal, under Global Bypass and with the output po
     host.set ("output_pan", 40.0f);
     host.settle (300);
     const auto write = [&] (const char* name) {
-        const auto bottom = host.editor->getLocalBounds().removeFromBottom (300);
-        const auto image = host.editor->createComponentSnapshot (bottom, true, 2.0f);
-        CHECK (image.isValid());
-        if (prefix.isEmpty())
-            return;
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
+        harness::writeSnapshot (*host.editor, juce::String ("footer-") + name, host.editor->getLocalBounds().removeFromBottom (300));
     };
     write ("normal");
     host.footer.toggleGlobalBypass();

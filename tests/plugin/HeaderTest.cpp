@@ -153,23 +153,14 @@ TEST_CASE ("Undo and Redo are disabled when there is nothing to undo or redo")
     CHECK (host.titled ("Redo").isEnabled());
 }
 
-// Renders the header for checking by hand against the prototype: EQ1_HEADER_SNAPSHOT=<path prefix>
-// writes <prefix>-no-preset.png and -modified-copied.png, each the window's top at 2x.
+// Renders the header for checking by hand against the prototype (harness::writeSnapshot):
+// header-no-preset and header-modified-copied, each the window's top at 2x.
 TEST_CASE ("Header snapshots: no Loaded Preset, and Modified on B just after Copy", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_HEADER_SNAPSHOT", {});
     Header host;
     host.settle (300);
     const auto write = [&] (const char* name) {
-        const auto top = host.editor->getLocalBounds().removeFromTop (80);
-        const auto image = host.editor->createComponentSnapshot (top, true, 2.0f);
-        CHECK (image.isValid());
-        if (prefix.isEmpty())
-            return;
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
+        harness::writeSnapshot (*host.editor, juce::String ("header-") + name, host.editor->getLocalBounds().removeFromTop (80));
     };
     write ("no-preset");
     host.loadPreset ("Warm Vocal Presence");

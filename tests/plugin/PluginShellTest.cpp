@@ -889,11 +889,5 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     processor.setOutputMeterShown (true);
     editor->resized();
 
-    if (const auto snapshot = juce::SystemStats::getEnvironmentVariable ("EQ1_EDITOR_SNAPSHOT", {}); snapshot.isNotEmpty())
-    {
-        juce::File file (snapshot + "-" + juce::String (percent) + (layout == juce::AudioChannelSet::mono() ? "-mono.png" : "-stereo.png"));
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds()), stream);
-    }
+    harness::writeSnapshot (*editor, "editor-" + juce::String (percent) + (layout == juce::AudioChannelSet::mono() ? "-mono" : "-stereo"), {}, 1.0f);
 }

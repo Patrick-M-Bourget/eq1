@@ -27,6 +27,31 @@ T* findChild (juce::Component& parent, std::function<bool (T&)> test = [] (T&) {
     return nullptr;
 }
 
+// Renders for checking by hand against the prototype: with EQ1_SCREENS naming a folder, writes image
+// there as <name>.png (scripts/check.sh screens <dir> runs every hidden [.screens] test so). The one
+// place a test reads an EQ1_ environment variable.
+inline void writeSnapshot (const juce::Image& image, const juce::String& name)
+{
+    CHECK (image.isValid());
+    const auto folder = juce::SystemStats::getEnvironmentVariable ("EQ1_SCREENS", {});
+    if (folder.isEmpty())
+        return;
+    const auto file = juce::File (folder).getChildFile (name + ".png");
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    REQUIRE (stream.openedOk());
+    CHECK (juce::PNGImageFormat().writeImageToStream (image, stream));
+}
+
+// Renders area of component (all of it when empty) at scale, and writes it as name (above).
+inline juce::Image writeSnapshot (juce::Component& component, const juce::String& name, juce::Rectangle<int> area = {}, float scale = 2.0f)
+{
+    auto image = component.createComponentSnapshot (area.isEmpty() ? component.getLocalBounds() : area, true, scale);
+    writeSnapshot (image, name);
+    return image;
+}
+
 // Lets JUCE's timers run for milliseconds: until a timer started now with that interval has fired.
 // JUCE fires timers in the order they fall due, so every timer due sooner has fired by then, however
 // late a busy machine's timer thread runs them (giving up after 10 s). Tests wait with this, never a

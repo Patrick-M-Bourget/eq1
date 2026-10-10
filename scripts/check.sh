@@ -4,13 +4,16 @@
 #
 #   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
-#                               glossary, no test reads a saved state as raw bytes, runs timers itself or has a non-ASCII
-#                               title, and no colour is hard-coded in plugin/ outside plugin/staple/
+#                               glossary, no test reads a saved state as raw bytes, runs timers itself, has a non-ASCII
+#                               title or reads an EQ1_ environment variable outside tests/plugin/EditorHarness.h, and no
+#                               colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh hooks      the Claude Code worktree hook's tests (not run by git hooks, which run docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
+#   scripts/check.sh screens <dir>  build the tests and render every hidden [.screens] test into <dir> as PNGs, to
+#                               compare with the rendered Staple prototype
 #   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget"); on a
 #                               Mac busy with other work it measures nothing and exits 3
 #   scripts/check.sh paint      the editor's paint time against its ceiling (docs/performance.md, "Paint time"); local
@@ -100,7 +103,15 @@ docs() {
         printf '%s\n' "$titles" | sed 's/$/: a test title outside ASCII; ctest on Windows runs no test by that name/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes, tests wait with harness::settle and have ASCII titles"
+    # Renders go through harness::writeSnapshot, the one reader of its environment variable, so a test
+    # doesn't grow plumbing of its own for them again.
+    local variables
+    variables=$(git grep -nE '(getenv|getEnvironmentVariable) *\( *"EQ1_' -- tests ':!tests/plugin/EditorHarness.h' || true)
+    if [ -n "$variables" ]; then
+        printf '%s\n' "$variables" | sed 's/$/: reads an EQ1_ environment variable; write renders with harness::writeSnapshot (tests\/plugin\/EditorHarness.h)/' >&2
+        broken=1
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes or an EQ1_ environment variable, tests wait with harness::settle and have ASCII titles"
     return "$broken"
 }
 
@@ -188,6 +199,17 @@ focus() {
         return 1
     fi
     grep -E '^[0-9]+% tests passed' "$log"
+}
+
+# Every hidden [.screens] test's renders, written into one folder by harness::writeSnapshot.
+screens() {
+    step "Renders into $1"
+    mkdir -p "$1"
+    local dir
+    dir=$(cd "$1" && pwd)
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_plugin_tests
+    EQ1_SCREENS=$dir "$(test_exe eq1_plugin_tests)" "[.screens]"
+    ls "$dir"
 }
 
 # Timings taken while the machine is busy (other builds, other agents) measure the machine, not eq1:
@@ -332,11 +354,12 @@ case "${1:-all}" in
     cpu) cpu ;;
     paint) paint ;;
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
+    screens) screens "${2:?usage: scripts/check.sh screens <dir>}" ;;
     tsan) tsan ;;
     validate) validate ;;
     docs) docs; colours ;;
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,20p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,23p' "$0" >&2; exit 2 ;;
 esac
