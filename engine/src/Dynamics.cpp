@@ -94,7 +94,6 @@ void Dynamics::setSettings (const BandSettings& settings, bool snap)
     }
     if (snap)
     {
-        samplesHeard = 0.0;
         dynamicRangeGlide.reset (dynamicRange);
         active.reset (activeTarget);
     }
@@ -111,6 +110,7 @@ void Dynamics::startAfresh()
     highLimit.setSettings (highLimitSettings, true);
     power = {};
     movement = sustain = 0.0;
+    samplesHeard = 0.0; // Auto Threshold learns the material playing now
 }
 
 void Dynamics::setAuditioned (bool newAuditioned)

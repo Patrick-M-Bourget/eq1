@@ -274,6 +274,18 @@ TEST_CASE ("Auto Threshold lets a Band rest on steady material and move on what 
     }
 }
 
+TEST_CASE ("Auto Threshold starts afresh when a Band becomes active again, so it follows what plays now")
+{
+    // Quiet material for a second, Dynamics Bypass for a second, then material 30 dB louder: a
+    // Threshold learned on the quiet material would duck the loud one at once.
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    band.thresholdAuto = true;
+    const auto run = play (1, 2.5, withBand (band), [] (int, int n) { return sine (1000.0, n < 2.0 * sampleRate ? -40.0 : -10.0, n); },
+                           [] (double seconds, Settings& s) { s.bands[0].dynamicsBypass = seconds >= 1.0 && seconds < 2.0; });
+    for (size_t b = blockAt (2.0) / 4; b < run.liveGain.size(); ++b)
+        REQUIRE (run.liveGain[b] > -1.0);
+}
+
 TEST_CASE ("A Mid or Side Dynamic Band reacts only to Mid or Side content")
 {
     const auto placement = GENERATE (StereoPlacement::Mid, StereoPlacement::Side);

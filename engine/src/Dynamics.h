@@ -48,7 +48,7 @@ public:
 
 private:
     bool running() const { return active.value() > 0.0 || active.isMoving() || auditioned; }
-    // Clears the detector, so it starts listening afresh.
+    // Clears the detector, Auto Threshold included, so it starts listening afresh.
     void startAfresh();
 
     // The detection signal: one channel, or two for a Stereo Band on a stereo source. 0 when the Band
