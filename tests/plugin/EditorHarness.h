@@ -64,11 +64,24 @@ struct OpenEditor
         set (slot, "in_use", 1.0f);
     }
 
-    // Lets the editor's timers run for a while, so it shows what the parameters hold.
+    // Lets the editor's timers run for milliseconds, so it shows what the parameters hold: until a timer
+    // started now with that interval has fired. JUCE fires timers in the order they fall due, so every
+    // timer due sooner has fired by then, however late a busy machine's timer thread runs them (giving
+    // up after 10 s).
     void settle (int milliseconds = 60)
     {
-        const auto end = juce::Time::getMillisecondCounter() + static_cast<juce::uint32> (milliseconds);
-        while (juce::Time::getMillisecondCounter() < end)
+        struct Probe final : juce::Timer
+        {
+            bool fired = false;
+            void timerCallback() override
+            {
+                fired = true;
+                stopTimer();
+            }
+        } probe;
+        probe.startTimer (milliseconds);
+        const auto giveUp = juce::Time::getMillisecondCounter() + static_cast<juce::uint32> (milliseconds + 10000);
+        while (! probe.fired && juce::Time::getMillisecondCounter() < giveUp)
         {
             juce::Timer::callPendingTimersSynchronously();
             juce::Thread::sleep (5);
