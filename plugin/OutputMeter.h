@@ -54,7 +54,10 @@ public:
 
 private:
     void timerCallback() override;
+    // Where clicks put out the Clip Lights: over both, at least 10 px tall.
     juce::Rectangle<float> clipLightArea() const;
+    // Where the bars run, from -60 dBFS at the bottom to +6 dBFS at the top, across the rail.
+    juce::Rectangle<float> barsArea() const;
     // Where channel's bar is drawn across, left to right.
     juce::Range<float> columnOf (int channel) const;
     void clearClipLights();
