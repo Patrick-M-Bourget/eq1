@@ -4,6 +4,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
+#include "staple/Light.h"
 #include "staple/controls/Overlay.h"
 
 #include <cmath>
@@ -15,7 +16,6 @@ namespace
 {
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
-namespace motion = staple::tokens::motion;
 
 constexpr int cardWidth = 176, paddingTop = 14, paddingSide = 12, paddingBottom = 10, gap = 12;
 constexpr int knobDiameter = 64, panHeight = 14, panLabelGap = 4, panLabelHeight = 12, toggleHeight = 30, toggleGap = 4;
@@ -24,8 +24,6 @@ constexpr int cardHeight = paddingTop + knobDiameter + gap + panHeight + panLabe
 
 // The thumb's small shadow.
 const juce::DropShadow thumbShadow { colour::shadow.withAlpha (0.5f), 3, { 0, 1 } };
-
-float dimmed (const juce::Component& c) { return c.isEnabled() ? 1.0f : motion::disabledAlpha; }
 } // namespace
 
 juce::String outputPanText (double pan, bool midSide)
@@ -64,9 +62,8 @@ public:
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override
     {
-        const float alpha = dimmed (*this);
-        const float light = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
-        g.setColour (colour::fill1.withMultipliedAlpha (light * alpha));
+        const float alpha = staple::enabledAlpha (*this);
+        g.setColour (staple::lit (colour::fill1, highlighted, down).withMultipliedAlpha (alpha));
         g.fillRoundedRectangle (getLocalBounds().toFloat(), size::r1);
         g.setFont (font());
         g.setColour ((highlighted || down ? colour::text1 : colour::text2).withMultipliedAlpha (alpha));
@@ -94,7 +91,7 @@ OutputPanSlider::OutputPanSlider() : KeyboardSlider ("Output Pan")
 
 void OutputPanSlider::paint (juce::Graphics& g)
 {
-    const float alpha = dimmed (*this);
+    const float alpha = staple::enabledAlpha (*this);
     const auto bounds = getLocalBounds().toFloat();
     const float width = bounds.getWidth();
     const float proportion = static_cast<float> (juce::jlimit (0.0, 1.0, (getValue() - getMinimum()) / (getMaximum() - getMinimum())));
@@ -155,13 +152,12 @@ void OutputToggle::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
     const bool on = getToggleState();
     const auto bounds = getLocalBounds().toFloat();
-    const float light = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
     if (on)
     {
-        g.setColour (colour::fill2.withMultipliedAlpha (light));
+        g.setColour (staple::lit (colour::fill2, highlighted, down));
         g.fillRoundedRectangle (bounds, size::r2);
     }
-    const auto ink = (on || highlighted || down ? colour::text1 : colour::text3).withMultipliedAlpha (dimmed (*this));
+    const auto ink = (on || highlighted || down ? colour::text1 : colour::text3).withMultipliedAlpha (staple::enabledAlpha (*this));
     if (icon)
         staple::drawIcon (g, *icon, bounds.withSizeKeepingCentre (15.0f, 15.0f), ink);
     else
@@ -262,7 +258,7 @@ void OutputPopover::paint (juce::Graphics& g)
     const bool midSide = panMode->getToggleState();
     const auto labels = panLabelsArea();
     g.setFont (staple::font (size::fs1));
-    g.setColour (colour::text3.withMultipliedAlpha (dimmed (outputPan)));
+    g.setColour (colour::text3.withMultipliedAlpha (staple::enabledAlpha (outputPan)));
     g.drawText (midSide ? "Mid" : "L", labels, juce::Justification::centredLeft, false);
     g.drawText (panReadout(), labels, juce::Justification::centred, false);
     g.drawText (midSide ? "Side" : "R", labels, juce::Justification::centredRight, false);

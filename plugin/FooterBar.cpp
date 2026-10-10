@@ -5,6 +5,7 @@
 #include "PluginProcessor.h"
 #include "UiScale.h"
 #include "staple/Fonts.h"
+#include "staple/Light.h"
 #include "staple/controls/Overlay.h"
 
 #include "eq1/Response.h"
@@ -75,7 +76,7 @@ juce::String GainScaleReadout::text() const { return juce::String (juce::roundTo
 void GainScaleReadout::paint (juce::Graphics& g)
 {
     g.setFont (readoutFont());
-    g.setColour ((notApplied ? colour::text4 : colour::text1).withMultipliedAlpha (isEnabled() ? 1.0f : staple::tokens::motion::disabledAlpha));
+    g.setColour ((notApplied ? colour::text4 : colour::text1).withMultipliedAlpha (staple::enabledAlpha (*this)));
     g.drawText (text(), getLocalBounds().reduced (readoutPadding, 0), juce::Justification::centred, false);
 }
 

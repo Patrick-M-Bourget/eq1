@@ -3,6 +3,7 @@
 #include "Accessibility.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
+#include "staple/Light.h"
 #include "staple/controls/Overlay.h"
 
 #include <cmath>
@@ -76,7 +77,7 @@ void CompareButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
     // The hover box, with no text of its own.
     staple::TextChip::paintButton (g, highlighted, down);
-    const float alpha = isEnabled() ? 1.0f : staple::tokens::motion::disabledAlpha;
+    const float alpha = staple::enabledAlpha (*this);
     const int a = widthOf (letterFont(), "A"), slash = widthOf (slashFont(), "/"), b = widthOf (letterFont(), "B");
     auto area = getLocalBounds().withSizeKeepingCentre (a + slash + b + 2, getHeight());
     g.setFont (letterFont());

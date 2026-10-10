@@ -2,6 +2,7 @@
 
 #include "../Fonts.h"
 #include "../Icons.h"
+#include "../Light.h"
 
 #include <cmath>
 
@@ -11,7 +12,6 @@ namespace staple
 namespace
 {
 namespace colour = tokens::colour;
-namespace motion = tokens::motion;
 
 constexpr float filledPadding = 8.0f, plainPadding = 6.0f;
 constexpr float chevronSize = 8.0f, chevronGap = 5.0f, chevronAlpha = 0.55f;
@@ -60,13 +60,11 @@ int TextChip::getIdealWidth() const
 
 void TextChip::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
-    const float alpha = isEnabled() ? 1.0f : motion::disabledAlpha;
+    const float alpha = enabledAlpha (*this);
     const auto bounds = getLocalBounds().toFloat();
-    // fill1 is translucent: lighting it up makes it more opaque, as brightening it over the dark does.
-    const float light = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
     if (look == Look::filled)
     {
-        g.setColour (colour::fill1.withMultipliedAlpha (light * alpha));
+        g.setColour (lit (colour::fill1, highlighted, down).withMultipliedAlpha (alpha));
         g.fillRoundedRectangle (bounds, tokens::size::r2);
     }
     else if (highlighted || down)

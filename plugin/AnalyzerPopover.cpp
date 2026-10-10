@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
+#include "staple/Light.h"
 #include "staple/LookAndFeel.h"
 
 #include <array>
@@ -16,7 +17,6 @@ namespace
 {
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
-namespace motion = staple::tokens::motion;
 
 constexpr int cardWidth = 260, padding = 10, gap = 10;
 constexpr int sourceHeight = 28, sourcePadding = 2, sourceGap = 4, rowHeight = 28, rowPadding = 8, peakHoldHeight = 30;
@@ -32,8 +32,6 @@ constexpr double tiltStep = 0.5, maximumTilt = 6.0;
 constexpr int numTilts = static_cast<int> (maximumTilt / tiltStep) + 1;
 
 juce::Font labelFont() { return staple::font (size::fs3, staple::Weight::medium); }
-
-float lightOf (bool highlighted, bool down) { return down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f; }
 
 juce::String tiltText (double tilt)
 {
@@ -76,9 +74,9 @@ int AnalyzerButton::getIdealWidth() const
 
 void AnalyzerButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
-    const float alpha = isEnabled() ? 1.0f : motion::disabledAlpha;
+    const float alpha = staple::enabledAlpha (*this);
     const auto bounds = getLocalBounds().toFloat();
-    g.setColour (colour::fill1.withMultipliedAlpha (lightOf (highlighted, down) * alpha));
+    g.setColour (staple::lit (colour::fill1, highlighted, down).withMultipliedAlpha (alpha));
     g.fillRoundedRectangle (bounds, size::r2);
 
     auto area = getLocalBounds().withTrimmedLeft (buttonPaddingLeft).withTrimmedRight (buttonPaddingRight).toFloat();
@@ -138,7 +136,7 @@ bool AnalyzerRow::keyPressed (const juce::KeyPress& key)
 
 void AnalyzerRow::paint (juce::Graphics& g)
 {
-    const float alpha = isEnabled() ? 1.0f : motion::disabledAlpha;
+    const float alpha = staple::enabledAlpha (*this);
     if (isMouseOver (true))
     {
         g.setColour (colour::fill1.withMultipliedAlpha (alpha));
@@ -193,7 +191,7 @@ public:
         const auto bounds = getLocalBounds().toFloat();
         if (on)
         {
-            g.setColour (colour::fill2.withMultipliedAlpha (lightOf (highlighted, down)));
+            g.setColour (staple::lit (colour::fill2, highlighted, down));
             g.fillRoundedRectangle (bounds, size::r2);
         }
         const auto font = labelFont();
@@ -228,7 +226,7 @@ public:
         const auto bounds = getLocalBounds().toFloat();
         if (on)
         {
-            g.setColour (colour::fill2.withMultipliedAlpha (lightOf (highlighted, down)));
+            g.setColour (staple::lit (colour::fill2, highlighted, down));
             g.fillRoundedRectangle (bounds, size::r2);
         }
         const auto ink = on || highlighted || down ? colour::text1 : colour::text3;
