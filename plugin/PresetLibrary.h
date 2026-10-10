@@ -22,7 +22,8 @@ public:
     const juce::File& folder() const { return userFolder; }
     static inline const juce::String fileExtension { ".eq1preset" };
 
-    // The User Presets' files, by name. None when the folder doesn't exist yet.
+    // The User Presets' files, in browser order: the User folder's own, then its subfolders' at any
+    // depth, depth-first, each level by name. None when the folder doesn't exist yet.
     std::vector<juce::File> userPresets() const;
 
     // Saves a Preset as name in the User folder, creating the folder if need be and replacing a
@@ -30,7 +31,7 @@ public:
     // when it can't be written.
     std::optional<juce::File> save (const juce::String& name, const juce::ValueTree& preset) const;
 
-    // A Preset file's contents, or an invalid tree when it isn't one.
+    // A Preset file's contents, or an invalid tree when it isn't one (not XML, or not eq1's state).
     static juce::ValueTree read (const juce::File& file);
 
     struct FactoryPreset
@@ -40,6 +41,25 @@ public:
     };
     // The Factory Presets, by name.
     static std::vector<FactoryPreset> factoryPresets();
+
+    // A Preset as the browser lists it.
+    struct Entry
+    {
+        juce::String name;
+        // "Factory", "User", or a User subfolder's path, such as "User/Drums/Acoustic".
+        juce::String folder;
+        // A User Preset's file; none for a Factory Preset.
+        juce::File file;
+        juce::ValueTree preset;
+    };
+    // Every Preset, read from the disk now, in browser order: Factory, then User (userPresets()). A
+    // User Preset file that doesn't read as a Preset is left out.
+    std::vector<Entry> listing() const;
+    // The entries whose Preset names contain text, ignoring case, in their order. All of them for no text.
+    static std::vector<Entry> search (const std::vector<Entry>& entries, const juce::String& text);
+    // The entry by places after (or before, when negative) the first one named loadedPreset, wrapping at
+    // the ends. With no such entry, forward is the first and back the last. Nothing when there are none.
+    static std::optional<std::size_t> step (const std::vector<Entry>& entries, const juce::String& loadedPreset, int by);
 
 private:
     juce::File userFolder;
