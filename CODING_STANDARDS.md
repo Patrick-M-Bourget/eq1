@@ -15,3 +15,7 @@ A test's inputs must cover the region its name and comments claim. Check sweep b
 ## Comments and docs state current behaviour
 
 A comment or doc says what the code does now and why. History (what changed, what the limits used to be, which ticket changed them) belongs in commit messages. A pointer to an open ticket for planned work stays, as in `Bell ignores Slope until Bell Slope (#19)`.
+
+## Shared behaviour lives once
+
+A control behaviour (drag and Shift-drag, double-click reset, hover and press light, enabled dimming, tweens, overlays, accessibility handlers) or a test helper (snapshots, synthetic mouse events, layouts) that a second component needs moves into `plugin/staple/` or `tests/plugin/EditorHarness.h`, and both call it. A second copy written beside the first drifts: two of five copied drag handlers snapped back after a double-click.
