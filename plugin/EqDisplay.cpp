@@ -325,10 +325,15 @@ int EqDisplay::focusedSlot() const
 
 void EqDisplay::releaseSolo()
 {
-    if (soloedSlot == 0)
+    processor.releaseSolo (PluginProcessor::SoloHolder::display);
+    showSolo();
+}
+
+void EqDisplay::showSolo()
+{
+    if (processor.soloSlot() == soloedSlot)
         return;
-    soloedSlot = 0;
-    processor.setSolo (0);
+    soloedSlot = processor.soloSlot();
     repaint();
 }
 
@@ -336,14 +341,15 @@ void EqDisplay::timerCallback()
 {
     if (heldSlot != 0 && juce::Time::getMillisecondCounter() - heldSince >= soloHoldMilliseconds)
     {
-        soloedSlot = heldSlot;
+        processor.holdSolo (heldSlot, PluginProcessor::SoloHolder::display);
         heldSlot = 0;
-        processor.setSolo (soloedSlot);
-        repaint();
     }
-    // A Band deleted, or taken out of use by automation, while Soloed lets go of its Solo for good.
-    if (soloedSlot != 0 && ! editing.band (soloedSlot).inUse)
+    // A Band deleted, or taken out of use by automation, while Soloed by a held handle lets go of its
+    // Solo for good.
+    if (processor.soloSlot() != 0 && ! editing.band (processor.soloSlot()).inUse)
         releaseSolo();
+    // Solo held here or on the Band panel draws its cue.
+    showSolo();
     // A heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
     const bool fading = stepFades();

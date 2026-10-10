@@ -74,6 +74,9 @@ public:
     // open or every Band Slot is in use.
     std::optional<display::Ghost> ghost() const;
 
+    // The Band whose handle draws the Solo cue: the Soloed one, whichever holder Solos it, or 0.
+    int soloCueSlot() const { return frame().soloedSlot; }
+
 private:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     // A Band's place in Tab's order: an element at its handle that takes keyboard focus. The display
@@ -160,8 +163,9 @@ private:
     static constexpr juce::uint32 soloHoldMilliseconds = 350;
     int heldSlot = 0; // the handle being held, before it Solos or the mouse moves
     juce::uint32 heldSince = 0;
-    int soloedSlot = 0;
+    int soloedSlot = 0; // the Soloed Band as last drawn, whichever holder Solos it
     void releaseSolo();
+    void showSolo();
     // How far the mouse moves before a press counts as a drag, in pixels.
     static constexpr int dragThreshold = 3;
     std::optional<juce::Rectangle<float>> marquee;

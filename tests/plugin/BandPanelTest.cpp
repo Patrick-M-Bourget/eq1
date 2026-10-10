@@ -272,6 +272,44 @@ TEST_CASE ("Holding the Band panel's Solo button Solos its Band until it is let 
     }
 }
 
+TEST_CASE ("The Band panel's Solo and the display's held handle share one Solo: neither lets go of the other's, and both draw the cue")
+{
+    PanelEditor host;
+    auto& solo = host.control<staple::IconButton> ("Band 1 Solo");
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    const auto handle = host.at (1000.0);
+    const auto holdHandle = [&] {
+        host.display.mouseDown (host.mouseEvent (handle, left, handle));
+        host.settle (450);
+    };
+    const auto letGoOfHandle = [&] { host.display.mouseUp (host.mouseEvent (handle, {}, handle)); };
+
+    solo.setState (juce::Button::buttonDown);
+    host.settle (60);
+    CHECK (host.display.soloCueSlot() == 1);
+
+    SECTION ("the display takes over: letting go of the button leaves the display's Solo")
+    {
+        holdHandle();
+        solo.setState (juce::Button::buttonNormal);
+        CHECK (host.processor.soloSlot() == 1);
+        letGoOfHandle();
+        CHECK (host.processor.soloSlot() == 0);
+    }
+    SECTION ("the button takes over: letting go of the handle leaves the button's Solo")
+    {
+        solo.setState (juce::Button::buttonNormal);
+        holdHandle();
+        solo.setState (juce::Button::buttonDown);
+        letGoOfHandle();
+        CHECK (host.processor.soloSlot() == 1);
+        solo.setState (juce::Button::buttonNormal);
+        CHECK (host.processor.soloSlot() == 0);
+    }
+    host.settle (60);
+    CHECK (host.display.soloCueSlot() == 0);
+}
+
 TEST_CASE ("The Band selector steps through the Bands in Frequency order, wrapping, and the display's selection follows")
 {
     PanelEditor host; // Band 2 at 100 Hz, 1 at 1 kHz, 3 at 5 kHz

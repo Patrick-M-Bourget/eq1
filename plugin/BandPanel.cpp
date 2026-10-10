@@ -265,8 +265,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
     solo.onStateChange = [this] {
         if (solo.isDown() && slot != 0)
         {
-            soloHeld = true;
-            processor.setSolo (slot);
+            processor.holdSolo (slot, PluginProcessor::SoloHolder::panel);
             solo.setToggleState (true, juce::dontSendNotification);
         }
         else if (! solo.isDown())
@@ -379,10 +378,7 @@ BandPanel::~BandPanel()
 void BandPanel::releaseSolo()
 {
     solo.setToggleState (false, juce::dontSendNotification);
-    if (! soloHeld)
-        return;
-    soloHeld = false;
-    processor.setSolo (0);
+    processor.releaseSolo (PluginProcessor::SoloHolder::panel);
 }
 
 std::vector<juce::Component*> BandPanel::faded()

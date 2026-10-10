@@ -90,8 +90,32 @@ public:
 
     // Solo, while the editor holds a Band: its Band Slot (1 to 24), or 0. Not a host parameter, not
     // saved, not undoable; restoring a session lets go of it.
-    void setSolo (int slot) { heldSoloSlot = slot; }
+    void setSolo (int slot)
+    {
+        soloHolder = SoloHolder::none;
+        heldSoloSlot = slot;
+    }
     int soloSlot() const { return heldSoloSlot.load(); }
+    // The editor's two ways to hold Solo share it: holding takes Solo over from the other, and letting
+    // go releases it only while this holder still has it, so neither lets go of the other's Solo.
+    // Message thread only.
+    enum class SoloHolder
+    {
+        none,
+        display, // a held handle
+        panel    // the Band panel's Solo button
+    };
+    void holdSolo (int slot, SoloHolder holder)
+    {
+        heldSoloSlot = slot;
+        soloHolder = holder;
+    }
+    void releaseSolo (SoloHolder holder)
+    {
+        if (soloHolder == holder)
+            setSolo (0);
+    }
+    bool holdsSolo (SoloHolder holder) const { return soloHolder == holder; }
 
     // Detection Audition, while the editor holds it: the Band Slot (1 to 24) whose detection signal
     // plays instead of the output, or 0. Like Solo: not a host parameter, not saved, let go on restore.
@@ -168,6 +192,7 @@ private:
     juce::SpinLock seenGainsLock; // a host may restore a session from another thread
     HeardGains currentHeardGains() const;
     std::atomic<int> heldSoloSlot { 0 };
+    SoloHolder soloHolder = SoloHolder::none;
     std::atomic<bool> processedAudio { false };
     std::atomic<int> heldAuditionSlot { 0 };
     std::atomic<int> heldMeteredSlot { 0 };

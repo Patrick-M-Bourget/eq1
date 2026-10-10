@@ -107,7 +107,6 @@ private:
     staple::Knob frequency { staple::tokens::knob::frequency, "Frequency" }, gain { staple::tokens::knob::gain, "Gain" },
         q { staple::tokens::knob::q, "Q" };
     juce::Label frequencyLabel, gainLabel, qLabel;
-    bool soloHeld = false;
 
     DynamicRangeRing ring;
     // Above Gain on a Dynamic Band: Clear Dynamics, Dynamics Bypass and the section's chevron.
