@@ -446,6 +446,37 @@ TEST_CASE ("Holding Detection Audition plays the detection signal; it is not a h
     CHECK (restored.detectionAuditionSlot() == 0);
 }
 
+TEST_CASE ("The editor reads the Detection Level of the Band it meters; the metered Band is not a host parameter and is not saved")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    setParameter (processor, "band3_in_use", 1.0f);
+    setParameter (processor, "band3_frequency", 1000.0f);
+
+    // A full-scale sine in the Bell's region reads 0 dB.
+    processor.setMeteredBand (3);
+    CHECK (processor.meteredSlot() == 3);
+    sineGainDb (processor, 1000.0);
+    CHECK_THAT (processor.readDetectionLevel(), WithinAbs (0.0, 0.1));
+
+    processor.setMeteredBand (0);
+    sineGainDb (processor, 1000.0);
+    CHECK_THAT (processor.readDetectionLevel(), WithinAbs (eq1::levelFloorDb, 0.0));
+
+    for (auto* parameter : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
+            CHECK_FALSE (ranged->getParameterID().containsIgnoreCase ("meter"));
+    processor.setMeteredBand (3);
+    juce::MemoryBlock state;
+    processor.getStateInformation (state);
+    CHECK_FALSE (state.toString().containsIgnoreCase ("meter"));
+    eq1::PluginProcessor restored;
+    restored.setMeteredBand (2);
+    restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    CHECK (restored.meteredSlot() == 0);
+}
+
 TEST_CASE ("Stereo Placement is available on stereo tracks only")
 {
     juce::ScopedJuceInitialiser_GUI juce;

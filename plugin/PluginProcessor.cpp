@@ -44,6 +44,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         settings.bands[slot] = slots[slot].read();
     settings.soloSlot = heldSoloSlot.load();
     settings.auditionSlot = heldAuditionSlot.load();
+    settings.meteredSlot = heldMeteredSlot.load();
     output.readInto (settings);
     engine.setSettings (settings);
 
@@ -164,6 +165,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
     {
         setSolo (0);
         setDetectionAudition (0);
+        setMeteredBand (0);
         auto state = juce::ValueTree::fromXml (*xml);
         migrate (state);
         state.removeProperty (versionProperty, nullptr);
