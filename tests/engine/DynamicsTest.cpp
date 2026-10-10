@@ -306,6 +306,88 @@ TEST_CASE ("Auto Threshold starts afresh when a Band becomes active again, so it
         REQUIRE (run.liveGain[b] > -1.0);
 }
 
+namespace
+{
+// White noise at levelDb, its level shaped by envelopeDb (seconds), drawn once so it can be replayed.
+std::vector<double> shapedNoise (double seconds, double levelDb, const std::function<double (double)>& envelopeDb)
+{
+    std::mt19937 random (7);
+    std::normal_distribution<double> gaussian;
+    std::vector<double> material (static_cast<size_t> (seconds * sampleRate));
+    for (size_t n = 0; n < material.size(); ++n)
+        material[n] = amplitudeOf (levelDb + envelopeDb (n / sampleRate)) * gaussian (random);
+    return material;
+}
+
+// A Dynamic Bell at 1 kHz, Q 1, Gain 0, in Auto Threshold, played over material in Engine runs.
+Run playAuto (const std::vector<double>& material, double dynamicRange, const std::function<void (double, Settings&)>& change = {})
+{
+    auto band = test::bellBand (1000.0, 0.0, 1.0);
+    band.dynamicRange = dynamicRange;
+    REQUIRE (band.thresholdAuto);
+    return play (1, material.size() / sampleRate, withBand (band), [&] (int, int n) { return material[static_cast<size_t> (n)]; },
+                 change, timingBlock);
+}
+
+// The Live Gain furthest from Gain (0 dB), and the one nearest it, between from and to seconds.
+double mostMoved (const Run& run, double from, double to)
+{
+    double most = 0.0;
+    for (size_t b = blockAt (from); b < blockAt (to); ++b)
+        most = std::max (most, std::abs (run.liveGain[b]));
+    return most;
+}
+
+double leastMoved (const Run& run, double from, double to)
+{
+    double least = 1000.0;
+    for (size_t b = blockAt (from); b < blockAt (to); ++b)
+        least = std::min (least, std::abs (run.liveGain[b]));
+    return least;
+}
+} // namespace
+
+TEST_CASE ("Auto Threshold follows the material's spread, so a Band moves on ordinary swings at any level")
+{
+    // Noise whose level swings +/-6 dB at 4 Hz: loud around each quarter-period's peak, quiet around
+    // each trough. Spec #1 "Dynamics response" (ADR 0005), as amended for #152.
+    const double levelDb = GENERATE (-36.0, -12.0);
+    const double dynamicRange = GENERATE (-6.0, -12.0);
+    CAPTURE (levelDb, dynamicRange);
+    constexpr double seconds = 5.0, rate = 4.0, period = 1.0 / rate;
+    const auto material = shapedNoise (seconds, levelDb, [] (double t) { return 6.0 * std::sin (2.0 * std::numbers::pi * rate * t); });
+    const auto run = playAuto (material, dynamicRange);
+
+    // After the first two seconds, each loud half-cycle moves at least 0.4 of the Dynamic Range, and
+    // each quiet one comes back within a quarter of it: Auto Release limits how far it gets back.
+    const double nearGain = 0.25 * std::abs (dynamicRange);
+    for (double start = 2.0; start + period <= seconds; start += period)
+    {
+        CAPTURE (start);
+        CHECK (mostMoved (run, start, start + 0.5 * period) >= 0.4 * std::abs (dynamicRange));
+        CHECK (leastMoved (run, start + 0.5 * period, start + period) <= nearGain);
+    }
+}
+
+TEST_CASE ("Auto Threshold learns a swell slowly, so a sustained swell moves the Band")
+{
+    // Steady noise for three seconds, then 6 dB louder for one.
+    const auto material = shapedNoise (4.0, -24.0, [] (double t) { return t >= 3.0 ? 6.0 : 0.0; });
+    const auto run = playAuto (material, -6.0);
+    CHECK (std::abs (run.liveGain[blockAt (4.0) - 1]) >= 0.35 * 6.0);
+}
+
+TEST_CASE ("Auto Threshold holds the Band at Gain until it has heard the region for a moment")
+{
+    // Quiet noise, Dynamics Bypassed until 0.5 s; from 0.55 s a tone 20 dB louder stands out of it,
+    // which would move the Band at once if Auto Threshold had already learned the noise.
+    auto material = shapedNoise (1.5, -36.0, [] (double) { return 0.0; });
+    for (size_t n = static_cast<size_t> (0.55 * sampleRate); n < material.size(); ++n)
+        material[n] += sine (1000.0, -16.0, static_cast<int> (n));
+    const auto run = playAuto (material, -6.0, [] (double seconds, Settings& s) { s.bands[0].dynamicsBypass = seconds < 0.5; });
+    CHECK (mostMoved (run, 0.0, 0.7) == 0.0);
+}
+
 TEST_CASE ("A Mid or Side Dynamic Band reacts only to Mid or Side content")
 {
     const auto placement = GENERATE (StereoPlacement::Mid, StereoPlacement::Side);
