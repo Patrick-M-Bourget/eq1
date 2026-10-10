@@ -57,7 +57,8 @@ target_sources(eq1 PRIVATE
     AnalyzerSpectrum.cpp
     staple/Fonts.cpp
     staple/Icons.cpp
-    staple/LookAndFeel.cpp)
+    staple/LookAndFeel.cpp
+    KeyboardSlider.cpp)
 
 # The Factory Presets, bundled into the plugin.
 juce_add_binary_data(eq1_factory_presets

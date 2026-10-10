@@ -64,6 +64,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     analyzerTiltLabel.setText ("Analyzer Tilt", juce::dontSendNotification);
     addAndMakeVisible (analyzerTiltLabel);
     analyzerTilt.setSliderStyle (juce::Slider::LinearHorizontal);
+    // In 0.5 dB/oct steps (the Staple Analyzer popover, #84, cycles Off, 3, 4.5 and 6): an arrow key
+    // moves it one step, as a step smaller than the interval would round back.
     analyzerTilt.setRange (0.0, 6.0, 0.5);
     analyzerTilt.setTextValueSuffix (" dB/oct");
     analyzerTilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 20);

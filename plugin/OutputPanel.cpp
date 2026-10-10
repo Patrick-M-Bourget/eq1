@@ -16,6 +16,7 @@ OutputPanel::OutputPanel (PluginProcessor& p) : processor (p)
     for (size_t i = 0; i < std::size (sliders); ++i)
     {
         auto [slider, label] = sliders[i];
+        slider->setName (names[i]);
         slider->setSliderStyle (juce::Slider::LinearHorizontal);
         slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 20);
         label->setText (names[i], juce::dontSendNotification);

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <numeric>
 #include <utility>
 
@@ -182,6 +183,14 @@ void BandEditing::endDrag()
     dragged.clear();
     if (std::exchange (grabbing, false))
         history.endTransaction();
+}
+
+void BandEditing::nudge (const std::vector<int>& slotsToNudge, double semitones, double gainOffset)
+{
+    // A drag from where the Bands are, so they stop together as a drag's do.
+    beginDrag (slotsToNudge);
+    dragBy (std::pow (2.0, semitones / 12.0), gainOffset);
+    endDrag();
 }
 
 void BandEditing::scaleQ (int slot, double factor)

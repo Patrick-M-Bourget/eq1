@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DetectionArc.h"
+#include "KeyboardSlider.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -55,7 +56,7 @@ private:
 
     juce::Label title;
     juce::ComboBox shape, placement, detectionSource, detectionRange;
-    juce::Slider frequency, gain, q, slope, dynamicRange, threshold, attack, release, detectionLow, detectionHigh;
+    KeyboardSlider frequency, gain, q, slope, dynamicRange, threshold, attack, release, detectionLow, detectionHigh;
     juce::Label frequencyLabel, gainLabel, qLabel, slopeLabel, dynamicRangeLabel, thresholdLabel, attackLabel, releaseLabel,
         detectionLowLabel, detectionHighLabel;
     DetectionArc detectionArc { processor, threshold };

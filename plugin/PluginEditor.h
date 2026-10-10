@@ -3,6 +3,7 @@
 #include "BandEditing.h"
 #include "BandPanel.h"
 #include "EqDisplay.h"
+#include "KeyboardSlider.h"
 #include "OutputMeter.h"
 #include "OutputPanel.h"
 #include "PresetBar.h"
@@ -56,7 +57,7 @@ private:
     juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" }, showSidechain { "Sidechain" }, peakHold { "Peak Hold" };
     juce::ComboBox analyzerRange, analyzerSpeed, analyzerResolution;
     juce::Label analyzerTiltLabel;
-    juce::Slider analyzerTilt;
+    KeyboardSlider analyzerTilt { "Analyzer Tilt" };
     void showAnalyzerSettings();
     void storeAnalyzerSettings();
 };

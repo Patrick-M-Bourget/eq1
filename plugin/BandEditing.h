@@ -53,6 +53,11 @@ public:
     void dragBy (double frequencyRatio, double gainOffset);
     void endDrag();
 
+    // The arrow keys: moves the given Bands from where they are, Frequency by semitones and Gain by
+    // gainOffset as heard, as one edit. Like a drag, the Bands stop together at the edge of a range,
+    // and a Band whose Shape has no Gain keeps it.
+    void nudge (const std::vector<int>& slots, double semitones, double gainOffset);
+
     // Multiplies a Band's Q by factor, within its range: the mouse wheel.
     void scaleQ (int slot, double factor);
     // The same on several Bands as one edit: the wheel over a selection.
