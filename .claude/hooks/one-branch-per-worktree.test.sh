@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 # Tests one-branch-per-worktree.sh against a throwaway repository with one linked worktree.
-# Run: .claude/hooks/one-branch-per-worktree.test.sh (scripts/check.sh docs runs it too).
+# Run: .claude/hooks/one-branch-per-worktree.test.sh
 set -uo pipefail
+# Inside a git hook, GIT_DIR and GIT_INDEX_FILE point at the repository being committed to; left set,
+# the throwaway repository's git init and commit would land there.
+unset $(git rev-parse --local-env-vars)
 hook=$(cd "$(dirname "$0")" && pwd)/one-branch-per-worktree.sh
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 main=$tmp/repo
 linked=$tmp/linked
 git init -q -b main "$main"
+if [ "$(git -C "$main" rev-parse --show-toplevel 2> /dev/null)" != "$(cd "$main" && pwd -P)" ]; then
+    echo "one-branch-per-worktree.test.sh: the throwaway repository isn't separate; stopping" >&2
+    exit 1
+fi
 git -C "$main" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 git -C "$main" worktree add -q --detach "$linked"
 
