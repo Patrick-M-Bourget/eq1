@@ -5,6 +5,7 @@
 #include "staple/Wordmark.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/TextChip.h"
+#include "staple/controls/Tween.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -16,7 +17,7 @@ class PluginProcessor;
 // The A/B Compare button (HANDOFF.md §5.6): one plain text button reading "A/B", the side you're on
 // in text1 and the other in text4, the slash in text4 at 400. The letters' colours change over dur2.
 // A screen reader reads the side you're on as its value.
-class CompareButton final : public staple::TextChip, private juce::Timer
+class CompareButton final : public staple::TextChip
 {
 public:
     CompareButton();
@@ -29,12 +30,10 @@ public:
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
 
 private:
-    void timerCallback() override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
-    float progress() const;
 
     CompareSide side = CompareSide::A, previousSide = CompareSide::A;
-    double changedAt = 0.0;
+    staple::Tween change { staple::tokens::motion::dur2Ms, 1.0f }; // from previousSide to side
 };
 
 // The window's header (HANDOFF.md §4, §5.6, §9B): the wordmark on the left; ‹, the Presets button and

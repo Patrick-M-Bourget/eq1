@@ -6,6 +6,7 @@
 #include "Parameters.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/TextChip.h"
+#include "staple/controls/Tween.h"
 
 #include "eq1/Settings.h"
 
@@ -136,8 +137,7 @@ private:
     std::unique_ptr<SliderAttachment> gainScaleAttachment;
     std::unique_ptr<ButtonAttachment> globalBypassAttachment;
     bool bypassedShown = false;
-    float bypassedAlpha = 0.0f;
-    double bypassedSince = 0.0;
+    staple::Tween bypassedFade { staple::tokens::motion::dur2Ms, 0.0f }; // "Bypassed" fading in
     std::vector<parameters::SlotValues> slotValues;
     parameters::OutputValues outputValues;
     // Auto Gain's estimate, and the settings it was worked out for.

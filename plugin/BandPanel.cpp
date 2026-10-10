@@ -224,38 +224,6 @@ void BandPanel::SlopeButton::stoppedDragging()
 }
 
 //==============================================================================
-void BandPanel::Tween::towards (float target)
-{
-    if (juce::exactlyEqual (target, to))
-        return;
-    from = now;
-    to = target;
-    startedMs = juce::Time::getMillisecondCounterHiRes();
-    startTimerHz (60);
-}
-
-void BandPanel::Tween::jump (float target)
-{
-    from = to = now = target;
-    stopTimer();
-    if (apply != nullptr)
-        apply (now);
-}
-
-void BandPanel::Tween::timerCallback()
-{
-    const auto elapsed = static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - startedMs) / durationMs);
-    now = from + (to - from) * staple::ease (elapsed);
-    if (elapsed >= 1.0f)
-    {
-        now = to;
-        stopTimer();
-    }
-    if (apply != nullptr)
-        apply (now);
-}
-
-//==============================================================================
 BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editing (e), ring (p, gain), section (p)
 {
     slope = std::make_unique<SlopeButton> (*this);
@@ -366,7 +334,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
 
     slide.apply = [this] (float) {
         placeAtWidth();
-        if (slide.now <= 0.0f && slide.to <= 0.0f)
+        if (slide.value() <= 0.0f && slide.target() <= 0.0f)
             section.setVisible (false);
     };
 
@@ -553,7 +521,7 @@ void BandPanel::showDynamics (bool animate)
         slide.jump (open ? 1.0f : 0.0f);
 }
 
-bool BandPanel::isDynamicsOpen() const { return slide.to > 0.0f; }
+bool BandPanel::isDynamicsOpen() const { return slide.target() > 0.0f; }
 
 void BandPanel::setAnchor (juce::Point<int> bottomCentre)
 {
@@ -563,7 +531,7 @@ void BandPanel::setAnchor (juce::Point<int> bottomCentre)
 
 void BandPanel::placeAtWidth()
 {
-    const int w = width + juce::roundToInt (slide.now * static_cast<float> (openWidth - width));
+    const int w = width + juce::roundToInt (slide.value() * static_cast<float> (openWidth - width));
     if (anchor.has_value())
         setBounds (anchor->x - w / 2, anchor->y - height, w, height);
     else
@@ -700,7 +668,7 @@ void BandPanel::paint (juce::Graphics& g)
     }
 
     // What fades with the Bypassed Band: the dividers and the Band's number.
-    const float alpha = fade.now;
+    const float alpha = fade.value();
     g.setColour (colour::fill2.withMultipliedAlpha (alpha));
     for (int x : dividers)
         g.fillRect (x, contentTop, 1, contentHeight);

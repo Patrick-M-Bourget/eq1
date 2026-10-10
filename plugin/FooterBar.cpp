@@ -6,7 +6,6 @@
 #include "UiScale.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
-#include "staple/controls/Overlay.h"
 
 #include "eq1/Response.h"
 
@@ -169,6 +168,7 @@ std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHand
 FooterBar::FooterBar (PluginProcessor& p)
     : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerSettings (p), popover (p)
 {
+    bypassedFade.apply = [this] (float) { repaint(); };
     auto& state = processor.parameterState();
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slotValues.push_back (parameters::SlotValues::of (state, slot));
@@ -270,8 +270,6 @@ void FooterBar::timerCallback()
     showBypass();
     showOutputLevel();
     showAnalyzerSources();
-    if (bypassedShown && bypassedAlpha < 1.0f)
-        repaint();
 }
 
 void FooterBar::showBypass()
@@ -280,8 +278,9 @@ void FooterBar::showBypass()
     if (on == bypassedShown)
         return;
     bypassedShown = on;
-    bypassedSince = juce::Time::getMillisecondCounterHiRes();
-    bypassedAlpha = 0.0f;
+    bypassedFade.jump (0.0f);
+    if (on)
+        bypassedFade.towards (1.0f);
     gainScale.setNotApplied (on);
     output.setNotApplied (on);
     resized();
@@ -330,11 +329,10 @@ void FooterBar::paint (juce::Graphics& g)
     if (! bypassedShown)
         return;
     // "Bypassed" fades in beside Global Bypass over dur2.
-    bypassedAlpha = staple::ease (static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - bypassedSince) / staple::tokens::motion::dur2Ms));
     const auto font = bypassedFont();
     const int width = staple::textWidth (font, bypassedText);
     g.setFont (font);
-    g.setColour (colour::stateOff.withMultipliedAlpha (bypassedAlpha));
+    g.setColour (colour::stateOff.withMultipliedAlpha (bypassedFade.value()));
     g.drawText (bypassedText, globalBypass.getRight() + footerGap - bypassedOverlap, 0, width, getHeight(), juce::Justification::centredLeft, false);
 }
 

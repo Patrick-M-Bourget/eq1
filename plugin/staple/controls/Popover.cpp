@@ -15,12 +15,12 @@ namespace motion = tokens::motion;
 // Room around the card for shadow1 (24 px blur, 8 px down) to show in.
 const juce::BorderSize<int> shadowMargin { 4, 12, 20, 12 };
 constexpr int gapToOpener = 6;
-constexpr int frameMs = 16;
 } // namespace
 
-Popover::Popover()
+Popover::Popover() : opening (motion::dur2Ms, 1.0f)
 {
     setVisible (false);
+    opening.apply = [this] (float progress) { popIn (progress); };
 }
 
 Popover::~Popover()
@@ -79,9 +79,8 @@ void Popover::open (juce::Component& newOpener, Placement preferred)
         top->addKeyListener (this);
     }
 
-    openedAt = juce::Time::getMillisecondCounterHiRes();
-    timerCallback();
-    startTimer (frameMs);
+    opening.jump (0.0f);
+    opening.towards (1.0f);
 }
 
 void Popover::close()
@@ -93,10 +92,8 @@ void Popover::close()
     // Focus inside it goes back to the opener; focus elsewhere stays there.
     auto* focused = getCurrentlyFocusedComponent();
     const bool focusInside = focused != nullptr && (focused == this || isParentOf (focused));
-    stopTimer();
     juce::Desktop::getInstance().removeGlobalMouseListener (this);
-    setTransform ({});
-    setAlpha (1.0f);
+    opening.jump (1.0f);
     setVisible (false);
     if (escapeFrom != nullptr)
         escapeFrom->removeKeyListener (this);
@@ -109,21 +106,10 @@ void Popover::close()
         onClose();
 }
 
-void Popover::timerCallback()
+void Popover::popIn (float progress)
 {
-    const float t = static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - openedAt) / motion::dur2Ms);
-    const float progress = ease (t);
-    const float scale = motion::popInScale + (1.0f - motion::popInScale) * progress;
-    const auto centre = getCardBounds().toFloat().getCentre();
-    setTransform (juce::AffineTransform::scale (scale, scale, centre.x, centre.y)
-                      .translated (0.0f, motion::popInOffset * (1.0f - progress)));
+    setTransform (popInTransform (getCardBounds().toFloat(), progress));
     setAlpha (progress);
-    if (t >= 1.0f)
-    {
-        stopTimer();
-        setTransform ({});
-        setAlpha (1.0f);
-    }
 }
 
 void Popover::paint (juce::Graphics& g)

@@ -16,7 +16,6 @@ namespace
 {
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
-namespace motion = staple::tokens::motion;
 
 // The panel's rows and columns (HANDOFF.md §5.6; prototype Main.dc.html, "Preset browser").
 constexpr int searchRowHeight = 56, searchPadLeft = 16, searchPadRight = 14, searchGap = 10;
@@ -26,7 +25,6 @@ constexpr int folderWidth = 200, folderPadY = 10, folderPadX = 8, folderRowHeigh
 constexpr int titleHeight = 34, listPadX = 8, listPadBottom = 10, rowHeight = 34, rowPadX = 10;
 constexpr int footerHeight = 46, footerPad = 10, footerGap = 4, actionHeight = 30, actionPad = 10, nameFieldWidth = 220, nameFieldHeight = 26;
 constexpr float folderDot = 5.0f, presetDot = 6.0f;
-constexpr int frameMs = 16;
 
 const juce::String openQuote = juce::String::fromUTF8 ("\xe2\x80\x9c"), closeQuote = juce::String::fromUTF8 ("\xe2\x80\x9d");
 
@@ -177,6 +175,10 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
     setName ("Preset Browser");
     setTitle ("Preset browser");
     setVisible (false);
+    opening.apply = [this] (float progress) {
+        panel.setTransform (staple::popInTransform (panel.getLocalBounds().toFloat(), progress));
+        setAlpha (progress);
+    };
     // Over everything, the overlay layer's tooltip window included.
     setAlwaysOnTop (true);
     setWantsKeyboardFocus (true);
@@ -286,39 +288,20 @@ void PresetBrowser::open (const juce::String& loadedPreset, const PresetLibrary:
     setVisible (true);
     focusOn (search);
     // Pops in over dur2, as a popover does.
-    openedAt = juce::Time::getMillisecondCounterHiRes();
-    timerCallback();
-    startTimer (frameMs);
+    opening.jump (0.0f);
+    opening.towards (1.0f);
 }
 
 void PresetBrowser::close()
 {
     if (! isVisible())
         return;
-    stopTimer();
+    opening.jump (1.0f);
     stopSaving (false);
-    panel.setTransform ({});
-    setAlpha (1.0f);
     setVisible (false);
     auto* returnTo = focusBefore != nullptr ? focusBefore.getComponent() : opener;
     if (returnTo != nullptr)
         focusOn (*returnTo);
-}
-
-void PresetBrowser::timerCallback()
-{
-    const float t = static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - openedAt) / motion::dur2Ms);
-    const float progress = staple::ease (juce::jlimit (0.0f, 1.0f, t));
-    const float scale = motion::popInScale + (1.0f - motion::popInScale) * progress;
-    const auto centre = panel.getLocalBounds().toFloat().getCentre();
-    panel.setTransform (juce::AffineTransform::scale (scale, scale, centre.x, centre.y).translated (0.0f, motion::popInOffset * (1.0f - progress)));
-    setAlpha (progress);
-    if (t >= 1.0f)
-    {
-        stopTimer();
-        panel.setTransform ({});
-        setAlpha (1.0f);
-    }
 }
 
 void PresetBrowser::showLoaded (const juce::String& loadedPreset, const PresetLibrary::Entry* lastLoadedEntry)

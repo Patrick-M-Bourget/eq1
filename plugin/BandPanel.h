@@ -6,6 +6,7 @@
 #include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/Knob.h"
+#include "staple/controls/Tween.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -116,19 +117,8 @@ private:
     bool sectionWanted = true; // open unless closed by », while the editor is open
     std::optional<juce::Point<int>> anchor;
 
-    // A value eased from one target to the next over durationMs: the Bypassed fade, the section's slide.
-    struct Tween final : juce::Timer
-    {
-        explicit Tween (int ms, float start) : durationMs (ms), from (start), to (start), now (start) {}
-        std::function<void (float)> apply;
-        int durationMs;
-        float from, to, now;
-        double startedMs = 0.0;
-        void towards (float target);
-        void jump (float target);
-        void timerCallback() override;
-    };
-    Tween fade { staple::tokens::motion::dur2Ms, 1.0f }, slide { staple::tokens::motion::dur3Ms, 1.0f };
+    // The Bypassed fade and the section's slide.
+    staple::Tween fade { staple::tokens::motion::dur2Ms, 1.0f }, slide { staple::tokens::motion::dur3Ms, 1.0f };
 
     juce::Path slab; // the body and its bell, in the panel's coordinates
     std::array<int, 2> dividers {}; // their x

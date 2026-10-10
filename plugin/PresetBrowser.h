@@ -3,6 +3,7 @@
 #include "PresetLibrary.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/TextChip.h"
+#include "staple/controls/Tween.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -25,7 +26,7 @@ namespace eq1
 // the Presets button when it was opened from there by keyboard, the display after a click on it (so
 // Delete still reaches the display), or the Presets button when nothing had focus;
 // while it is open, Tab stays within it.
-class PresetBrowser final : public juce::Component, private juce::ListBoxModel, private juce::Timer
+class PresetBrowser final : public juce::Component, private juce::ListBoxModel
 {
 public:
     explicit PresetBrowser (const PresetLibrary& library);
@@ -103,7 +104,6 @@ private:
         bool keyPressed (const juce::KeyPress& key) override;
     };
 
-    void timerCallback() override; // the pop-in
     void showRows();
     void showFolders();
     bool isSearching() const;
@@ -132,7 +132,7 @@ private:
     std::vector<const PresetLibrary::Entry*> rows;
     juce::String loaded, selectedFolder = "Factory";
     std::optional<PresetLibrary::Entry> lastLoaded;
-    double openedAt = 0.0;
+    staple::Tween opening { staple::tokens::motion::dur2Ms, 1.0f }; // the pop-in
     juce::Component::SafePointer<juce::Component> focusBefore; // given focus back on closing
 
     Panel panel { *this };

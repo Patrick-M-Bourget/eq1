@@ -4,7 +4,6 @@
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
-#include "staple/controls/Overlay.h"
 
 #include <cmath>
 
@@ -31,6 +30,7 @@ CompareButton::CompareButton() : staple::TextChip ({}, Look::plain, size::fs4)
 {
     setName ("A/B Compare");
     setTitle ("A/B Compare");
+    change.apply = [this] (float) { repaint(); };
 }
 
 void CompareButton::showSide (CompareSide newSide)
@@ -39,28 +39,15 @@ void CompareButton::showSide (CompareSide newSide)
         return;
     previousSide = side;
     side = newSide;
-    changedAt = juce::Time::getMillisecondCounterHiRes();
     setTooltip ("Switch to " + letter (otherSide (side)));
-    startTimerHz (60);
-    repaint();
-}
-
-float CompareButton::progress() const
-{
-    return staple::ease (juce::jlimit (0.0f, 1.0f, static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - changedAt) / staple::tokens::motion::dur2Ms)));
+    change.jump (0.0f);
+    change.towards (1.0f);
 }
 
 juce::Colour CompareButton::letterInk (CompareSide l) const
 {
     const auto inkOn = [l] (CompareSide s) { return l == s ? colour::text1 : colour::text4; };
-    return inkOn (previousSide).interpolatedWith (inkOn (side), progress());
-}
-
-void CompareButton::timerCallback()
-{
-    repaint();
-    if (progress() >= 1.0f)
-        stopTimer();
+    return inkOn (previousSide).interpolatedWith (inkOn (side), change.value());
 }
 
 int CompareButton::getIdealWidth() const

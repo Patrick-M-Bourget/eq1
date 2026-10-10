@@ -47,6 +47,16 @@ void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float corn
     }
 }
 
+juce::AffineTransform popInTransform (juce::Rectangle<float> card, float progress)
+{
+    using namespace tokens::motion;
+    if (progress >= 1.0f)
+        return {};
+    const float scale = popInScale + (1.0f - popInScale) * progress;
+    const auto centre = card.getCentre();
+    return juce::AffineTransform::scale (scale, scale, centre.x, centre.y).translated (0.0f, popInOffset * (1.0f - progress));
+}
+
 float ease (float time)
 {
     using namespace tokens::motion;
