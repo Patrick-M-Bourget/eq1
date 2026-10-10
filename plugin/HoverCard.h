@@ -63,11 +63,9 @@ public:
     // undo step, and closes it. Nothing while closed.
     juce::Component* shapeStrip() const { return strip != nullptr && strip->isVisible() ? strip.get() : nullptr; }
 
-    // What ▾ opens: the Band menu for the shown Band alone. Its Delete deletes that Band, and its Split
-    // and Paste leave the selection as it is.
+    // What ▾ opens: the Band menu for the shown Band alone, which never changes the selection: its Delete
+    // deletes that Band, its Split and Paste leave the selection as it is, and it has no Select All.
     juce::PopupMenu menu();
-    // The Band menu's Select All.
-    std::function<void()> onSelectAll;
 
     void paint (juce::Graphics& g) override;
     void resized() override;

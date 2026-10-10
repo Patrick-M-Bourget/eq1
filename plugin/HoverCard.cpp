@@ -435,10 +435,7 @@ juce::PopupMenu HoverCard::menu()
                                       safe->hide();
                                   }
                               },
-                              [safe] {
-                                  if (safe != nullptr && safe->onSelectAll)
-                                      safe->onSelectAll();
-                              },
+                              {},
                               [] (std::vector<int>) {},
                               juce::SystemClipboard::getTextFromClipboard(),
                               [] (const juce::String& text) { juce::SystemClipboard::copyTextToClipboard (text); } };

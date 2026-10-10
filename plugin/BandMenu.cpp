@@ -146,14 +146,16 @@ juce::PopupMenu BandMenu::build() const
                       [&edit, slots, selectHalves = select] { selectHalves (edit.split (slots)); });
         menu.addSeparator();
         menu.addItem ("Delete", deleteSelection);
-        menu.addSeparator();
     }
     else
     {
         addPaste();
-        menu.addSeparator();
     }
-    menu.addItem ("Select All", selectAll);
+    if (selectAll != nullptr)
+    {
+        menu.addSeparator();
+        menu.addItem ("Select All", selectAll);
+    }
     return menu;
 }
 

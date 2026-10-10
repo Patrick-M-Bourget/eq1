@@ -300,7 +300,7 @@ TEST_CASE ("The Hover Card's Bypass, Delete and menu act on its Band alone, one 
     CHECK (card.shownSlot() == 0);
 }
 
-TEST_CASE ("The Hover Card's menu deletes only its Band, and the card stays up while the menu is open")
+TEST_CASE ("The Hover Card's menu has no Select All, deletes only its Band, and the card stays up while it is open")
 {
     CardOnBand4 f;
     auto& host = f.host;
@@ -312,6 +312,8 @@ TEST_CASE ("The Hover Card's menu deletes only its Band, and the card stays up w
     CHECK (card.shownSlot() == 4);
     juce::PopupMenu::dismissAllActiveMenus();
 
+    // It never changes the selection, so it has no Select All.
+    CHECK (actionOf (card.menu(), "Select All") == nullptr);
     const auto remove = actionOf (card.menu(), "Delete");
     REQUIRE (remove != nullptr);
     remove();

@@ -159,7 +159,6 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editi
     }
     shown = heardSettings();
     tapSamples.resize (1 << 16);
-    card.onSelectAll = [this] { selectAll(); };
     // An editor opened under Global Bypass shows it at once.
     globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
     lastFadeStep = juce::Time::getMillisecondCounter();
