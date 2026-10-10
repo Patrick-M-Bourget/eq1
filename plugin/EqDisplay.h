@@ -5,14 +5,15 @@
 #include "AnalyzerSpectrum.h"
 #include "display/DisplayFrame.h"
 #include "display/DisplayGeometry.h"
+#include "display/EdgeFadeLayer.h"
 #include "display/GhostLayer.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <set>
-#include <tuple>
 #include <vector>
 
 namespace eq1
@@ -191,11 +192,17 @@ private:
     juce::uint32 lastFadeStep = 0;
     bool isGlobalBypassOn() const;
 
-    // The window's background under the display's edges (display::edgeFadeOverlay), and what it was
-    // built for: the display's place in the window, the window's size and the scale it is drawn at.
-    juce::Image edgeFade;
-    std::tuple<juce::Rectangle<int>, juce::Rectangle<int>, float> edgeFadeFor;
-    const juce::Image& edgeFadeAt (float scale);
+    // The window's background under the display's edges (display::edgeFadeOverlay), built again only
+    // when the display's place in the window, the window's size or the scale it is drawn at changes.
+    struct EdgeFadeFor
+    {
+        juce::Rectangle<int> display, window;
+        float scale = 0.0f;
+        bool operator== (const EdgeFadeFor& other) const { return display == other.display && window == other.window && juce::exactlyEqual (scale, other.scale); }
+    };
+    display::EdgeFadeOverlay edgeFade;
+    std::optional<EdgeFadeFor> edgeFadeFor;
+    const display::EdgeFadeOverlay& edgeFadeAt (float scale);
     // Moves every fade on by the time since the last step; true while any of them moved.
     bool stepFades();
 };
