@@ -29,7 +29,8 @@ juce::MouseEvent clickAt (juce::Component& component, juce::Point<float> at = {}
                              1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &component, &component, now, at, now, 1, false);
 }
 
-// The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Room.
+// The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Room,
+// and an empty Drums/Brushes.
 struct Browser
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -49,6 +50,7 @@ struct Browser
             REQUIRE (file.getParentDirectory().createDirectory());
             REQUIRE (processor.presetState().createXml()->writeTo (file));
         }
+        REQUIRE (folder.getChildFile ("Drums/Brushes").createDirectory());
         // On the desktop, as in a window, so it has accessibility handlers.
         browser.addToDesktop (0);
         browser.setSize (1200, 760);
@@ -109,6 +111,9 @@ TEST_CASE ("The Preset browser's folders are Factory, User and each User subfold
     CHECK (host.button ("Drums").getX() == host.button ("User").getX() + 12);
     CHECK (host.button ("Acoustic").getX() == host.button ("Drums").getX() + 12);
     CHECK (host.browser.getCountText() == juce::String (factory + 3) + " Presets");
+    // A User subfolder with no Presets in it is listed too.
+    CHECK (host.valueOf (host.button ("Brushes")) == "0");
+    CHECK (host.button ("Brushes").getX() == host.button ("Drums").getX() + 12);
 
     // With no Loaded Preset, Factory is selected and its Presets listed.
     CHECK (host.browser.getSelectedFolder() == "Factory");

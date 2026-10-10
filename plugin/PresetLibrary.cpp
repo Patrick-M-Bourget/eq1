@@ -27,6 +27,28 @@ std::vector<juce::File> byFileName (const juce::Array<juce::File>& found)
     std::sort (files.begin(), files.end(), [&] (const juce::File& a, const juce::File& b) { return byName (name (a), name (b)); });
     return files;
 }
+
+// Calls visit for root, then each of its subfolders, depth-first, each level by name; a folder reached
+// twice (by a link back up the tree) is visited once.
+void eachFolder (const juce::File& root, const std::function<void (const juce::File&)>& visit)
+{
+    std::set<juce::String> visited;
+    const std::function<void (const juce::File&)> walk = [&] (const juce::File& folder) {
+        if (! visited.insert (folder.getLinkedTarget().getFullPathName()).second)
+            return;
+        visit (folder);
+        for (const auto& subfolder : byFileName (folder.findChildFiles (juce::File::findDirectories, false)))
+            walk (subfolder);
+    };
+    if (root.isDirectory())
+        walk (root);
+}
+
+// A folder in the User folder as Entry::folder names it: "User", or "User/Drums" with / on every OS.
+juce::String folderPath (const juce::File& folder, const juce::File& userFolder)
+{
+    return folder == userFolder ? juce::String ("User") : "User/" + folder.getRelativePathFrom (userFolder).replaceCharacter ('\\', '/');
+}
 } // namespace
 
 PresetLibrary::PresetLibrary (juce::File folder) : userFolder (std::move (folder)) {}
@@ -39,19 +61,21 @@ juce::File PresetLibrary::defaultUserFolder()
 std::vector<juce::File> PresetLibrary::userPresets() const
 {
     std::vector<juce::File> files;
-    // A folder's own Presets, then each subfolder's, depth-first; a folder reached twice (by a link
-    // back up the tree) is read once.
-    std::set<juce::String> visited;
-    const std::function<void (const juce::File&)> collect = [&] (const juce::File& folder) {
-        if (! visited.insert (folder.getLinkedTarget().getFullPathName()).second)
-            return;
+    eachFolder (userFolder, [&] (const juce::File& folder) {
         for (const auto& found : byFileName (folder.findChildFiles (juce::File::findFiles, false, "*" + fileExtension)))
             files.push_back (found);
-        for (const auto& subfolder : byFileName (folder.findChildFiles (juce::File::findDirectories, false)))
-            collect (subfolder);
-    };
-    collect (userFolder);
+    });
     return files;
+}
+
+std::vector<juce::String> PresetLibrary::userSubfolders() const
+{
+    std::vector<juce::String> paths;
+    eachFolder (userFolder, [&] (const juce::File& folder) {
+        if (folder != userFolder)
+            paths.push_back (folderPath (folder, userFolder));
+    });
+    return paths;
 }
 
 std::optional<juce::File> PresetLibrary::save (const juce::String& name, const juce::ValueTree& preset) const
@@ -90,17 +114,11 @@ std::vector<PresetLibrary::Entry> PresetLibrary::listing() const
         entries.push_back ({ name, "Factory", {}, preset });
     for (const auto& file : userPresets())
         if (auto preset = read (file); preset.isValid())
-        {
-            const auto folder = file.getParentDirectory();
-            entries.push_back ({ file.getFileNameWithoutExtension(),
-                                 folder == userFolder ? juce::String ("User") : "User/" + folder.getRelativePathFrom (userFolder).replaceCharacter ('\\', '/'),
-                                 file,
-                                 preset });
-        }
+            entries.push_back ({ file.getFileNameWithoutExtension(), folderPath (file.getParentDirectory(), userFolder), file, preset });
     return entries;
 }
 
-std::vector<PresetLibrary::Folder> PresetLibrary::folders (const std::vector<Entry>& entries)
+std::vector<PresetLibrary::Folder> PresetLibrary::folders (const std::vector<Entry>& entries, const std::vector<juce::String>& subfolders)
 {
     std::vector<Folder> found { { "Factory", "Factory", 0, 0 }, { "User", "User", 0, 0 } };
     const auto add = [&found] (const juce::String& path) -> Folder& {
@@ -110,6 +128,8 @@ std::vector<PresetLibrary::Folder> PresetLibrary::folders (const std::vector<Ent
         const auto parts = juce::StringArray::fromTokens (path, "/", {});
         return found.emplace_back (Folder { path, parts[parts.size() - 1], parts.size() - 1, 0 });
     };
+    for (const auto& path : subfolders)
+        add (path);
     for (const auto& entry : entries)
     {
         // Its enclosing folders first, so one holding only subfolders is listed above them.

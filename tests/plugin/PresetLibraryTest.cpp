@@ -354,3 +354,25 @@ TEST_CASE ("The browser's folders are Factory, User and each User subfolder, nes
     // With no Presets at all: Factory and User, empty.
     CHECK (PresetLibrary::folders ({}).size() == 2u);
 }
+
+TEST_CASE ("The browser's folders include each User subfolder on disk that holds no Presets, in browser order")
+{
+    Folder user;
+    for (const auto* path : { "Drums/Kick", "bass/Sub" })
+        writePreset (user.folder.getChildFile (juce::String (path) + PresetLibrary::fileExtension));
+    for (const auto* path : { "Empty", "Drums/Acoustic/Large", "Drums/Brushes" })
+        REQUIRE (user.folder.getChildFile (path).createDirectory());
+
+    const PresetLibrary library (user.folder);
+    CHECK (library.userSubfolders()
+           == std::vector<juce::String> { "User/bass", "User/Drums", "User/Drums/Acoustic", "User/Drums/Acoustic/Large", "User/Drums/Brushes", "User/Empty" });
+    juce::StringArray shown;
+    for (const auto& folder : PresetLibrary::folders (library.listing(), library.userSubfolders()))
+        shown.add (juce::String::repeatedString ("  ", folder.depth) + folder.name + " " + juce::String (folder.count));
+    shown.remove (0); // Factory
+    CHECK (shown
+           == juce::StringArray ({ "User 0", "  bass 1", "  Drums 1", "    Acoustic 0", "      Large 0", "    Brushes 0", "  Empty 0" }));
+
+    // No User folder yet: no subfolders.
+    CHECK (PresetLibrary (user.folder.getChildFile ("Missing")).userSubfolders().empty());
+}

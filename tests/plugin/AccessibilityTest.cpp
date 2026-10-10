@@ -176,7 +176,8 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
         host.closeCallOut();
     }
     // The Preset browser lists the subfolders of this machine's User folder too: not the editor's own names.
-    for (const auto& folder : eq1::PresetLibrary::folders (eq1::PresetLibrary().listing()))
+    const eq1::PresetLibrary library;
+    for (const auto& folder : eq1::PresetLibrary::folders (library.listing(), library.userSubfolders()))
         if (folder.depth > 0)
             std::erase (names, folder.name);
     std::sort (names.begin(), names.end());

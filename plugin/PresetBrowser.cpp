@@ -374,7 +374,7 @@ bool PresetBrowser::isSearching() const { return search.getText().trim().isNotEm
 
 void PresetBrowser::showFolders()
 {
-    folders = PresetLibrary::folders (listing);
+    folders = PresetLibrary::folders (listing, library.userSubfolders());
     folderRows.clear();
     int y = folderPadY;
     const int width = folderWidth - 1 - 2 * folderPadX;
