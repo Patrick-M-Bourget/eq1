@@ -36,7 +36,7 @@ jobs:
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Ninja
         if: runner.os == 'macOS'
@@ -53,7 +53,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.11
 
       - name: Cache dependencies and validators
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .deps
           # A restored folder built with another CMake generator is rebuilt by scripts/check.sh build.
@@ -90,7 +90,7 @@ jobs:
         if: always()
         run: sccache --show-stats
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: eq1-${{ runner.os }}
           path: |
