@@ -7,6 +7,7 @@
 #include "OutputMeter.h"
 #include "OutputPanel.h"
 #include "PresetBar.h"
+#include "UiScale.h"
 #include "staple/LookAndFeel.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -33,7 +34,8 @@ public:
     bool keyPressed (const juce::KeyPress& key) override;
 
 private:
-    // Follows the Display Range, restored with the plugin's state or zoomed out, and what can be undone.
+    // Follows the Display Range, restored with the plugin's state or zoomed out, the window's size and
+    // UI Scale, restored with it, and what can be undone.
     void timerCallback() override;
 
     PluginProcessor& eqProcessor;
@@ -50,10 +52,13 @@ private:
     juce::TooltipWindow tooltips { &content };
     juce::ComboBox displayRange;
     juce::ComboBox uiScale;
-    // The UI Scale, as a factor, and the logical size the window holds at it.
+    // Sizes the window to the processor's logical size and UI Scale, kept within limits.
+    void applyUiScale();
     float scale = 1.0f;
-    juce::Point<int> logicalSize { 1200, 760 };
-    void applyUiScale (int percent);
+    // What the window last took from the processor, to follow a restored session.
+    int shownScalePercent = 0;
+    juce::Point<int> shownSize;
+    bool applyingScale = true; // until the window first takes its size
     OutputMeter meter;
     juce::ToggleButton showMeter { "Meter" }; // shows or hides the Output Meter, saved with the plugin
     juce::TextButton undoButton { "Undo" }, redoButton { "Redo" };

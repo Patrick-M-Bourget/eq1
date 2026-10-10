@@ -31,10 +31,12 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     uiScale.setTitle ("UI Scale");
     uiScale.setTooltip ("UI Scale");
-    for (int percent : { 75, 100, 125, 150, 200 })
+    for (int percent : uiScale::percents)
         uiScale.addItem (juce::String (percent) + "%", percent);
-    uiScale.setSelectedId (100, juce::dontSendNotification);
-    uiScale.onChange = [this] { applyUiScale (uiScale.getSelectedId()); };
+    uiScale.onChange = [this] {
+        eqProcessor.setUiScalePercent (uiScale.getSelectedId());
+        applyUiScale();
+    };
     content.addAndMakeVisible (uiScale);
 
     content.addChildComponent (meter);
@@ -89,19 +91,26 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     addAndMakeVisible (content);
 
     setResizable (true, true);
-    applyUiScale (100);
+    applyUiScale();
 }
 
-void PluginEditor::applyUiScale (int percent)
+void PluginEditor::applyUiScale()
 {
     // In logical pixels: wide enough for the output controls' row and the toolbar.
     constexpr int minimumWidth = 1120, minimumHeight = 600, maximumWidth = 2560, maximumHeight = 1600;
-    const auto size = logicalSize;
+    const auto stored = eqProcessor.editorSize();
+    const juce::Point<int> size { juce::jlimit (minimumWidth, maximumWidth, stored.x), juce::jlimit (minimumHeight, maximumHeight, stored.y) };
+    const int percent = eqProcessor.uiScalePercent();
+    uiScale.setSelectedId (percent, juce::dontSendNotification);
+    shownScalePercent = percent;
     scale = static_cast<float> (percent) / 100.0f;
     content.setTransform (juce::AffineTransform::scale (scale));
     const auto scaled = [this] (int logical) { return juce::roundToInt (static_cast<float> (logical) * scale); };
+    // New limits can resize the window on the way to its size: keep that from the processor.
+    applyingScale = true;
     setResizeLimits (scaled (minimumWidth), scaled (minimumHeight), scaled (maximumWidth), scaled (maximumHeight));
     setSize (scaled (size.x), scaled (size.y));
+    applyingScale = false;
     resized();
 }
 
@@ -180,6 +189,8 @@ void PluginEditor::timerCallback()
         showMeter.setToggleState (eqProcessor.isOutputMeterShown(), juce::dontSendNotification);
         resized();
     }
+    if (eqProcessor.uiScalePercent() != shownScalePercent || eqProcessor.editorSize() != shownSize)
+        applyUiScale();
     showAnalyzerSettings();
 }
 
@@ -190,8 +201,13 @@ void PluginEditor::paint (juce::Graphics& g)
 
 void PluginEditor::resized()
 {
-    logicalSize = { juce::roundToInt (static_cast<float> (getWidth()) / scale), juce::roundToInt (static_cast<float> (getHeight()) / scale) };
-    content.setBounds (0, 0, logicalSize.x, logicalSize.y);
+    const juce::Point<int> logical { juce::roundToInt (static_cast<float> (getWidth()) / scale), juce::roundToInt (static_cast<float> (getHeight()) / scale) };
+    if (! applyingScale)
+    {
+        eqProcessor.setEditorSize (logical);
+        shownSize = eqProcessor.editorSize();
+    }
+    content.setBounds (0, 0, logical.x, logical.y);
     auto area = content.getLocalBounds();
     auto header = area.removeFromTop (32).reduced (6, 4);
     auto toolbar = area.removeFromTop (32).reduced (6, 4);

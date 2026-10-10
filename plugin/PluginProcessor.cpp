@@ -63,7 +63,8 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 
 namespace
 {
-const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" }, outputMeterShownProperty { "outputMeterShown" };
+const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" }, outputMeterShownProperty { "outputMeterShown" },
+    editorWidthProperty { "editorWidth" }, editorHeightProperty { "editorHeight" }, uiScaleProperty { "uiScalePercent" };
 
 // Brings a saved state from an older version up to stateVersion, one version at a time.
 void migrate (juce::ValueTree& state)
@@ -156,6 +157,21 @@ void PluginProcessor::setDisplayRangeDb (int rangeDb)
     displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
 }
 
+void PluginProcessor::setEditorSize (juce::Point<int> logical)
+{
+    if (logical.x > 0 && logical.y > 0)
+    {
+        editorWidth = logical.x;
+        editorHeight = logical.y;
+    }
+}
+
+void PluginProcessor::setUiScalePercent (int percent)
+{
+    if (uiScale::isOffered (percent))
+        uiScale = percent;
+}
+
 HeardGains PluginProcessor::currentHeardGains() const
 {
     Settings settings;
@@ -196,6 +212,9 @@ void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
     state.setProperty (outputMeterShownProperty, isOutputMeterShown(), nullptr);
+    state.setProperty (editorWidthProperty, editorWidth.load(), nullptr);
+    state.setProperty (editorHeightProperty, editorHeight.load(), nullptr);
+    state.setProperty (uiScaleProperty, uiScalePercent(), nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -217,6 +236,11 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         // Shown in a session saved before the Output Meter.
         setOutputMeterShown (state.getProperty (outputMeterShownProperty, true));
         state.removeProperty (outputMeterShownProperty, nullptr);
+        // A session saved before them opens like a new instance.
+        setEditorSize ({ state.getProperty (editorWidthProperty, newEditorWidth), state.getProperty (editorHeightProperty, newEditorHeight) });
+        setUiScalePercent (state.getProperty (uiScaleProperty, uiScale::defaultPercent));
+        for (const auto& property : { editorWidthProperty, editorHeightProperty, uiScaleProperty })
+            state.removeProperty (property, nullptr);
         if (auto saved = state.getChildWithName (analyzerType); saved.isValid())
         {
             setAnalyzerSettings (fromTree (saved));

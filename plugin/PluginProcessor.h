@@ -5,6 +5,7 @@
 #include "DisplayRange.h"
 #include "EditHistory.h"
 #include "Parameters.h"
+#include "UiScale.h"
 #include "eq1/Engine.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -122,6 +123,13 @@ public:
     bool isOutputMeterShown() const { return outputMeterShown.load(); }
     void setOutputMeterShown (bool shown) { outputMeterShown = shown; }
 
+    // The editor's window: its size in logical pixels (as at 100%) and its UI Scale in percent (one of
+    // uiScale::percents). Saved with the session, not in Presets, not undoable. Message thread only.
+    juce::Point<int> editorSize() const { return { editorWidth.load(), editorHeight.load() }; }
+    void setEditorSize (juce::Point<int> logical);
+    int uiScalePercent() const { return uiScale.load(); }
+    void setUiScalePercent (int percent);
+
     // The version of the saved state's format. setStateInformation() brings older states up to it one
     // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
     // version. Bump it, and add a step to the migration, whenever the format changes.
@@ -142,6 +150,8 @@ private:
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
     std::atomic<bool> outputMeterShown { true };
+    static constexpr int newEditorWidth = 1200, newEditorHeight = 760;
+    std::atomic<int> editorWidth { newEditorWidth }, editorHeight { newEditorHeight }, uiScale { uiScale::defaultPercent };
     // The heard Gains at the editor's last look, or as a session restored them: not saved, and kept
     // while the editor is closed.
     HeardGains seenGains;

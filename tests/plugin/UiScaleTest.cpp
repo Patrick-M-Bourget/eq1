@@ -1,5 +1,6 @@
 #include "EditorHarness.h"
 #include "PluginProcessor.h"
+#include "SavedState.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -26,6 +27,13 @@ void pickUiScale (juce::AudioProcessorEditor& editor, int percent)
 std::unique_ptr<juce::AudioProcessorEditor> openEditor (eq1::PluginProcessor& processor)
 {
     return std::unique_ptr<juce::AudioProcessorEditor> (processor.createEditor());
+}
+
+void reload (eq1::PluginProcessor& into, eq1::PluginProcessor& from)
+{
+    juce::MemoryBlock state;
+    from.getStateInformation (state);
+    into.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
 }
 
 } // namespace
@@ -68,4 +76,67 @@ TEST_CASE ("At each UI Scale the editor is its logical size times the scale, and
     // A control sits where it did at 100%, scaled, and is that much larger.
     const auto drawn = editor->getLocalArea (&menu, menu.getLocalBounds());
     CHECK (drawn == atHundred.transformedBy (juce::AffineTransform::scale (percent / 100.0f)));
+}
+
+TEST_CASE ("The window's size and UI Scale survive closing and reopening the editor")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    {
+        const auto editor = openEditor (processor);
+        pickUiScale (*editor, 150);
+        editor->setSize (1800, 1200); // 1200 x 800 logical
+    }
+    const auto editor = openEditor (processor);
+    CHECK (uiScaleMenu (*editor).getSelectedId() == 150);
+    CHECK (editor->getWidth() == 1800);
+    CHECK (editor->getHeight() == 1200);
+}
+
+TEST_CASE ("The window's size and UI Scale are saved with the session, not in a Preset, and change neither the undo history nor Modified")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    // With a Loaded Preset, a change to any sound setting would make the side Modified.
+    REQUIRE (saved.loadPreset (saved.presetState(), "Current"));
+    const int steps = saved.editHistory().undoSteps();
+    const auto preset = saved.presetState().createXml()->toString();
+    {
+        const auto editor = openEditor (saved);
+        pickUiScale (*editor, 75);
+        editor->setSize (900, 600); // 1200 x 800 logical
+    }
+    CHECK_FALSE (saved.isLoadedPresetModified());
+    CHECK (saved.editHistory().undoSteps() == steps);
+    CHECK (saved.presetState().createXml()->toString() == preset);
+    CHECK (eq1::test::savedState (saved).getProperty ("version") == juce::var (eq1::PluginProcessor::stateVersion));
+
+    eq1::PluginProcessor restored;
+    reload (restored, saved);
+    const auto editor = openEditor (restored);
+    CHECK (uiScaleMenu (*editor).getSelectedId() == 75);
+    CHECK (editor->getWidth() == 900);
+    CHECK (editor->getHeight() == 600);
+}
+
+TEST_CASE ("A session saved before the window's size and UI Scale opens like a new instance, with the state version unchanged")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    {
+        const auto editor = openEditor (processor);
+        pickUiScale (*editor, 200);
+        editor->setSize (2600, 1400);
+    }
+    const auto older = juce::XmlDocument::parse (juce::File (EQ1_TEST_FIXTURES).getChildFile ("state-v2.xml"));
+    REQUIRE (older != nullptr);
+    juce::MemoryBlock state;
+    juce::AudioProcessor::copyXmlToBinary (*older, state);
+    processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+
+    const auto editor = openEditor (processor);
+    CHECK (uiScaleMenu (*editor).getSelectedId() == 100);
+    CHECK (editor->getWidth() == 1200);
+    CHECK (editor->getHeight() == 760);
+    CHECK (eq1::PluginProcessor::stateVersion == 3);
 }
