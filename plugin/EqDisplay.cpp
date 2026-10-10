@@ -134,6 +134,8 @@ void EqDisplay::timerCallback()
     // A Band deleted, or taken out of use by automation, while Soloed lets go of its Solo for good.
     if (soloedSlot != 0 && ! editing.band (soloedSlot).inUse)
         releaseSolo();
+    // A heard Gain changed beyond the Display Range, from anywhere, zooms it out.
+    processor.fitDisplayRangeToHeardGains();
 
     if (updateAnalyzer())
     {
@@ -543,7 +545,12 @@ void EqDisplay::mouseDrag (const juce::MouseEvent& e)
 void EqDisplay::mouseUp (const juce::MouseEvent&)
 {
     if (dragging)
+    {
+        // The drag's Gain offset follows the mouse under the range it began with, so the range zooms
+        // only now.
         editing.endDrag();
+        processor.fitDisplayRangeToHeardGains();
+    }
     dragging = grabbing = false;
     heldSlot = 0;
     releaseSolo();

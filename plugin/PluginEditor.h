@@ -29,7 +29,7 @@ public:
     bool keyPressed (const juce::KeyPress& key) override;
 
 private:
-    // Follows a display range restored with the plugin's state, and what can be undone.
+    // Follows the Display Range, restored with the plugin's state or zoomed out, and what can be undone.
     void timerCallback() override;
 
     PluginProcessor& eqProcessor;
