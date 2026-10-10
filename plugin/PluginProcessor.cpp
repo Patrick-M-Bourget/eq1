@@ -62,7 +62,7 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 
 namespace
 {
-const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" };
+const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" }, outputMeterShownProperty { "outputMeterShown" };
 
 // Brings a saved state from an older version up to stateVersion, one version at a time.
 void migrate (juce::ValueTree& state)
@@ -129,6 +129,27 @@ void PluginProcessor::setAnalyzerSettings (const AnalyzerSettings& settings)
     analyzer = settings;
 }
 
+OutputLevel PluginProcessor::readOutputLevel (int channel)
+{
+    const auto level = engine.readOutputLevel (channel);
+    // Above 0 dBFS: a sample beyond full scale. Full scale itself is not an over, nor the few float steps
+    // past it that rounding leaves on a full-scale input (Output Gain's default reads 1.4e-6 dB).
+    if (level.peakDb > clipThresholdDb && channel >= 0 && channel < static_cast<int> (clipLit.size()))
+        clipLit[static_cast<size_t> (channel)] = true;
+    return level;
+}
+
+bool PluginProcessor::isClipLit (int channel) const
+{
+    return channel >= 0 && channel < static_cast<int> (clipLit.size()) && clipLit[static_cast<size_t> (channel)].load();
+}
+
+void PluginProcessor::clearClipLights()
+{
+    for (auto& lit : clipLit)
+        lit = false;
+}
+
 void PluginProcessor::setDisplayRangeDb (int rangeDb)
 {
     displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
@@ -154,6 +175,7 @@ void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
     auto state = compare.savedState();
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
+    state.setProperty (outputMeterShownProperty, isOutputMeterShown(), nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -166,11 +188,15 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         setSolo (0);
         setDetectionAudition (0);
         setMeteredBand (0);
+        clearClipLights();
         auto state = juce::ValueTree::fromXml (*xml);
         migrate (state);
         state.removeProperty (versionProperty, nullptr);
         setDisplayRangeDb (state.getProperty (displayRangeProperty, 12));
         state.removeProperty (displayRangeProperty, nullptr);
+        // Shown in a session saved before the Output Meter.
+        setOutputMeterShown (state.getProperty (outputMeterShownProperty, true));
+        state.removeProperty (outputMeterShownProperty, nullptr);
         if (auto saved = state.getChildWithName (analyzerType); saved.isValid())
         {
             setAnalyzerSettings (fromTree (saved));

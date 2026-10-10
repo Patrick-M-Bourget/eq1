@@ -3,6 +3,7 @@
 #include "BandEditing.h"
 #include "BandPanel.h"
 #include "EqDisplay.h"
+#include "OutputMeter.h"
 #include "OutputPanel.h"
 #include "PresetBar.h"
 
@@ -14,7 +15,7 @@ namespace eq1
 class PluginProcessor;
 
 // The native editor (ADR 0002): Presets, A/B Compare and undo at the top, the Analyzer's controls
-// under them, the EQ display, the selected Band's panel below it, and the whole-plugin output
+// under them, the EQ display with the Output Meter at its right, the selected Band's panel below it, and the whole-plugin output
 // controls at the bottom. Resizable; everything is drawn as vectors, so it stays
 // sharp at any display scale.
 class PluginEditor final : public juce::AudioProcessorEditor, private juce::Timer
@@ -39,6 +40,8 @@ private:
     PresetBar presetBar;
     juce::TooltipWindow tooltips { this };
     juce::ComboBox displayRange;
+    OutputMeter meter;
+    juce::ToggleButton showMeter { "Meter" }; // shows or hides the Output Meter, saved with the plugin
     juce::TextButton undoButton { "Undo" }, redoButton { "Redo" };
     void undo();
     void redo();
