@@ -740,6 +740,7 @@ TEST_CASE ("The Detection Level reads the floor when no Band with dynamics is me
     SECTION ("an unused slot") { settings.meteredSlot = 2; CHECK (floorOf (1, settings)); }
     SECTION ("a slot out of range") { settings.meteredSlot = 25; CHECK (floorOf (1, settings)); }
     SECTION ("a Shape without dynamics") { settings.bands[0].shape = Shape::Notch; CHECK (floorOf (1, settings)); }
+    SECTION ("a Bypassed Band") { settings.bands[0].bypass = true; CHECK (floorOf (1, settings)); }
     SECTION ("External with no Sidechain") { settings.bands[0].detectionSource = DetectionSource::External; CHECK (floorOf (2, settings)); }
     SECTION ("a Side Band on mono") { settings.bands[0].placement = StereoPlacement::Side; CHECK (floorOf (1, settings)); }
 }

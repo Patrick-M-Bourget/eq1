@@ -129,7 +129,7 @@ struct Engine::Impl
         return 0.0f;
     }
 
-    // The metered Band Slot, 0 for none: one in use whose Shape has dynamics.
+    // The metered Band Slot, 0 for none: one in use, not Bypassed, whose Shape has dynamics.
     int meteredSlot = 0;
     DetectionLevelTap detectionLevel;
 
@@ -205,7 +205,7 @@ struct Engine::Impl
                 soloRegion.setSettings (wantedSoloRegion, false);
         }
         const auto* metered = bandIn (settings.meteredSlot);
-        const int newMeteredSlot = metered != nullptr && hasDynamics (metered->shape) ? settings.meteredSlot : 0;
+        const int newMeteredSlot = metered != nullptr && ! metered->bypass && hasDynamics (metered->shape) ? settings.meteredSlot : 0;
         if (newMeteredSlot != meteredSlot)
             detectionLevel.clear();
         meteredSlot = newMeteredSlot;
