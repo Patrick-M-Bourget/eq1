@@ -371,3 +371,29 @@ TEST_CASE ("Delete on a focused Band removes it and moves focus to the next Band
     CHECK (host.value (2, "in_use") == 0.0f);
     CHECK (host.display.hasKeyboardFocus (false));
 }
+
+TEST_CASE ("Clicking Undo, Redo, A, B or Presets leaves keyboard focus where it was, so Delete still deletes")
+{
+    EveryControl host;
+    host.addBand (2, 200.0f, 0.0f);
+    undoAndRedoEnabled (host);
+    host.display.grabKeyboardFocus();
+    const auto button = [&host] (const juce::String& text) {
+        return host.findAll<juce::Button> ([&text] (juce::Button& b) { return b.getButtonText() == text; }).front();
+    };
+    // A click runs a button's onClick, and takes keyboard focus only if the button lets it (a real
+    // click, through the OS window, can't be made here). Presets opens the browser, whose search takes
+    // focus, then closes it, giving focus back.
+    for (const juce::String text : { "Undo", "Redo", "B", "A", "Presets", "Presets" })
+    {
+        CAPTURE (text);
+        auto* clicked = button (text);
+        CHECK (clicked->getWantsKeyboardFocus());
+        CHECK_FALSE (clicked->getMouseClickGrabsKeyboardFocus());
+        clicked->onClick();
+    }
+    CHECK (host.display.hasKeyboardFocus (false));
+    host.click (host.at (200.0));
+    host.press (juce::KeyPress (juce::KeyPress::deleteKey));
+    CHECK (host.value (2, "in_use") == 0.0f);
+}

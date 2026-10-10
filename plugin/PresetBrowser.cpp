@@ -46,6 +46,7 @@ void PresetBrowser::open (const juce::String& loadedPreset, const PresetLibrary:
     listing = library.listing();
     loaded = loadedPreset;
     lastLoaded = lastLoadedEntry != nullptr ? std::optional (*lastLoadedEntry) : std::nullopt;
+    focusBefore = juce::Component::getCurrentlyFocusedComponent();
     search.clear();
     showRows();
     setVisible (true);
@@ -54,7 +55,14 @@ void PresetBrowser::open (const juce::String& loadedPreset, const PresetLibrary:
         search.grabKeyboardFocus();
 }
 
-void PresetBrowser::close() { setVisible (false); }
+void PresetBrowser::close()
+{
+    // Focus inside the panel goes back to where it was before it opened, so Delete still reaches the display.
+    const bool hadFocus = hasKeyboardFocus (true);
+    setVisible (false);
+    if (hadFocus && focusBefore != nullptr && focusBefore->isShowing())
+        focusBefore->grabKeyboardFocus();
+}
 
 void PresetBrowser::visibilityChanged()
 {

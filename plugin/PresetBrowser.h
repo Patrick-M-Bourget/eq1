@@ -15,7 +15,8 @@ namespace eq1
 // (PresetLibrary::listing) under its folder's name, a search over Preset names whose results show
 // their folder, and saving as a User Preset, loading a Preset file from anywhere and showing the User
 // folder. A click on a Preset loads it and the panel stays open, to audition the next. Each opening
-// reads the disk again and clears the search; Escape or a click outside the panel closes it.
+// reads the disk again and clears the search; Escape or a click outside the panel closes it, giving
+// keyboard focus back to where it was.
 class PresetBrowser final : public juce::Component, private juce::ListBoxModel
 {
 public:
@@ -61,6 +62,7 @@ private:
     std::vector<Row> rows;
     juce::String loaded;
     std::optional<PresetLibrary::Entry> lastLoaded;
+    juce::Component::SafePointer<juce::Component> focusBefore; // given focus back on closing
     juce::TextEditor search;
     juce::ListBox list { {}, this };
     juce::TextButton save { "Save as User Preset..." }, loadFile { "Load Preset File..." }, showFolder { "Show User Presets Folder" };
