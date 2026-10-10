@@ -38,6 +38,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/BandEditingTest.cpp
         plugin/BandMenuTest.cpp
         plugin/BandPanelTest.cpp
+        plugin/DisplayRangeTest.cpp
         plugin/EditHistoryTest.cpp
         plugin/HostSessionTest.cpp
         plugin/OutputMeterTest.cpp

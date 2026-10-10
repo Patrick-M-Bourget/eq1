@@ -24,7 +24,8 @@ class PluginProcessor;
 // is released. Pressing on the spectrum, away from the handles, grabs its
 // peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
 // with its Live Gain's movement inside it, and its curve follows its Live Gain. The curve comes from
-// the Engine's own response maths (eq1/Response.h).
+// the Engine's own response maths (eq1/Response.h). A handle beyond the Display Range sits at its
+// edge; a heard Gain changed to beyond it zooms the range out, once any drag has ended.
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:

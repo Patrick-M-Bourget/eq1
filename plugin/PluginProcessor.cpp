@@ -17,6 +17,7 @@ PluginProcessor::PluginProcessor()
 {
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slots[static_cast<size_t> (slot - 1)] = eq1::parameters::SlotValues::of (parameters, slot);
+    seenGains = currentHeardGains();
 }
 
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
@@ -155,6 +156,25 @@ void PluginProcessor::setDisplayRangeDb (int rangeDb)
     displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
 }
 
+HeardGains PluginProcessor::currentHeardGains() const
+{
+    Settings settings;
+    for (size_t slot = 0; slot < slots.size(); ++slot)
+        settings.bands[slot] = slots[slot].read();
+    output.readInto (settings);
+    return heardGains (settings);
+}
+
+void PluginProcessor::fitDisplayRangeToHeardGains()
+{
+    if (history.isEditing())
+        return;
+    const auto now = currentHeardGains();
+    const juce::SpinLock::ScopedLockType lock (seenGainsLock);
+    setDisplayRangeDb (fittedDisplayRangeDb (displayRangeDb(), seenGains, now));
+    seenGains = now;
+}
+
 juce::ValueTree PluginProcessor::presetState()
 {
     return capturePresetSettings (parameters, parameters.state.getType()).setProperty (versionProperty, stateVersion, nullptr);
@@ -208,6 +228,9 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         state.removeChild (savedCompare, nullptr);
         parameters.replaceState (state);
         history.sessionRestored();
+        const auto restored = currentHeardGains();
+        const juce::SpinLock::ScopedLockType lock (seenGainsLock);
+        seenGains = restored;
     }
 }
 

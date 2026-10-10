@@ -47,6 +47,9 @@ public:
     void undo();
     void redo();
 
+    // True from the start of an edit until it is finished: during a drag, for one.
+    bool isEditing() const { return upToDate() && editInProgress(); }
+
     // A session was restored: the history empties, and the edit in progress is forgotten. From any
     // thread, as hosts restore state from theirs; the message thread catches up on its next call.
     void sessionRestored() { restores.fetch_add (1, std::memory_order_release); }

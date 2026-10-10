@@ -43,6 +43,7 @@ target_sources(eq1 PRIVATE
     BandPanel.cpp
     DetectionArc.cpp
     EqDisplay.cpp
+    DisplayRange.cpp
     EditHistory.cpp
     ABCompare.cpp
     PresetSettings.cpp
