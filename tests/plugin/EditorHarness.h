@@ -28,15 +28,18 @@ T* findChild (juce::Component& parent, std::function<bool (T&)> test = [] (T&) {
     return nullptr;
 }
 
-// Renders for checking by hand against the prototype: with EQ1_SCREENS naming a folder, writes image
-// there as <name>.png (scripts/check.sh screens <dir> runs every hidden [.screens] test so). The one
+// The folder EQ1_SCREENS names, where renders for checking by hand against the prototype go
+// (scripts/check.sh screens <dir> runs every hidden [.screens] test with it); empty when unset. The one
 // place a test reads an EQ1_ environment variable.
+inline juce::String snapshotFolder() { return juce::SystemStats::getEnvironmentVariable ("EQ1_SCREENS", {}); }
+
+// Writes image as <name>.png into the snapshot folder, if one is set.
 inline void writeSnapshot (const juce::Image& image, const juce::String& name)
 {
-    CHECK (image.isValid());
-    const auto folder = juce::SystemStats::getEnvironmentVariable ("EQ1_SCREENS", {});
+    const auto folder = snapshotFolder();
     if (folder.isEmpty())
         return;
+    REQUIRE (image.isValid());
     const auto file = juce::File (folder).getChildFile (name + ".png");
     file.getParentDirectory().createDirectory();
     file.deleteFile();
@@ -45,12 +48,13 @@ inline void writeSnapshot (const juce::Image& image, const juce::String& name)
     CHECK (juce::PNGImageFormat().writeImageToStream (image, stream));
 }
 
-// Renders area of component (all of it when empty) at scale, and writes it as name (above).
-inline juce::Image writeSnapshot (juce::Component& component, const juce::String& name, juce::Rectangle<int> area = {}, float scale = 2.0f)
+// Renders area of component (all of it when empty) at scale and writes it as name (above); renders
+// nothing when no snapshot folder is set.
+inline void writeSnapshot (juce::Component& component, const juce::String& name, juce::Rectangle<int> area = {}, float scale = 2.0f)
 {
-    auto image = component.createComponentSnapshot (area.isEmpty() ? component.getLocalBounds() : area, true, scale);
-    writeSnapshot (image, name);
-    return image;
+    if (snapshotFolder().isEmpty())
+        return;
+    writeSnapshot (component.createComponentSnapshot (area.isEmpty() ? component.getLocalBounds() : area, true, scale), name);
 }
 
 // A mouse event on target at position, in its own pixels, with mods held: pressed at downAt
