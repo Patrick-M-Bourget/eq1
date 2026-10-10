@@ -24,6 +24,7 @@ OutputPanel::OutputPanel (PluginProcessor& p) : processor (p)
         addAndMakeVisible (*slider);
         addAndMakeVisible (*label);
     }
+    panMode.setName ("Pan Mode");
     panMode.addItemList (parameters::panModeNames(), 1);
     addAndMakeVisible (panMode);
     for (auto* button : { &autoGain, &phaseInvert, &globalBypass })

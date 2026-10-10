@@ -178,3 +178,63 @@ TEST_CASE ("The focus ring is hidden until an arrow key steps a slider, and hide
     staple->showFocusRing (false);
     CHECK_FALSE (staple->isFocusRingShown());
 }
+
+namespace
+{
+// What a focusable component is called in the focus order: its name, or a button's text.
+juce::String describe (juce::Component& component)
+{
+    if (component.getName().isNotEmpty())
+        return component.getName();
+    if (auto* button = dynamic_cast<juce::Button*> (&component))
+        return button->getButtonText();
+    return "?";
+}
+
+std::vector<juce::String> focusOrder (juce::Component& editor)
+{
+    std::vector<juce::String> order;
+    for (auto* component : juce::KeyboardFocusTraverser().getAllComponents (&editor))
+        order.push_back (describe (*component));
+    return order;
+}
+
+// Two edits, one undone, so Undo and Redo are both enabled.
+void undoAndRedoEnabled (EveryControl& host)
+{
+    auto& gain = host.parameter ("band1_gain");
+    for (float value : { 0.4f, 0.6f })
+    {
+        gain.beginChangeGesture();
+        gain.setValueNotifyingHost (value);
+        gain.endChangeGesture();
+    }
+    host.processor.editHistory().undo();
+    host.settle (300);
+}
+} // namespace
+
+TEST_CASE ("Tab reaches every visible, enabled control and every Band in use, in on-screen order")
+{
+    EveryControl host;
+    host.addBand (2, 200.0f, 0.0f);
+    host.addBand (3, 1000.0f, -3.0f); // ties with Band 1: the lower Band Slot first
+    undoAndRedoEnabled (host);
+
+    const std::vector<juce::String> expected {
+        // The header.
+        "Presets", "Previous Preset", "Next Preset", "A", "B", "Copy A to B", "Undo", "Redo",
+        // The Analyzer and Display Range.
+        "Pre", "Post", "Sidechain", "Peak Hold", "Analyzer Range", "Analyzer Speed", "Analyzer Resolution", "Analyzer Tilt",
+        "Meter", "Display Range",
+        // The EQ display and its Bands, by Frequency, then the Output Meter's Clip Lights.
+        "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter",
+        // The Band panel: its top row, its left column, then its knobs.
+        "Dynamics Bypass", "Bypass", "Detection Audition", "Delete", "Shape", "Stereo Placement", "Detection Source",
+        "Detection Range", "Frequency", "Gain", "Q", "Slope", "Dynamic Range", "Threshold", "Attack", "Release",
+        "Detection Low", "Detection High",
+        // The output panel.
+        "Gain Scale", "Auto Gain", "Output Gain", "Output Pan", "Pan Mode", "Phase Invert", "Global Bypass"
+    };
+    CHECK (focusOrder (*host.editor) == expected);
+}

@@ -40,6 +40,10 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
     placement.addItemList (parameters::placementNames(), 1);
     detectionSource.addItemList (parameters::detectionSourceNames(), 1);
     detectionRange.addItemList (parameters::detectionRangeNames(), 1);
+    shape.setName ("Shape");
+    placement.setName ("Stereo Placement");
+    detectionSource.setName ("Detection Source");
+    detectionRange.setName ("Detection Range");
     for (auto* combo : { &shape, &placement, &detectionSource, &detectionRange })
         addAndMakeVisible (*combo);
 
@@ -99,6 +103,14 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
             releaseAudition();
     };
     addAndMakeVisible (audition);
+
+    // Tab's order: the top row, the left column, then the knobs, each as laid out.
+    int order = 0;
+    for (juce::Component* control : std::initializer_list<juce::Component*> { &brickwall, &dynamicsBypass, &bypass, &audition, &deleteButton,
+                                                                                &shape, &placement, &detectionSource, &detectionRange })
+        control->setExplicitFocusOrder (++order);
+    for (auto [slider, label] : controls)
+        slider->setExplicitFocusOrder (++order);
 
     show (0);
     startTimerHz (10);

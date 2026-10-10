@@ -33,7 +33,8 @@ private:
 };
 
 // The Output Meter: a bar per channel of the Output Level, with a Clip Light above each. Clicking
-// either Clip Light puts out both. Read and repainted at 60 Hz, like the EQ display.
+// either Clip Light, or Space or Return while the meter has keyboard focus, puts out both. Read and
+// repainted at 60 Hz, like the EQ display.
 class OutputMeter final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
 {
 public:
@@ -44,6 +45,7 @@ public:
 
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
+    bool keyPressed (const juce::KeyPress& key) override;
 
 private:
     void timerCallback() override;

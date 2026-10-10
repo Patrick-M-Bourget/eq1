@@ -8,10 +8,11 @@
 namespace eq1
 {
 
-// A Slider that keyboard focus reaches by Tab, though a click leaves focus where it was. The arrow
-// keys step it 1% of its normalised range, 0.2% with Shift (so Frequency and Q step evenly in log),
-// within its range and at least one interval. A key held, with its repeats, is one drag: one gesture
-// on a host parameter, so one undo step, ended by the key's release or by losing focus.
+// A Slider that keyboard focus reaches by Tab, once (not again in its text box), though a click
+// leaves focus where it was. The arrow keys step it 1% of its normalised range, 0.2% with Shift (so
+// Frequency and Q step evenly in log), within its range and at least one interval. A key held, with
+// its repeats, is one drag: one gesture on a host parameter, so one undo step, ended by the key's
+// release or by losing focus.
 class KeyboardSlider : public juce::Slider
 {
 public:

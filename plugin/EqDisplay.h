@@ -20,7 +20,10 @@ class PluginProcessor;
 // adds a Band; drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box
 // around them, or Cmd/Ctrl+A for all); the wheel changes Q; Delete removes the selected Bands;
 // Cmd/Ctrl+X, C and V Cut, Copy and Paste them, as the Band menu does, while the display has keyboard
-// focus (a host may take these keys first). Right-click opens the Band menu (BandMenu.h) for the
+// focus (a host may take these keys first). The arrow keys move the selected Bands, a semitone or
+// 0.5 dB as heard per press (0.1 semitone or 0.05 dB with Shift), a held key being one undo step. Tab
+// reaches each Band in use, in Frequency order (the order kept while a Band has focus), which selects
+// it alone; Delete then moves focus to the next Band. Right-click opens the Band menu (BandMenu.h) for the
 // selection, which a Band outside it becomes first; on empty space it offers Paste and Select All.
 // Holding a handle still Solos its Band until the mouse is released. Pressing on the spectrum, away
 // from the handles, grabs its peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
@@ -43,8 +46,24 @@ public:
     void mouseDoubleClick (const juce::MouseEvent& e) override;
     void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed (const juce::KeyPress& key) override;
+    bool keyStateChanged (bool isKeyDown) override;
+    void focusLost (FocusChangeType cause) override;
+    void resized() override;
 
 private:
+    // A Band's place in Tab's order: an element at its handle that takes keyboard focus. The display
+    // keeps the mouse.
+    class BandHandle;
+    std::array<std::unique_ptr<BandHandle>, numBandSlots> handles;
+    // Puts each Band in use's element at its handle, and orders them by Frequency unless one has focus.
+    void placeHandles();
+    int focusedSlot() const; // the Band whose element has keyboard focus, or 0
+    // Moves the selected Bands by the arrow keys; the undo step lasts until the key is released or the
+    // display and its Bands lose focus.
+    void nudgeSelection (double semitones, double heardDb);
+    void endHeldNudge();
+    bool nudging = false;
+
     void timerCallback() override;
     // Reads the analysis taps into the spectra; false when the Analyzer shows nothing.
     bool updateAnalyzer();

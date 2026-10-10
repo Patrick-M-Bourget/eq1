@@ -9,6 +9,8 @@ KeyboardSlider::KeyboardSlider (const juce::String& name) : juce::Slider (name)
 {
     setWantsKeyboardFocus (true);
     setMouseClickGrabsKeyboardFocus (false);
+    // One stop for Tab: its text box, which a double-click edits, isn't another.
+    setFocusContainerType (FocusContainerType::keyboardFocusContainer);
 }
 
 KeyboardSlider::~KeyboardSlider()

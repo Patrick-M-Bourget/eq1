@@ -31,7 +31,11 @@ constexpr float clipLightHeight = 8.0f, margin = 3.0f;
 
 OutputMeter::OutputMeter (PluginProcessor& p) : processor (p)
 {
+    setName ("Output Meter");
     setTooltip ("Output Meter: click a Clip Light to put both out");
+    // Tab reaches the Clip Lights, which Space or Return puts out; a click leaves focus where it was.
+    setWantsKeyboardFocus (true);
+    setMouseClickGrabsKeyboardFocus (false);
     timerCallback();
     startTimerHz (60);
 }
@@ -103,6 +107,15 @@ void OutputMeter::paint (juce::Graphics& g)
         g.setColour (processor.isClipLit (ch) ? staple::tokens::colour::meterClip : staple::tokens::colour::stateOffBg);
         g.fillRect (lights.withX (x).withWidth (width));
     }
+}
+
+bool OutputMeter::keyPressed (const juce::KeyPress& key)
+{
+    if (key != juce::KeyPress::spaceKey && key != juce::KeyPress::returnKey)
+        return false;
+    processor.clearClipLights();
+    repaint();
+    return true;
 }
 
 void OutputMeter::mouseDown (const juce::MouseEvent& e)

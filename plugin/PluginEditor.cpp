@@ -22,6 +22,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     // The display's Gain range, saved with the plugin.
     for (int range : { 6, 12, 30 })
         displayRange.addItem ("+/- " + juce::String (range) + " dB", range);
+    displayRange.setName ("Display Range");
     displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
     displayRange.onChange = [this] {
         eqProcessor.setDisplayRangeDb (displayRange.getSelectedId());
@@ -42,7 +43,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     redoButton.onClick = [this] { redo(); };
     for (auto* button : { &undoButton, &redoButton })
     {
-        button->setWantsKeyboardFocus (false);
+        // Tab reaches them, but a click leaves focus where it was, so Delete still reaches the display.
+        button->setMouseClickGrabsKeyboardFocus (false);
         addAndMakeVisible (*button);
     }
     showUndoState();
@@ -56,6 +58,9 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         analyzerRange.addItem (juce::String (range) + " dB", range);
     analyzerSpeed.addItemList ({ "Very Slow", "Slow", "Medium", "Fast", "Very Fast" }, 1);
     analyzerResolution.addItemList ({ "Low", "Medium", "High", "Maximum" }, 1);
+    analyzerRange.setName ("Analyzer Range");
+    analyzerSpeed.setName ("Analyzer Speed");
+    analyzerResolution.setName ("Analyzer Resolution");
     for (auto* combo : { &analyzerRange, &analyzerSpeed, &analyzerResolution })
     {
         combo->onChange = [this] { storeAnalyzerSettings(); };
@@ -72,6 +77,15 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     analyzerTilt.onValueChange = [this] { storeAnalyzerSettings(); };
     addAndMakeVisible (analyzerTilt);
     showAnalyzerSettings();
+
+    // Tab's order: the header, the Analyzer and Display Range, the display and its Bands, the Output
+    // Meter, the Band panel and the output panel. Within a row, left to right.
+    int order = 0;
+    for (juce::Component* child : std::initializer_list<juce::Component*> {
+             &presetBar, &presetBar.browserPanel(), &undoButton, &redoButton, &showPreEq, &showPostEq, &showSidechain, &peakHold,
+             &analyzerRange, &analyzerSpeed, &analyzerResolution, &analyzerTilt, &showMeter, &displayRange, &display, &meter,
+             &panel, &output })
+        child->setExplicitFocusOrder (++order);
 
     startTimerHz (4);
 
@@ -154,7 +168,8 @@ void PluginEditor::timerCallback()
     showUndoState();
     // Follows settings restored with the plugin's state.
     if (displayRange.getSelectedId() != eqProcessor.displayRangeDb())
-        displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
+        displayRange.setName ("Display Range");
+    displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
     if (showMeter.getToggleState() != eqProcessor.isOutputMeterShown())
     {
         showMeter.setToggleState (eqProcessor.isOutputMeterShown(), juce::dontSendNotification);

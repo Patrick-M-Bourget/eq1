@@ -5,6 +5,7 @@
 #include "PluginProcessor.h"
 #include "eq1/Response.h"
 #include "staple/Fonts.h"
+#include "staple/LookAndFeel.h"
 #include "staple/Tokens.h"
 
 #include <cmath>
@@ -52,9 +53,37 @@ juce::String frequencyText (double frequency)
 }
 } // namespace
 
+class EqDisplay::BandHandle final : public juce::Component
+{
+public:
+    BandHandle (EqDisplay& d, int s) : display (d), slot (s)
+    {
+        setName ("Band " + juce::String (slot));
+        setInterceptsMouseClicks (false, false);
+        setWantsKeyboardFocus (true);
+    }
+
+    void focusGained (FocusChangeType) override
+    {
+        if (display.selected != std::set<int> { slot })
+            display.select ({ slot });
+    }
+    void focusLost (FocusChangeType) override { display.endHeldNudge(); }
+
+    EqDisplay& display;
+    const int slot;
+};
+
 EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
 {
+    setName ("EQ Display");
     setWantsKeyboardFocus (true);
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        auto& handle = handles[static_cast<size_t> (slot - 1)];
+        handle = std::make_unique<BandHandle> (*this, slot);
+        addChildComponent (*handle);
+    }
     shown = heardSettings();
     tapSamples.resize (1 << 16);
     startTimerHz (60);
@@ -116,7 +145,45 @@ Settings EqDisplay::heardSettings() const
 
 EqDisplay::~EqDisplay()
 {
+    endHeldNudge();
     releaseSolo();
+}
+
+void EqDisplay::resized()
+{
+    placeHandles();
+}
+
+void EqDisplay::placeHandles()
+{
+    const bool reorder = focusedSlot() == 0;
+    std::vector<int> inUse;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
+        auto& handle = *handles[static_cast<size_t> (slot - 1)];
+        handle.setVisible (band.inUse);
+        if (! band.inUse)
+            continue;
+        inUse.push_back (slot);
+        handle.setBounds (juce::Rectangle<float> (handleRadius * 2.0f, handleRadius * 2.0f).withCentre (handleOf (band)).getSmallestIntegerContainer());
+    }
+    if (! reorder)
+        return;
+    // By Frequency, the lower Band Slot first on a tie (std::stable_sort keeps slot order).
+    std::stable_sort (inUse.begin(), inUse.end(), [this] (int a, int b) {
+        return shown.bands[static_cast<size_t> (a - 1)].frequency < shown.bands[static_cast<size_t> (b - 1)].frequency;
+    });
+    for (size_t i = 0; i < inUse.size(); ++i)
+        handles[static_cast<size_t> (inUse[i] - 1)]->setExplicitFocusOrder (static_cast<int> (i) + 1);
+}
+
+int EqDisplay::focusedSlot() const
+{
+    for (const auto& handle : handles)
+        if (handle->hasKeyboardFocus (false))
+            return handle->slot;
+    return 0;
 }
 
 void EqDisplay::releaseSolo()
@@ -148,6 +215,7 @@ void EqDisplay::timerCallback()
         // The spectra move every frame.
         shown = heardSettings();
         shownRangeDb = processor.displayRangeDb();
+        placeHandles();
         repaint();
         return;
     }
@@ -176,6 +244,7 @@ void EqDisplay::timerCallback()
     std::erase_if (stillInUse, [this] (int slot) { return ! shown.bands[static_cast<size_t> (slot - 1)].inUse; });
     if (stillInUse != selected)
         select (stillInUse);
+    placeHandles();
     repaint();
 }
 
@@ -656,13 +725,85 @@ void EqDisplay::deleteSelection()
     editing.deleteBands ({ selected.begin(), selected.end() });
     select ({});
     shown = heardSettings();
+    placeHandles();
+}
+
+void EqDisplay::nudgeSelection (double semitones, double heardDb)
+{
+    if (! nudging)
+    {
+        processor.editHistory().beginTransaction();
+        nudging = true;
+    }
+    editing.nudge ({ selected.begin(), selected.end() }, semitones, heardDb);
+    shown = heardSettings();
+    placeHandles();
+    repaint();
+}
+
+void EqDisplay::endHeldNudge()
+{
+    if (! std::exchange (nudging, false))
+        return;
+    processor.editHistory().endTransaction();
+    // As after a drag, a Gain moved beyond the Display Range zooms it out.
+    processor.fitDisplayRangeToHeardGains();
+}
+
+bool EqDisplay::keyStateChanged (bool isKeyDown)
+{
+    if (! isKeyDown)
+        endHeldNudge();
+    return false;
+}
+
+void EqDisplay::focusLost (FocusChangeType)
+{
+    endHeldNudge();
 }
 
 bool EqDisplay::keyPressed (const juce::KeyPress& key)
 {
     if ((key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) && ! selected.empty())
     {
+        // A Band with focus hands it to the next Band in Tab's order that is left, else the one before,
+        // else the display.
+        const int focused = focusedSlot();
+        BandHandle* next = nullptr;
+        if (focused != 0)
+        {
+            std::vector<BandHandle*> order;
+            for (auto& handle : handles)
+                if (handle->isVisible() && (handle->slot == focused || ! selected.contains (handle->slot)))
+                    order.push_back (handle.get());
+            std::stable_sort (order.begin(), order.end(), [] (auto* a, auto* b) { return a->getExplicitFocusOrder() < b->getExplicitFocusOrder(); });
+            const auto at = std::find_if (order.begin(), order.end(), [focused] (auto* h) { return h->slot == focused; });
+            if (std::next (at) != order.end())
+                next = *std::next (at);
+            else if (at != order.begin())
+                next = *std::prev (at);
+        }
         deleteSelection();
+        if (next != nullptr)
+            next->grabKeyboardFocus();
+        else if (focused != 0)
+            grabKeyboardFocus();
+        return true;
+    }
+    const auto mods = key.getModifiers();
+    const int code = key.getKeyCode();
+    const bool horizontal = code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey;
+    const bool vertical = code == juce::KeyPress::upKey || code == juce::KeyPress::downKey;
+    if ((horizontal || vertical) && ! selected.empty()
+        && (mods.getRawFlags() & ~juce::ModifierKeys::shiftModifier & juce::ModifierKeys::allKeyboardModifiers) == 0)
+    {
+        staple::LookAndFeel::keyUsed (*this);
+        const double sign = code == juce::KeyPress::rightKey || code == juce::KeyPress::upKey ? 1.0 : -1.0;
+        const bool fine = mods.isShiftDown();
+        if (horizontal)
+            nudgeSelection (sign * (fine ? 0.1 : 1.0), 0.0);
+        else
+            nudgeSelection (0.0, sign * (fine ? 0.05 : 0.5));
         return true;
     }
     if (key == juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0))

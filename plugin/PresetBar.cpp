@@ -43,9 +43,12 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
     // The side you're on is lit.
     for (auto* side : { &a, &b })
         side->setColour (juce::TextButton::buttonOnColourId, staple::tokens::colour::fill3);
+    previous.setName ("Previous Preset");
+    next.setName ("Next Preset");
     for (auto* button : { &presets, &previous, &next, &a, &b, &copyAToB })
     {
-        button->setWantsKeyboardFocus (false);
+        // Tab reaches them, but a click leaves focus where it was, so Delete still reaches the display.
+        button->setMouseClickGrabsKeyboardFocus (false);
         addAndMakeVisible (*button);
     }
     showSide();
