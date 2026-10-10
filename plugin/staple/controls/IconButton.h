@@ -30,6 +30,8 @@ public:
     void setRestColour (juce::Colour colour);
     // The icon's size in px; by default 2/3 of the button's side (16 px in 24).
     void setIconSize (float size);
+    // The icon's side as drawn, in px.
+    float getIconSide() const;
     // Turns the icon clockwise about its centre (the dynamics chevron, 180° while the section is open).
     void setIconRotation (float radians);
     // While on, Off rather than lit.

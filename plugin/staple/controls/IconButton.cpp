@@ -20,6 +20,11 @@ IconButton::IconButton (const juce::String& name, Icon i) : juce::Button (name),
     setMouseClickGrabsKeyboardFocus (false);
 }
 
+float IconButton::getIconSide() const
+{
+    return iconSize > 0.0f ? iconSize : static_cast<float> (std::min (getWidth(), getHeight())) * 2.0f / 3.0f;
+}
+
 void IconButton::setIcon (Icon newIcon)
 {
     icon = newIcon;
@@ -73,7 +78,7 @@ void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     const float side = static_cast<float> (std::min (getWidth(), getHeight()));
     const auto square = getLocalBounds().toFloat().withSizeKeepingCentre (side, side);
     // The icon's 16 px grid in a 24 px button, in proportion at other sizes.
-    const float iconSide = iconSize > 0.0f ? iconSize : side * 2.0f / 3.0f;
+    const float iconSide = getIconSide();
     const auto iconArea = square.withSizeKeepingCentre (iconSide, iconSide);
 
     juce::Colour ink;

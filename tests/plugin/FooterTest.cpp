@@ -199,6 +199,16 @@ TEST_CASE ("A double-click's second press resets the Gain Scale readout and the 
     CHECK (host.undoSteps() == steps + 1);
 }
 
+TEST_CASE ("The footer's Global Bypass and UI Scale buttons draw 14 px icons")
+{
+    Footer host;
+    for (const juce::String title : { "Global Bypass", "UI Scale" })
+    {
+        CAPTURE (title);
+        CHECK (host.titled<staple::IconButton> (title).getIconSide() == 14.0f);
+    }
+}
+
 TEST_CASE ("The Output readout shows Output Gain, plus Auto Gain's estimate while Auto Gain is on")
 {
     Footer host;

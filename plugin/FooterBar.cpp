@@ -139,6 +139,7 @@ UiScaleMenu::UiScaleMenu() : staple::IconButton ("UI Scale", staple::Icon::uiSca
 {
     setTitle ("UI Scale");
     setTooltip ("UI Scale");
+    setIconSize (14.0f);
     onClick = [this] {
         menu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withDeletionCheck (*this),
                               [safe = juce::Component::SafePointer<UiScaleMenu> (this)] (int picked) {
@@ -178,6 +179,7 @@ FooterBar::FooterBar (PluginProcessor& p)
 
     globalBypass.setClickingTogglesState (true);
     globalBypass.setOffLook (true);
+    globalBypass.setIconSize (14.0f);
     globalBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::globalBypassId, globalBypass);
     globalBypass.setTitle (state.getParameter (parameters::globalBypassId)->getName (100));
     globalBypass.setTooltip ("Global Bypass (Cmd/Ctrl+B)");
