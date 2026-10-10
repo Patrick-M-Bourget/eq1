@@ -29,16 +29,16 @@ struct Frame
     }
 };
 
-std::optional<eq1::display::Grip> gripOf (const std::vector<eq1::display::Grip>& grips, int slot)
+std::optional<eq1::display::DynamicRangeHandle> dynamicRangeHandleOf (const std::vector<eq1::display::DynamicRangeHandle>& handles, int slot)
 {
-    for (const auto& grip : grips)
-        if (grip.slot == slot)
-            return grip;
+    for (const auto& dynamicRangeHandle : handles)
+        if (dynamicRangeHandle.slot == slot)
+            return dynamicRangeHandle;
     return std::nullopt;
 }
 } // namespace
 
-TEST_CASE ("A Dynamic Range grip sits at its Band's Frequency and heard Gain + Dynamic Range, 26 px below the handle with none, 14 px inside the edges")
+TEST_CASE ("A Dynamic Range Handle sits at its Band's Frequency and heard Gain + Dynamic Range, 26 px below the handle with none, 14 px inside the edges")
 {
     const DisplayGeometry geometry { .width = 1134, .height = 612, .rangeDb = 12 };
     Frame f;
@@ -46,15 +46,15 @@ TEST_CASE ("A Dynamic Range grip sits at its Band's Frequency and heard Gain + D
     f.add (2, 200.0, -2.0);
     f.add (3, 5000.0, 10.0, 20.0);
     f.selected = { 2 };
-    const auto grips = eq1::display::dynamicRangeGrips (geometry, f.frame);
-    REQUIRE (grips.size() == 3);
-    CHECK_THAT (gripOf (grips, 1)->centre.x, WithinAbs (geometry.xOf (1000.0), 0.01));
-    CHECK_THAT (gripOf (grips, 1)->centre.y, WithinAbs (geometry.yOf (9.0), 0.01));
-    CHECK_THAT (gripOf (grips, 2)->centre.y, WithinAbs (geometry.yOf (-2.0) + 26.0f, 0.01));
-    CHECK_THAT (gripOf (grips, 3)->centre.y, WithinAbs (14.0, 0.01));
+    const auto handles = eq1::display::dynamicRangeHandles (geometry, f.frame);
+    REQUIRE (handles.size() == 3);
+    CHECK_THAT (dynamicRangeHandleOf (handles, 1)->centre.x, WithinAbs (geometry.xOf (1000.0), 0.01));
+    CHECK_THAT (dynamicRangeHandleOf (handles, 1)->centre.y, WithinAbs (geometry.yOf (9.0), 0.01));
+    CHECK_THAT (dynamicRangeHandleOf (handles, 2)->centre.y, WithinAbs (geometry.yOf (-2.0) + 26.0f, 0.01));
+    CHECK_THAT (dynamicRangeHandleOf (handles, 3)->centre.y, WithinAbs (14.0, 0.01));
 }
 
-TEST_CASE ("Grips show for the selected Band with Gain unless Bypassed, and other Dynamic Bands not under Dynamics Bypass, at 55 % until hovered")
+TEST_CASE ("Dynamic Range Handles show for the selected Band with Gain unless Bypassed, and other Dynamic Bands not under Dynamics Bypass, at 55 % until hovered")
 {
     const DisplayGeometry geometry { .width = 1134, .height = 612, .rangeDb = 12 };
     Frame f;
@@ -66,18 +66,18 @@ TEST_CASE ("Grips show for the selected Band with Gain unless Bypassed, and othe
     f.add (5, 1600.0, 0.0);       // not Dynamic: none
     f.selected = { 1 };
     f.frame.hover[2] = 1.0f;
-    auto grips = eq1::display::dynamicRangeGrips (geometry, f.frame);
-    CHECK (grips.size() == 3);
-    CHECK_THAT (gripOf (grips, 1)->alpha, WithinAbs (1.0, 1.0e-6));
-    CHECK_THAT (gripOf (grips, 2)->alpha, WithinAbs (0.55, 1.0e-6));
-    CHECK_THAT (gripOf (grips, 3)->alpha, WithinAbs (1.0, 1.0e-6));
+    auto handles = eq1::display::dynamicRangeHandles (geometry, f.frame);
+    CHECK (handles.size() == 3);
+    CHECK_THAT (dynamicRangeHandleOf (handles, 1)->alpha, WithinAbs (1.0, 1.0e-6));
+    CHECK_THAT (dynamicRangeHandleOf (handles, 2)->alpha, WithinAbs (0.55, 1.0e-6));
+    CHECK_THAT (dynamicRangeHandleOf (handles, 3)->alpha, WithinAbs (1.0, 1.0e-6));
 
     // The selected Band Bypassed, or with a Shape without Gain, has none.
     f.band (1).bypass = true;
-    CHECK_FALSE (gripOf (eq1::display::dynamicRangeGrips (geometry, f.frame), 1));
+    CHECK_FALSE (dynamicRangeHandleOf (eq1::display::dynamicRangeHandles (geometry, f.frame), 1));
     f.band (1).bypass = false;
     f.band (1).shape = eq1::Shape::LowCut;
-    CHECK_FALSE (gripOf (eq1::display::dynamicRangeGrips (geometry, f.frame), 1));
+    CHECK_FALSE (dynamicRangeHandleOf (eq1::display::dynamicRangeHandles (geometry, f.frame), 1));
 }
 
 TEST_CASE ("Band handles: 16 px in the Band's colour with a dark 1 px ring; selected 22 px with a 2 px white ring and a 40 % glow; x1.15 on hover and while dragged")

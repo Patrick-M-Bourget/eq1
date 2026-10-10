@@ -82,10 +82,10 @@ private:
     juce::String spoken;
 };
 
-class EqDisplay::RangeGrip final : public juce::Component
+class EqDisplay::DynamicRangeHandleElement final : public juce::Component
 {
 public:
-    RangeGrip (EqDisplay& d, int s) : display (d), slot (s)
+    DynamicRangeHandleElement (EqDisplay& d, int s) : display (d), slot (s)
     {
         setName ("Band " + juce::String (slot) + " Dynamic Range Handle");
         setTitle (getName());
@@ -151,9 +151,9 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editi
         auto& handle = handles[static_cast<size_t> (slot - 1)];
         handle = std::make_unique<BandHandle> (*this, slot);
         addChildComponent (*handle);
-        auto& grip = rangeGrips[static_cast<size_t> (slot - 1)];
-        grip = std::make_unique<RangeGrip> (*this, slot);
-        addChildComponent (*grip);
+        auto& dynamicRangeHandle = dynamicRangeHandleElements[static_cast<size_t> (slot - 1)];
+        dynamicRangeHandle = std::make_unique<DynamicRangeHandleElement> (*this, slot);
+        addChildComponent (*dynamicRangeHandle);
     }
     shown = heardSettings();
     tapSamples.resize (1 << 16);
@@ -242,36 +242,36 @@ void EqDisplay::placeHandles()
         handle.announce();
         handle.setBounds (juce::Rectangle<float> (handleRadius * 2.0f, handleRadius * 2.0f).withCentre (handleOf (band)).getSmallestIntegerContainer());
     }
-    std::array<bool, numBandSlots> gripShown {};
-    for (const auto& grip : display::dynamicRangeGrips (geometry(), frame()))
+    std::array<bool, numBandSlots> handleShown {};
+    for (const auto& dynamicRangeHandle : display::dynamicRangeHandles (geometry(), frame()))
     {
-        gripShown[static_cast<size_t> (grip.slot - 1)] = true;
-        auto& element = *rangeGrips[static_cast<size_t> (grip.slot - 1)];
-        element.setBounds (display::gripArea (grip.centre).getSmallestIntegerContainer());
+        handleShown[static_cast<size_t> (dynamicRangeHandle.slot - 1)] = true;
+        auto& element = *dynamicRangeHandleElements[static_cast<size_t> (dynamicRangeHandle.slot - 1)];
+        element.setBounds (display::dynamicRangeHandleArea (dynamicRangeHandle.centre).getSmallestIntegerContainer());
         element.announce();
     }
     for (int slot = 1; slot <= numBandSlots; ++slot)
-        rangeGrips[static_cast<size_t> (slot - 1)]->setVisible (gripShown[static_cast<size_t> (slot - 1)]);
+        dynamicRangeHandleElements[static_cast<size_t> (slot - 1)]->setVisible (handleShown[static_cast<size_t> (slot - 1)]);
     if (! reorder)
         return;
-    // By Frequency, the lower Band Slot first on a tie (std::stable_sort keeps slot order), each grip
-    // after its Band.
+    // By Frequency, the lower Band Slot first on a tie (std::stable_sort keeps slot order), each Dynamic
+    // Range Handle after its Band.
     std::stable_sort (inUse.begin(), inUse.end(), [this] (int a, int b) {
         return shown.bands[static_cast<size_t> (a - 1)].frequency < shown.bands[static_cast<size_t> (b - 1)].frequency;
     });
     for (size_t i = 0; i < inUse.size(); ++i)
     {
         handles[static_cast<size_t> (inUse[i] - 1)]->setExplicitFocusOrder (2 * static_cast<int> (i) + 1);
-        rangeGrips[static_cast<size_t> (inUse[i] - 1)]->setExplicitFocusOrder (2 * static_cast<int> (i) + 2);
+        dynamicRangeHandleElements[static_cast<size_t> (inUse[i] - 1)]->setExplicitFocusOrder (2 * static_cast<int> (i) + 2);
     }
 }
 
-int EqDisplay::gripAt (juce::Point<float> position) const
+int EqDisplay::dynamicRangeHandleAt (juce::Point<float> position) const
 {
-    const auto grips = display::dynamicRangeGrips (geometry(), frame());
-    for (auto grip = grips.rbegin(); grip != grips.rend(); ++grip)
-        if (display::gripArea (grip->centre).contains (position))
-            return grip->slot;
+    const auto dynamicRangeHandles = display::dynamicRangeHandles (geometry(), frame());
+    for (auto dynamicRangeHandle = dynamicRangeHandles.rbegin(); dynamicRangeHandle != dynamicRangeHandles.rend(); ++dynamicRangeHandle)
+        if (display::dynamicRangeHandleArea (dynamicRangeHandle->centre).contains (position))
+            return dynamicRangeHandle->slot;
     return 0;
 }
 
@@ -317,9 +317,9 @@ int EqDisplay::focusedSlot() const
     for (const auto& handle : handles)
         if (handle->hasKeyboardFocus (false))
             return handle->slot;
-    for (const auto& grip : rangeGrips)
-        if (grip->hasKeyboardFocus (false))
-            return grip->slot;
+    for (const auto& dynamicRangeHandle : dynamicRangeHandleElements)
+        if (dynamicRangeHandle->hasKeyboardFocus (false))
+            return dynamicRangeHandle->slot;
     return 0;
 }
 
@@ -435,7 +435,7 @@ std::optional<display::Ghost> EqDisplay::ghost() const
         return std::nullopt;
     if (pointer)
     {
-        if (slotAt (*pointer) != 0 || gripAt (*pointer) != 0 || bandAreaAt (*pointer) != 0)
+        if (slotAt (*pointer) != 0 || dynamicRangeHandleAt (*pointer) != 0 || bandAreaAt (*pointer) != 0)
             return std::nullopt;
         return display::ghostBell (geometry(), *pointer);
     }
@@ -503,7 +503,7 @@ void EqDisplay::select (std::set<int> slots)
     const int shown = selected.empty() ? 0 : *selected.rbegin();
     if (std::exchange (panelSlot, shown) != shown && onSelectionChanged)
         onSelectionChanged (shown);
-    // The selected Band shows its grip.
+    // The selected Band shows its Dynamic Range Handle.
     placeHandles();
     repaint();
 }
@@ -564,15 +564,15 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
     dragStart = e.position;
     const bool adding = e.mods.isShiftDown() || e.mods.isCommandDown();
     const int slot = slotAt (e.position);
-    if (const int gripped = slot == 0 ? gripAt (e.position) : 0; gripped != 0)
+    if (const int handleSlot = slot == 0 ? dynamicRangeHandleAt (e.position) : 0; handleSlot != 0)
     {
-        // A grip: never a Band drag, a marquee or a Solo.
-        if (selected != std::set<int> { gripped })
-            select ({ gripped });
-        const auto& band = shown.bands[static_cast<size_t> (gripped - 1)];
-        rangeDragSlot = gripped;
+        // A Dynamic Range Handle: never a Band drag, a marquee or a Solo.
+        if (selected != std::set<int> { handleSlot })
+            select ({ handleSlot });
+        const auto& band = shown.bands[static_cast<size_t> (handleSlot - 1)];
+        rangeDragSlot = handleSlot;
         rangeDragStartEnd = band.gain + band.dynamicRange;
-        editing.beginDynamicRangeDrag (gripped);
+        editing.beginDynamicRangeDrag (handleSlot);
         return;
     }
     if (slot == 0 && ! adding)
@@ -702,9 +702,9 @@ void EqDisplay::mouseDoubleClick (const juce::MouseEvent& e)
 {
     if (e.mods.isPopupMenu() || slotAt (e.position) != 0)
         return;
-    if (const int gripped = gripAt (e.position); gripped != 0)
+    if (const int handleSlot = dynamicRangeHandleAt (e.position); handleSlot != 0)
     {
-        editing.setDynamicRange (gripped, 0.0);
+        editing.setDynamicRange (handleSlot, 0.0);
         shown = heardSettings();
         placeHandles();
         repaint();

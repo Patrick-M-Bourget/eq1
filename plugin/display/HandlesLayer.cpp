@@ -49,10 +49,10 @@ HandleStyle handleStyle (const HandleState& state)
     return style;
 }
 
-std::vector<Grip> dynamicRangeGrips (const DisplayGeometry& geometry, const DisplayFrame& frame)
+std::vector<DynamicRangeHandle> dynamicRangeHandles (const DisplayGeometry& geometry, const DisplayFrame& frame)
 {
-    namespace grip = staple::tokens::grip;
-    std::vector<Grip> grips;
+    namespace token = staple::tokens::dynamicRangeHandle;
+    std::vector<DynamicRangeHandle> handles;
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
         const auto& band = frame.bands.bands[static_cast<size_t> (slot - 1)];
@@ -63,18 +63,18 @@ std::vector<Grip> dynamicRangeGrips (const DisplayGeometry& geometry, const Disp
         if (! shown)
             continue;
         const auto centre = geometry.handleOf (band);
-        const float y = band.dynamicRange != 0.0 ? geometry.yOf (band.gain + band.dynamicRange) : centre.y + grip::belowHandle;
+        const float y = band.dynamicRange != 0.0 ? geometry.yOf (band.gain + band.dynamicRange) : centre.y + token::belowHandle;
         const float hover = frame.hover[static_cast<size_t> (slot - 1)];
-        grips.push_back ({ slot,
-                           { centre.x, juce::jlimit (grip::edgeInset, static_cast<float> (geometry.height) - grip::edgeInset, y) },
-                           alone ? 1.0f : juce::jmap (hover, grip::restingAlpha, 1.0f) });
+        handles.push_back ({ slot,
+                           { centre.x, juce::jlimit (token::edgeInset, static_cast<float> (geometry.height) - token::edgeInset, y) },
+                           alone ? 1.0f : juce::jmap (hover, token::restingAlpha, 1.0f) });
     }
-    return grips;
+    return handles;
 }
 
-juce::Rectangle<float> gripArea (juce::Point<float> centre)
+juce::Rectangle<float> dynamicRangeHandleArea (juce::Point<float> centre)
 {
-    return juce::Rectangle<float> (tokens::grip::width, tokens::grip::height).withCentre (centre);
+    return juce::Rectangle<float> (tokens::dynamicRangeHandle::width, tokens::dynamicRangeHandle::height).withCentre (centre);
 }
 
 Readout dragReadout (int slot, const BandSettings& band)
@@ -88,15 +88,15 @@ Readout dragReadout (int slot, const BandSettings& band)
 
 namespace
 {
-void paintGrip (juce::Graphics& g, const Grip& grip, juce::Colour bandColour)
+void paintDynamicRangeHandle (juce::Graphics& g, const DynamicRangeHandle& dynamicRangeHandle, juce::Colour bandColour)
 {
-    namespace size = tokens::grip;
-    const auto c = grip.centre;
+    namespace size = tokens::dynamicRangeHandle;
+    const auto c = dynamicRangeHandle.centre;
     const float half = size::triangleWidth / 2.0f, offset = size::gap / 2.0f;
     juce::Path triangles;
     triangles.addTriangle (c.x, c.y - offset - size::triangleHeight, c.x + half, c.y - offset, c.x - half, c.y - offset);
     triangles.addTriangle (c.x, c.y + offset + size::triangleHeight, c.x + half, c.y + offset, c.x - half, c.y + offset);
-    g.setColour (bandColour.withMultipliedAlpha (grip.alpha));
+    g.setColour (bandColour.withMultipliedAlpha (dynamicRangeHandle.alpha));
     g.fillPath (triangles);
 }
 
@@ -160,8 +160,8 @@ void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)
 
 void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame)
 {
-    for (const auto& grip : dynamicRangeGrips (geometry, frame))
-        paintGrip (g, grip, bandColour (grip.slot));
+    for (const auto& dynamicRangeHandle : dynamicRangeHandles (geometry, frame))
+        paintDynamicRangeHandle (g, dynamicRangeHandle, bandColour (dynamicRangeHandle.slot));
 
     // The selected handles go on top.
     const auto draw = [&] (int slot) {

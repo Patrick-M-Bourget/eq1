@@ -13,7 +13,7 @@ enum class Icon
 {
     power, close, more, dropdown, chevronUp, submenu, check, previous, next, undo, redo,
     headphones, detectionSource, track, freeze, dynamicsOpen, phaseInvert, meter, uiScale, search, star,
-    peakHold, resizeGrip, gripUp, gripDown,
+    peakHold, resizeGrip, dynamicRangeHandleUp, dynamicRangeHandleDown,
     // Shapes
     bell, lowShelf, highShelf, lowCut, highCut, notch, bandPass, tiltShelf, flatTilt, allPass,
     // Stereo Placements: drawn over placementStereo at low opacity for the part not processed
@@ -32,7 +32,7 @@ const juce::Path& pathOf (Icon icon);
 juce::Rectangle<float> gridOf (Icon icon);
 
 // Fitted into the area, centred, keeping its proportions: stroked 1.5 px wide with round caps and
-// joins whatever its size, or filled (star, grips).
+// joins whatever its size, or filled (star, Dynamic Range Handles).
 void drawIcon (juce::Graphics& g, Icon icon, juce::Rectangle<float> area, juce::Colour colour);
 void fillIcon (juce::Graphics& g, Icon icon, juce::Rectangle<float> area, juce::Colour colour);
 

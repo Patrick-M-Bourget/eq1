@@ -27,19 +27,19 @@ class PluginProcessor;
 // the Band menu does, while the display has keyboard focus (a host may take these keys first). The arrow
 // keys move the selected Bands, a semitone or 0.5 dB as heard per press (0.1 semitone or 0.05 dB with
 // Shift), a held key being one undo step. Tab reaches each Band in use, in Frequency order (the order
-// kept while a Band has focus), which selects it alone, then its Dynamic Range grip if shown; Delete then
-// moves focus to the next Band. Right-click opens the Band menu (BandMenu.h) for the selection, which a
-// Band outside it becomes first; on empty space it offers Paste and Select All. Holding a handle still
-// Solos its Band until the mouse is released. Pressing on the spectrum, away from the handles, grabs its
-// peak there (Spectrum Grab). The ▲▼ grip of the selected Band, and of each Dynamic Band, sets its
-// Dynamic Range: drag it, double-click it to clear it, or ↑/↓ while it has focus. A Dynamic Band's curve
+// kept while a Band has focus), which selects it alone, then its Dynamic Range Handle if shown; Delete
+// then moves focus to the next Band. Right-click opens the Band menu (BandMenu.h) for the selection,
+// which a Band outside it becomes first; on empty space it offers Paste and Select All. Holding a handle
+// still Solos its Band until the mouse is released. Pressing on the spectrum, away from the handles,
+// grabs its peak there (Spectrum Grab). The ▲▼ Dynamic Range Handle of the selected Band, and of each
+// Dynamic Band, sets its Dynamic Range: drag it, double-click it to clear it, or ↑/↓ while it has focus. A Dynamic Band's curve
 // follows its Live Gain, and the selected one has a wash between its curves at Gain and Gain + Dynamic
 // Range. Hovering a handle or a curve lights the Band's curve, and Global Bypass fades every curve and
 // handle to its bypassed look (plugin/display/). The curve comes from the Engine's own response maths
 // (eq1/Response.h). A handle beyond the Display Range sits at its edge; a heard Gain changed to beyond
 // it zooms the range out, once any drag has ended. A screen reader reads the display as a group, "EQ
 // display", of the Bands in use, each named "Band 4" with its stored settings as its value (spokenBand),
-// announced again whenever the Band moves, and each shown grip, "Band 4 Dynamic Range Handle".
+// announced again whenever the Band moves, and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle".
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
@@ -70,8 +70,8 @@ public:
     // out on Shapes without one, then "Bypassed" and "Dynamic Band" when they apply.
     juce::String spokenBand (int slot) const;
 
-    // The ghost Bell, while it shows: following the mouse over empty space (no handle, grip or Band's
-    // curve under it), or resting at 1 kHz with no Bands; never while the mouse is pressed, a menu is
+    // The ghost Bell, while it shows: following the mouse over empty space (no handle, Dynamic Range
+    // Handle or Band's curve under it), or resting at 1 kHz with no Bands; never while the mouse is pressed, a menu is
     // open or every Band Slot is in use.
     std::optional<display::Ghost> ghost() const;
 
@@ -84,15 +84,15 @@ private:
     // keeps the mouse.
     class BandHandle;
     std::array<std::unique_ptr<BandHandle>, numBandSlots> handles;
-    // A Dynamic Range grip's place in Tab's order, after its Band's: an element at the grip, shown while
-    // the grip is, that takes keyboard focus. ↑/↓ step the Band's Dynamic Range.
-    class RangeGrip;
-    std::array<std::unique_ptr<RangeGrip>, numBandSlots> rangeGrips;
-    // Puts each Band in use's element at its handle, and each shown grip's at the grip, and orders them
-    // by Frequency, each grip after its Band, unless one has focus.
+    // A Dynamic Range Handle's place in Tab's order, after its Band's: an element over the handle, shown
+    // while it is, that takes keyboard focus. ↑/↓ step the Band's Dynamic Range.
+    class DynamicRangeHandleElement;
+    std::array<std::unique_ptr<DynamicRangeHandleElement>, numBandSlots> dynamicRangeHandleElements;
+    // Puts each Band in use's element at its handle, and each shown Dynamic Range Handle's over it, and
+    // orders them by Frequency, each Dynamic Range Handle after its Band, unless one has focus.
     void placeHandles();
-    int gripAt (juce::Point<float> position) const; // the Band whose grip is there, or 0
-    // The grip's arrow keys: Dynamic Range by dB, one undo step until the key is released.
+    int dynamicRangeHandleAt (juce::Point<float> position) const; // the Band whose Dynamic Range Handle is there, or 0
+    // The Dynamic Range Handle's arrow keys: Dynamic Range by dB, one undo step until the key is released.
     void stepDynamicRange (int slot, double db);
     int focusedSlot() const; // the Band whose element has keyboard focus, or 0
     // Moves the selected Bands by the arrow keys; the undo step lasts until the key is released or the
@@ -157,7 +157,7 @@ private:
     // double-click on the spectrum doesn't.
     std::optional<double> grabFrequency;
     bool grabbing = false; // the drag sets only the grabbed Band's Gain
-    // A grip's drag: the Band, and its range's heard end when the drag began.
+    // A Dynamic Range Handle's drag: the Band, and its range's heard end when the drag began.
     int rangeDragSlot = 0;
     double rangeDragStartEnd = 0.0;
 

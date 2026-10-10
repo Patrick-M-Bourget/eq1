@@ -68,7 +68,7 @@ _Avoid_: Depth, range, ratio
 
 **Dynamic Range Handle**:
 The ▲▼ marker on the EQ display at a Band's Gain plus Dynamic Range, dragged to set its Dynamic Range; the Band panel sets the same value with the ring around its Gain knob.
-_Avoid_: Range handle, Dynamic Range (when meaning the marker)
+_Avoid_: Range handle, grip, Dynamic Range (when meaning the marker)
 
 **Live Gain**:
 The Gain a Dynamic Band is applying at this moment, between its Gain and its Gain plus Dynamic Range. The Engine reports it as heard, with Gain Scale applied, so compare it with the Heard Gain, not the Gain.

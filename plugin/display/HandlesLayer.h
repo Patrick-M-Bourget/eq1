@@ -31,20 +31,20 @@ struct HandleStyle
 // in the bypassed colour at 85 % with no glow, a selected one's ring at 60 % white.
 HandleStyle handleStyle (const HandleState& state);
 
-// A Dynamic Range grip: the ▲▼ on the display that sets a Band's Dynamic Range.
-struct Grip
+// A Dynamic Range Handle: the ▲▼ on the display that sets a Band's Dynamic Range.
+struct DynamicRangeHandle
 {
     int slot = 0;
     juce::Point<float> centre;
     float alpha = 1.0f;
 };
-// The grips to show: the selected Band's (one selected alone) while its Shape has Gain and it isn't
-// Bypassed, so a range can be made by dragging, and every other Dynamic Band's not under Dynamics Bypass,
-// at 55 % until hovered. Each sits at its Band's Frequency and heard Gain + Dynamic Range, or 26 px below
+// The Dynamic Range Handles to show: the selected Band's (one selected alone) while its Shape has Gain
+// and it isn't Bypassed, so a range can be made by dragging, and every other Dynamic Band's not under
+// Dynamics Bypass, at 55 % until hovered. Each sits at its Band's Frequency and heard Gain + Dynamic Range, or 26 px below
 // its handle with none, and 14 px inside the top and bottom.
-std::vector<Grip> dynamicRangeGrips (const DisplayGeometry& geometry, const DisplayFrame& frame);
-// A grip's 18 x 26 px hit area.
-juce::Rectangle<float> gripArea (juce::Point<float> centre);
+std::vector<DynamicRangeHandle> dynamicRangeHandles (const DisplayGeometry& geometry, const DisplayFrame& frame);
+// A Dynamic Range Handle's 18 x 26 px hit area.
+juce::Rectangle<float> dynamicRangeHandleArea (juce::Point<float> centre);
 
 // What the readout beside a dragged Band says: "Band 4" over "1.00 kHz  +3.0 dB  Q 1.00", Gain left out
 // on Shapes without it.
@@ -54,8 +54,8 @@ struct Readout
 };
 Readout dragReadout (int slot, const BandSettings& band);
 
-// Over the curves: the grips, a handle per Band in use with the Solo cue on a Soloed one, the readouts
-// beside the Bands being dragged, the marquee, and the "All 24 Bands are in use" message.
+// Over the curves: the Dynamic Range Handles, a handle per Band in use with the Solo cue on a Soloed
+// one, the readouts beside the Bands being dragged, the marquee, and the "All 24 Bands are in use" message.
 void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame);
 
 } // namespace eq1::display
