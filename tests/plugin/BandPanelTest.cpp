@@ -712,8 +712,7 @@ TEST_CASE ("The dynamics section opens and closes, widening the panel alone; it 
     CHECK (panel.isDynamicsOpen());
     CHECK (panel.getWidth() == eq1::BandPanel::openWidth);
     CHECK (std::abs (panel.getBounds().getCentreX() - closed.getCentreX()) <= 1);
-    CHECK (panel.getY() == closed.getY());
-    CHECK (panel.getHeight() == closed.getHeight());
+    CHECK (panel.getBottom() == closed.getBottom());
     CHECK (host.display.getBounds() == displayBounds);
     // Between Gain and Q.
     const auto inPanel = [&panel] (juce::Component& c) { return panel.getLocalArea (c.getParentComponent(), c.getBounds()); };
@@ -742,6 +741,50 @@ TEST_CASE ("The dynamics section opens and closes, widening the panel alone; it 
     host.settle (400);
     CHECK_FALSE (section.isShowing());
     CHECK (panel.getBounds() == closed);
+}
+
+TEST_CASE ("With the dynamics section open the slab grows 11 px up, its bottom where it was, and the top row and columns follow")
+{
+    PanelEditor host;
+    host.editor->setSize (1200, 760);
+    host.settle();
+    auto& panel = host.panel();
+    // Where a control is in the editor.
+    const auto at = [&host] (juce::Component& c) { return host.editor->getLocalArea (&c, c.getLocalBounds()); };
+    const auto near = [] (int actual, int expected) { return std::abs (actual - expected) <= 1; };
+    // The slab (bell excluded), the top row, the Edge selectors and Slope, from the prototype (Main.dc.html).
+    const auto check = [&] (int slabWidth, int slabHeight, int slabTop, int rowTop, int edgeTop, int slopeTop) {
+        const auto slab = host.editor->getLocalArea (panel.getParentComponent(), panel.slabBounds());
+        INFO ("slab " << slab.toString());
+        CHECK (slab.getWidth() == slabWidth);
+        CHECK (slab.getHeight() == slabHeight);
+        CHECK (near (slab.getY(), slabTop));
+        CHECK (slab.getBottom() == 654);
+        for (auto* title : { "Band 1 Bypass", "Band 1 Solo", "Previous Band", "Next Band", "Band 1 Delete" })
+        {
+            INFO (title);
+            CHECK (near (at (host.control (title)).getCentreY(), rowTop + 12));
+        }
+        for (auto* title : { "Band 1 Shape", "Band 1 Stereo Placement" })
+        {
+            INFO (title);
+            CHECK (near (at (host.control (title)).getY(), edgeTop));
+        }
+        CHECK (near (at (host.control ("Band 1 Slope")).getY(), slopeTop));
+    };
+    check (492, 115, 539, 545, 570, 612);
+
+    host.set (1, "dynamic_range", -6.0f);
+    host.settle (400);
+    REQUIRE (panel.isDynamicsOpen());
+    check (634, 126, 528, 534, 565, 607);
+    // The dynamics section inside the slab.
+    auto& section = *host.findAll<eq1::DynamicsSection>().front();
+    CHECK (panel.slabBounds().contains (panel.getParentComponent()->getLocalArea (&section, section.getLocalBounds())));
+
+    host.control<juce::Button> ("Hide Band 1 dynamics").onClick();
+    host.settle (400);
+    check (492, 115, 539, 545, 570, 612);
 }
 
 TEST_CASE ("The Threshold fader's top step is Auto: a double-click sets Auto, and a drag is one undo step across Threshold and Auto")
@@ -888,7 +931,17 @@ TEST_CASE ("The Detection Range bar shows on a Free Dynamic Band that isn't Bypa
     host.settle (120);
     CHECK (bar.isVisible());
     const auto& panel = host.panel();
-    CHECK (juce::roundToInt (bar.getY() + bar.lineY()) == panel.getY() - 30);
+    // 30 px above the slab's top, the bell excluded, with the dynamics section open and closed.
+    const auto line = [&] { return juce::roundToInt (bar.getY() + bar.lineY()); };
+    host.settle (400);
+    REQUIRE (panel.isDynamicsOpen());
+    CHECK (line() == panel.slabBounds().getY() - 30);
+    CHECK (line() == host.display.getBottom() - 36 - 126 - 30);
+    host.control<juce::Button> ("Hide Band 1 dynamics").onClick();
+    host.settle (400);
+    CHECK (line() == host.display.getBottom() - 36 - 115 - 30);
+    host.control<juce::Button> ("Show Band 1 dynamics").onClick();
+    host.settle (400);
     CHECK (bar.getX() == host.display.getX());
     CHECK (bar.getWidth() == host.display.getWidth());
     host.set (1, "bypass", 1.0f);
