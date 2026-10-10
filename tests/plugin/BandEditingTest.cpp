@@ -307,6 +307,7 @@ TEST_CASE ("Analyzer settings are saved with the session")
     CHECK (defaults.speed == eq1::AnalyzerSpeed::medium);
     CHECK (defaults.resolution == eq1::AnalyzerResolution::medium);
     CHECK_THAT (defaults.tiltDbPerOctave, WithinAbs (4.5, 1.0e-9));
+    CHECK (defaults.peakHold);
 
     const eq1::AnalyzerSettings changed { .showPreEq = false,
                                           .showPostEq = true,
@@ -314,7 +315,8 @@ TEST_CASE ("Analyzer settings are saved with the session")
                                           .rangeDb = 120,
                                           .speed = eq1::AnalyzerSpeed::veryFast,
                                           .resolution = eq1::AnalyzerResolution::maximum,
-                                          .tiltDbPerOctave = 1.5 };
+                                          .tiltDbPerOctave = 1.5,
+                                          .peakHold = false };
     saved.setAnalyzerSettings (changed);
 
     juce::MemoryBlock state;

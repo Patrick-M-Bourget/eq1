@@ -82,7 +82,8 @@ void migrate (juce::ValueTree& state)
 }
 const juce::Identifier analyzerType { "Analyzer" }, showPreEqProperty { "showPreEq" }, showPostEqProperty { "showPostEq" },
     showSidechainProperty { "showSidechain" },
-    rangeProperty { "rangeDb" }, speedProperty { "speed" }, resolutionProperty { "resolution" }, analyzerTiltProperty { "tiltDbPerOctave" };
+    rangeProperty { "rangeDb" }, speedProperty { "speed" }, resolutionProperty { "resolution" }, analyzerTiltProperty { "tiltDbPerOctave" },
+    peakHoldProperty { "peakHold" };
 
 juce::ValueTree toTree (const AnalyzerSettings& a)
 {
@@ -93,7 +94,8 @@ juce::ValueTree toTree (const AnalyzerSettings& a)
         .setProperty (rangeProperty, a.rangeDb, nullptr)
         .setProperty (speedProperty, static_cast<int> (a.speed), nullptr)
         .setProperty (resolutionProperty, static_cast<int> (a.resolution), nullptr)
-        .setProperty (analyzerTiltProperty, a.tiltDbPerOctave, nullptr);
+        .setProperty (analyzerTiltProperty, a.tiltDbPerOctave, nullptr)
+        .setProperty (peakHoldProperty, a.peakHold, nullptr);
 }
 
 AnalyzerSettings fromTree (const juce::ValueTree& tree)
@@ -109,7 +111,8 @@ AnalyzerSettings fromTree (const juce::ValueTree& tree)
              .resolution = static_cast<AnalyzerResolution> (
                  juce::jlimit (static_cast<int> (AnalyzerResolution::low), static_cast<int> (AnalyzerResolution::maximum),
                                static_cast<int> (tree.getProperty (resolutionProperty, static_cast<int> (defaults.resolution))))),
-             .tiltDbPerOctave = juce::jlimit (0.0, 6.0, static_cast<double> (tree.getProperty (analyzerTiltProperty, defaults.tiltDbPerOctave))) };
+             .tiltDbPerOctave = juce::jlimit (0.0, 6.0, static_cast<double> (tree.getProperty (analyzerTiltProperty, defaults.tiltDbPerOctave))),
+             .peakHold = tree.getProperty (peakHoldProperty, defaults.peakHold) };
 }
 } // namespace
 

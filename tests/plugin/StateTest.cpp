@@ -186,6 +186,8 @@ TEST_CASE ("A session saved before the state had a version (version 0) loads eve
     CHECK_FALSE (analyzer.showPreEq);
     CHECK (analyzer.rangeDb == 120);
     CHECK (analyzer.speed == eq1::AnalyzerSpeed::fast);
+    // Saved before Peak Hold, it reads as on.
+    CHECK (analyzer.peakHold);
 
     // Saved again, it is the current version.
     CHECK (savedXml (processor)->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
