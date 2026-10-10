@@ -1,3 +1,4 @@
+#include "OutputMeter.h"
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -165,4 +166,49 @@ TEST_CASE ("During Global Bypass the Output Meter reads the input")
     setParameter (processor, "global_bypass", 1.0f);
     playSine (processor, 1.0f);
     CHECK_THAT (processor.readOutputLevel (0).peakDb, WithinAbs (0.0, 0.01));
+}
+
+TEST_CASE ("An Output Meter bar's peak rises at once and falls at 20 dB/s; its RMS is the RMS read")
+{
+    eq1::OutputMeterChannel channel;
+    channel.update ({ .peakDb = -6.0, .rmsDb = -9.0 }, 1.0 / 60.0);
+    CHECK_THAT (channel.peakDb(), WithinAbs (-6.0, 1.0e-9));
+    CHECK_THAT (channel.rmsDb(), WithinAbs (-9.0, 1.0e-9));
+    channel.update ({ .peakDb = eq1::levelFloorDb, .rmsDb = -20.0 }, 0.5);
+    CHECK_THAT (channel.peakDb(), WithinAbs (-16.0, 1.0e-9));
+    CHECK_THAT (channel.rmsDb(), WithinAbs (-20.0, 1.0e-9));
+}
+
+TEST_CASE ("An Output Meter bar's held-peak tick holds the highest peak for 1 s, then falls at 20 dB/s, never below the peak")
+{
+    eq1::OutputMeterChannel channel;
+    const auto quiet = eq1::OutputLevel {};
+    channel.update ({ .peakDb = -3.0, .rmsDb = -6.0 }, 0.1);
+    for (int frame = 0; frame < 9; ++frame)
+        channel.update (quiet, 0.1);
+    CHECK_THAT (channel.heldPeakDb(), WithinAbs (-3.0, 1.0e-9)); // 0.9 s on
+    CHECK_THAT (channel.peakDb(), WithinAbs (-21.0, 1.0e-9));
+    for (int frame = 0; frame < 6; ++frame)
+        channel.update (quiet, 0.1);
+    CHECK_THAT (channel.heldPeakDb(), WithinAbs (-13.0, 1.0e-6)); // 1.5 s on: falling for 0.5 s
+
+    // A louder peak holds again from where it is.
+    channel.update ({ .peakDb = -1.0, .rmsDb = -6.0 }, 0.1);
+    channel.update (quiet, 0.9);
+    CHECK_THAT (channel.heldPeakDb(), WithinAbs (-1.0, 1.0e-9));
+    // Falling, it stays on the peak once it meets it.
+    channel.update ({ .peakDb = -2.0, .rmsDb = -6.0 }, 0.5);
+    channel.update ({ .peakDb = -2.0, .rmsDb = -6.0 }, 0.5);
+    CHECK_THAT (channel.heldPeakDb(), WithinAbs (-2.0, 1.0e-9));
+}
+
+TEST_CASE ("The Output Meter's scale runs linearly in dB from -60 dBFS at the bottom to +6 dBFS at the top")
+{
+    CHECK_THAT (eq1::OutputMeter::position (-60.0), WithinAbs (0.0, 1.0e-9));
+    CHECK_THAT (eq1::OutputMeter::position (6.0), WithinAbs (1.0, 1.0e-9));
+    CHECK_THAT (eq1::OutputMeter::position (0.0), WithinAbs (60.0 / 66.0, 1.0e-9));
+    CHECK_THAT (eq1::OutputMeter::position (-27.0), WithinAbs (0.5, 1.0e-9));
+    CHECK_THAT (eq1::OutputMeter::position (-90.0), WithinAbs (0.0, 1.0e-9));
+    CHECK_THAT (eq1::OutputMeter::position (eq1::levelFloorDb), WithinAbs (0.0, 1.0e-9));
+    CHECK_THAT (eq1::OutputMeter::position (12.0), WithinAbs (1.0, 1.0e-9));
 }
