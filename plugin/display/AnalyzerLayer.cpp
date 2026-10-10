@@ -35,7 +35,7 @@ void paintAnalyzer (juce::Graphics& g, const DisplayGeometry& geometry, const An
         line.closeSubPath();
         return line;
     };
-    // Peak Hold under the spectra, faint, in its spectrum's colour; nothing where it is below the
+    // Peak Hold under the spectra, a faint line; nothing where it is below the
     // Analyzer's range, so silence leaves no flat line.
     if (frame.held != nullptr)
     {
@@ -59,16 +59,21 @@ void paintAnalyzer (juce::Graphics& g, const DisplayGeometry& geometry, const An
         g.setColour (colour::anPeak);
         g.strokePath (line, juce::PathStrokeType (1.0f));
     }
-    if (analyzer.showPreEq)
+    // The main spectrum: post-EQ, or pre-EQ when only it is shown, filled with a gradient and outlined;
+    // beside the post one, pre-EQ is a faint line.
+    const AnalyzerSpectrum* main = analyzer.showPostEq ? &frame.postEq : analyzer.showPreEq ? &frame.preEq : nullptr;
+    if (main != nullptr)
     {
-        g.setColour (colour::anFillMid);
-        g.fillPath (areaUnder (spectrumLine (frame.preEq)));
-    }
-    if (analyzer.showPostEq)
-    {
-        const auto line = spectrumLine (frame.postEq);
-        g.setColour (colour::anFillTop);
+        const auto line = spectrumLine (*main);
+        juce::ColourGradient gradient (colour::anFillTop, 0.0f, 0.0f, colour::anFillMid.withAlpha (0.0f), 0.0f, height, false);
+        gradient.addColour (0.6, colour::anFillMid);
+        g.setGradientFill (gradient);
         g.fillPath (areaUnder (line));
+        if (analyzer.showPostEq && analyzer.showPreEq)
+        {
+            g.setColour (colour::anPre);
+            g.strokePath (spectrumLine (frame.preEq), juce::PathStrokeType (1.0f));
+        }
         g.setColour (colour::anLine);
         g.strokePath (line, juce::PathStrokeType (1.0f));
     }

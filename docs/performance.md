@@ -15,13 +15,14 @@ The same run fails if silence (after every filter has rung down) or input made o
 
 ## Paint time
 
-`tests/plugin/PaintTimeTest.cpp` measures how long the whole editor takes to draw a busy frame: 1200 × 760 rendered into an image at 2× (`createComponentSnapshot` with scale 2), with 24 Dynamic Bells across the spectrum, one selected, the Analyzer showing Pre, Post, Sidechain and Peak Hold on spectra fed with noise on the main input and the Sidechain, and the Output Meter shown. It prints the median of 20 frames. It is tagged `[.paint]`, hidden from the normal run so its timing never flakes it; run it with `build/tests/eq1_plugin_tests "[paint]"`. It has no ceiling yet: the Staple display (#79) sets one.
+`tests/plugin/PaintTimeTest.cpp` measures how long the whole editor takes to draw a busy frame: 1200 × 760 rendered into an image at 2× (`createComponentSnapshot` with scale 2), with 24 Dynamic Bells across the spectrum, one selected, the Analyzer showing Pre, Post, Sidechain and Peak Hold on spectra fed with noise on the main input and the Sidechain, and the Output Meter shown. It prints the median of 20 frames and fails when that median is above its ceiling of 200 ms, about 3× the median measured with the Staple display (the grid, the Analyzer, every Band's curve with its fill, the sum's halo and the edge fades). Every later change to the editor's drawing stays under it. It is tagged `[.paint]`, hidden from the normal run so its timing never flakes it; run it with `build/tests/eq1_plugin_tests "[paint]"`.
 
 | Machine | Median frame |
 | --- | --- |
-| Apple M3 | about 50 ms |
+| Apple M3, before the Staple display | about 50 ms |
+| Apple M3, with the Staple display | about 65 ms |
 
-Measured 2026-10-10 with other builds sharing the machine.
+Measured 2026-10-10 with other builds sharing the machine (load average 35 to 60); at a load average above 80 the median reached 125 to 160 ms. A quiet machine draws faster: the ceiling allows for a busy one.
 
 ## Subnormal numbers
 

@@ -290,7 +290,8 @@ void LookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<in
     g.drawFittedText (text, row.toNearestInt(), juce::Justification::centredLeft, 1);
 }
 
-void LookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator, int, int& idealWidth, int& idealHeight)
+void LookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator, int standardMenuItemHeight, int& idealWidth,
+                                              int& idealHeight)
 {
     if (isSeparator)
     {
@@ -298,7 +299,8 @@ void LookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSe
         idealHeight = 1 + 2 * tokens::layout::menuSeparatorMargin;
         return;
     }
-    idealHeight = tokens::layout::menuItemHeight;
+    // A menu may ask for its own row height (the Display Range chip's 26 px).
+    idealHeight = standardMenuItemHeight > 0 ? standardMenuItemHeight : tokens::layout::menuItemHeight;
     // Room for the tick column, padding either side, and a submenu chevron or shortcut.
     idealWidth = juce::roundToInt (juce::GlyphArrangement::getStringWidth (getPopupMenuFont(), text) + menuTickColumn
                                    + 2.0f * menuItemPadding + 24.0f);
