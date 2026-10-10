@@ -58,7 +58,7 @@ TEST_CASE ("The editor draws every stock widget with Staple's LookAndFeel, token
     CHECK (staple->findColour (juce::PopupMenu::backgroundColourId).withAlpha (1.0f) == staple::tokens::colour::menu);
 
     namespace colour = staple::tokens::colour;
-    int sliders = 0, combos = 0, buttons = 0, toggles = 0, labels = 0;
+    int sliders = 0, combos = 0, buttons = 0, labels = 0;
     const auto isManrope = [] (const juce::Font& font) { return font.getTypefacePtr()->getName() == "Manrope"; };
     std::function<void (juce::Component&)> visit = [&] (juce::Component& component) {
         for (auto* child : component.getChildren())
@@ -77,7 +77,6 @@ TEST_CASE ("The editor draws every stock widget with Staple's LookAndFeel, token
             }
             else if (auto* toggle = dynamic_cast<juce::ToggleButton*> (child))
             {
-                ++toggles;
                 CHECK (toggle->findColour (juce::ToggleButton::textColourId) == colour::text2);
             }
             else if (auto* button = dynamic_cast<juce::TextButton*> (child))
@@ -95,10 +94,10 @@ TEST_CASE ("The editor draws every stock widget with Staple's LookAndFeel, token
         }
     };
     visit (*editor);
-    // The editor has each kind of stock widget.
+    // The editor has each kind of stock widget, but ToggleButtons: its toggles are all Staple's own
+    // (IconButtons, Edge selectors), and any stock one that comes back is checked above.
     CHECK (sliders > 0);
     CHECK (combos > 0);
     CHECK (buttons > 0);
-    CHECK (toggles > 0);
     CHECK (labels > 0);
 }

@@ -101,8 +101,8 @@ struct Editor : OpenEditor
         settle();
     }
 
-    // Opens what the footer's button titled title shows ("Analyzer" its call-out, "Output" the output
-    // popover), as a click does, and closes it again, as Escape does.
+    // Opens what the button titled title shows (the footer's "Analyzer" or "Output" popover), as a click
+    // does, and closes it again, as Escape does.
     void openCallOut (const juce::String& title)
     {
         auto* button = harness::findChild<juce::Button> (*editor, [&title] (juce::Button& b) { return b.getTitle() == title; });
@@ -163,7 +163,7 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
     host.openPresetBrowser();
     checkEveryControlIsNamed (host);
     auto names = host.names();
-    // And what the footer's call-outs show while open.
+    // And what the footer's popovers show while open.
     for (const juce::String title : { "Analyzer", "Output" })
     {
         CAPTURE (title);
@@ -278,7 +278,7 @@ TEST_CASE ("Every control is named on mono, and with no Band selected")
     host.openPresetBrowser();
     checkEveryControlIsNamed (host);
     auto names = host.names();
-    // And what the footer's call-outs show while open.
+    // And what the footer's popovers show while open.
     for (const juce::String title : { "Analyzer", "Output" })
     {
         CAPTURE (title);

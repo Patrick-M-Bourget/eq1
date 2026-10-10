@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AnalyzerPopover.h"
 #include "KeyboardSlider.h"
 #include "OutputPopover.h"
 #include "Parameters.h"
@@ -98,8 +99,8 @@ private:
 // The window's footer (HANDOFF.md §4, §5.7, §5.12): from the left, Global Bypass (with "Bypassed"
 // beside it while on) and the Analyzer button; at the right, the Gain Scale and Output readouts and the
 // UI Scale menu. Under Global Bypass the readouts are drawn in text4, not applied. Output opens the
-// output popover; the Analyzer button opens its settings in a call-out over the editor, which an
-// outside click or Escape closes (the Staple Analyzer popover, #84, replaces it).
+// output popover; the Analyzer button, which reads the sources the Analyzer shows, opens the Analyzer
+// popover.
 class FooterBar final : public juce::Component, private juce::Timer
 {
 public:
@@ -122,12 +123,11 @@ public:
     bool isBypassedLabelShown() const { return bypassedShown; }
 
     OutputPopover& outputPopover() { return popover; }
+    AnalyzerPopover& analyzerPopover() { return analyzerSettings; }
 
 private:
-    class AnalyzerPanel;
-    // Opens panel in a call-out pointing at from, in the component holding the footer.
-    void openCallOut (juce::Component& panel, juce::Component& from);
     void timerCallback() override;
+    void showAnalyzerSources();
     void showBypass();
     void showOutputLevel();
 
@@ -136,7 +136,8 @@ private:
 
     PluginProcessor& processor;
     staple::IconButton globalBypass { "Global Bypass", staple::Icon::power };
-    juce::TextButton analyzer { "Analyzer" };
+    juce::Label analyzerLabel;
+    AnalyzerButton analyzer;
     GainScaleReadout gainScale;
     OutputReadout output;
     UiScaleMenu uiScale;
@@ -152,10 +153,8 @@ private:
     double estimateDb = 0.0;
     bool estimated = false;
 
-    // What the Analyzer call-out shows; a hidden child of the footer while closed.
-    std::unique_ptr<AnalyzerPanel> analyzerPanel;
-    juce::Component::SafePointer<juce::CallOutBox> callOut;
-    // A hidden child of the footer while closed.
+    // Hidden children of the footer while closed.
+    AnalyzerPopover analyzerSettings;
     OutputPopover popover;
 };
 
