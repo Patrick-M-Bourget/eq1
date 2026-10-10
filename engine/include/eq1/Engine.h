@@ -29,7 +29,7 @@ enum class AnalysisTap
     Sidechain,
 };
 
-// What the Output Level reads for silence, and for anything quieter.
+// What the Output Level and the Detection Level read for silence, and for anything quieter.
 inline constexpr double outputLevelFloorDb = -150.0;
 
 // The Output Level of one channel, in dBFS.
@@ -40,14 +40,14 @@ struct OutputLevel
 };
 
 // The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis(), liveGainDb(),
-// outputLevelChannels() and readOutputLevel() never allocate, lock or do I/O. process() flushes
+// outputLevelChannels(), readOutputLevel() and readDetectionLevel() never allocate, lock or do I/O. process() flushes
 // subnormal numbers to zero, whatever the caller's floating-point mode, and leaves that mode as it
 // found it.
 //
 // Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
 // one thread at a time may call it; the newest settings are taken at the start of each process().
-// readAnalysis() may run on one reader thread, and readOutputLevel() on one reader thread, but not
-// while prepare() changes the channel count.
+// readAnalysis() may run on one reader thread, and readOutputLevel() and readDetectionLevel() each on
+// one reader thread, but not while prepare() changes the channel count.
 class Engine
 {
 public:
@@ -79,6 +79,12 @@ public:
     // reads is reported once, by the next. Called from one reader thread while process() runs on the
     // audio thread.
     OutputLevel readOutputLevel (int channel);
+
+    // The Detection Level of the metered Band Slot (Settings::meteredSlot), in dB on Threshold's scale:
+    // the loudest level its detector compared with Threshold since the last read, the louder channel's
+    // when it hears two. Reading resets it. The floor when no Band is metered, or the metered Band has
+    // nothing to listen to. Called from one reader thread while process() runs on the audio thread.
+    double readDetectionLevel();
 
 private:
     struct Impl;

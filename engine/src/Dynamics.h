@@ -25,6 +25,11 @@ public:
     // signal can be heard.
     void setAuditioned (bool auditioned);
 
+    // While metered, the detector runs even if the Band isn't a Dynamic Band, so its Detection Level
+    // can be read; only to measure, so the movement, Auto Threshold and glides wait as they do
+    // unmetered, and the Band sounds the same metered or not.
+    void setMetered (bool metered);
+
     // Listens to a run of at most Band::maxSubBlock samples of the main input, or of the Sidechain
     // (sidechainChannels 0 when none is connected). Returns the offset in dB to add to the Band's Gain
     // at the end of the run.
@@ -35,6 +40,11 @@ public:
     // detector heard nothing.
     // A mono main output (outputChannels 1) hears the mean of two detection channels.
     float auditionSample (int outputChannels, int ch, int i) const;
+
+    // The loudest level the detector compared with Threshold in the last process(), in dB where a
+    // full-scale sine reads 0; nothingHeardDb when it didn't run or had nothing to listen to.
+    double detectionLevelDb() const { return loudestLevel; }
+    static constexpr double nothingHeardDb = -1000.0;
 
 private:
     bool running() const { return active.value() > 0.0 || active.isMoving() || auditioned; }
@@ -61,6 +71,8 @@ private:
     Band rangeFilter, highLimit;
     BandSettings rangeFilterSettings, highLimitSettings;
     bool auditioned = false;
+    bool metered = false;
+    double loudestLevel = nothingHeardDb;
     int detectionChannelCount = 0; // in the last process()
     std::vector<std::array<float, Band::maxSubBlock>> detection;
     std::vector<float*> detectionChannels;

@@ -94,6 +94,8 @@ How a Dynamic Band moves its Live Gain (`engine/src/Dynamics.cpp`). Pro-Q 4 only
 - **Attack and Release settings:** the Auto timing times 10^((setting − 50%) / 50%), so 0% is ten times faster and 100% ten times slower. 50% is Auto itself, and the timing still follows the material at every setting.
 - **Changes:** Dynamic Range, Dynamics Bypass and a Shape change to or from one without dynamics glide over about 50 ms, like a Band's own settings, so the Band doesn't click. Shapes without dynamics, Bands not in use and Bypassed Bands don't run their detector.
 
+**Detection Level** is published for one metered Band (`Settings::meteredSlot`): the loudest level its detector compared with Threshold since the last read, the louder channel's for a Stereo Band. The metered Band's detector runs whatever its dynamics state (Dynamics Bypass, Dynamic Range 0, a Bypassed Band), but only to measure: its movement, Auto Threshold and glides wait as they do unmetered, and it starts afresh when it becomes active, so metering never changes the sound. Only a Band in use whose Shape has dynamics is metered; otherwise, and when its detector has nothing to listen to, it reads the −150 dB floor.
+
 **Detection Audition** plays a Dynamic Band's detection signal, after the Detection Range, instead of the output: the one detection channel on every output channel, or each channel's own for a Stereo Band on a stereo source. It crossfades in and out like Solo, runs the detector while held even when the Band isn't dynamic yet, and takes precedence over Solo.
 
 **Solo** plays the main input, before the EQ, through a filter for the Band's region above (`engine/src/Solo.h`), so you hear what the Band works on, not its Gain:
