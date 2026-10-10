@@ -1,6 +1,7 @@
 #include "EditorHarness.h"
 #include "PluginProcessor.h"
 #include "SavedState.h"
+#include "UserSettings.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -139,4 +140,72 @@ TEST_CASE ("A session saved before the window's size and UI Scale opens like a n
     CHECK (editor->getWidth() == 1200);
     CHECK (editor->getHeight() == 760);
     CHECK (eq1::PluginProcessor::stateVersion == 3);
+}
+
+TEST_CASE ("Picking a UI Scale in one instance makes a new instance open at it; instances already open keep their own")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const juce::TemporaryFile settings;
+    eq1::PluginProcessor first (settings.getFile()), open (settings.getFile());
+    const auto openEditorOfOpen = openEditor (open);
+    {
+        const auto editor = openEditor (first);
+        pickUiScale (*editor, 125);
+    }
+    CHECK (uiScaleMenu (*openEditorOfOpen).getSelectedId() == 100);
+
+    eq1::PluginProcessor next (settings.getFile());
+    const auto editor = openEditor (next);
+    CHECK (uiScaleMenu (*editor).getSelectedId() == 125);
+    CHECK (editor->getWidth() == 1500);
+    CHECK (editor->getHeight() == 950);
+}
+
+TEST_CASE ("A new instance opens at 100% with no settings file, or one it can't read")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const juce::TemporaryFile settings;
+    SECTION ("none") { REQUIRE_FALSE (settings.getFile().exists()); }
+    SECTION ("unreadable") { REQUIRE (settings.getFile().replaceWithText ("not settings")); }
+    SECTION ("not a UI Scale")
+    {
+        eq1::PluginProcessor picker (settings.getFile());
+        pickUiScale (*openEditor (picker), 150);
+        REQUIRE (settings.getFile().loadFileAsString().contains ("150"));
+        REQUIRE (settings.getFile().replaceWithText (settings.getFile().loadFileAsString().replace ("150", "110")));
+    }
+    eq1::PluginProcessor processor (settings.getFile());
+    CHECK (uiScaleMenu (*openEditor (processor)).getSelectedId() == 100);
+}
+
+TEST_CASE ("An instance takes the per-user UI Scale when its editor first opens and keeps its own from then on")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const juce::TemporaryFile settings;
+    eq1::PluginProcessor other (settings.getFile()), processor (settings.getFile());
+    pickUiScale (*openEditor (other), 150);
+    openEditor (processor).reset();
+    pickUiScale (*openEditor (other), 75);
+    CHECK (uiScaleMenu (*openEditor (processor)).getSelectedId() == 150);
+
+    SECTION ("and an older session takes the per-user UI Scale")
+    {
+        const auto older = juce::XmlDocument::parse (juce::File (EQ1_TEST_FIXTURES).getChildFile ("state-v2.xml"));
+        REQUIRE (older != nullptr);
+        juce::MemoryBlock state;
+        juce::AudioProcessor::copyXmlToBinary (*older, state);
+        processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+        CHECK (uiScaleMenu (*openEditor (processor)).getSelectedId() == 75);
+    }
+}
+
+TEST_CASE ("The per-user settings file is in Application Support/eq1 on macOS and %APPDATA%/eq1 on Windows")
+{
+    const auto folder = eq1::UserSettings::defaultFile().getParentDirectory();
+    CHECK (folder.getFileName() == "eq1");
+#if JUCE_MAC
+    CHECK (folder.getParentDirectory() == juce::File ("~/Library/Application Support"));
+#elif JUCE_WINDOWS
+    CHECK (folder.getParentDirectory() == juce::File (juce::SystemStats::getEnvironmentVariable ("APPDATA", {})));
+#endif
 }

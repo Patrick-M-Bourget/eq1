@@ -34,7 +34,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     for (int percent : uiScale::percents)
         uiScale.addItem (juce::String (percent) + "%", percent);
     uiScale.onChange = [this] {
-        eqProcessor.setUiScalePercent (uiScale.getSelectedId());
+        eqProcessor.pickUiScale (uiScale.getSelectedId());
         applyUiScale();
     };
     content.addAndMakeVisible (uiScale);

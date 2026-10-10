@@ -7,13 +7,14 @@
 namespace eq1
 {
 
-PluginProcessor::PluginProcessor()
+PluginProcessor::PluginProcessor (juce::File userSettingsFile)
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withInput ("Sidechain", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "eq1", parameters::createLayout()),
-      output (eq1::parameters::OutputValues::of (parameters))
+      output (eq1::parameters::OutputValues::of (parameters)),
+      userSettings (std::move (userSettingsFile))
 {
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slots[static_cast<size_t> (slot - 1)] = eq1::parameters::SlotValues::of (parameters, slot);
@@ -166,10 +167,19 @@ void PluginProcessor::setEditorSize (juce::Point<int> logical)
     }
 }
 
-void PluginProcessor::setUiScalePercent (int percent)
+int PluginProcessor::uiScalePercent()
 {
-    if (uiScale::isOffered (percent))
-        uiScale = percent;
+    if (uiScale.load() == 0)
+        uiScale = userSettings.uiScalePercent();
+    return uiScale.load();
+}
+
+void PluginProcessor::pickUiScale (int percent)
+{
+    if (! uiScale::isOffered (percent))
+        return;
+    uiScale = percent;
+    userSettings.setUiScalePercent (percent);
 }
 
 HeardGains PluginProcessor::currentHeardGains() const
@@ -214,7 +224,8 @@ void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty (outputMeterShownProperty, isOutputMeterShown(), nullptr);
     state.setProperty (editorWidthProperty, editorWidth.load(), nullptr);
     state.setProperty (editorHeightProperty, editorHeight.load(), nullptr);
-    state.setProperty (uiScaleProperty, uiScalePercent(), nullptr);
+    if (const int percent = uiScale.load(); percent != 0)
+        state.setProperty (uiScaleProperty, percent, nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -238,7 +249,8 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         state.removeProperty (outputMeterShownProperty, nullptr);
         // A session saved before them opens like a new instance.
         setEditorSize ({ state.getProperty (editorWidthProperty, newEditorWidth), state.getProperty (editorHeightProperty, newEditorHeight) });
-        setUiScalePercent (state.getProperty (uiScaleProperty, uiScale::defaultPercent));
+        const int percent = state.getProperty (uiScaleProperty, 0);
+        uiScale = uiScale::isOffered (percent) ? percent : 0;
         for (const auto& property : { editorWidthProperty, editorHeightProperty, uiScaleProperty })
             state.removeProperty (property, nullptr);
         if (auto saved = state.getChildWithName (analyzerType); saved.isValid())
@@ -262,5 +274,5 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new eq1::PluginProcessor();
+    return new eq1::PluginProcessor (eq1::UserSettings::defaultFile());
 }
