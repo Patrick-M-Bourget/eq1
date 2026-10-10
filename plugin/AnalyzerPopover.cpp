@@ -68,7 +68,7 @@ AnalyzerButton::AnalyzerButton() : staple::TextChip (analyzerButtonText ({}), Lo
 
 int AnalyzerButton::getIdealWidth() const
 {
-    const int text = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (labelFont(), getButtonText())));
+    const int text = staple::textWidth (labelFont(), getButtonText());
     return std::max (buttonMinimumWidth, buttonPaddingLeft + text + chevronGap + chevronSize + buttonPaddingRight);
 }
 

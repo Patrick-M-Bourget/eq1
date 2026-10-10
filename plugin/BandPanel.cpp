@@ -608,7 +608,7 @@ void BandPanel::resized()
     solo.setBounds (36, bell + 6, button, button);
     deleteButton.setBounds (getWidth() - 8 - button, bell + 6, button, button);
     const auto numberFont = staple::font (tokens::size::fs4, staple::Weight::semiBold);
-    const int numberWidth = std::max (16, juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (numberFont, juce::String (slot)))));
+    const int numberWidth = std::max (16, staple::textWidth (numberFont, juce::String (slot)));
     auto selector = juce::Rectangle<int> (getWidth() - 34 - (2 * rowHeight + numberWidth), bell + 7, 2 * rowHeight + numberWidth, rowHeight);
     previous.setBounds (selector.removeFromLeft (rowHeight));
     next.setBounds (selector.removeFromRight (rowHeight));

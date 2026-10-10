@@ -31,4 +31,8 @@ juce::Font font (float size, Weight weight = Weight::regular);
 // The bundled typeface itself.
 juce::Typeface::Ptr typeface (Weight weight);
 
+// The width text takes in font, rounded up to whole pixels: the width to give a label or button that
+// shows it whole.
+int textWidth (const juce::Font& font, const juce::String& text);
+
 } // namespace staple

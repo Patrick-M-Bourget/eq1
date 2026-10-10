@@ -57,7 +57,7 @@ public:
 
     int idealWidth() const
     {
-        return juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (font(), "M/S"))) + 2 * chipPadding;
+        return staple::textWidth (font(), "M/S") + 2 * chipPadding;
     }
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override

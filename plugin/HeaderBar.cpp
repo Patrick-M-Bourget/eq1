@@ -23,11 +23,6 @@ juce::Font wordmarkFont() { return staple::font (size::fs5, staple::Weight::semi
 juce::Font letterFont() { return staple::font (size::fs4, staple::Weight::semiBold).withExtraKerningFactor (0.02f); }
 juce::Font slashFont() { return staple::font (size::fs4, staple::Weight::regular).withExtraKerningFactor (0.02f); }
 
-int widthOf (const juce::Font& font, const juce::String& text)
-{
-    return static_cast<int> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)));
-}
-
 CompareSide otherSide (CompareSide side) { return side == CompareSide::A ? CompareSide::B : CompareSide::A; }
 juce::String letter (CompareSide side) { return side == CompareSide::A ? "A" : "B"; }
 } // namespace
@@ -70,7 +65,7 @@ void CompareButton::timerCallback()
 
 int CompareButton::getIdealWidth() const
 {
-    return widthOf (letterFont(), "AB") + widthOf (slashFont(), "/") + 2 + 2 * chipPadding;
+    return staple::textWidth (letterFont(), "AB") + staple::textWidth (slashFont(), "/") + 2 + 2 * chipPadding;
 }
 
 void CompareButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
@@ -78,7 +73,7 @@ void CompareButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     // The hover box, with no text of its own.
     staple::TextChip::paintButton (g, highlighted, down);
     const float alpha = staple::enabledAlpha (*this);
-    const int a = widthOf (letterFont(), "A"), slash = widthOf (slashFont(), "/"), b = widthOf (letterFont(), "B");
+    const int a = staple::textWidth (letterFont(), "A"), slash = staple::textWidth (slashFont(), "/"), b = staple::textWidth (letterFont(), "B");
     auto area = getLocalBounds().withSizeKeepingCentre (a + slash + b + 2, getHeight());
     g.setFont (letterFont());
     g.setColour (letterInk (CompareSide::A).withMultipliedAlpha (alpha));
@@ -214,7 +209,7 @@ void HeaderBar::resized()
     const int centreWidth = juce::jmax (smallestCentre, juce::jmin (presetBar.getIdealWidth(), roomForCentre));
     const int side = (row.getWidth() - centreWidth - 2 * groupGap) / 2;
     auto left = row.removeFromLeft (side);
-    wordmark = left.withWidth (juce::jmin (left.getWidth(), widthOf (wordmarkFont(), staple::wordmark) + 1));
+    wordmark = left.withWidth (juce::jmin (left.getWidth(), staple::textWidth (wordmarkFont(), staple::wordmark) + 1));
     row.removeFromLeft (groupGap);
     presetBar.setBounds (row.removeFromLeft (centreWidth));
     row.removeFromLeft (groupGap);

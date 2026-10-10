@@ -337,7 +337,7 @@ void FooterBar::paint (juce::Graphics& g)
     // "Bypassed" fades in beside Global Bypass over dur2.
     bypassedAlpha = staple::ease (static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - bypassedSince) / staple::tokens::motion::dur2Ms));
     const auto font = bypassedFont();
-    const int width = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (font, bypassedText)));
+    const int width = staple::textWidth (font, bypassedText);
     g.setFont (font);
     g.setColour (colour::stateOff.withMultipliedAlpha (bypassedAlpha));
     g.drawText (bypassedText, globalBypass.getRight() + footerGap - bypassedOverlap, 0, width, getHeight(), juce::Justification::centredLeft, false);
@@ -353,11 +353,11 @@ void FooterBar::resized()
     row.removeFromLeft (footerGap);
     if (bypassedShown)
     {
-        const int width = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (bypassedFont(), bypassedText)));
+        const int width = staple::textWidth (bypassedFont(), bypassedText);
         row.removeFromLeft (width - bypassedOverlap + footerGap);
     }
     // "Analyzer", then its button, 8 apart.
-    const int labelWidth = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (analyzerLabel.getFont(), analyzerLabel.getText())));
+    const int labelWidth = staple::textWidth (analyzerLabel.getFont(), analyzerLabel.getText());
     analyzerLabel.setBounds (row.removeFromLeft (labelWidth));
     row.removeFromLeft (analyzerLabelGap);
     analyzer.setBounds (row.removeFromLeft (analyzer.getIdealWidth()));
@@ -368,7 +368,7 @@ void FooterBar::resized()
     row.removeFromRight (4);
     output.setBounds (row.removeFromRight (std::max (outputWidth, output.getIdealWidth() + 2 * (readoutPadding - 6))));
     row.removeFromRight (2);
-    const int gainScaleText = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (readoutFont(), "200%")));
+    const int gainScaleText = staple::textWidth (readoutFont(), "200%");
     gainScale.setBounds (row.removeFromRight (std::max (gainScaleWidth, gainScaleText + 2 * readoutPadding)));
 }
 

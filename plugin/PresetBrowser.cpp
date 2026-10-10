@@ -438,7 +438,7 @@ void PresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int width, int
     {
         g.setColour (colour::text3);
         g.setFont (staple::font (size::fs2));
-        const auto folderWidthPx = juce::jmin (area.getWidth() / 2, static_cast<int> (std::ceil (juce::GlyphArrangement::getStringWidth (staple::font (size::fs2), entry.folder))));
+        const auto folderWidthPx = juce::jmin (area.getWidth() / 2, staple::textWidth (staple::font (size::fs2), entry.folder));
         g.drawText (entry.folder, area.removeFromRight (folderWidthPx), juce::Justification::centredRight, true);
         area.removeFromRight (8);
     }
@@ -561,7 +561,7 @@ void PresetBrowser::layOutPanel()
         footer.removeFromLeft (footerGap);
     };
     const auto widthOf = [] (TextAction& b) {
-        return static_cast<int> (std::ceil (juce::GlyphArrangement::getStringWidth (staple::font (size::fs3), b.getButtonText()))) + 2 * actionPad;
+        return staple::textWidth (staple::font (size::fs3), b.getButtonText()) + 2 * actionPad;
     };
     place (save, widthOf (save));
     // The name field opens beside Save as, before the other actions.

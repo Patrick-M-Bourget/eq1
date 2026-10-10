@@ -148,7 +148,7 @@ void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)
     g.drawEllipse (juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (centre), handle::soloRing);
     const auto font = staple::font (size::fs1);
     const juce::String text ("Solo");
-    const auto pill = juce::Rectangle<float> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)) + 8.0f, 14.0f)
+    const auto pill = juce::Rectangle<float> (static_cast<float> (staple::textWidth (font, text)) + 8.0f, 14.0f)
                           .withCentre ({ centre.x, centre.y - r - 4.0f - 7.0f });
     g.setColour (colour::menu);
     g.fillRoundedRectangle (pill, size::r1);
@@ -202,7 +202,7 @@ void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const Dis
     {
         const auto font = staple::font (size::fs3);
         const juce::String text ("All 24 Bands are in use");
-        const auto box = juce::Rectangle<float> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)) + 28.0f, 30.0f)
+        const auto box = juce::Rectangle<float> (static_cast<float> (staple::textWidth (font, text)) + 28.0f, 30.0f)
                              .withCentre ({ geometry.bounds().getCentreX(), 12.0f + 15.0f });
         staple::drawSoftShadow (g, box, size::r3, tokens::shadow::shadow1);
         g.setColour (colour::menu);
