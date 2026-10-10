@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Blocks a commit whose cited docs are missing, or whose build or tests fail. The slow frequency
-# response grids ([response]) are left to CI. A commit of Markdown alone runs the doc check only.
+# Blocks a commit whose cited docs are missing, or whose build or tests fail (.githooks/gate.sh).
+# A commit of Markdown alone runs the doc check only.
 # Install with scripts/install-hooks.sh. It builds and tests the working tree, so it first requires
 # the build's sources there to be exactly what is staged.
 set -euo pipefail
@@ -21,17 +21,4 @@ if [ -n "$unstaged" ]; then
     exit 1
 fi
 
-BUILD_DIR=${BUILD_DIR:-build}
-if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    echo "pre-commit: no build in $BUILD_DIR yet; run scripts/check.sh build first" >&2
-    exit 1
-fi
-# The output goes to a log: only its summary on success, all of it on failure.
-log="$BUILD_DIR/pre-commit.log"
-printf '\n== Build and tests (pre-commit), log in %s\n' "$log"
-if ! { cmake --build "$BUILD_DIR" --config Release --parallel \
-    && ctest --test-dir "$BUILD_DIR" -C Release -LE response -j 8 --output-on-failure; } > "$log" 2>&1; then
-    cat "$log" >&2
-    exit 1
-fi
-grep -E '^[0-9]+% tests passed' "$log"
+exec .githooks/gate.sh pre-commit

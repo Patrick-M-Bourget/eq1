@@ -22,7 +22,7 @@ Run one part with `scripts/check.sh docs|build|test|cpu|tsan|validate`. CMake fe
 
 `scripts/ci-timings.sh <run-id> [attempt]` prints how long each CI job and step took, and why a job never started.
 
-Run `scripts/install-hooks.sh` once per clone: its pre-commit hook blocks a commit whose build or tests (all but the slow response grids) fail.
+Run `scripts/install-hooks.sh` once per clone: its pre-commit and pre-push hooks block a commit or push whose build or tests (all but the slow response grids) fail. A rebase skips the pre-commit hook; the pre-push hook catches what it rewrote.
 
 Plugins land in `build/plugin/eq1_artefacts/Release/`. AAX is built unsigned and can only be loaded in Pro Tools Developer.
 
