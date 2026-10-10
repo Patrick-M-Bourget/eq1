@@ -238,3 +238,136 @@ TEST_CASE ("Tab reaches every visible, enabled control and every Band in use, in
     };
     CHECK (focusOrder (*host.editor) == expected);
 }
+
+namespace
+{
+// The element Tab reaches for a Band in use.
+juce::Component& bandElement (OpenEditor& host, int slot)
+{
+    const auto name = "Band " + juce::String (slot);
+    return *host.findAll<juce::Component> ([&name] (juce::Component& c) { return c.getName() == name; }).front();
+}
+
+constexpr double semitone = 1.0594630943592953; // 2^(1/12)
+} // namespace
+
+TEST_CASE ("Focusing a Band selects it alone, and the Band panel shows it")
+{
+    EveryControl host;
+    host.addBand (2, 200.0f, 0.0f);
+    host.settle();
+    auto& band2 = bandElement (host, 2);
+    band2.grabKeyboardFocus();
+    REQUIRE (band2.hasKeyboardFocus (false));
+    host.press (up);
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (0.5, 1.0e-4));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.0, 1.0e-4)); // no longer selected
+    const auto titles = host.findAll<juce::Label> ([] (juce::Label& l) { return l.getText() == "Band 2"; });
+    CHECK (titles.size() == 1);
+}
+
+TEST_CASE ("A focused Band moves a semitone or 0.5 dB per arrow, 0.1 semitone or 0.05 dB with Shift")
+{
+    EveryControl host;
+    auto& band1 = bandElement (host, 1);
+    band1.grabKeyboardFocus();
+    REQUIRE (band1.hasKeyboardFocus (false));
+
+    CHECK (host.press (right));
+    CHECK_THAT (host.value (1, "frequency"), WithinAbs (1000.0 * semitone, 0.01));
+    CHECK (host.press (left));
+    CHECK (host.press (left));
+    CHECK_THAT (host.value (1, "frequency"), WithinAbs (1000.0 / semitone, 0.01));
+    CHECK (host.press (withShift (right)));
+    CHECK_THAT (host.value (1, "frequency"), WithinAbs (1000.0 / semitone * std::pow (2.0, 0.1 / 12.0), 0.01));
+
+    CHECK (host.press (up));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.5, 1.0e-4));
+    CHECK (host.press (down));
+    CHECK (host.press (withShift (down)));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (2.95, 1.0e-4));
+}
+
+TEST_CASE ("Arrow keys move the display's selection together, and it stops together at the edge of a range")
+{
+    EveryControl host;
+    host.addBand (2, 20000.0f, 29.0f);
+    host.settle();
+    host.display.grabKeyboardFocus();
+    host.press (juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0));
+
+    for (int i = 0; i < 12; ++i)
+        host.press (right); // Band 2 reaches 30 kHz after seven
+    CHECK_THAT (host.value (2, "frequency"), WithinAbs (30000.0, 0.5));
+    CHECK_THAT (host.value (1, "frequency"), WithinAbs (30000.0 / 20000.0 * 1000.0, 0.5));
+    for (int i = 0; i < 4; ++i)
+        host.press (up); // Band 2 reaches +30 dB after two
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (30.0, 1.0e-4));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (4.0, 1.0e-4));
+
+    host.set (2, "frequency", 12.0f);
+    host.set (2, "gain", -29.8f);
+    host.settle();
+    for (int i = 0; i < 6; ++i)
+        host.press (left);
+    CHECK_THAT (host.value (2, "frequency"), WithinAbs (10.0, 0.01));
+    host.press (down);
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-30.0, 1.0e-4));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.8, 1.0e-4));
+}
+
+TEST_CASE ("Each arrow press on a Band is one undo step, and so is a held key with its repeats")
+{
+    EveryControl host;
+    auto& history = host.processor.editHistory();
+    bandElement (host, 1).grabKeyboardFocus();
+    const int steps = history.undoSteps();
+
+    host.press (right);
+    host.press (up);
+    CHECK (history.undoSteps() == steps + 2);
+    for (int repeat = 0; repeat < 5; ++repeat)
+        host.hold (withShift (left));
+    host.release();
+    CHECK (history.undoSteps() == steps + 3);
+
+    history.undo();
+    history.undo();
+    history.undo();
+    CHECK_THAT (host.value (1, "frequency"), WithinAbs (1000.0, 0.01));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.0, 1.0e-4));
+}
+
+TEST_CASE ("A held arrow key's undo step on a Band ends when the Band loses focus")
+{
+    EveryControl host;
+    auto& history = host.processor.editHistory();
+    bandElement (host, 1).grabKeyboardFocus();
+    const int steps = history.undoSteps();
+    host.hold (up);
+    host.hold (up);
+    host.findAll<juce::Slider>().front()->grabKeyboardFocus();
+    CHECK (history.undoSteps() == steps + 1);
+}
+
+TEST_CASE ("Delete on a focused Band removes it and moves focus to the next Band, else the one before, else the display")
+{
+    EveryControl host;
+    host.addBand (2, 200.0f, 0.0f);
+    host.addBand (3, 5000.0f, 0.0f);
+    host.settle();
+    // Tab's order: Band 2, Band 1, Band 3.
+    bandElement (host, 1).grabKeyboardFocus();
+
+    host.press (juce::KeyPress (juce::KeyPress::deleteKey));
+    CHECK (host.value (1, "in_use") == 0.0f);
+    CHECK (bandElement (host, 3).hasKeyboardFocus (false));
+
+    host.press (juce::KeyPress (juce::KeyPress::deleteKey));
+    CHECK (host.value (3, "in_use") == 0.0f);
+    CHECK (bandElement (host, 2).hasKeyboardFocus (false));
+
+    host.press (juce::KeyPress (juce::KeyPress::backspaceKey));
+    CHECK (host.value (2, "in_use") == 0.0f);
+    CHECK (host.display.hasKeyboardFocus (false));
+}
