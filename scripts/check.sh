@@ -4,8 +4,8 @@
 #
 #   scripts/check.sh            docs, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
-#                               glossary, no test reads a saved state as raw bytes or runs timers itself, and no colour is
-#                               hard-coded in plugin/ outside plugin/staple/
+#                               glossary, no test reads a saved state as raw bytes, runs timers itself or has a non-ASCII
+#                               title, and no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -91,7 +91,15 @@ docs() {
         printf '%s\n' "$loops" | sed 's/$/: runs timers itself; wait with harness::settle (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes, and tests wait with harness::settle"
+    # ctest hands a test's name to the test executable in the machine's code page, which on Windows
+    # can't hold "…" or "–": a title with them matches no test there. Titles stay ASCII.
+    local titles
+    titles=$(LC_ALL=C git grep -nE '(TEST_CASE|SECTION) *\("[^"]*[^ -~]' -- tests || true)
+    if [ -n "$titles" ]; then
+        printf '%s\n' "$titles" | sed 's/$/: a test title outside ASCII; ctest on Windows runs no test by that name/' >&2
+        broken=1
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes, tests wait with harness::settle and have ASCII titles"
     return "$broken"
 }
 
