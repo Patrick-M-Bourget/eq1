@@ -20,7 +20,9 @@ if [ "$state" = CONFLICTING ]; then
 fi
 
 gh pr checks "$pr" --watch --interval 60 > /dev/null 2>&1
-if ! gh pr checks "$pr" --json bucket -q 'all(.[]; .bucket == "pass")' | grep -qx true; then
+# Both platforms' jobs must have run: an empty or partial list of checks is not green.
+green='all(.[]; .bucket == "pass") and ([.[].name] | contains(["Windows x64", "macOS Universal"]))'
+if ! gh pr checks "$pr" --json name,bucket -q "$green" | grep -qx true; then
     echo "NOT MERGED #$pr: checks failed"
     gh pr checks "$pr"
     exit 1
@@ -41,4 +43,4 @@ until verdicts | grep -q "qa-verdict: pass sha=${head:0:7}"; do
 done
 
 title=$(gh pr view "$pr" --json title -q .title)
-gh pr merge "$pr" --squash --subject "$title (#$pr)" --body "Squashed from #$pr" && echo "MERGED #$pr: $title"
+gh pr merge "$pr" --squash --match-head-commit "$head" --subject "$title (#$pr)" --body "Squashed from #$pr" && echo "MERGED #$pr: $title"
