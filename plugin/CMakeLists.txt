@@ -55,7 +55,8 @@ target_sources(eq1 PRIVATE
     OutputMeter.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp
-    staple/Fonts.cpp)
+    staple/Fonts.cpp
+    staple/Icons.cpp)
 
 # The Factory Presets, bundled into the plugin.
 juce_add_binary_data(eq1_factory_presets

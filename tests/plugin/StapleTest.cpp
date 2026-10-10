@@ -1,4 +1,5 @@
 #include "staple/Fonts.h"
+#include "staple/Icons.h"
 #include "staple/Tokens.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -21,5 +22,21 @@ TEST_CASE ("Staple's font is Manrope, with digits of equal width so numbers don'
     {
         CAPTURE (size, digit);
         CHECK_THAT (juce::GlyphArrangement::getStringWidth (font, digit), WithinAbs (zero, 1.0e-3));
+    }
+}
+
+TEST_CASE ("Every icon the prototype uses parses to a path inside its grid")
+{
+    for (int i = 0; i < staple::numIcons; ++i)
+    {
+        const auto icon = static_cast<staple::Icon> (i);
+        CAPTURE (i);
+        const auto grid = staple::gridOf (icon);
+        REQUIRE (! grid.isEmpty());
+        CAPTURE (staple::nameOf (icon));
+        const auto& path = staple::pathOf (icon);
+        CHECK (! path.isEmpty());
+        CHECK (! path.getBounds().isEmpty());
+        CHECK (grid.contains (path.getBounds()));
     }
 }
