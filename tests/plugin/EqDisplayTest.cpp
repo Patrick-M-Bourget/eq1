@@ -286,6 +286,30 @@ TEST_CASE ("A drag from empty space draws a marquee that selects the Bands insid
     CHECK (host.display.selection() == std::set<int> { 1, 2 });
 }
 
+TEST_CASE ("A marquee drag tells the Band panel about the selection only when the Band it shows changes")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 100.0f, 0.0f);
+    host.addBand (2, 1000.0f, 0.0f);
+    host.addBand (3, 10000.0f, 0.0f);
+    host.settle();
+    std::vector<int> shown;
+    host.display.onSelectionChanged = [&shown, panel = host.display.onSelectionChanged] (int slot) {
+        shown.push_back (slot);
+        panel (slot);
+    };
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    const auto from = atDb (host, 50.0, 6.0);
+    host.display.mouseDown (host.mouseEvent (from, left, from));
+    // Across the three Bands, a mouse move at a time, and back over the last one.
+    for (const double frequency : { 60.0, 150.0, 200.0, 500.0, 1500.0, 3000.0, 15000.0, 18000.0, 12000.0 })
+        host.display.mouseDrag (host.mouseEvent (atDb (host, frequency, -6.0), left, from));
+    host.display.mouseUp (host.mouseEvent (atDb (host, 12000.0, -6.0), {}, from));
+    CHECK (host.display.selection() == std::set<int> { 1, 2, 3 });
+    CHECK (shown == std::vector<int> { 1, 2, 3 });
+}
+
 TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its peak")
 {
     OpenEditor host;

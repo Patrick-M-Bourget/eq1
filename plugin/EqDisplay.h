@@ -46,7 +46,8 @@ public:
     EqDisplay (PluginProcessor& processor, BandEditing& editing);
     ~EqDisplay() override;
 
-    // Called with the Band Slot to show in the Band panel, or 0 when none is selected.
+    // Called with the Band Slot to show in the Band panel, or 0 when none is selected, when that slot
+    // changes.
     std::function<void (int)> onSelectionChanged;
     // Selects one Band alone, as a click on its handle does (the Band panel's ‹ and ›).
     void selectBand (int slot) { select ({ slot }); }
@@ -149,6 +150,7 @@ private:
     std::array<double, numBandSlots> shownLiveGains {};
 
     std::set<int> selected;
+    int panelSlot = 0; // the slot onSelectionChanged last reported
     std::set<int> selectedBeforeMarquee; // Shift or Cmd adds the marquee to it
     bool dragging = false;
     // Spectrum Grab, from the press until the mouse moves: only a drag makes the Bell, so a click or a

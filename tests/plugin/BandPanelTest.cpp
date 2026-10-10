@@ -310,6 +310,24 @@ TEST_CASE ("The Band panel's Solo and the display's held handle share one Solo: 
     CHECK (host.display.soloCueSlot() == 0);
 }
 
+TEST_CASE ("A selection update that keeps the Band panel's Band keeps the panel's Solo")
+{
+    PanelEditor host; // Band 2 at 100 Hz, 1 at 1 kHz, 3 at 5 kHz
+    host.control<juce::Button> ("Next Band").onClick();
+    REQUIRE (host.panel().shownSlot() == 3);
+    host.control<staple::IconButton> ("Band 3 Solo").setState (juce::Button::buttonDown);
+    REQUIRE (host.processor.soloSlot() == 3);
+
+    // Shift adds a marquee around Band 2 to the selection; Band 3 is still the highest selected.
+    const juce::ModifierKeys shiftLeft (juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier);
+    const auto band2 = host.at (100.0);
+    host.drag (band2.translated (-30.0f, -30.0f), band2.translated (30.0f, 30.0f), shiftLeft);
+    REQUIRE (host.display.selection() == std::set<int> { 2, 3 });
+    CHECK (host.panel().shownSlot() == 3);
+    CHECK (host.processor.soloSlot() == 3);
+    CHECK (host.processor.holdsSolo (eq1::PluginProcessor::SoloHolder::panel));
+}
+
 TEST_CASE ("The Band selector steps through the Bands in Frequency order, wrapping, and the display's selection follows")
 {
     PanelEditor host; // Band 2 at 100 Hz, 1 at 1 kHz, 3 at 5 kHz
