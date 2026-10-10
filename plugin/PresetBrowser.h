@@ -5,6 +5,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
+#include <optional>
 #include <vector>
 
 namespace eq1
@@ -21,11 +22,11 @@ public:
     explicit PresetBrowser (const PresetLibrary& library);
     ~PresetBrowser() override;
 
-    // Opens the panel, marking the Loaded Preset.
-    void open (const juce::String& loadedPreset);
+    // Opens the panel, marking the Loaded Preset's entry (PresetLibrary::find).
+    void open (const juce::String& loadedPreset, const PresetLibrary::Entry* lastLoaded);
     void close();
-    // Marks the Loaded Preset (its first entry), which loads, undo and the other side change.
-    void showLoaded (const juce::String& loadedPreset);
+    // Marks the Loaded Preset's entry (PresetLibrary::find), which loads, undo and the other side change.
+    void showLoaded (const juce::String& loadedPreset, const PresetLibrary::Entry* lastLoaded);
 
     std::function<void (const PresetLibrary::Entry&)> onLoad;
     std::function<void()> onSave, onLoadFile;
@@ -41,7 +42,7 @@ public:
 private:
     void visibilityChanged() override;
     void showRows();
-    // Whether entry is the Loaded Preset's first entry in the listing.
+    // Whether entry is the Loaded Preset's entry in the listing, the one ‹ › step from.
     bool isLoaded (const PresetLibrary::Entry& entry) const;
 
     int getNumRows() override { return static_cast<int> (rows.size()); }
@@ -59,6 +60,7 @@ private:
     std::vector<PresetLibrary::Entry> listing, found;
     std::vector<Row> rows;
     juce::String loaded;
+    std::optional<PresetLibrary::Entry> lastLoaded;
     juce::TextEditor search;
     juce::ListBox list { {}, this };
     juce::TextButton save { "Save as User Preset..." }, loadFile { "Load Preset File..." }, showFolder { "Show User Presets Folder" };

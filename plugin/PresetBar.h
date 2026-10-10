@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace eq1
 {
@@ -37,13 +38,15 @@ private:
     void showSide();
     void showLoadedPreset();
     void edited();
-    void load (const juce::ValueTree& preset, const juce::String& name);
-    // Loads the Preset by places after (or before, when negative) the Loaded Preset (PresetLibrary::step).
+    // Loads a Preset, remembering the listing entry it came from (none for a file from anywhere).
+    void load (const juce::ValueTree& preset, const juce::String& name, std::optional<PresetLibrary::Entry> entry);
+    // Loads the Preset by places after (or before, when negative) the Loaded Preset's entry (PresetLibrary::step).
     void step (int by);
     void askToSave();
     // Saves the settings as a User Preset named name, when it isn't empty, making it the side's Loaded
     // Preset, and closes the prompt.
     void saveAs (const juce::String& name);
+    const PresetLibrary::Entry* lastLoadedEntry() const { return lastLoaded.has_value() ? &*lastLoaded : nullptr; }
     void chooseFileToLoad();
 
     PluginProcessor& processor;
@@ -51,6 +54,10 @@ private:
     PresetBrowser browser { library };
     juce::TextButton presets { "Presets" }, previous { juce::String::charToString (0x2039) }, next { juce::String::charToString (0x203a) }, a { "A" },
         b { "B" }, copyAToB { "Copy A to B" };
+    // The listing entry last loaded or saved, through the browser, ‹ › or saving, which ‹ › step from
+    // while its name is still the Loaded Preset's: a name can be listed more than once. Kept in memory
+    // only, so the Loaded Preset stays a name.
+    std::optional<PresetLibrary::Entry> lastLoaded;
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<juce::AlertWindow> namePrompt;
 };

@@ -11,10 +11,10 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
         if (browser.isVisible())
             browser.close();
         else
-            browser.open (processor.loadedPresetName());
+            browser.open (processor.loadedPresetName(), lastLoadedEntry());
     };
     browser.opener = &presets;
-    browser.onLoad = [this] (const PresetLibrary::Entry& entry) { load (entry.preset, entry.name); };
+    browser.onLoad = [this] (const PresetLibrary::Entry& entry) { load (entry.preset, entry.name, entry); };
     browser.onSave = [this] {
         browser.close();
         askToSave();
@@ -70,7 +70,7 @@ void PresetBar::showLoadedPreset()
     const auto name = processor.loadedPresetName();
     presets.setButtonText (name.isEmpty() ? "Presets" : name + (processor.isLoadedPresetModified() ? "*" : ""));
     presets.setTooltip (name);
-    browser.showLoaded (name);
+    browser.showLoaded (name, lastLoadedEntry());
 }
 
 void PresetBar::edited()
@@ -80,10 +80,13 @@ void PresetBar::edited()
         onEdit();
 }
 
-void PresetBar::load (const juce::ValueTree& preset, const juce::String& name)
+void PresetBar::load (const juce::ValueTree& preset, const juce::String& name, std::optional<PresetLibrary::Entry> entry)
 {
     if (processor.loadPreset (preset, name))
+    {
+        lastLoaded = std::move (entry);
         edited();
+    }
     else
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Load Preset", "That file isn't an eq1 Preset.");
 }
@@ -91,8 +94,8 @@ void PresetBar::load (const juce::ValueTree& preset, const juce::String& name)
 void PresetBar::step (int by)
 {
     const auto listing = library.listing();
-    if (const auto i = PresetLibrary::step (listing, processor.loadedPresetName(), by))
-        load (listing[*i].preset, listing[*i].name);
+    if (const auto i = PresetLibrary::step (listing, processor.loadedPresetName(), by, lastLoadedEntry()))
+        load (listing[*i].preset, listing[*i].name, listing[*i]);
 }
 
 // The name prompt and the file chooser call back after the editor may have closed: each callback
@@ -119,6 +122,7 @@ void PresetBar::saveAs (const juce::String& name)
     if (const auto file = library.save (name, preset))
     {
         processor.presetSaved (preset, file->getFileNameWithoutExtension());
+        lastLoaded = PresetLibrary::Entry { file->getFileNameWithoutExtension(), "User", *file, preset };
         edited();
     }
     else
@@ -133,7 +137,7 @@ void PresetBar::chooseFileToLoad()
     const juce::Component::SafePointer<PresetBar> bar (this);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [bar] (const juce::FileChooser& chosen) {
         if (const auto file = chosen.getResult(); bar != nullptr && file.existsAsFile())
-            bar->load (PresetLibrary::read (file), file.getFileNameWithoutExtension());
+            bar->load (PresetLibrary::read (file), file.getFileNameWithoutExtension(), std::nullopt);
     });
 }
 

@@ -40,10 +40,11 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
 
 PresetBrowser::~PresetBrowser() { juce::Desktop::getInstance().removeGlobalMouseListener (this); }
 
-void PresetBrowser::open (const juce::String& loadedPreset)
+void PresetBrowser::open (const juce::String& loadedPreset, const PresetLibrary::Entry* lastLoadedEntry)
 {
     listing = library.listing();
     loaded = loadedPreset;
+    lastLoaded = lastLoadedEntry != nullptr ? std::optional (*lastLoadedEntry) : std::nullopt;
     search.clear();
     showRows();
     setVisible (true);
@@ -62,11 +63,15 @@ void PresetBrowser::visibilityChanged()
         juce::Desktop::getInstance().removeGlobalMouseListener (this);
 }
 
-void PresetBrowser::showLoaded (const juce::String& loadedPreset)
+void PresetBrowser::showLoaded (const juce::String& loadedPreset, const PresetLibrary::Entry* lastLoadedEntry)
 {
-    if (loaded == loadedPreset)
+    const auto samePlace = [] (const PresetLibrary::Entry* a, const std::optional<PresetLibrary::Entry>& b) {
+        return a == nullptr ? ! b.has_value() : b.has_value() && a->folder == b->folder && a->name == b->name;
+    };
+    if (loaded == loadedPreset && samePlace (lastLoadedEntry, lastLoaded))
         return;
     loaded = loadedPreset;
+    lastLoaded = lastLoadedEntry != nullptr ? std::optional (*lastLoadedEntry) : std::nullopt;
     list.repaint();
 }
 
@@ -97,8 +102,8 @@ void PresetBrowser::showRows()
 
 bool PresetBrowser::isLoaded (const PresetLibrary::Entry& entry) const
 {
-    const auto first = std::find_if (listing.begin(), listing.end(), [this] (const PresetLibrary::Entry& e) { return e.name == loaded; });
-    return first != listing.end() && first->name == entry.name && first->folder == entry.folder;
+    const auto i = PresetLibrary::find (listing, loaded, lastLoaded.has_value() ? &*lastLoaded : nullptr);
+    return i.has_value() && listing[*i].name == entry.name && listing[*i].folder == entry.folder;
 }
 
 void PresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool)
@@ -114,7 +119,7 @@ void PresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int width, int
         g.drawText (text, area, juce::Justification::centredLeft, true);
         return;
     }
-    // The Loaded Preset's first entry, which ‹ › step from, is lit in the display's blue.
+    // The Loaded Preset's entry, which ‹ › step from, is lit in the display's blue.
     if (isLoaded (*entry))
     {
         g.setColour (juce::Colour (0x602f8fd0));
