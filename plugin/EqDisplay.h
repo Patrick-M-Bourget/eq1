@@ -18,7 +18,9 @@ class PluginProcessor;
 
 // The EQ curve with a handle per Band, over the Analyzer's pre-EQ, post-EQ and Sidechain spectra. Double-click
 // adds a Band; drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box
-// around them); the wheel changes Q; Delete removes the selected Bands. Holding a handle still Solos
+// around them, or Cmd/Ctrl+A for all); the wheel changes Q; Delete removes the selected Bands. Right-click
+// opens the Band menu (BandMenu.h) for the selection, which a Band outside it becomes first; on empty
+// space, it offers Select All. Holding a handle still Solos
 // its Band until the mouse is released. Pressing on the spectrum, away from the handles, grabs its
 // peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
 // with its Live Gain's movement inside it, and its curve follows its Live Gain. The curve comes from
@@ -61,6 +63,9 @@ private:
     int slotAt (juce::Point<float> position) const; // 0 when no handle is there
 
     void select (std::set<int> slots);
+    void selectAll();
+    void deleteSelection();
+    void showMenu (const juce::MouseEvent& e);
     // A curve through db, one value every pixelStep pixels from the left edge.
     juce::Path curve (const std::vector<double>& db) const;
 

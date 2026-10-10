@@ -1,5 +1,6 @@
 #include "EqDisplay.h"
 
+#include "BandMenu.h"
 #include "PluginProcessor.h"
 #include "eq1/Response.h"
 
@@ -414,6 +415,13 @@ void EqDisplay::paint (juce::Graphics& g)
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)
 {
+    // Right-click, or Ctrl-click on macOS: never a Solo, a drag or a marquee.
+    if (e.mods.isPopupMenu())
+    {
+        if (! dragging && ! marquee)
+            showMenu (e);
+        return;
+    }
     if (! e.mods.isLeftButtonDown())
         return;
     grabKeyboardFocus();
@@ -515,7 +523,7 @@ void EqDisplay::mouseUp (const juce::MouseEvent&)
 
 void EqDisplay::mouseDoubleClick (const juce::MouseEvent& e)
 {
-    if (slotAt (e.position) != 0)
+    if (e.mods.isPopupMenu() || slotAt (e.position) != 0)
         return;
     if (const auto slot = editing.add (frequencyAt (e.position.x), dbAt (e.position.y)))
     {
@@ -541,13 +549,54 @@ void EqDisplay::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWhee
     repaint();
 }
 
+void EqDisplay::showMenu (const juce::MouseEvent& e)
+{
+    grabKeyboardFocus();
+    const int slot = slotAt (e.position);
+    if (slot != 0 && ! selected.contains (slot))
+        select ({ slot });
+    const juce::Component::SafePointer<EqDisplay> display (this);
+    const BandMenu menu { editing,
+                          slot == 0 ? std::vector<int> {} : std::vector<int> (selected.begin(), selected.end()),
+                          processor.isStereoPlacementAvailable(),
+                          [display] {
+                              if (display != nullptr)
+                                  display->deleteSelection();
+                          },
+                          [display] {
+                              if (display != nullptr)
+                                  display->selectAll();
+                          } };
+    // Closed unchosen if the display goes, so the Band actions never outlive the editing they use.
+    menu.build().showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withMousePosition());
+}
+
+void EqDisplay::selectAll()
+{
+    std::set<int> inUse;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        if (editing.band (slot).inUse)
+            inUse.insert (slot);
+    select (inUse);
+}
+
+void EqDisplay::deleteSelection()
+{
+    editing.deleteBands ({ selected.begin(), selected.end() });
+    select ({});
+    shown = heardSettings();
+}
+
 bool EqDisplay::keyPressed (const juce::KeyPress& key)
 {
     if ((key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) && ! selected.empty())
     {
-        editing.deleteBands ({ selected.begin(), selected.end() });
-        select ({});
-        shown = heardSettings();
+        deleteSelection();
+        return true;
+    }
+    if (key == juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0))
+    {
+        selectAll();
         return true;
     }
     return false;
