@@ -460,3 +460,51 @@ TEST_CASE ("A handle takes a press within 9 px of its centre, and a Dynamic Band
     host.drag (centre.translated (-8.5f, 0.0f), host.at (2000.0).translated (-8.5f, 0.0f), juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
     CHECK_THAT (host.value (1, "frequency"), WithinRel (2000.0f, 0.01f));
 }
+
+TEST_CASE ("The ghost Bell follows the mouse over empty space, rests at 1 kHz with no Bands, and hides over a handle, a grip or a curve, under a menu and with every Band Slot in use")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.settle();
+    const auto move = [&] (juce::Point<float> to) { host.display.mouseMove (host.mouseEvent (to, {}, to)); };
+
+    // No Bands, and the mouse elsewhere: resting at 1 kHz, half the range up.
+    REQUIRE (host.display.ghost().has_value());
+    CHECK_THAT (host.display.ghost()->frequency, WithinRel (1000.0, 1.0e-3));
+    CHECK_THAT (host.display.ghost()->gain, WithinAbs (6.0, 1.0e-3));
+
+    host.addBand (1, 1000.0f, 6.0f);
+    host.settle();
+    host.display.mouseExit (host.mouseEvent ({ 1.0f, 1.0f }, {}, { 1.0f, 1.0f }));
+    CHECK_FALSE (host.display.ghost().has_value());
+    // Over empty space it follows the mouse.
+    move (atDb (host, 100.0, -5.0));
+    REQUIRE (host.display.ghost().has_value());
+    CHECK_THAT (host.display.ghost()->frequency, WithinRel (100.0, 1.0e-3));
+    CHECK_THAT (host.display.ghost()->gain, WithinAbs (-5.0, 1.0e-3));
+    // Over the handle, the curve and the selected Band's grip, none.
+    move (atDb (host, 1000.0, 6.0));
+    CHECK_FALSE (host.display.ghost().has_value());
+    move (atDb (host, 1000.0, 3.0));
+    CHECK_FALSE (host.display.ghost().has_value());
+    host.click (atDb (host, 1000.0, 6.0));
+    move (atDb (host, 1000.0, 6.0).translated (0.0f, 26.0f));
+    CHECK_FALSE (host.display.ghost().has_value());
+
+    // Under a menu, none.
+    move (atDb (host, 100.0, -5.0));
+    juce::PopupMenu menu;
+    menu.addItem (1, "Item");
+    menu.showMenuAsync ({});
+    CHECK_FALSE (host.display.ghost().has_value());
+    juce::PopupMenu::dismissAllActiveMenus();
+    host.settle();
+    CHECK (host.display.ghost().has_value());
+
+    // With all 24 Band Slots in use, none.
+    for (int slot = 2; slot <= 24; ++slot)
+        host.addBand (slot, 20.0f, 0.0f, 1.0f);
+    host.settle();
+    move (atDb (host, 100.0, -5.0));
+    CHECK_FALSE (host.display.ghost().has_value());
+}

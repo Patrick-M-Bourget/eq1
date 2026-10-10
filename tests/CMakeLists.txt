@@ -40,6 +40,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/BandEditingTest.cpp
         plugin/BandMenuTest.cpp
         plugin/BandPanelTest.cpp
+        plugin/DisplayGhostTest.cpp
         plugin/DisplayHandlesTest.cpp
         plugin/DisplayLayersTest.cpp
         plugin/DisplayRangeTest.cpp

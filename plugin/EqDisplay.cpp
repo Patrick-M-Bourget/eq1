@@ -409,11 +409,40 @@ bool EqDisplay::stepFades()
     bool moved = toward (globalBypassFade, isGlobalBypassOn(), motion::globalBypassFadeMs);
     for (int slot = 1; slot <= numBandSlots; ++slot)
         moved = toward (hoverFades[static_cast<size_t> (slot - 1)], slot == hoveredSlot, motion::hoverFadeMs) || moved;
+    // The ghost fades in as it appears, and goes at once.
+    if (ghost())
+        moved = toward (ghostFade, true, staple::tokens::ghost::fadeInMs) || moved;
+    else if (std::exchange (ghostFade, 0.0f) > 0.0f)
+        moved = true;
     return moved;
+}
+
+std::optional<display::Ghost> EqDisplay::ghost() const
+{
+    // A menu is modal while it shows.
+    if (dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency || juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0)
+        return std::nullopt;
+    int inUse = 0;
+    for (const auto& band : shown.bands)
+        inUse += band.inUse ? 1 : 0;
+    if (inUse == numBandSlots)
+        return std::nullopt;
+    if (pointer)
+    {
+        if (slotAt (*pointer) != 0 || gripAt (*pointer) != 0 || bandAreaAt (*pointer) != 0)
+            return std::nullopt;
+        return display::ghostBell (geometry(), *pointer);
+    }
+    if (inUse == 0)
+        return display::restingGhost (geometry());
+    return std::nullopt;
 }
 
 void EqDisplay::mouseMove (const juce::MouseEvent& e)
 {
+    pointer = e.position;
+    if (ghost() || ghostFade > 0.0f)
+        repaint();
     // A handle, or else a Band's filled curve.
     hoveredSlot = slotAt (e.position);
     if (hoveredSlot == 0)
@@ -423,6 +452,8 @@ void EqDisplay::mouseMove (const juce::MouseEvent& e)
 void EqDisplay::mouseExit (const juce::MouseEvent&)
 {
     hoveredSlot = 0;
+    pointer.reset();
+    repaint();
 }
 
 display::DisplayGeometry EqDisplay::geometry() const
@@ -501,8 +532,11 @@ void EqDisplay::paint (juce::Graphics& g)
     display::paintCurves (g, shape, frame);
     // The handles and labels go over the edge fades, unfaded.
     display::paintEdgeFades (g, shape);
-    display::paintLabels (g, display::gridLabels (shape));
+    const auto shownGhost = ghostFade > 0.0f ? ghost() : std::nullopt;
+    display::paintLabels (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
     display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
+    if (shownGhost)
+        display::paintGhost (g, shape, *shownGhost, frame.sampleRate, ghostFade);
     display::paintHandles (g, shape, frame);
 }
 
