@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PresetLibrary.h"
+#include "SavedState.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -336,9 +337,13 @@ TEST_CASE ("Whether the Output Meter is shown is saved with the session, isn't u
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor saved;
     CHECK (saved.isOutputMeterShown());
+    // With a Loaded Preset, a change to any sound setting would make the side Modified.
+    REQUIRE (saved.loadPreset (saved.presetState(), "Current"));
+    REQUIRE_FALSE (saved.isLoadedPresetModified());
+    const int steps = saved.editHistory().undoSteps(); // loading the Preset is one
     saved.setOutputMeterShown (false);
-    CHECK_FALSE (saved.editHistory().canUndo());
     CHECK_FALSE (saved.isLoadedPresetModified());
+    CHECK (saved.editHistory().undoSteps() == steps);
     const auto xml = savedXml (saved);
     REQUIRE (xml != nullptr);
     CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
@@ -355,4 +360,24 @@ TEST_CASE ("A session saved before the Output Meter loads with it shown")
     processor.setOutputMeterShown (false);
     load (processor, *fixture ("state-v0.xml"));
     CHECK (processor.isOutputMeterShown());
+}
+
+TEST_CASE ("The saved names a test checks include nested properties and host parameter ids")
+{
+    juce::ValueTree state ("eq1");
+    state.setProperty ("displayRangeDb", 12, nullptr);
+    juce::ValueTree side ("A");
+    juce::ValueTree parameter ("PARAM");
+    parameter.setProperty ("id", "band3_solo_slot", nullptr);
+    side.appendChild (parameter, nullptr);
+    juce::ValueTree held ("Held");
+    held.setProperty ("auditionSlot", 3, nullptr);
+    side.appendChild (held, nullptr);
+    state.appendChild (side, nullptr);
+
+    const auto names = eq1::test::savedNames (state);
+    CHECK (names.contains ("displayRangeDb"));
+    CHECK (names.contains ("band3_solo_slot"));
+    CHECK (names.contains ("auditionSlot"));
+    CHECK (names.contains ("Held"));
 }

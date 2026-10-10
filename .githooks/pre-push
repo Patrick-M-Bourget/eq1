@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Blocks a push whose build or tests fail (.githooks/gate.sh). A rebase rewrites commits without running
+# the pre-commit hook, so the pushed commits get the same gate here. It builds and tests the working
+# tree, so it requires the pushed commit to be the checked-out one, with nothing uncommitted in what the
+# build reads. A push of Markdown changes alone, or of a branch deletion, isn't gated.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+zero=0000000000000000000000000000000000000000
+gate=no
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue # deleting a branch
+    base=$remote_sha
+    [ "$base" = "$zero" ] && base=$(git merge-base "$local_sha" origin/main 2> /dev/null || echo "")
+    changed=$(if [ -n "$base" ]; then git diff --name-only "$base" "$local_sha"; else git show --name-only --format= "$local_sha"; fi)
+    printf '%s\n' "$changed" | grep -qv '\.md$' || continue
+    if [ "$local_sha" != "$(git rev-parse HEAD)" ]; then
+        echo "pre-push: $local_ref isn't checked out here, so its build can't be tested; check it out and push from it" >&2
+        exit 1
+    fi
+    gate=yes
+done
+[ "$gate" = yes ] || exit 0
+
+dirty=$(git status --porcelain=v1 --untracked-files=all -- engine plugin tests scripts cmake presets assets .githooks '*CMakeLists.txt')
+if [ -n "$dirty" ]; then
+    echo "pre-push: these differ from the pushed commit; commit them or set them aside first:" >&2
+    printf '%s\n' "$dirty" >&2
+    exit 1
+fi
+exec .githooks/gate.sh pre-push

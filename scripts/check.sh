@@ -2,24 +2,34 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
 #
 #   scripts/check.sh            docs, build, test, cpu, tsan and validate
-#   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, and GLOSSARY.md is the only glossary
+#   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
+#                               glossary, and no test reads a saved state as raw bytes
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
-#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget")
+#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget"); on a
+#                               Mac busy with other work it measures nothing and exits 3
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
 #
-# BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps) can be overridden; CMake's
+# BUILD_DIR (default build) and FETCHCONTENT_BASE_DIR (default .deps, or the main checkout's .deps in a linked
+# worktree) can be overridden; CMake's
 # CMAKE_C_COMPILER_LAUNCHER and CMAKE_CXX_COMPILER_LAUNCHER environment variables (sccache in CI) apply. Validators
 # are downloaded into the dependencies folder with gh, which needs to be authenticated (GH_TOKEN in CI).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BUILD_DIR=${BUILD_DIR:-build}
-DEPS=${FETCHCONTENT_BASE_DIR:-$PWD/.deps}
+# A linked worktree shares the main checkout's dependencies rather than fetching its own over a slow link.
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2> /dev/null || true)
+main_checkout=${common_dir%/.git}
+if [ -z "${FETCHCONTENT_BASE_DIR:-}" ] && [ -n "$common_dir" ] && [ "$main_checkout" != "$PWD" ] && [ -d "$main_checkout/.deps" ]; then
+    DEPS=$main_checkout/.deps
+else
+    DEPS=${FETCHCONTENT_BASE_DIR:-$PWD/.deps}
+fi
 PLUGINVAL_VERSION=v1.0.4
 CLAP_VALIDATOR_VERSION=0.4.1
 ARTEFACTS=$BUILD_DIR/plugin/eq1_artefacts/Release
@@ -61,7 +71,15 @@ docs() {
             broken=1
         done < <(git ls-files -- '*GLOSSARY.md' ':!GLOSSARY.md')
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists"
+    # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
+    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h.
+    local raw
+    raw=$(git grep -nE '[A-Za-z_]*[sS]tate\.toString *\(\)' -- tests || true)
+    if [ -n "$raw" ]; then
+        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
+        broken=1
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, and no test reads a saved state as raw bytes"
     return "$broken"
 }
 
@@ -123,7 +141,19 @@ focus() {
 # On its own, after the tests: timings taken while anything else runs are meaningless.
 cpu() {
     step "CPU budget"
-    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget
+    # Timings taken while the machine is busy (other builds, other agents) measure the machine, not the
+    # Engine: refuse rather than report a false overrun. CI's runners are quiet, so it always measures.
+    if [ "$os" = macos ] && [ -z "${GITHUB_ACTIONS:-}" ]; then
+        local load cores
+        load=$(sysctl -n vm.loadavg | awk '{ print $2 }')
+        cores=$(sysctl -n hw.ncpu)
+        if awk -v l="$load" -v c="$cores" 'BEGIN { exit ! (l > c / 2) }'; then
+            echo "Machine busy (load $load on $cores cores): CPU budget not measured; CI measures it on every PR" >&2
+            return 3
+        fi
+    fi
+    # `all` calls cpu under ||, where set -e is off: return a failed build rather than time a stale exe.
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget || return
     local exe=$BUILD_DIR/tests/eq1_cpu_budget
     [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/eq1_cpu_budget
     local out status=0
@@ -234,6 +264,7 @@ case "${1:-all}" in
     tsan) tsan ;;
     validate) validate ;;
     docs) docs ;;
-    all) docs; build; run_tests; cpu; tsan; validate ;;
+    # A busy machine skips the CPU budget (exit 3) but not the stages after it.
+    all) docs; build; run_tests; cpu || [ $? -eq 3 ]; tsan; validate ;;
     *) sed -n '2,14p' "$0" >&2; exit 2 ;;
 esac
