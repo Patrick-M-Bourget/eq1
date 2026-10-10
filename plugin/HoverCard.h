@@ -1,6 +1,7 @@
 #pragma once
 
 #include "KeyboardSlider.h"
+#include "eq1/Settings.h"
 #include "staple/Tokens.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/Tween.h"
@@ -34,9 +35,9 @@ public:
     int shownSlot() const { return slot; }
 
     // Shows the card for a Band whose handle is at handle, or moves it there: centred 18 px above it, or
-    // below it when the handle is near the top of within (the display), and kept 6 px inside its left and
+    // below it when the handle is near the top of display, and kept 6 px inside its left and
     // right; both in the card's parent's coordinates. It reads the Band afresh each time. Hides it.
-    void show (int slot, juce::Point<float> handle, juce::Rectangle<int> within);
+    void show (int slot, juce::Point<float> handle, juce::Rectangle<int> display);
     void hide();
 
     // The card itself, in its parent's coordinates: the component is wider, for its shadow and arrow tip.
@@ -53,6 +54,11 @@ public:
     // (staple/controls/TypeIn.h: Enter sets it as one undo step, Esc or a click away cancels). There is
     // no reset gesture. Disabled, it shows readOnlyText dimmed.
     class Value;
+
+    // The strip of every Shape that its Shape opens, 32 x 28 px each, 6 px under the card or above it
+    // where there is no room, kept 6 px inside the display; a Shape picked there sets the Band's, one
+    // undo step, and closes it. Nothing while closed.
+    juce::Component* shapeStrip() const { return strip != nullptr && strip->isVisible() ? strip.get() : nullptr; }
 
     // What ▾ opens: the Band menu for the shown Band alone. Its Delete deletes that Band, and its Split
     // and Paste leave the selection as it is.
@@ -74,7 +80,11 @@ private:
     // The controls' states for the shown Band, as it is now.
     void refresh();
     void openMenu();
+    void openStrip();
+    void closeStrip();
+    void placeStrip();
     bool isFrozen() const;
+    juce::Colour bandColour() const;
 
     // Room around the body for its shadow and arrow tip, which the pointer passes through.
     static constexpr int margin = 32;
@@ -84,12 +94,17 @@ private:
     BandEditing& editing;
     int slot = 0;
     bool pointerOver = false, menuOpen = false;
+    juce::Rectangle<int> within; // the display, in the parent's coordinates
     bool above = true; // the card is above its handle, its tip pointing down
     float tipX = 0.0f; // the handle's x, in the card's coordinates
 
     // Named apart from the Band panel's buttons; titled for the shown Band by refresh().
     staple::IconButton bypass { "Hover Card Bypass", staple::Icon::power }, deleteButton { "Hover Card Delete", staple::Icon::close },
         more { "Hover Card Menu", staple::Icon::dropdown };
+    // A Shape's icon as a button: the card's Shape, and each of the strip's.
+    class ShapeChoice;
+    std::unique_ptr<ShapeChoice> shape;
+    std::unique_ptr<juce::Component> strip;
     std::unique_ptr<Value> frequency, gain, q;
     std::array<Value*, 3> values() const { return { frequency.get(), gain.get(), q.get() }; }
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

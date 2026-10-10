@@ -4,6 +4,7 @@
 #include "BandMenu.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ShapeIcon.h"
 #include "staple/Fonts.h"
 #include "staple/Tokens.h"
 #include "staple/controls/Knob.h"
@@ -24,7 +25,36 @@ namespace card = tokens::hoverCard;
 // The columns, inside the padding (HANDOFF.md §5.2): Bypass over the Shape, the values, Delete over ▾.
 constexpr int button = 22, leftColumn = 26, rightColumn = button, valuesWidth = 84, valueHeight = 18;
 constexpr int columnGap = (card::width - 2 * card::padding - leftColumn - valuesWidth - rightColumn) / 2;
+constexpr int shapeWidth = 26, shapeHeight = 20;
+// The strip: each Shape 32 x 28 px, 1 px apart, inside a 1 px border and 3 px of padding.
+constexpr int optionWidth = 32, optionHeight = 28, optionGap = 1, stripInset = 4, stripGap = 6;
 } // namespace
+
+//==============================================================================
+class HoverCard::ShapeChoice final : public juce::Button
+{
+public:
+    explicit ShapeChoice (const juce::String& name) : juce::Button (name)
+    {
+        setWantsKeyboardFocus (false);
+        setMouseClickGrabsKeyboardFocus (false);
+    }
+
+    Shape shown = Shape::Bell;
+    juce::Colour iconColour = colour::text2;
+    bool marked = false; // the strip's Shape now, or the card's Shape while its strip is open
+
+    void paintButton (juce::Graphics& g, bool highlighted, bool) override
+    {
+        const auto area = getLocalBounds().toFloat();
+        if (marked || highlighted)
+        {
+            g.setColour (marked ? colour::fill2 : colour::fill1);
+            g.fillRoundedRectangle (area, tokens::size::r1);
+        }
+        staple::drawIcon (g, shapeIcon (shown), juce::Rectangle<float> (20.0f, 12.0f).withCentre (area.getCentre()), iconColour);
+    }
+};
 
 //==============================================================================
 HoverCard::Value::Value (Kind k) : kind (k)
@@ -168,6 +198,15 @@ HoverCard::HoverCard (PluginProcessor& p, BandEditing& e) : processor (p), editi
         addAndMakeVisible (*b);
     }
 
+    shape = std::make_unique<ShapeChoice> ("Hover Card Shape");
+    shape->onClick = [this] {
+        if (shapeStrip() != nullptr)
+            closeStrip();
+        else
+            openStrip();
+    };
+    addAndMakeVisible (*shape);
+
     frequency = std::make_unique<Value> (Value::Kind::frequency);
     gain = std::make_unique<Value> (Value::Kind::gain);
     q = std::make_unique<Value> (Value::Kind::q);
@@ -188,6 +227,8 @@ HoverCard::HoverCard (PluginProcessor& p, BandEditing& e) : processor (p), editi
 HoverCard::~HoverCard()
 {
     removeMouseListener (this);
+    if (strip != nullptr)
+        strip->removeMouseListener (this);
     for (auto* value : values())
         value->stop();
     frequencyAttachment.reset();
@@ -201,10 +242,88 @@ bool HoverCard::isFrozen() const
     return std::any_of (all.begin(), all.end(), [] (const Value* value) { return value->isBusy(); });
 }
 
-bool HoverCard::isHeld() const { return menuOpen || isFrozen(); }
+bool HoverCard::isHeld() const { return menuOpen || shapeStrip() != nullptr || isFrozen(); }
 
-void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<int> within)
+juce::Colour HoverCard::bandColour() const { return tokens::band[static_cast<size_t> (std::max (1, slot) - 1)]; }
+
+void HoverCard::openStrip()
 {
+    auto* layer = getParentComponent();
+    if (slot == 0 || layer == nullptr)
+        return;
+    if (strip == nullptr)
+    {
+        struct Strip final : juce::Component
+        {
+            juce::OwnedArray<ShapeChoice> options;
+            void paint (juce::Graphics& g) override
+            {
+                const auto area = getLocalBounds().toFloat();
+                g.setColour (colour::menu);
+                g.fillRoundedRectangle (area, tokens::size::r3);
+                g.setColour (colour::line2);
+                g.drawRoundedRectangle (area.reduced (0.5f), tokens::size::r3, 1.0f);
+            }
+        };
+        auto made = std::make_unique<Strip>();
+        made->setTitle ("Shape");
+        made->setWantsKeyboardFocus (false);
+        for (int i = 0; i < parameters::shapeNames().size(); ++i)
+        {
+            auto option = std::make_unique<ShapeChoice> (parameters::shapeNames()[i]);
+            option->setTitle (parameters::shapeNames()[i]);
+            option->shown = static_cast<Shape> (i);
+            option->setBounds (stripInset + i * (optionWidth + optionGap), stripInset, optionWidth, optionHeight);
+            option->onClick = [this, picked = option->shown] {
+                if (slot != 0)
+                    editing.setShape (slot, picked);
+                closeStrip();
+                refresh();
+            };
+            made->addAndMakeVisible (*made->options.add (option.release()));
+        }
+        strip = std::move (made);
+        strip->setSize (2 * stripInset + parameters::shapeNames().size() * (optionWidth + optionGap) - optionGap, 2 * stripInset + optionHeight);
+        strip->addMouseListener (this, true);
+    }
+    layer->addAndMakeVisible (*strip);
+    strip->toFront (false);
+    const auto current = editing.band (slot).shape;
+    for (auto* child : strip->getChildren())
+        if (auto* option = dynamic_cast<ShapeChoice*> (child))
+        {
+            option->marked = option->shown == current;
+            option->iconColour = option->marked ? bandColour() : colour::text2;
+            option->repaint();
+        }
+    placeStrip();
+    shape->marked = true;
+    shape->repaint();
+}
+
+void HoverCard::closeStrip()
+{
+    if (strip == nullptr)
+        return;
+    strip->setVisible (false);
+    shape->marked = false;
+    shape->repaint();
+}
+
+void HoverCard::placeStrip()
+{
+    if (shapeStrip() == nullptr)
+        return;
+    const auto cardArea = body();
+    const int width = strip->getWidth(), height = strip->getHeight();
+    const int x = juce::jlimit (within.getX() + card::inset, std::max (within.getX() + card::inset, within.getRight() - card::inset - width), cardArea.getX());
+    const bool room = cardArea.getBottom() + stripGap + height <= within.getBottom() - card::inset;
+    strip->setTopLeftPosition (x, room ? cardArea.getBottom() + stripGap : cardArea.getY() - stripGap - height);
+}
+
+void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<int> display)
+{
+    within = display;
     if (newSlot != slot)
         attach (newSlot);
     else if (isFrozen())
@@ -221,6 +340,7 @@ void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<in
                              area.getX()));
     const float newTipX = handle.x - static_cast<float> (area.getX() - margin);
     setBounds (area.expanded (margin));
+    placeStrip();
     if (! juce::approximatelyEqual (newTipX, tipX))
     {
         tipX = newTipX;
@@ -233,6 +353,7 @@ void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<in
 void HoverCard::hide()
 {
     attach (0);
+    closeStrip();
     pointerOver = false;
     setVisible (false);
 }
@@ -268,6 +389,8 @@ void HoverCard::attach (int newSlot)
     bypass.setTitle (band + " Bypass");
     deleteButton.setTitle ("Delete " + band);
     more.setTitle (band + " menu");
+    shape->setTitle (band + " Shape");
+    closeStrip();
     fade.jump (editing.band (slot).bypass ? card::bypassedAlpha : 1.0f);
     repaint();
 }
@@ -278,6 +401,12 @@ void HoverCard::refresh()
         return;
     const auto band = editing.band (slot);
     bypass.setToggleState (band.bypass, juce::dontSendNotification);
+    if (shape->shown != band.shape || shape->iconColour != bandColour())
+    {
+        shape->shown = band.shape;
+        shape->iconColour = bandColour();
+        shape->repaint();
+    }
     // Gain's place shows a Cut's Slope, or that the Shape has no Gain.
     gain->setEnabled (hasGain (band.shape));
     gain->readOnlyText = isCut (band.shape) ? slopeText (band.slope, band.brickwall) : "No Gain";
@@ -331,6 +460,7 @@ void HoverCard::resized()
     auto left = area.removeFromLeft (leftColumn);
     auto right = area.removeFromRight (rightColumn);
     bypass.setBounds (left.removeFromTop (button).withSizeKeepingCentre (button, button));
+    shape->setBounds (left.removeFromBottom (shapeHeight).withSizeKeepingCentre (shapeWidth, shapeHeight));
     deleteButton.setBounds (right.removeFromTop (button));
     more.setBounds (right.removeFromBottom (button));
     auto middle = area.withTrimmedLeft (columnGap).withWidth (valuesWidth);

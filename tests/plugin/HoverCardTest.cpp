@@ -1,5 +1,6 @@
 #include "EditorHarness.h"
 #include "HoverCard.h"
+#include "Parameters.h"
 #include "staple/controls/IconButton.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -450,4 +451,57 @@ TEST_CASE ("On a Cut the Hover Card shows its Slope in Gain's place, on other ga
     CHECK_THAT (frequency.getAlpha(), WithinAbs (0.38, 1.0e-3));
     CHECK (frequency.isEnabled());
     CHECK (control (card, "Band 4 Bypass").getAlpha() == 1.0f);
+}
+
+TEST_CASE ("The Hover Card's Shape opens a strip of every Shape under the card, which sets its Band's Shape as one undo step and keeps the card up")
+{
+    CardOnBand4 f;
+    auto& host = f.host;
+    auto& card = *f.card;
+    auto& history = host.processor.editHistory();
+    auto& shape = control<juce::Button> (card, "Band 4 Shape");
+    CHECK_FALSE (shape.getWantsKeyboardFocus());
+
+    shape.onClick();
+    auto* strip = card.shapeStrip();
+    REQUIRE (strip != nullptr);
+    REQUIRE (strip->isVisible());
+    CHECK (card.isHeld());
+    const auto inDisplay = [&] (juce::Rectangle<int> r) { return host.display.getLocalArea (card.getParentComponent(), r); };
+    const auto stripArea = inDisplay (strip->getBoundsInParent());
+    CHECK (stripArea.getY() == inDisplay (card.body()).getBottom() + 6);
+    CHECK (stripArea.getHeight() == 28 + 2 * 4);
+    std::vector<juce::String> names;
+    for (auto* child : strip->getChildren())
+    {
+        CHECK (child->getWidth() == 32);
+        CHECK (child->getHeight() == 28);
+        CHECK_FALSE (child->getWantsKeyboardFocus());
+        names.push_back (child->getTitle());
+    }
+    CHECK (names == std::vector<juce::String> (eq1::parameters::shapeNames().begin(), eq1::parameters::shapeNames().end()));
+
+    const int steps = history.undoSteps();
+    auto* notch = harness::findChild<juce::Button> (*strip, [] (juce::Button& b) { return b.getTitle() == "Notch"; });
+    REQUIRE (notch != nullptr);
+    notch->onClick();
+    CHECK (host.value (4, "shape") == static_cast<float> (eq1::Shape::Notch));
+    CHECK (host.value (2, "shape") == static_cast<float> (eq1::Shape::Bell));
+    CHECK (history.undoSteps() == steps + 1);
+    CHECK_FALSE (strip->isVisible());
+    CHECK (host.display.selection() == std::set<int> { 2, 4 });
+}
+
+TEST_CASE ("The Hover Card's Shape strip opens above the card when there is no room under it")
+{
+    OpenEditor host;
+    host.addBand (4, 1000.0f, -12.0f);
+    host.settle();
+    rest (host, host.at (1000.0, -12.0));
+    host.settle (400);
+    auto& card = cardOf (host);
+    REQUIRE (card.shownSlot() == 4);
+    control<juce::Button> (card, "Band 4 Shape").onClick();
+    REQUIRE (card.shapeStrip() != nullptr);
+    CHECK (card.shapeStrip()->getBottom() == card.body().getY() - 6);
 }
