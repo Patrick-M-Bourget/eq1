@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "staple/controls/Knob.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -342,4 +343,25 @@ TEST_CASE ("Each Clip Light reads Lit or Off, and pressing either puts out both"
     REQUIRE (left->getActions().invoke (juce::AccessibilityActionType::press));
     CHECK_FALSE (host.processor.isClipLit (1));
     CHECK (host.element ("Clip Light Right").value == "Off");
+}
+
+TEST_CASE ("A Staple Knob described by its parameter reads, and shows in its tooltip, the name and the value with its unit")
+{
+    Editor host;
+    staple::Knob knob (staple::tokens::knob::gain);
+    juce::SliderParameterAttachment attachment (host.parameter ("band4_gain"), knob);
+    knob.describe (host.parameter ("band4_gain"));
+    juce::Component window;
+    window.setBounds (0, 0, 200, 200);
+    window.addAndMakeVisible (knob);
+    knob.setBounds (10, 10, knob.getIdealSize(), knob.getIdealSize());
+    window.addToDesktop (0);
+    host.set (4, "gain", 3.5f);
+
+    auto* handler = knob.getAccessibilityHandler();
+    REQUIRE (handler != nullptr);
+    CHECK (handler->getTitle() == "Band 4 Gain");
+    CHECK (handler->getValueInterface()->getCurrentValueAsString() == "+3.50 dB");
+    CHECK (knob.tooltipTitle() == "Band 4 Gain");
+    CHECK (knob.tooltipValue() == "+3.50 dB");
 }

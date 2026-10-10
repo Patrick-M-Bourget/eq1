@@ -59,7 +59,8 @@ public:
     juce::Point<float> getFaceCentre() const;
     float getFaceRadius() const { return diameter / 2.0f; }
 
-    // What the tooltip shows: the title (#48's, or the name) and the value text with its unit.
+    // What the tooltip shows: the title (#48's, or the name) and the value text with its unit, as a
+    // screen reader reads it (KeyboardSlider::describe), else its text.
     juce::String tooltipTitle() const;
     juce::String tooltipValue();
     bool isTooltipShown() const;

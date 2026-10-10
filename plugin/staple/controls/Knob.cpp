@@ -272,7 +272,7 @@ void Knob::parentHierarchyChanged()
 //==============================================================================
 juce::String Knob::tooltipTitle() const { return getTitle().isNotEmpty() ? getTitle() : getName(); }
 
-juce::String Knob::tooltipValue() { return getTextFromValue (getValue()); }
+juce::String Knob::tooltipValue() { return spokenValue != nullptr ? spokenValue (getValue()) : getTextFromValue (getValue()); }
 
 bool Knob::isTooltipShown() const { return tooltip != nullptr && tooltip->isVisible() && tooltip->getParentComponent() != nullptr; }
 
