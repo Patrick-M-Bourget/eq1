@@ -16,7 +16,7 @@ Files in this folder:
 |---|---|
 | `HANDOFF.md` | This brief |
 | `tokens.json` | All design tokens (colour, type, radius, motion, band palette) |
-| `StapleTokens.h` | The same tokens as `juce::Colour` / float constants, ready to include |
+| `plugin/staple/Tokens.h` (in the build, moved from this folder) | The same tokens as `juce::Colour` / float constants, ready to include |
 | `logo.png` | Current logo (183 × 114 source — request an SVG before release) |
 | `prototype/` | Snapshot of the prototype source (`Main.dc.html`, `DesignSystem.dc.html`, `tokens.css`) for reading exact values, icon paths and behaviour. Reference only — do not port. |
 
@@ -47,7 +47,7 @@ header; *eq1* is the build's codename.
    disabled controls dim to 35 % instead of disappearing.
 4. **One font:** Manrope (bundle it as BinaryData; do not rely on system fonts). All numbers use tabular figures
    (`juce::FontOptions` with the `tnum` feature, or a tabular cut) so values never jitter.
-5. **Every value comes from `StapleTokens.h`.** No hard-coded colours in components.
+5. **Every value comes from `plugin/staple/Tokens.h`.** No hard-coded colours in components.
 
 ## 2. Suggested JUCE architecture
 
@@ -160,7 +160,7 @@ saved on it — the header then reads "No preset" in `text3`). When a side's set
 **Analyzer** (UI state): sources Pre / Post / Sidechain, Range 60 / 90 / 120 dB, Resolution low/medium/high,
 Speed slow/medium/fast, **Analyzer Tilt** off/3/4.5/6 dB/oct, Peak hold on, Freeze off.
 
-## 4. Visual spec (reference tokens by name — see `StapleTokens.h`)
+## 4. Visual spec (reference tokens by name — see `plugin/staple/Tokens.h`)
 
 **Window:** `bg0` with three very soft neutral radial highlights (no hue). 14 px outer padding.
 
@@ -260,7 +260,7 @@ value (`fs4`, `text1`). Shows *Dynamic Range* when the pointer is over the ring.
 ### 5.8 Band colours
 24 slots: hue order `[7,1,4,10,6,0,9,2,8,3,11,5] × 30° + 25°` → blue, orange, green, magenta, cyan, red, violet,
 yellow, indigo, lime, pink, teal; `oklch(0.77 0.125 h)`. Slots 12–23 repeat lighter: `oklch(0.84 0.095 h+15°)`.
-Pre-computed sRGB values are in `tokens.json` / `StapleTokens.h`.
+Pre-computed sRGB values are in `tokens.json` / `plugin/staple/Tokens.h`.
 
 ### 5.9 Auto-zoom
 When any Band's Gain (× Gain Scale) exceeds the display range, step the range up to the smallest option that fits
@@ -371,7 +371,7 @@ Throttle expensive repaints during an active resize drag.
 - [ ] A UI-control → parameter-ID mapping table exists; every mismatch with the DSP is listed for the DSP author, none invented.
 - [ ] Every drag is wrapped in a change gesture (host automation writes one clean ramp per drag).
 - [ ] Side-by-side with the prototype at 1×: Band panel, knobs, Band handles, header, footer match within 1–2 px.
-- [ ] No hard-coded colours outside `StapleTokens.h`.
+- [ ] No hard-coded colours outside `plugin/staple/Tokens.h`.
 - [ ] Panel width does not change when switching shapes/bands (only when the dynamics section opens).
 - [ ] Bypassed band: visible but greyed, excluded from sum and post spectrum; panel fades to 38 %.
 - [ ] Gain ring: red range, yellow live GR, flat lane; bypassing dynamics fades red to 30 % and hides yellow.

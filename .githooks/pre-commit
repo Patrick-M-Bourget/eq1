@@ -13,7 +13,7 @@ fi
 
 # Unstaged or untracked changes in what the build reads would be tested here but left out of the
 # commit, which could then fail to build on its own.
-unstaged=$(git status --porcelain=v1 --untracked-files=all -- engine plugin tests scripts cmake presets .githooks '*CMakeLists.txt' |
+unstaged=$(git status --porcelain=v1 --untracked-files=all -- engine plugin tests scripts cmake presets assets .githooks '*CMakeLists.txt' |
     grep -v '^. ' || true)
 if [ -n "$unstaged" ]; then
     echo "pre-commit: these differ from what is staged; stage them, or set them aside with a WIP commit:" >&2

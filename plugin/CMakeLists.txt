@@ -54,7 +54,8 @@ target_sources(eq1 PRIVATE
     OutputPanel.cpp
     OutputMeter.cpp
     PluginEditor.cpp
-    AnalyzerSpectrum.cpp)
+    AnalyzerSpectrum.cpp
+    staple/Fonts.cpp)
 
 # The Factory Presets, bundled into the plugin.
 juce_add_binary_data(eq1_factory_presets
@@ -67,6 +68,17 @@ juce_add_binary_data(eq1_factory_presets
         "${PROJECT_SOURCE_DIR}/presets/factory/Master Polish.eq1preset"
         "${PROJECT_SOURCE_DIR}/presets/factory/Vocal Presence.eq1preset")
 
+# Staple's one font, Manrope (SIL Open Font License 1.1, assets/fonts/OFL.txt), bundled so the editor
+# never falls back to a system font.
+juce_add_binary_data(eq1_staple_fonts
+    NAMESPACE StapleFonts
+    HEADER_NAME StapleFonts.h
+    SOURCES
+        ${PROJECT_SOURCE_DIR}/assets/fonts/manrope-regular.ttf
+        ${PROJECT_SOURCE_DIR}/assets/fonts/manrope-medium.ttf
+        ${PROJECT_SOURCE_DIR}/assets/fonts/manrope-semibold.ttf
+        ${PROJECT_SOURCE_DIR}/assets/fonts/manrope-bold.ttf)
+
 target_compile_definitions(eq1 PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
@@ -76,6 +88,7 @@ target_link_libraries(eq1
     PRIVATE
         eq1::engine
         eq1_factory_presets
+        eq1_staple_fonts
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
