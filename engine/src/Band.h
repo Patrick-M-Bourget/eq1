@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -40,7 +41,8 @@ public:
     // Processes the piece of the grid's run numbered run (counted by the Engine from prepare) from
     // position (0 to maxSubBlock - 1) on, numSamples long, at most to the run's end. A run's first
     // piece starts at position 0. A Band that missed the run's start (a detector with nothing to
-    // listen to for a while) plays at the filter last designed until the next run.
+    // listen to for a while) plays at the filter last designed until the next run; one that saw the
+    // start and misses a piece in the middle keeps gliding by position.
     void process (float* const* channels, int numChannels, std::uint64_t run, int position, int numSamples);
 
 private:
@@ -99,7 +101,7 @@ private:
     // The run in progress: the last one whose start the Band saw; whether the coefficients move over
     // it, and from what; where the last piece ended; and the Live Gain at its start and its end, for
     // liveGainDb().
-    static constexpr std::uint64_t noRun = UINT64_MAX;
+    static constexpr std::uint64_t noRun = std::numeric_limits<std::uint64_t>::max();
     std::uint64_t startedRun = noRun;
     bool runGliding = false;
     Cascade runFrom;

@@ -31,7 +31,7 @@ public:
     // unmetered, and the Band sounds the same metered or not.
     void setMetered (bool metered);
 
-    // Listens to the piece of the Engine's grid's run number run (Band::process) from position on,
+    // Listens to the piece of the grid's run numbered run (Band::process) from position on,
     // numSamples long, of the main input, or of the Sidechain (sidechainChannels 0 when none is connected).
     void hear (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, std::uint64_t run,
                int position, int numSamples);
