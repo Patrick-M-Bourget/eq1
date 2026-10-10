@@ -169,3 +169,24 @@ TEST_CASE ("With no peak within reach, the peak near a Frequency is that Frequen
 
     CHECK (spectrum.peakNear (1000.0) == 1000.0);
 }
+
+TEST_CASE ("Peak Hold holds a short burst's unsmoothed level, even at Very Slow, then falls at 6 dB/s")
+{
+    // On an FFT bin, so the burst reads its full level.
+    const double frequency = 43.0 * sampleRate / AnalyzerSpectrum::fftSize (sampleRate, AnalyzerResolution::medium);
+    AnalyzerSpectrum spectrum;
+    spectrum.prepare (sampleRate, AnalyzerResolution::medium);
+    play (spectrum, { { frequency, 1.0e-4 } }, 1.0, AnalyzerSpeed::verySlow);
+    play (spectrum, { { frequency, 1.0 } }, 0.1, AnalyzerSpeed::verySlow);
+
+    CHECK_THAT (spectrum.heldLevelDb (frequency, 0.0), WithinAbs (0.0, 0.5));
+    // The smoothed spectrum has barely moved toward it.
+    CHECK (spectrum.levelDb (frequency, 0.0) < -10.0);
+
+    // The burst leaves the FFT's frame within 2048 samples, 43 ms; from there the line falls.
+    play (spectrum, { { frequency, 1.0e-4 } }, 1.0, AnalyzerSpeed::verySlow);
+    CHECK_THAT (spectrum.heldLevelDb (frequency, 0.0), WithinAbs (-6.0 * (1.0 - 2048.0 / sampleRate), 0.5));
+    play (spectrum, { { frequency, 1.0e-4 } }, 1.0, AnalyzerSpeed::verySlow);
+    CHECK_THAT (spectrum.heldLevelDb (frequency, 0.0), WithinAbs (-6.0 * (2.0 - 2048.0 / sampleRate), 0.5));
+    CHECK (spectrum.heldLevelDb (frequency, 0.0) > spectrum.levelDb (frequency, 0.0));
+}
