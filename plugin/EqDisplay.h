@@ -3,6 +3,7 @@
 #include "AnalyzerSettings.h"
 #include "BandEditing.h"
 #include "AnalyzerSpectrum.h"
+#include "display/DisplayFrame.h"
 #include "display/DisplayGeometry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -61,6 +62,9 @@ public:
     // out on Shapes without one, then "Bypassed" and "Dynamic Band" when they apply.
     juce::String spokenBand (int slot) const;
 
+    // The selected Bands' slots.
+    const std::set<int>& selectedBands() const { return selected; }
+
 private:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     // A Band's place in Tab's order: an element at its handle that takes keyboard focus. The display
@@ -97,6 +101,9 @@ private:
     // The Gain a Band is drawn with: its Live Gain from the Engine while it is a Dynamic Band.
     double drawnGain (int slot, const BandSettings& band) const;
     int slotAt (juce::Point<float> position) const; // 0 when no handle is there
+    // What the layers draw this frame, and the Band whose filled curve is at a point, or 0.
+    display::DisplayFrame frame() const;
+    int bandAreaAt (juce::Point<float> position) const;
 
     void select (std::set<int> slots);
     void selectAll();
@@ -138,6 +145,8 @@ private:
     // How far the mouse moves before a press counts as a drag, in pixels.
     static constexpr int dragThreshold = 3;
     std::optional<juce::Rectangle<float>> marquee;
+    // A press on empty space: a drag past dragThreshold draws a marquee, a click selects by curve.
+    bool pressedOnEmpty = false, pressAdding = false;
     juce::Point<float> dragStart;
     int shownRangeDb = 0;
     juce::uint32 allInUseMessageUntil = 0; // shows "All 24 Bands are in use" until this time

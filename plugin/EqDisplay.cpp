@@ -313,7 +313,10 @@ bool EqDisplay::stepFades()
 
 void EqDisplay::mouseMove (const juce::MouseEvent& e)
 {
+    // A handle, or else a Band's filled curve.
     hoveredSlot = slotAt (e.position);
+    if (hoveredSlot == 0)
+        hoveredSlot = bandAreaAt (e.position);
 }
 
 void EqDisplay::mouseExit (const juce::MouseEvent&)
@@ -357,23 +360,33 @@ void EqDisplay::select (std::set<int> slots)
     repaint();
 }
 
+display::DisplayFrame EqDisplay::frame() const
+{
+    display::DisplayFrame result { .bands = shown,
+                                   .selected = selected,
+                                   .soloedSlot = soloedSlot,
+                                   .dragging = dragging,
+                                   .marquee = marquee,
+                                   .allInUseMessage = allInUseMessageUntil != 0,
+                                   // Before the host has prepared the plugin, the curves are drawn as at 48 kHz.
+                                   .sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                                   .mono = ! processor.isStereoPlacementAvailable(),
+                                   .hover = hoverFades,
+                                   .globalBypass = globalBypassFade };
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        result.drawnGains[static_cast<size_t> (slot - 1)] = drawnGain (slot, shown.bands[static_cast<size_t> (slot - 1)]);
+    return result;
+}
+
+int EqDisplay::bandAreaAt (juce::Point<float> position) const
+{
+    return display::bandAreaAt (geometry(), frame(), position);
+}
+
 void EqDisplay::paint (juce::Graphics& g)
 {
     const auto shape = geometry();
-    display::DisplayFrame frame { .bands = shown,
-                                  .selected = selected,
-                                  .soloedSlot = soloedSlot,
-                                  .dragging = dragging,
-                                  .marquee = marquee,
-                                  .allInUseMessage = allInUseMessageUntil != 0,
-                                  // Before the host has prepared the plugin, the curves are drawn as at 48 kHz.
-                                  .sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
-                                  .mono = ! processor.isStereoPlacementAvailable(),
-                                  .hover = hoverFades,
-                                  .globalBypass = globalBypassFade };
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-        frame.drawnGains[static_cast<size_t> (slot - 1)] = drawnGain (slot, shown.bands[static_cast<size_t> (slot - 1)]);
-
+    const auto frame = this->frame();
     g.fillAll (staple::tokens::colour::bg0);
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
@@ -412,9 +425,8 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
     }
     if (slot == 0)
     {
-        selectedBeforeMarquee = adding ? selected : std::set<int> {};
-        select (selectedBeforeMarquee);
-        marquee = juce::Rectangle<float> (e.position, e.position);
+        pressedOnEmpty = true;
+        pressAdding = adding;
         return;
     }
 
@@ -459,6 +471,11 @@ void EqDisplay::mouseDrag (const juce::MouseEvent& e)
         }
         grabFrequency.reset();
     }
+    if (pressedOnEmpty && ! marquee && e.getDistanceFromDragStart() > dragThreshold)
+    {
+        selectedBeforeMarquee = pressAdding ? selected : std::set<int> {};
+        marquee = juce::Rectangle<float> (dragStart, dragStart);
+    }
     if (marquee)
     {
         marquee = juce::Rectangle<float> (dragStart, e.position);
@@ -483,6 +500,16 @@ void EqDisplay::mouseDrag (const juce::MouseEvent& e)
 
 void EqDisplay::mouseUp (const juce::MouseEvent&)
 {
+    if (std::exchange (pressedOnEmpty, false) && ! marquee)
+    {
+        // A click: inside a Band's filled curve selects it (Shift or Cmd toggles it), on empty space
+        // clears the selection.
+        const int slot = bandAreaAt (dragStart);
+        auto toggled = pressAdding ? selected : std::set<int> {};
+        if (slot != 0 && ! toggled.erase (slot))
+            toggled.insert (slot);
+        select (toggled);
+    }
     if (dragging)
     {
         // The drag's Gain offset follows the mouse under the range it began with, so the range zooms

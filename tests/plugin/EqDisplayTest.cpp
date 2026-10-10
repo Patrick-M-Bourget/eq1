@@ -241,3 +241,92 @@ TEST_CASE ("The Display Range chip reads the range, sets it from its menu, follo
     host.settle (300);
     CHECK (chip->getButtonText() == pm + "12 dB");
 }
+
+TEST_CASE ("A click inside a Band's filled curve selects it, the smallest curve there winning, Bypassed Bands included; a click on empty space clears the selection")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 9.0f);
+    host.addBand (2, 1000.0f, 3.0f);
+    host.set (2, "bypass", 1.0f);
+    host.addBand (3, 100.0f, -6.0f);
+    host.settle();
+    const auto& selected = host.display.selectedBands();
+
+    // Inside both Bells: Band 2's, the smaller there, wins although it is Bypassed.
+    host.click (atDb (host, 1000.0, 1.5));
+    CHECK (selected == std::set<int> { 2 });
+    // Inside Band 1's alone, above Band 2's peak.
+    host.click (atDb (host, 1000.0, 6.0));
+    CHECK (selected == std::set<int> { 1 });
+    // Inside the cut, below 0 dB.
+    host.click (atDb (host, 100.0, -3.0));
+    CHECK (selected == std::set<int> { 3 });
+    // Above Band 1's peak, and below 0 dB under the Bells: empty space.
+    host.click (atDb (host, 1000.0, 11.0));
+    CHECK (selected.empty());
+    host.click (atDb (host, 100.0, -3.0));
+    host.click (atDb (host, 1000.0, -4.0));
+    CHECK (selected.empty());
+    // Where every curve is under 0.4 dB, none counts, even within 0.3 dB of 0 dB.
+    host.click (atDb (host, 15000.0, 0.1));
+    CHECK (selected.empty());
+}
+
+TEST_CASE ("A drag from empty space draws a marquee that selects the Bands inside it")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 100.0f, 0.0f);
+    host.addBand (2, 1000.0f, 0.0f);
+    host.addBand (3, 10000.0f, 0.0f);
+    host.settle();
+    host.drag (atDb (host, 50.0, 6.0), atDb (host, 2000.0, -6.0), juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
+    CHECK (host.display.selectedBands() == std::set<int> { 1, 2 });
+}
+
+TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its peak")
+{
+    OpenEditor host;
+    auto& processor = host.processor;
+    processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = true });
+    processor.prepareToPlay (48000.0, 512);
+    // A loud 1 kHz sine, so the spectrum's line peaks there.
+    double phase = 0.0;
+    for (int frame = 0; frame < 30; ++frame)
+    {
+        juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), 512);
+        juce::MidiBuffer midi;
+        for (int block = 0; block < 4; ++block)
+        {
+            for (int n = 0; n < 512; ++n, phase += 2.0 * juce::MathConstants<double>::pi * 1000.0 / 48000.0)
+                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                    buffer.setSample (ch, n, static_cast<float> (0.5 * std::sin (phase)));
+            processor.processBlock (buffer, midi);
+        }
+        host.settle (20);
+    }
+    // Down the display at 1 kHz until a press there grabs: only the spectrum's line does.
+    const auto x = host.at (1000.0).x;
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    for (float y = 20.0f; y < static_cast<float> (host.display.getHeight()) && host.value (1, "in_use") == 0.0f; y += 6.0f)
+        host.drag ({ x, y }, { x, y + 20.0f }, left);
+    REQUIRE (host.value (1, "in_use") == 1.0f);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 0.1f));
+    CHECK (host.display.selectedBands() == std::set<int> { 1 });
+}
+
+TEST_CASE ("Hovering inside a Band's filled curve lights it, as hovering its handle does")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 6.0f);
+    host.settle();
+    const auto fill = atDb (host, 1000.0, 3.0);
+    const auto blue = [&] { return colourAt (snapshot (host), fill).getFloatBlue(); };
+    const float resting = blue();
+    const auto inside = atDb (host, 1200.0, 2.0);
+    host.display.mouseMove (host.mouseEvent (inside, {}, inside));
+    host.settle (400);
+    CHECK (blue() > resting + 0.04f);
+}

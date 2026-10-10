@@ -121,6 +121,33 @@ void paintCurve (juce::Graphics& g, const juce::Path& line, const juce::Path& fi
 }
 } // namespace
 
+int bandAreaAt (const DisplayGeometry& geometry, const DisplayFrame& frame, juce::Point<float> point)
+{
+    constexpr double tolerance = 0.3, smallest = 0.4;
+    const double frequency = std::min (geometry.frequencyAt (point.x), 0.4999 * frame.sampleRate);
+    const double db = geometry.dbAt (point.y);
+    int found = 0;
+    double foundSize = 0.0;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        auto band = frame.bands.bands[static_cast<size_t> (slot - 1)];
+        if (! band.inUse)
+            continue;
+        band.gain = frame.drawnGains[static_cast<size_t> (slot - 1)];
+        double curve = 0.0;
+        bandResponseDb (band, &frequency, &curve, 1, frame.sampleRate);
+        if (std::abs (curve) < smallest)
+            continue;
+        const bool inside = curve > 0.0 ? db >= -tolerance && db <= curve + tolerance : db <= tolerance && db >= curve - tolerance;
+        if (inside && (found == 0 || std::abs (curve) < foundSize))
+        {
+            found = slot;
+            foundSize = std::abs (curve);
+        }
+    }
+    return found;
+}
+
 void paintCurves (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame)
 {
     const double sampleRate = frame.sampleRate;
