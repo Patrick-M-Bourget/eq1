@@ -235,10 +235,10 @@ TEST_CASE ("The browser lists Factory, then the User folder's Presets, then its 
         CHECK (entry.file.getFileNameWithoutExtension() == entry.name);
     }
 
-    // The User Presets' files in the same order, a file with a Preset's name that doesn't read as one included.
+    // The User Presets' files in the same order (with / between folders on every OS), a file with a Preset's name that doesn't read as one included.
     juce::StringArray files;
     for (const auto& file : library.userPresets())
-        files.add (file.getRelativePathFrom (user.folder).upToLastOccurrenceOf (PresetLibrary::fileExtension, false, false));
+        files.add (file.getRelativePathFrom (user.folder).replaceCharacter ('\\', '/').upToLastOccurrenceOf (PresetLibrary::fileExtension, false, false));
     CHECK (files == juce::StringArray ({ "A", "b", "broken", "bass/Sub", "Drums/kick", "Drums/Snare", "Drums/Acoustic/Room" }));
 }
 
