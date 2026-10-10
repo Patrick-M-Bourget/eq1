@@ -1,5 +1,6 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "staple/Fonts.h"
 #include "staple/LookAndFeel.h"
 #include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
@@ -7,6 +8,7 @@
 #include "staple/controls/KnobTooltip.h"
 #include "staple/controls/ParseValue.h"
 #include "staple/controls/Popover.h"
+#include "staple/controls/TextChip.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -473,4 +475,25 @@ TEST_CASE ("A Popover opens above its opener where there is no room below")
     popover.open (opener);
     REQUIRE (popover.isOpen());
     CHECK (popover.getCardBounds().translated (popover.getX(), popover.getY()).getBottom() <= opener.getY());
+}
+
+TEST_CASE ("A TextChip clicks as a Button, and is as wide as its text, padding and chevron")
+{
+    Kit kit;
+    staple::TextChip range ("12 dB", staple::TextChip::Look::filled);
+    staple::TextChip plain ("Copy", staple::TextChip::Look::plain);
+    range.setChevron (true);
+    kit.add (range, { 10, 10, range.getIdealWidth(), 22 });
+    int clicks = 0;
+    range.onClick = [&] { ++clicks; };
+    Kit::click (range);
+    CHECK (clicks == 1);
+
+    const float text = juce::GlyphArrangement::getStringWidth (staple::font (staple::tokens::size::fs3, staple::Weight::medium), "Copy");
+    CHECK (plain.getIdealWidth() >= static_cast<int> (text) + 12);
+    CHECK (range.getIdealWidth() > plain.getIdealWidth());
+    range.setChevron (false);
+    const int withoutChevron = range.getIdealWidth();
+    range.setChevron (true);
+    CHECK (range.getIdealWidth() >= withoutChevron + 8);
 }

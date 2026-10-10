@@ -65,6 +65,7 @@ target_sources(eq1 PRIVATE
     staple/controls/Overlay.cpp
     staple/controls/ParseValue.cpp
     staple/controls/Popover.cpp
+    staple/controls/TextChip.cpp
     KeyboardSlider.cpp)
 
 # The Factory Presets, bundled into the plugin.
