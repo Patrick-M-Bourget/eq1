@@ -107,7 +107,6 @@ namespace size
     constexpr float iconStroke = 1.5f;
     constexpr float iconGrid = 16.0f;
     constexpr float focusWidth = 2.0f, focusOffset = 2.0f;
-    constexpr int windowWidth = 1200, windowHeight = 760;
 } // namespace size
 
 // The window and its areas at 100 % UI scale (HANDOFF.md §2, §4, §9).
@@ -116,7 +115,10 @@ namespace layout
     constexpr int outerPadding = 14, gap = 12;
     constexpr int headerHeight = 52, footerHeight = 44, meterWidth = 40;
     constexpr int displayWidth = 1134, displayWidthWithoutMeter = 1186, displayHeight = 612;
-    constexpr int minimumWidth = 960, minimumHeight = 600;
+    // A new editor's window; it resizes between the minimum, below which the Band panel would collide
+    // with the Frequency labels, and the maximum.
+    constexpr int windowWidth = 1200, windowHeight = 760;
+    constexpr int minimumWidth = 960, minimumHeight = 600, maximumWidth = 2560, maximumHeight = 1600;
     // The display's edges dissolve over these distances (grid, Analyzer and curve fills only).
     constexpr float fadeTop = 18.0f, fadeBottom = 84.0f, fadeLeft = 36.0f, fadeRight = 56.0f;
     // Below this display width the grid drops its minor lines and every other Frequency label.

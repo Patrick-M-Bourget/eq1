@@ -7,6 +7,7 @@
 #include "Parameters.h"
 #include "UiScale.h"
 #include "UserSettings.h"
+#include "staple/Tokens.h"
 #include "eq1/Engine.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -183,8 +184,7 @@ private:
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
     std::atomic<bool> outputMeterShown { true };
-    static constexpr int newEditorWidth = 1200, newEditorHeight = 760;
-    std::atomic<int> editorWidth { newEditorWidth }, editorHeight { newEditorHeight };
+    std::atomic<int> editorWidth { staple::tokens::layout::windowWidth }, editorHeight { staple::tokens::layout::windowHeight };
     std::atomic<int> uiScale { 0 }; // 0 until the instance has one
     UserSettings userSettings;
     // The heard Gains at the editor's last look, or as a session restored them: not saved, and kept

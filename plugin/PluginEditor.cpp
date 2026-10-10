@@ -60,8 +60,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
 void PluginEditor::applyUiScale()
 {
-    // In logical pixels: below the minimum the Band panel would collide with the frequency labels.
-    constexpr int minimumWidth = layout::minimumWidth, minimumHeight = layout::minimumHeight, maximumWidth = 2560, maximumHeight = 1600;
+    // In logical pixels.
+    using layout::minimumWidth, layout::minimumHeight, layout::maximumWidth, layout::maximumHeight;
     const auto stored = eqProcessor.editorSize();
     const juce::Point<int> size { juce::jlimit (minimumWidth, maximumWidth, stored.x), juce::jlimit (minimumHeight, maximumHeight, stored.y) };
     const int percent = eqProcessor.uiScalePercent();

@@ -249,7 +249,8 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         setOutputMeterShown (state.getProperty (outputMeterShownProperty, true));
         state.removeProperty (outputMeterShownProperty, nullptr);
         // A session saved before them opens like a new instance.
-        setEditorSize ({ state.getProperty (editorWidthProperty, newEditorWidth), state.getProperty (editorHeightProperty, newEditorHeight) });
+        setEditorSize ({ state.getProperty (editorWidthProperty, staple::tokens::layout::windowWidth),
+                         state.getProperty (editorHeightProperty, staple::tokens::layout::windowHeight) });
         const int percent = state.getProperty (uiScaleProperty, 0);
         uiScale = uiScale::isOffered (percent) ? percent : 0;
         for (const auto& property : { editorWidthProperty, editorHeightProperty, uiScaleProperty })
