@@ -10,7 +10,7 @@ Real-time EQ plugin (VST3, AU, AAX, CLAP and Standalone) for macOS Universal and
 
 ## Build and test
 
-`scripts/check.sh` runs everything CI runs:
+`scripts/check.sh` runs everything CI runs on main (a pull request skips ThreadSanitizer and macOS plugin validation):
 - checks that every doc section cited in code exists;
 - builds every format (macOS Universal or Windows x64);
 - runs the Engine and Plugin Shell tests;
