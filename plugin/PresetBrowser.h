@@ -2,6 +2,8 @@
 
 #include "PresetLibrary.h"
 #include "staple/controls/IconButton.h"
+#include "staple/controls/TextChip.h"
+#include "staple/controls/Tween.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -24,7 +26,7 @@ namespace eq1
 // the Presets button when it was opened from there by keyboard, the display after a click on it (so
 // Delete still reaches the display), or the Presets button when nothing had focus;
 // while it is open, Tab stays within it.
-class PresetBrowser final : public juce::Component, private juce::ListBoxModel, private juce::Timer
+class PresetBrowser final : public juce::Component, private juce::ListBoxModel
 {
 public:
     explicit PresetBrowser (const PresetLibrary& library);
@@ -78,12 +80,6 @@ private:
     {
         void paint (juce::Graphics& g) override;
     };
-    // A plain text button: the footer's actions.
-    struct TextAction final : juce::Button
-    {
-        explicit TextAction (const juce::String& text); // named by its text
-        void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
-    };
     // A folder in the folder column: its name, a dot when it holds the Loaded Preset, and its count.
     struct FolderRow final : juce::Button
     {
@@ -108,7 +104,6 @@ private:
         bool keyPressed (const juce::KeyPress& key) override;
     };
 
-    void timerCallback() override; // the pop-in
     void showRows();
     void showFolders();
     bool isSearching() const;
@@ -137,7 +132,7 @@ private:
     std::vector<const PresetLibrary::Entry*> rows;
     juce::String loaded, selectedFolder = "Factory";
     std::optional<PresetLibrary::Entry> lastLoaded;
-    double openedAt = 0.0;
+    staple::Tween opening { staple::tokens::motion::dur2Ms, 1.0f }; // the pop-in
     juce::Component::SafePointer<juce::Component> focusBefore; // given focus back on closing
 
     Panel panel { *this };
@@ -149,8 +144,10 @@ private:
     juce::Component folderColumn;
     std::vector<std::unique_ptr<FolderRow>> folderRows;
     juce::ListBox list { {}, this };
-    TextAction save { juce::String::fromUTF8 ("Save as\xe2\x80\xa6") }, loadFile { juce::String::fromUTF8 ("Load Preset File\xe2\x80\xa6") },
-        showFolder { "Show User Presets Folder" };
+    // The footer's actions: plain chips in text1 at 400, each named by its text.
+    staple::TextChip save { juce::String::fromUTF8 ("Save as\xe2\x80\xa6"), staple::TextChip::Look::plain, staple::tokens::size::fs3, staple::Weight::regular },
+        loadFile { juce::String::fromUTF8 ("Load Preset File\xe2\x80\xa6"), staple::TextChip::Look::plain, staple::tokens::size::fs3, staple::Weight::regular },
+        showFolder { "Show User Presets Folder", staple::TextChip::Look::plain, staple::tokens::size::fs3, staple::Weight::regular };
     Field nameField;
 };
 

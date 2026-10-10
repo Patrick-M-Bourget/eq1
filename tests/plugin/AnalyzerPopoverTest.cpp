@@ -15,7 +15,7 @@ struct Analyzer : harness::OpenEditor
 {
     eq1::FooterBar& footer = *harness::findChild<eq1::FooterBar> (*editor);
     eq1::AnalyzerButton& button = *harness::findChild<eq1::AnalyzerButton> (*editor);
-    eq1::AnalyzerPopover& popover = footer.analyzerPopover();
+    eq1::AnalyzerPopover& popover = footer.getAnalyzerPopover();
 
     template <typename T>
     T& titled (const juce::String& title)
@@ -26,32 +26,12 @@ struct Analyzer : harness::OpenEditor
         return *found.front();
     }
 
-    static juce::MouseEvent mouse (juce::Component& component, juce::Point<float> position, juce::ModifierKeys mods)
-    {
-        const auto now = juce::Time::getCurrentTime();
-        return { juce::Desktop::getInstance().getMainMouseSource(),
-                 position,
-                 mods,
-                 juce::MouseInputSource::defaultPressure,
-                 juce::MouseInputSource::defaultOrientation,
-                 juce::MouseInputSource::defaultRotation,
-                 juce::MouseInputSource::defaultTiltX,
-                 juce::MouseInputSource::defaultTiltY,
-                 &component,
-                 &component,
-                 now,
-                 position,
-                 now,
-                 1,
-                 false };
-    }
-
     // A left-click in the middle of component.
     static void click (juce::Component& component)
     {
         const auto centre = component.getLocalBounds().toFloat().getCentre();
-        component.mouseDown (mouse (component, centre, juce::ModifierKeys::leftButtonModifier));
-        component.mouseUp (mouse (component, centre, {}));
+        component.mouseDown (harness::mouseEvent (component, centre, juce::ModifierKeys::leftButtonModifier));
+        component.mouseUp (harness::mouseEvent (component, centre, {}));
     }
 
     void open()
@@ -115,7 +95,7 @@ TEST_CASE ("The Analyzer button opens its popover above it, left-aligned to it, 
     CHECK (host.display.hasKeyboardFocus (false));
 
     host.open();
-    host.popover.mouseDown (Analyzer::mouse (host.display, { 20.0f, 20.0f }, juce::ModifierKeys::leftButtonModifier));
+    host.popover.mouseDown (harness::mouseEvent (host.display, { 20.0f, 20.0f }, juce::ModifierKeys::leftButtonModifier));
     CHECK_FALSE (host.popover.isOpen());
     host.open();
 }
@@ -314,22 +294,14 @@ TEST_CASE ("The popover shows settings restored with the session, and the sessio
     CHECK (host.button.getButtonText() == "Post");
 }
 
-// Renders the Analyzer popover for checking by hand against the prototype: EQ1_ANALYZER_SNAPSHOT=<path>
-// writes the window's bottom left at 2x with the popover open.
+// Renders the Analyzer popover for checking by hand against the prototype (harness::writeSnapshot):
+// analyzer, the window's bottom left at 2x with the popover open.
 TEST_CASE ("Analyzer popover snapshot", "[.screens]")
 {
-    const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_ANALYZER_SNAPSHOT", {});
     Analyzer host;
     host.settle (300);
     host.open();
     host.settle (300);
     const auto area = host.editor->getLocalBounds().removeFromBottom (340).removeFromLeft (520);
-    const auto image = host.editor->createComponentSnapshot (area, true, 2.0f);
-    CHECK (image.isValid());
-    if (path.isEmpty())
-        return;
-    juce::File file (path);
-    file.deleteFile();
-    juce::FileOutputStream stream (file);
-    juce::PNGImageFormat().writeImageToStream (image, stream);
+    harness::writeSnapshot (*host.editor, "analyzer", area);
 }

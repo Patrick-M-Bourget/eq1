@@ -21,7 +21,6 @@ namespace
 
 const juce::KeyPress left (juce::KeyPress::leftKey), right (juce::KeyPress::rightKey), up (juce::KeyPress::upKey),
     down (juce::KeyPress::downKey);
-juce::KeyPress withShift (juce::KeyPress key) { return { key.getKeyCode(), juce::ModifierKeys::shiftModifier, 0 }; }
 
 // The editor with a dynamic Low Shelf in Band 1 on a Free Detection Range, selected, so the Band panel,
 // its dynamics section and the Detection Range bar show every control.
@@ -94,11 +93,11 @@ void checkArrowSteps (OpenEditor& host, const std::vector<juce::Slider*>& slider
         CHECK (host.press (down));
         CHECK_THAT (position(), WithinAbs (std::max (0.0, start - 0.01), 1.0e-4));
         const double lowered = position();
-        CHECK (host.press (withShift (right)));
+        CHECK (host.press (harness::withShift (right)));
         CHECK_THAT (position(), WithinAbs (lowered + 0.002, 1.0e-4));
         CHECK (host.press (up));
         CHECK_THAT (position(), WithinAbs (std::min (1.0, lowered + 0.012), 1.0e-4));
-        CHECK (host.press (withShift (left)));
+        CHECK (host.press (harness::withShift (left)));
         CHECK_THAT (position(), WithinAbs (std::min (1.0, lowered + 0.012) - 0.002, 1.0e-4));
 
         // At the top of its range, a step up stays there.
@@ -142,7 +141,7 @@ TEST_CASE ("Threshold steps from 0 dB into Auto, its top position, and from Auto
     host.press (up);
     CHECK_THAT (host.value (1, "threshold"), WithinAbs (0.0, 1.0e-4));
     CHECK (host.value (1, "threshold_auto") == 0.0f);
-    host.press (withShift (up));
+    host.press (harness::withShift (up));
     CHECK (host.value (1, "threshold_auto") == 1.0f);
 }
 
@@ -441,13 +440,13 @@ TEST_CASE ("A focused Band moves a semitone or 0.5 dB per arrow, 0.1 semitone or
     CHECK (host.press (left));
     CHECK (host.press (left));
     CHECK_THAT (host.value (1, "frequency"), WithinAbs (1000.0 / semitone, 0.01));
-    CHECK (host.press (withShift (right)));
+    CHECK (host.press (harness::withShift (right)));
     CHECK_THAT (host.value (1, "frequency"), WithinAbs (1000.0 / semitone * std::pow (2.0, 0.1 / 12.0), 0.01));
 
     CHECK (host.press (up));
     CHECK_THAT (host.value (1, "gain"), WithinAbs (3.5, 1.0e-4));
     CHECK (host.press (down));
-    CHECK (host.press (withShift (down)));
+    CHECK (host.press (harness::withShift (down)));
     CHECK_THAT (host.value (1, "gain"), WithinAbs (2.95, 1.0e-4));
 }
 
@@ -490,7 +489,7 @@ TEST_CASE ("Each arrow press on a Band is one undo step, and so is a held key wi
     host.press (up);
     CHECK (history.undoSteps() == steps + 2);
     for (int repeat = 0; repeat < 5; ++repeat)
-        host.hold (withShift (left));
+        host.hold (harness::withShift (left));
     host.release();
     CHECK (history.undoSteps() == steps + 3);
 
@@ -625,7 +624,7 @@ TEST_CASE ("Every control Tab reaches has a focus ring, which Tab shows")
     CHECK (host.press (tab));
     CHECK (stapleOf (host).isFocusRingShown());
     CHECK (bandElement (host, 1).hasKeyboardFocus (false));
-    host.press (withShift (tab));
+    host.press (harness::withShift (tab));
     CHECK (host.display.hasKeyboardFocus (false));
 }
 
@@ -636,7 +635,7 @@ TEST_CASE ("With nothing focused, Tab focuses the first control and Shift+Tab th
     host.press (tab);
     CHECK (named<juce::Button> (host, "Previous Preset").hasKeyboardFocus (false));
     juce::Component::unfocusAllComponents();
-    host.press (withShift (tab));
+    host.press (harness::withShift (tab));
     CHECK (named<juce::Button> (host, "UI Scale").hasKeyboardFocus (false));
 }
 

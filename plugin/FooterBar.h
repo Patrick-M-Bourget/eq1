@@ -6,6 +6,7 @@
 #include "Parameters.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/TextChip.h"
+#include "staple/controls/Tween.h"
 
 #include "eq1/Settings.h"
 
@@ -65,7 +66,6 @@ public:
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
 
 private:
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     bool notApplied = false, open = false;
 };
 
@@ -107,16 +107,15 @@ public:
     std::function<void (int)> onUiScalePicked;
     // After the Output Meter's toggle shows or hides it.
     std::function<void()> onMeterToggled;
-    // The UI Scale, and whether the Output Meter is shown, as the processor holds them.
+    // The UI Scale as the processor holds it.
     void showUiScale (int percent);
-    void showMeterShown (bool shown);
 
     // Toggles Global Bypass as a click on its button does (Cmd/Ctrl+B).
     void toggleGlobalBypass();
     bool isBypassedLabelShown() const { return bypassedShown; }
 
-    OutputPopover& outputPopover() { return popover; }
-    AnalyzerPopover& analyzerPopover() { return analyzerSettings; }
+    OutputPopover& getOutputPopover() { return outputPopover; }
+    AnalyzerPopover& getAnalyzerPopover() { return analyzerPopover; }
 
 private:
     void timerCallback() override;
@@ -137,8 +136,7 @@ private:
     std::unique_ptr<SliderAttachment> gainScaleAttachment;
     std::unique_ptr<ButtonAttachment> globalBypassAttachment;
     bool bypassedShown = false;
-    float bypassedAlpha = 0.0f;
-    double bypassedSince = 0.0;
+    staple::Tween bypassedFade { staple::tokens::motion::dur2Ms, 0.0f }; // "Bypassed" fading in
     std::vector<parameters::SlotValues> slotValues;
     parameters::OutputValues outputValues;
     // Auto Gain's estimate, and the settings it was worked out for.
@@ -147,8 +145,8 @@ private:
     bool estimated = false;
 
     // Hidden children of the footer while closed.
-    AnalyzerPopover analyzerSettings;
-    OutputPopover popover;
+    AnalyzerPopover analyzerPopover;
+    OutputPopover outputPopover;
 };
 
 } // namespace eq1

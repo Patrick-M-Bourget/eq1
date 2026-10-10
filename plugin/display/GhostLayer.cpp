@@ -62,7 +62,7 @@ std::vector<Label> fadedForGhost (std::vector<Label> labels, const DisplayGeomet
 
 void paintGhost (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost& ghost, double sampleRate, float alpha)
 {
-    const auto white = colour::handleSelectedRing;
+    const auto white = colour::sheen;
     const float x = ghost.x, height = static_cast<float> (geometry.height);
 
     // The line at its Frequency.

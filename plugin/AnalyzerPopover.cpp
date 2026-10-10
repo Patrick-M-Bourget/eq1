@@ -1,9 +1,9 @@
 #include "AnalyzerPopover.h"
 
-#include "Accessibility.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
+#include "staple/Light.h"
 #include "staple/LookAndFeel.h"
 
 #include <array>
@@ -16,15 +16,14 @@ namespace
 {
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
-namespace motion = staple::tokens::motion;
 
 constexpr int cardWidth = 260, padding = 10, gap = 10;
 constexpr int sourceHeight = 28, sourcePadding = 2, sourceGap = 4, rowHeight = 28, rowPadding = 8, peakHoldHeight = 30;
 constexpr int numRows = 4;
 constexpr int cardHeight = padding + sourceHeight + 2 * sourcePadding + gap + numRows * rowHeight + gap + 1 + gap + peakHoldHeight + padding;
 constexpr float dotSize = 5.0f, dotGap = 7.0f;
-constexpr int buttonMinimumWidth = 92, buttonPaddingLeft = 12, buttonPaddingRight = 10, chevronSize = 10, chevronGap = 10;
-constexpr float chevronAlpha = 0.6f;
+constexpr int buttonMinimumWidth = 92;
+constexpr float buttonPaddingLeft = 12.0f, buttonPaddingRight = 10.0f;
 
 // Analyzer Tilt's listed values, which a click cycles through; the arrow keys step it by tiltStep.
 constexpr std::array<double, 4> listedTilts { 0.0, 3.0, 4.5, 6.0 };
@@ -32,8 +31,6 @@ constexpr double tiltStep = 0.5, maximumTilt = 6.0;
 constexpr int numTilts = static_cast<int> (maximumTilt / tiltStep) + 1;
 
 juce::Font labelFont() { return staple::font (size::fs3, staple::Weight::medium); }
-
-float lightOf (bool highlighted, bool down) { return down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f; }
 
 juce::String tiltText (double tilt)
 {
@@ -65,36 +62,13 @@ AnalyzerButton::AnalyzerButton() : staple::TextChip (analyzerButtonText ({}), Lo
 {
     setName ("Analyzer");
     setTitle ("Analyzer");
+    setTextIsValue (true);
     setTooltip ("Analyzer: what it shows and how. Click for its settings");
+    setChevron (Chevron { .icon = staple::Icon::chevronUp, .size = 10.0f, .gap = 10.0f, .alpha = 0.6f });
+    setPadding (buttonPaddingLeft, buttonPaddingRight);
 }
 
-int AnalyzerButton::getIdealWidth() const
-{
-    const int text = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (labelFont(), getButtonText())));
-    return std::max (buttonMinimumWidth, buttonPaddingLeft + text + chevronGap + chevronSize + buttonPaddingRight);
-}
-
-void AnalyzerButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
-{
-    const float alpha = isEnabled() ? 1.0f : motion::disabledAlpha;
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour (colour::fill1.withMultipliedAlpha (lightOf (highlighted, down) * alpha));
-    g.fillRoundedRectangle (bounds, size::r2);
-
-    auto area = getLocalBounds().withTrimmedLeft (buttonPaddingLeft).withTrimmedRight (buttonPaddingRight).toFloat();
-    const auto ink = colour::text1.withMultipliedAlpha (alpha);
-    staple::drawIcon (g, staple::Icon::chevronUp, area.removeFromRight (static_cast<float> (chevronSize)).withSizeKeepingCentre (chevronSize, chevronSize),
-                      ink.withMultipliedAlpha (chevronAlpha));
-    area.removeFromRight (static_cast<float> (chevronGap));
-    g.setFont (labelFont());
-    g.setColour (ink);
-    g.drawText (getButtonText(), area, juce::Justification::centredLeft, true);
-}
-
-std::unique_ptr<juce::AccessibilityHandler> AnalyzerButton::createAccessibilityHandler()
-{
-    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
-}
+int AnalyzerButton::getIdealWidth() const { return std::max (buttonMinimumWidth, staple::TextChip::getIdealWidth()); }
 
 AnalyzerRow::AnalyzerRow (const juce::String& title, const juce::String& l) : juce::ComboBox (title), label (l)
 {
@@ -138,7 +112,7 @@ bool AnalyzerRow::keyPressed (const juce::KeyPress& key)
 
 void AnalyzerRow::paint (juce::Graphics& g)
 {
-    const float alpha = isEnabled() ? 1.0f : motion::disabledAlpha;
+    const float alpha = staple::enabledAlpha (*this);
     if (isMouseOver (true))
     {
         g.setColour (colour::fill1.withMultipliedAlpha (alpha));
@@ -193,7 +167,7 @@ public:
         const auto bounds = getLocalBounds().toFloat();
         if (on)
         {
-            g.setColour (colour::fill2.withMultipliedAlpha (lightOf (highlighted, down)));
+            g.setColour (staple::lit (colour::fill2, highlighted, down));
             g.fillRoundedRectangle (bounds, size::r2);
         }
         const auto font = labelFont();
@@ -228,7 +202,7 @@ public:
         const auto bounds = getLocalBounds().toFloat();
         if (on)
         {
-            g.setColour (colour::fill2.withMultipliedAlpha (lightOf (highlighted, down)));
+            g.setColour (staple::lit (colour::fill2, highlighted, down));
             g.fillRoundedRectangle (bounds, size::r2);
         }
         const auto ink = on || highlighted || down ? colour::text1 : colour::text3;

@@ -1,10 +1,11 @@
 #include "OutputPopover.h"
 
-#include "Accessibility.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
+#include "staple/Light.h"
 #include "staple/controls/Overlay.h"
+#include "staple/controls/TextChip.h"
 
 #include <cmath>
 
@@ -15,17 +16,11 @@ namespace
 {
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
-namespace motion = staple::tokens::motion;
 
 constexpr int cardWidth = 176, paddingTop = 14, paddingSide = 12, paddingBottom = 10, gap = 12;
 constexpr int knobDiameter = 64, panHeight = 14, panLabelGap = 4, panLabelHeight = 12, toggleHeight = 30, toggleGap = 4;
 constexpr int chipHeight = 20, chipPadding = 6;
 constexpr int cardHeight = paddingTop + knobDiameter + gap + panHeight + panLabelGap + panLabelHeight + gap + 1 + gap + toggleHeight + paddingBottom;
-
-// The thumb's small shadow.
-const juce::DropShadow thumbShadow { colour::shadow.withAlpha (0.5f), 3, { 0, 1 } };
-
-float dimmed (const juce::Component& c) { return c.isEnabled() ? 1.0f : motion::disabledAlpha; }
 } // namespace
 
 juce::String outputPanText (double pan, bool midSide)
@@ -37,15 +32,14 @@ juce::String outputPanText (double pan, bool midSide)
 }
 
 // Pan Mode's chip: "L/R" or "M/S"; a click switches.
-class OutputPopover::PanModeChip final : public juce::Button
+class OutputPopover::PanModeChip final : public staple::TextChip
 {
 public:
-    PanModeChip() : juce::Button ("Pan Mode")
+    PanModeChip() : staple::TextChip ("Pan Mode", Look::filled, size::fs1, staple::Weight::semiBold)
     {
         setClickingTogglesState (true);
-        setHasFocusOutline (true);
-        setMouseClickGrabsKeyboardFocus (false);
         setTitle ("Pan Mode");
+        setTextIsValue (true);
         buttonStateChanged();
     }
 
@@ -59,26 +53,17 @@ public:
 
     int idealWidth() const
     {
-        return juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (font(), "M/S"))) + 2 * chipPadding;
+        return staple::textWidth (textFont(), "M/S") + 2 * chipPadding;
     }
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override
     {
-        const float alpha = dimmed (*this);
-        const float light = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
-        g.setColour (colour::fill1.withMultipliedAlpha (light * alpha));
+        const float alpha = staple::enabledAlpha (*this);
+        g.setColour (staple::lit (colour::fill1, highlighted, down).withMultipliedAlpha (alpha));
         g.fillRoundedRectangle (getLocalBounds().toFloat(), size::r1);
-        g.setFont (font());
+        g.setFont (textFont());
         g.setColour ((highlighted || down ? colour::text1 : colour::text2).withMultipliedAlpha (alpha));
         g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centred, false);
-    }
-
-private:
-    static juce::Font font() { return staple::font (size::fs1, staple::Weight::semiBold); }
-
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
-    {
-        return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
     }
 };
 
@@ -94,7 +79,7 @@ OutputPanSlider::OutputPanSlider() : KeyboardSlider ("Output Pan")
 
 void OutputPanSlider::paint (juce::Graphics& g)
 {
-    const float alpha = dimmed (*this);
+    const float alpha = staple::enabledAlpha (*this);
     const auto bounds = getLocalBounds().toFloat();
     const float width = bounds.getWidth();
     const float proportion = static_cast<float> (juce::jlimit (0.0, 1.0, (getValue() - getMinimum()) / (getMaximum() - getMinimum())));
@@ -108,7 +93,7 @@ void OutputPanSlider::paint (juce::Graphics& g)
     g.fillRoundedRectangle ({ std::min (centreX, valueX), 4.0f, std::abs (valueX - centreX), 6.0f }, 3.0f);
 
     const juce::Rectangle<float> thumb { juce::jlimit (0.0f, width - 6.0f, valueX - 3.0f), 1.0f, 6.0f, 12.0f };
-    staple::drawSoftShadow (g, thumb, 2.0f, thumbShadow);
+    staple::drawSoftShadow (g, thumb, 2.0f, staple::tokens::shadow::panThumb);
     g.setColour (colour::text1.withMultipliedAlpha (alpha));
     g.fillRoundedRectangle (thumb, 2.0f);
 }
@@ -155,13 +140,12 @@ void OutputToggle::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
     const bool on = getToggleState();
     const auto bounds = getLocalBounds().toFloat();
-    const float light = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
     if (on)
     {
-        g.setColour (colour::fill2.withMultipliedAlpha (light));
+        g.setColour (staple::lit (colour::fill2, highlighted, down));
         g.fillRoundedRectangle (bounds, size::r2);
     }
-    const auto ink = (on || highlighted || down ? colour::text1 : colour::text3).withMultipliedAlpha (dimmed (*this));
+    const auto ink = (on || highlighted || down ? colour::text1 : colour::text3).withMultipliedAlpha (staple::enabledAlpha (*this));
     if (icon)
         staple::drawIcon (g, *icon, bounds.withSizeKeepingCentre (15.0f, 15.0f), ink);
     else
@@ -194,7 +178,6 @@ OutputPopover::OutputPopover (PluginProcessor& p)
     phaseInvert.setTooltip ("Phase Invert");
     autoGain.setTooltip ("Auto Gain: compensates the output level so EQ changes are heard without a loudness bias");
     showMeter.setTooltip ("Show or hide the Output Meter");
-    showMeter.setToggleState (processor.isOutputMeterShown(), juce::dontSendNotification);
     showMeter.onClick = [this] {
         processor.setOutputMeterShown (showMeter.getToggleState());
         if (onMeterToggled != nullptr)
@@ -212,8 +195,8 @@ OutputPopover::OutputPopover (PluginProcessor& p)
     }
 
     setCardSize (cardWidth, cardHeight);
-    followLayout();
-    layoutCheck.startTimerHz (4);
+    followProcessor();
+    follow.startTimerHz (4);
 }
 
 OutputPopover::~OutputPopover() = default;
@@ -228,18 +211,14 @@ void OutputPopover::openFrom (juce::Component& readout)
     }
 }
 
-void OutputPopover::showMeterShown (bool shown)
-{
-    showMeter.setToggleState (shown, juce::dontSendNotification);
-}
-
 juce::String OutputPopover::panReadout() const
 {
     return outputPanText (outputPan.getValue(), panMode->getToggleState());
 }
 
-void OutputPopover::followLayout()
+void OutputPopover::followProcessor()
 {
+    showMeter.setToggleState (processor.isOutputMeterShown(), juce::dontSendNotification);
     // The track can change between mono and stereo while the editor is open.
     const bool stereo = processor.isOutputPanAvailable();
     if (outputPan.isEnabled() != stereo || panMode->isEnabled() != stereo)
@@ -262,7 +241,7 @@ void OutputPopover::paint (juce::Graphics& g)
     const bool midSide = panMode->getToggleState();
     const auto labels = panLabelsArea();
     g.setFont (staple::font (size::fs1));
-    g.setColour (colour::text3.withMultipliedAlpha (dimmed (outputPan)));
+    g.setColour (colour::text3.withMultipliedAlpha (staple::enabledAlpha (outputPan)));
     g.drawText (midSide ? "Mid" : "L", labels, juce::Justification::centredLeft, false);
     g.drawText (panReadout(), labels, juce::Justification::centred, false);
     g.drawText (midSide ? "Side" : "R", labels, juce::Justification::centredRight, false);

@@ -54,48 +54,27 @@ struct Kit
         return component;
     }
 
-    static juce::MouseEvent event (juce::Component& target, juce::Point<float> position, juce::ModifierKeys mods,
-                                   juce::Point<float> downAt, int clicks = 1)
-    {
-        const auto now = juce::Time::getCurrentTime();
-        return { juce::Desktop::getInstance().getMainMouseSource(),
-                 position,
-                 mods,
-                 juce::MouseInputSource::defaultPressure,
-                 juce::MouseInputSource::defaultOrientation,
-                 juce::MouseInputSource::defaultRotation,
-                 juce::MouseInputSource::defaultTiltX,
-                 juce::MouseInputSource::defaultTiltY,
-                 &target,
-                 &target,
-                 now,
-                 downAt,
-                 now,
-                 clicks,
-                 position != downAt };
-    }
-
     // A press at from, a vertical drag by dy (negative is up) and a release, with mods held throughout.
     static void drag (juce::Component& target, juce::Point<float> from, float dy, juce::ModifierKeys mods = {})
     {
         const auto left = mods.withFlags (juce::ModifierKeys::leftButtonModifier);
         const auto to = from.translated (0.0f, dy);
-        target.mouseDown (event (target, from, left, from));
-        target.mouseDrag (event (target, from.translated (0.0f, dy / 2.0f), left, from));
-        target.mouseDrag (event (target, to, left, from));
-        target.mouseUp (event (target, to, mods, from));
+        target.mouseDown (harness::mouseEvent (target, from, left, from));
+        target.mouseDrag (harness::mouseEvent (target, from.translated (0.0f, dy / 2.0f), left, from));
+        target.mouseDrag (harness::mouseEvent (target, to, left, from));
+        target.mouseUp (harness::mouseEvent (target, to, mods, from));
     }
 
     // A press and a release at the target's centre, through Component's interface (Button's is protected).
     static void press (juce::Component& target)
     {
         const auto at = target.getLocalBounds().toFloat().getCentre();
-        target.mouseDown (event (target, at, juce::ModifierKeys::leftButtonModifier, at));
+        target.mouseDown (harness::mouseEvent (target, at, juce::ModifierKeys::leftButtonModifier, at));
     }
     static void release (juce::Component& target)
     {
         const auto at = target.getLocalBounds().toFloat().getCentre();
-        target.mouseUp (event (target, at, {}, at));
+        target.mouseUp (harness::mouseEvent (target, at, {}, at));
     }
     static void click (juce::Component& target)
     {
@@ -106,11 +85,11 @@ struct Kit
     static void doubleClick (juce::Component& target, juce::Point<float> at)
     {
         const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
-        target.mouseDown (event (target, at, left, at));
-        target.mouseUp (event (target, at, {}, at));
-        target.mouseDown (event (target, at, left, at, 2));
-        target.mouseDoubleClick (event (target, at, left, at, 2));
-        target.mouseUp (event (target, at, {}, at, 2));
+        target.mouseDown (harness::mouseEvent (target, at, left, at));
+        target.mouseUp (harness::mouseEvent (target, at, {}, at));
+        target.mouseDown (harness::mouseEvent (target, at, left, at, 2));
+        target.mouseDoubleClick (harness::mouseEvent (target, at, left, at, 2));
+        target.mouseUp (harness::mouseEvent (target, at, {}, at, 2));
     }
 };
 
@@ -205,7 +184,7 @@ TEST_CASE ("A disabled Knob ignores drags, double-clicks and arrow keys, and sho
     kit.drag (knob, centreOf (knob), -50.0f);
     kit.doubleClick (knob, centreOf (knob));
     CHECK (knob.keyPressed (juce::KeyPress (juce::KeyPress::upKey)) == false);
-    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    knob.mouseEnter (harness::mouseEvent (knob, centreOf (knob), {}, centreOf (knob)));
     CHECK_FALSE (knob.isTooltipShown());
     CHECK_THAT (position (knob), WithinAbs (0.6, 1.0e-4));
     CHECK (kit.history.undoSteps() == 0);
@@ -222,7 +201,7 @@ TEST_CASE ("A Knob's tooltip shows its title and its value text with the unit wh
     knob.setValue (-11.42, juce::sendNotificationSync);
     CHECK_FALSE (knob.isTooltipShown());
 
-    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    knob.mouseEnter (harness::mouseEvent (knob, centreOf (knob), {}, centreOf (knob)));
     REQUIRE (knob.isTooltipShown());
     auto& tooltip = *knob.getKnobTooltip();
     CHECK (tooltip.getParentComponent() == &kit.window); // a child of the editor, not a window of its own
@@ -233,12 +212,12 @@ TEST_CASE ("A Knob's tooltip shows its title and its value text with the unit wh
     // It follows a drag, and stays while the drag goes on outside the knob.
     const auto left = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
     const auto from = centreOf (knob);
-    knob.mouseDown (Kit::event (knob, from, left, from));
-    knob.mouseExit (Kit::event (knob, from.translated (0.0f, -200.0f), left, from));
-    knob.mouseDrag (Kit::event (knob, from.translated (0.0f, -200.0f), left, from));
+    knob.mouseDown (harness::mouseEvent (knob, from, left, from));
+    knob.mouseExit (harness::mouseEvent (knob, from.translated (0.0f, -200.0f), left, from));
+    knob.mouseDrag (harness::mouseEvent (knob, from.translated (0.0f, -200.0f), left, from));
     CHECK (knob.isTooltipShown());
     CHECK (tooltip.valueText() == "30.00 dB");
-    knob.mouseUp (Kit::event (knob, from.translated (0.0f, -200.0f), {}, from));
+    knob.mouseUp (harness::mouseEvent (knob, from.translated (0.0f, -200.0f), {}, from));
     CHECK_FALSE (knob.isTooltipShown());
 }
 
@@ -247,7 +226,7 @@ TEST_CASE ("A Knob's tooltip sits below the knob where there is no room above")
     Kit kit;
     staple::Knob knob (staple::tokens::knob::small);
     kit.add (knob, { 10, 0, knob.getIdealSize(), knob.getIdealSize() });
-    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    knob.mouseEnter (harness::mouseEvent (knob, centreOf (knob), {}, centreOf (knob)));
     REQUIRE (knob.isTooltipShown());
     CHECK (knob.getKnobTooltip()->getY() >= knob.getBounds().getCentreY() + 15);
 }
@@ -260,7 +239,7 @@ TEST_CASE ("A value typed into a Knob's tooltip commits as one undo step on Ente
     knob.setTitle ("Band 1 Frequency");
     knob.setTextValueSuffix (" Hz");
     kit.add (knob, { 150, 150, knob.getIdealSize(), knob.getIdealSize() });
-    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    knob.mouseEnter (harness::mouseEvent (knob, centreOf (knob), {}, centreOf (knob)));
     auto& tooltip = *knob.getKnobTooltip();
 
     kit.doubleClick (tooltip, centreOf (tooltip));
@@ -336,6 +315,32 @@ TEST_CASE ("An IconButton attached as a toggle is lit while on, or shows Off for
     CHECK (bypass.getToggleState());
     CHECK (bypass.isOff());
     CHECK_FALSE (bypass.isLit());
+}
+
+TEST_CASE ("A Band's Off button lights its translucent tint while hovered, more while pressed")
+{
+    Kit kit;
+    staple::IconButton bypass ("Bypass", staple::Icon::power);
+    bypass.setOffLook (true);
+    bypass.setClickingTogglesState (true);
+    bypass.setToggleState (true, juce::dontSendNotification);
+    kit.add (bypass, { 10, 10, 24, 24 });
+    REQUIRE (bypass.isOff());
+    // The tint alone, on nothing, at the square's top middle, clear of the icon.
+    const auto tint = [&bypass] (bool highlighted, bool down) {
+        // A software image, and the Graphics gone before the read: a GPU-backed image (Direct2D on
+        // Windows) holds its drawing until its context ends.
+        juce::Image image (juce::Image::ARGB, 24, 24, true, juce::SoftwareImageType());
+        {
+            juce::Graphics g (image);
+            bypass.paintButton (g, highlighted, down);
+        }
+        return static_cast<int> (image.getPixelAt (12, 2).getAlpha());
+    };
+    const auto rest = tint (false, false), hovered = tint (true, false), pressed = tint (false, true);
+    CHECK (rest > 0);
+    CHECK (hovered > rest);
+    CHECK (pressed > hovered);
 }
 
 namespace
@@ -451,9 +456,9 @@ TEST_CASE ("A Popover closes on an outside click and on Esc, returns focus to it
     CHECK (inFocusOrder (inside));
 
     // A click inside, or on its opener, leaves it open; a click anywhere else closes it.
-    popover.mouseDown (Kit::event (inside, centreOf (inside), juce::ModifierKeys::leftButtonModifier, centreOf (inside)));
+    popover.mouseDown (harness::mouseEvent (inside, centreOf (inside), juce::ModifierKeys::leftButtonModifier, centreOf (inside)));
     CHECK (popover.isOpen());
-    popover.mouseDown (Kit::event (elsewhere, centreOf (elsewhere), juce::ModifierKeys::leftButtonModifier, centreOf (elsewhere)));
+    popover.mouseDown (harness::mouseEvent (elsewhere, centreOf (elsewhere), juce::ModifierKeys::leftButtonModifier, centreOf (elsewhere)));
     CHECK_FALSE (popover.isOpen());
     CHECK (closes == 1);
     CHECK (opener.hasKeyboardFocus (false));
@@ -544,9 +549,9 @@ TEST_CASE ("A Knob's outer ring lane reports presses, drags and hovers to its ha
     CHECK (gain.hitTest (juce::roundToInt (onRing.x), juce::roundToInt (onRing.y)));
     CHECK_FALSE (gain.hitTest (juce::roundToInt (beyond.x), juce::roundToInt (beyond.y)));
 
-    gain.mouseMove (Kit::event (gain, onRing, {}, onRing));
+    gain.mouseMove (harness::mouseEvent (gain, onRing, {}, onRing));
     CHECK (ring.hoversOn == 1);
-    gain.mouseMove (Kit::event (gain, centre, {}, centre));
+    gain.mouseMove (harness::mouseEvent (gain, centre, {}, centre));
     CHECK (ring.hoversOff == 1);
 
     Kit::drag (gain, onRing, -50.0f);
@@ -577,15 +582,10 @@ TEST_CASE ("Tab skips a disabled Knob")
     CHECK (focusStops().empty());
 }
 
-// Not run by ctest: draws every kit control in its states into the PNG at $EQ1_GALLERY_PNG, for
+// Not run by ctest: draws every kit control in its states as gallery (harness::writeSnapshot), for
 // checking by hand against the prototype (docs/staple-handoff/prototype/Main.dc.html).
-//   build/tests/eq1_plugin_tests "[.gallery]"
-TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
+TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
 {
-    const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_GALLERY_PNG", {});
-    if (path.isEmpty())
-        SKIP ("EQ1_GALLERY_PNG names the file to write");
-
     Kit kit;
     auto& w = kit.window;
     w.setSize (760, 520);
@@ -649,8 +649,8 @@ TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
         kit.add (*k, { x, 150 - s / 2, s, s });
         x += s + 16;
     }
-    frequency->mouseEnter (Kit::event (*frequency, centreOf (*frequency), {}, centreOf (*frequency)));
-    gain->mouseEnter (Kit::event (*gain, centreOf (*gain), {}, centreOf (*gain)));
+    frequency->mouseEnter (harness::mouseEvent (*frequency, centreOf (*frequency), {}, centreOf (*frequency)));
+    gain->mouseEnter (harness::mouseEvent (*gain, centreOf (*gain), {}, centreOf (*gain)));
     gain->getKnobTooltip()->startEditing();
 
     // Icon buttons: normal, hover, pressed, lit, Off, Off hovered, disabled, focused.
@@ -758,12 +758,7 @@ TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
     CHECK (popover.isOpen());
     CHECK (popover.isVisible());
     CHECK (popover.getAlpha() == 1.0f);
-    const auto image = w.createComponentSnapshot (w.getLocalBounds(), true, 2.0f);
-    juce::File file (path);
-    file.deleteFile();
-    juce::FileOutputStream out (file);
-    REQUIRE (out.openedOk());
-    CHECK (juce::PNGImageFormat().writeImageToStream (image, out));
+    harness::writeSnapshot (w, "gallery");
 }
 
 TEST_CASE ("A Knob's tooltip and a Popover open inside the editor's scaled content, so they scale with it")
@@ -775,7 +770,7 @@ TEST_CASE ("A Knob's tooltip and a Popover open inside the editor's scaled conte
     staple::Knob knob (staple::tokens::knob::frequency);
     content.addAndMakeVisible (knob);
     knob.setBounds (100, 100, knob.getIdealSize(), knob.getIdealSize());
-    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    knob.mouseEnter (harness::mouseEvent (knob, centreOf (knob), {}, centreOf (knob)));
     REQUIRE (knob.isTooltipShown());
     CHECK (knob.getKnobTooltip()->getParentComponent() == &content);
 

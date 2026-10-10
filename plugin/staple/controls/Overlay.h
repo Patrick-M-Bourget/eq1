@@ -19,4 +19,8 @@ void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float corn
 // The handoff's one easing curve, cubic-bezier (0.2, 0.7, 0.2, 1): progress for a time from 0 to 1.
 float ease (float time);
 
+// Where a popping-in card is drawn at progress 0 to 1 (a Tween over dur2): from 3 px lower at 98.5 %
+// scale about its centre, to where it is, with no transform at all once in.
+juce::AffineTransform popInTransform (juce::Rectangle<float> card, float progress);
+
 } // namespace staple

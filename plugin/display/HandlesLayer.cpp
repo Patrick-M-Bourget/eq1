@@ -111,7 +111,7 @@ void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyl
     g.setColour (style.fill);
     g.fillEllipse (circle);
     // A centred white sheen, gone at 70 % of the radius.
-    const auto sheen = colour::handleSelectedRing.withAlpha (handle::sheenAlpha);
+    const auto sheen = colour::sheen.withAlpha (handle::sheenAlpha);
     g.setGradientFill (juce::ColourGradient (sheen, centre, sheen.withAlpha (0.0f), centre.translated (r * handle::sheenReach, 0.0f), true));
     g.fillEllipse (circle);
     g.setColour (style.ring);
@@ -121,10 +121,9 @@ void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyl
 void paintReadout (juce::Graphics& g, const DisplayGeometry& geometry, juce::Point<float> handleCentre, const Readout& readout)
 {
     const auto titleFont = staple::font (size::fs2), valueFont = staple::font (size::fs4);
-    const float textWidth = std::max (juce::GlyphArrangement::getStringWidth (titleFont, readout.title),
-                                      juce::GlyphArrangement::getStringWidth (valueFont, readout.value));
+    const int textWidth = std::max (staple::textWidth (titleFont, readout.title), staple::textWidth (valueFont, readout.value));
     const float height = readoutPaddingTop + readoutTitleLine + readoutValueLine + readoutPaddingBottom;
-    auto box = juce::Rectangle<float> (std::ceil (textWidth) + 2.0f * readoutPaddingSide, height)
+    auto box = juce::Rectangle<float> (static_cast<float> (textWidth) + 2.0f * readoutPaddingSide, height)
                    .withPosition (handleCentre.x + readoutOffset, handleCentre.y - readoutOffset - height)
                    .constrainedWithin (geometry.bounds());
     staple::drawSoftShadow (g, box, size::r2, tokens::shadow::shadow1);
@@ -148,7 +147,7 @@ void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)
     g.drawEllipse (juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (centre), handle::soloRing);
     const auto font = staple::font (size::fs1);
     const juce::String text ("Solo");
-    const auto pill = juce::Rectangle<float> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)) + 8.0f, 14.0f)
+    const auto pill = juce::Rectangle<float> (static_cast<float> (staple::textWidth (font, text)) + 8.0f, 14.0f)
                           .withCentre ({ centre.x, centre.y - r - 4.0f - 7.0f });
     g.setColour (colour::menu);
     g.fillRoundedRectangle (pill, size::r1);
@@ -202,7 +201,7 @@ void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const Dis
     {
         const auto font = staple::font (size::fs3);
         const juce::String text ("All 24 Bands are in use");
-        const auto box = juce::Rectangle<float> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)) + 28.0f, 30.0f)
+        const auto box = juce::Rectangle<float> (static_cast<float> (staple::textWidth (font, text)) + 28.0f, 30.0f)
                              .withCentre ({ geometry.bounds().getCentreX(), 12.0f + 15.0f });
         staple::drawSoftShadow (g, box, size::r3, tokens::shadow::shadow1);
         g.setColour (colour::menu);

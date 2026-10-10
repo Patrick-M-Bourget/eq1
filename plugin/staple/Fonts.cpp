@@ -2,6 +2,8 @@
 
 #include "StapleFonts.h"
 
+#include <cmath>
+
 namespace staple
 {
 
@@ -22,6 +24,11 @@ juce::Typeface::Ptr typeface (Weight weight)
 juce::Font font (float size, Weight weight)
 {
     return juce::FontOptions {}.withTypeface (typeface (weight)).withPointHeight (size).withFeatureEnabled ("tnum");
+}
+
+int textWidth (const juce::Font& font, const juce::String& text)
+{
+    return static_cast<int> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)));
 }
 
 } // namespace staple

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Tween.h"
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
@@ -14,7 +16,7 @@ namespace staple
 // opener, or Esc, closes it, and focus inside it goes back to the opener. Its contents (the children a
 // caller adds, laid out in getCardBounds()) are in the focus order only while it is open; its own
 // chrome is never a focus stop.
-class Popover : public juce::Component, private juce::Timer, private juce::KeyListener
+class Popover : public juce::Component, private juce::KeyListener
 {
 public:
     enum class Placement
@@ -44,13 +46,14 @@ public:
     void mouseDown (const juce::MouseEvent& event) override;
 
 private:
-    void timerCallback() override;
+    // The pop-in's progress, 0 to 1.
+    void popIn (float progress);
     // Esc from wherever focus is in the opener's window.
     bool keyPressed (const juce::KeyPress& key, juce::Component* origin) override;
     juce::Component::SafePointer<juce::Component> escapeFrom;
 
     juce::Component::SafePointer<juce::Component> opener;
-    double openedAt = 0.0;
+    Tween opening;
 };
 
 } // namespace staple

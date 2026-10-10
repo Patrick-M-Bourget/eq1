@@ -81,6 +81,7 @@ namespace colour
     // Band handles and the ghost Bell.
     inline const juce::Colour handleRing { 0x8C0A0B0E }; // rgba (10, 11, 14, 0.55), around an unselected handle
     inline const juce::Colour handleSelectedRing { 0xFFFFFFFF }; // and a selected one's, white
+    inline const juce::Colour sheen { 0xFFFFFFFF };      // white light: a handle's sheen, the ghost Bell's line
     inline const juce::Colour ghostGlow { 0xFFFFC482 };  // rgb (255, 196, 130), at the ghost Bell's peak
 } // namespace colour
 
@@ -107,7 +108,6 @@ namespace size
     constexpr float iconStroke = 1.5f;
     constexpr float iconGrid = 16.0f;
     constexpr float focusWidth = 2.0f, focusOffset = 2.0f;
-    constexpr int windowWidth = 1200, windowHeight = 760;
 } // namespace size
 
 // The window and its areas at 100 % UI scale (HANDOFF.md §2, §4, §9).
@@ -116,7 +116,10 @@ namespace layout
     constexpr int outerPadding = 14, gap = 12;
     constexpr int headerHeight = 52, footerHeight = 44, meterWidth = 40;
     constexpr int displayWidth = 1134, displayWidthWithoutMeter = 1186, displayHeight = 612;
-    constexpr int minimumWidth = 960, minimumHeight = 600;
+    // A new editor's window; it resizes between the minimum, below which the Band panel would collide
+    // with the Frequency labels, and the maximum.
+    constexpr int windowWidth = 1200, windowHeight = 760;
+    constexpr int minimumWidth = 960, minimumHeight = 600, maximumWidth = 2560, maximumHeight = 1600;
     // The display's edges dissolve over these distances (grid, Analyzer and curve fills only).
     constexpr float fadeTop = 18.0f, fadeBottom = 84.0f, fadeLeft = 36.0f, fadeRight = 56.0f;
     // Below this display width the grid drops its minor lines and every other Frequency label.
@@ -220,6 +223,7 @@ namespace shadow
     inline const juce::DropShadow knobSmall { colour::shadow.withAlpha (0.35f), 8, { 0, 3 } }; // 30 px and below
     inline const juce::DropShadow handle { colour::shadow.withAlpha (0.45f), 5, { 0, 0 } };
     inline const juce::DropShadow thumb { colour::shadow.withAlpha (0.5f), 5, { 0, 2 } }; // the fader's thumb, the bar's pills
+    inline const juce::DropShadow panThumb { colour::shadow.withAlpha (0.5f), 3, { 0, 1 } }; // Output Pan's small thumb
     inline const juce::DropShadow selectedHandle { colour::shadow.withAlpha (0.45f), 8, { 0, 0 } };
 } // namespace shadow
 

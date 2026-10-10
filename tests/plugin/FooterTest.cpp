@@ -16,24 +16,13 @@ namespace
 
 const juce::KeyPress up (juce::KeyPress::upKey), down (juce::KeyPress::downKey), left (juce::KeyPress::leftKey),
     right (juce::KeyPress::rightKey), escape (juce::KeyPress::escapeKey);
-juce::KeyPress withShift (juce::KeyPress key) { return { key.getKeyCode(), juce::ModifierKeys::shiftModifier, 0 }; }
-
-void setLayout (juce::AudioProcessor& processor, const juce::AudioChannelSet& channels)
-{
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (channels);
-    layout.inputBuses.add (juce::AudioChannelSet::disabled());
-    layout.outputBuses.add (channels);
-    REQUIRE (processor.setBusesLayout (layout));
-    processor.prepareToPlay (48000.0, 512);
-}
 
 struct Footer : harness::OpenEditor
 {
     eq1::FooterBar& footer = *harness::findChild<eq1::FooterBar> (*editor);
     eq1::GainScaleReadout& gainScale = *harness::findChild<eq1::GainScaleReadout> (*editor);
     eq1::OutputReadout& output = *harness::findChild<eq1::OutputReadout> (*editor);
-    eq1::OutputPopover& popover = footer.outputPopover();
+    eq1::OutputPopover& popover = footer.getOutputPopover();
 
     template <typename T>
     T& titled (const juce::String& title)
@@ -44,44 +33,22 @@ struct Footer : harness::OpenEditor
         return *found.front();
     }
 
-    // A mouse event on component, at position in its own pixels.
-    static juce::MouseEvent mouse (juce::Component& component, juce::Point<float> position, juce::ModifierKeys mods,
-                                   juce::Point<float> downAt, int clicks = 1)
-    {
-        const auto now = juce::Time::getCurrentTime();
-        return { juce::Desktop::getInstance().getMainMouseSource(),
-                 position,
-                 mods,
-                 juce::MouseInputSource::defaultPressure,
-                 juce::MouseInputSource::defaultOrientation,
-                 juce::MouseInputSource::defaultRotation,
-                 juce::MouseInputSource::defaultTiltX,
-                 juce::MouseInputSource::defaultTiltY,
-                 &component,
-                 &component,
-                 now,
-                 downAt,
-                 now,
-                 clicks,
-                 position != downAt };
-    }
-
     // A press on component, a drag up by pixels and a release, with Shift held or not.
     void dragUp (juce::Component& component, float pixels, bool shift)
     {
         const juce::Point<float> from { 10.0f, 10.0f }, to { 10.0f, 10.0f - pixels };
         const auto mods = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier | (shift ? juce::ModifierKeys::shiftModifier : 0));
-        component.mouseDown (mouse (component, from, mods, from));
-        component.mouseDrag (mouse (component, to, mods, from));
-        component.mouseUp (mouse (component, to, mods.withoutMouseButtons(), from));
+        component.mouseDown (harness::mouseEvent (component, from, mods, from));
+        component.mouseDrag (harness::mouseEvent (component, to, mods, from));
+        component.mouseUp (harness::mouseEvent (component, to, mods.withoutMouseButtons(), from));
     }
 
     void doubleClick (juce::Component& component, juce::Point<float> at = { 10.0f, 10.0f })
     {
         const juce::ModifierKeys leftButton (juce::ModifierKeys::leftButtonModifier);
-        component.mouseDown (mouse (component, at, leftButton, at, 2));
-        component.mouseUp (mouse (component, at, {}, at, 2));
-        component.mouseDoubleClick (mouse (component, at, {}, at, 2));
+        component.mouseDown (harness::mouseEvent (component, at, leftButton, at, 2));
+        component.mouseUp (harness::mouseEvent (component, at, {}, at, 2));
+        component.mouseDoubleClick (harness::mouseEvent (component, at, {}, at, 2));
     }
 
     void openPopover()
@@ -144,7 +111,7 @@ TEST_CASE ("The Gain Scale readout steps 5% on up and down, 1% with Shift, each 
     const int steps = host.undoSteps();
     CHECK (host.press (up));
     CHECK_THAT (host.value ("gain_scale"), WithinAbs (105.0, 1.0e-3));
-    CHECK (host.press (withShift (down)));
+    CHECK (host.press (harness::withShift (down)));
     CHECK_THAT (host.value ("gain_scale"), WithinAbs (104.0, 1.0e-3));
     CHECK (host.undoSteps() == steps + 2);
     host.hold (down);
@@ -187,14 +154,14 @@ TEST_CASE ("A double-click's second press resets the Gain Scale readout and the 
     const auto to = onPan ? at.translated (pan.getWidth() * 0.1f, 0.0f) : at.translated (0.0f, -10.0f);
     const juce::ModifierKeys leftButton (juce::ModifierKeys::leftButtonModifier);
 
-    target.mouseDown (Footer::mouse (target, at, leftButton, at));
-    target.mouseUp (Footer::mouse (target, at, {}, at));
+    target.mouseDown (harness::mouseEvent (target, at, leftButton, at));
+    target.mouseUp (harness::mouseEvent (target, at, {}, at));
     const int steps = host.undoSteps();
     // As JUCE sends them: the double-click comes after the second release.
-    target.mouseDown (Footer::mouse (target, at, leftButton, at, 2));
-    target.mouseDrag (Footer::mouse (target, to, leftButton, at, 2));
-    target.mouseUp (Footer::mouse (target, to, {}, at, 2));
-    target.mouseDoubleClick (Footer::mouse (target, to, {}, at, 2));
+    target.mouseDown (harness::mouseEvent (target, at, leftButton, at, 2));
+    target.mouseDrag (harness::mouseEvent (target, to, leftButton, at, 2));
+    target.mouseUp (harness::mouseEvent (target, to, {}, at, 2));
+    target.mouseDoubleClick (harness::mouseEvent (target, to, {}, at, 2));
     CHECK_THAT (host.value (id), WithinAbs (onPan ? 20.0 : 110.0, 1.0e-3));
     CHECK (host.undoSteps() == steps + 1);
 }
@@ -261,7 +228,7 @@ TEST_CASE ("The output popover opens above the Output readout, right-aligned to 
     CHECK_FALSE (host.popover.isOpen());
 
     host.openPopover();
-    host.popover.mouseDown (Footer::mouse (host.display, { 20.0f, 20.0f }, juce::ModifierKeys::leftButtonModifier, { 20.0f, 20.0f }));
+    host.popover.mouseDown (harness::mouseEvent (host.display, { 20.0f, 20.0f }, juce::ModifierKeys::leftButtonModifier));
     CHECK_FALSE (host.popover.isOpen());
     // And it opens again.
     host.openPopover();
@@ -270,7 +237,7 @@ TEST_CASE ("The output popover opens above the Output readout, right-aligned to 
 TEST_CASE ("The output popover's controls set their parameters")
 {
     Footer host;
-    setLayout (host.processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (host.processor, juce::AudioChannelSet::stereo());
     host.openPopover();
     host.settle();
 
@@ -295,8 +262,8 @@ TEST_CASE ("The output popover's controls set their parameters")
     CHECK (host.popover.panReadout() == "Centre");
     // A click at 70% across sets 40 towards Side.
     const juce::Point<float> at { pan.getWidth() * 0.7f, 7.0f };
-    pan.mouseDown (Footer::mouse (pan, at, juce::ModifierKeys::leftButtonModifier, at));
-    pan.mouseUp (Footer::mouse (pan, at, {}, at));
+    pan.mouseDown (harness::mouseEvent (pan, at, juce::ModifierKeys::leftButtonModifier, at));
+    pan.mouseUp (harness::mouseEvent (pan, at, {}, at));
     CHECK_THAT (host.value ("output_pan"), WithinAbs (40.0, 1.0e-3));
     CHECK (host.popover.panReadout() == "40 S");
     pan.grabKeyboardFocus();
@@ -327,7 +294,7 @@ TEST_CASE ("On mono, Pan Mode and Output Pan are disabled")
 {
     Footer host;
     const bool mono = GENERATE (true, false);
-    setLayout (host.processor, mono ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo());
+    harness::useLayout (host.processor, mono ? juce::AudioChannelSet::mono() : juce::AudioChannelSet::stereo());
     host.openPopover();
     host.settle (300);
     CHECK (host.titled<juce::Button> ("Pan Mode").isEnabled() != mono);
@@ -385,27 +352,18 @@ TEST_CASE ("The UI Scale menu, titled UI Scale, offers the five UI Scales, the c
     CHECK (items()[4] == std::pair<juce::String, bool> { "150%", true });
 }
 
-// Renders the footer for checking by hand against the prototype: EQ1_FOOTER_SNAPSHOT=<path prefix>
-// writes <prefix>-normal.png, -bypassed.png and -popover.png, each the window's bottom at 2x.
+// Renders the footer for checking by hand against the prototype (harness::writeSnapshot):
+// footer-normal, footer-bypassed and footer-popover, each the window's bottom at 2x.
 TEST_CASE ("Footer snapshots: normal, under Global Bypass and with the output popover open", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_FOOTER_SNAPSHOT", {});
     Footer host;
-    setLayout (host.processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (host.processor, juce::AudioChannelSet::stereo());
     host.addBand (1, 1000.0f, 6.0f);
     host.set ("auto_gain", 1.0f);
     host.set ("output_pan", 40.0f);
     host.settle (300);
     const auto write = [&] (const char* name) {
-        const auto bottom = host.editor->getLocalBounds().removeFromBottom (300);
-        const auto image = host.editor->createComponentSnapshot (bottom, true, 2.0f);
-        CHECK (image.isValid());
-        if (prefix.isEmpty())
-            return;
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
+        harness::writeSnapshot (*host.editor, juce::String ("footer-") + name, host.editor->getLocalBounds().removeFromBottom (300));
     };
     write ("normal");
     host.footer.toggleGlobalBypass();

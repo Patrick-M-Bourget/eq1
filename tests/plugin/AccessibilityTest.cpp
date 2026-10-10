@@ -3,6 +3,7 @@
 #include "PresetLibrary.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/Popover.h"
+#include "staple/controls/TextChip.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -34,16 +35,6 @@ bool isInteractive (juce::Component& c, juce::AccessibilityRole role)
     using Role = juce::AccessibilityRole;
     return role == Role::button || role == Role::toggleButton || role == Role::radioButton || role == Role::comboBox || role == Role::slider
            || role == Role::editableText || isBandHandle (c);
-}
-
-void setLayout (juce::AudioProcessor& processor, const juce::AudioChannelSet& channels)
-{
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (channels);
-    layout.inputBuses.add (juce::AudioChannelSet::disabled());
-    layout.outputBuses.add (channels);
-    REQUIRE (processor.setBusesLayout (layout));
-    processor.prepareToPlay (48000.0, 512);
 }
 
 struct Editor : OpenEditor
@@ -137,7 +128,7 @@ struct EveryControl : Editor
 {
     EveryControl()
     {
-        setLayout (processor, juce::AudioChannelSet::stereo());
+        harness::useLayout (processor, juce::AudioChannelSet::stereo());
         addBand (4, 1000.0f, 3.0f, 0.0f);
         set (4, "dynamic_range", 6.0f);
         set (4, "detection_range", 1.0f);
@@ -281,7 +272,7 @@ TEST_CASE ("Every control is named on mono, and with no Band selected")
     const bool mono = GENERATE (true, false);
     Editor host;
     if (mono)
-        setLayout (host.processor, juce::AudioChannelSet::mono());
+        harness::useLayout (host.processor, juce::AudioChannelSet::mono());
     host.addBand (2, 500.0f, 0.0f);
     host.settle();
     host.openPresetBrowser();
@@ -407,10 +398,28 @@ TEST_CASE ("The Presets button reads the Loaded Preset, with Modified, or No Pre
     CHECK (presets() == name + ", Modified");
 }
 
+TEST_CASE ("A chip whose text is a value reads it as its value; an action chip is a plain button")
+{
+    Editor host;
+    host.settle();
+    const auto chip = [&host] (const juce::String& title) {
+        auto found = host.findAll<staple::TextChip> ([&title] (staple::TextChip& c) { return c.getTitle() == title; });
+        REQUIRE (found.size() == 1);
+        auto* handler = found.front()->getAccessibilityHandler();
+        REQUIRE (handler != nullptr);
+        CHECK (handler->getRole() == juce::AccessibilityRole::button);
+        return handler;
+    };
+    const auto* range = chip ("Display Range")->getValueInterface();
+    REQUIRE (range != nullptr);
+    CHECK (range->getCurrentValueAsString() == juce::String::charToString (0x00B1) + "12 dB");
+    CHECK (chip ("Copy A to B")->getValueInterface() == nullptr);
+}
+
 TEST_CASE ("Each Clip Light reads Lit or Off, and pressing either puts out both")
 {
     Editor host;
-    setLayout (host.processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (host.processor, juce::AudioChannelSet::stereo());
     juce::AudioBuffer<float> buffer (host.processor.getTotalNumInputChannels(), 512);
     juce::MidiBuffer midi;
     buffer.clear();

@@ -84,8 +84,8 @@ TEST_CASE ("At each UI Scale the editor is its logical size times the scale, and
     REQUIRE (constrainer != nullptr);
     CHECK (constrainer->getMinimumWidth() == scaled (960));
     CHECK (constrainer->getMinimumHeight() == scaled (600));
-    CHECK (constrainer->getMaximumWidth() == scaled (2560));
-    CHECK (constrainer->getMaximumHeight() == scaled (1600));
+    CHECK (constrainer->getMaximumWidth() == scaled (staple::tokens::layout::maximumWidth));
+    CHECK (constrainer->getMaximumHeight() == scaled (staple::tokens::layout::maximumHeight));
     // A control sits where it did at 100%, scaled, and is that much larger.
     const auto drawn = editor->getLocalArea (&menu, menu.getLocalBounds());
     CHECK (drawn == atHundred.transformedBy (juce::AffineTransform::scale (percent / 100.0f)));

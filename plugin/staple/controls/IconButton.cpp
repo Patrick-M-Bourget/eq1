@@ -1,17 +1,13 @@
 #include "IconButton.h"
 
+#include "../Light.h"
+
 namespace staple
 {
 
 namespace
 {
 namespace colour = tokens::colour;
-namespace motion = tokens::motion;
-
-juce::Colour brightened (juce::Colour c, bool highlighted, bool down)
-{
-    return c.withMultipliedBrightness (down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f);
-}
 } // namespace
 
 IconButton::IconButton (const juce::String& name, Icon i) : juce::Button (name), icon (i)
@@ -23,12 +19,6 @@ IconButton::IconButton (const juce::String& name, Icon i) : juce::Button (name),
 float IconButton::getIconSide() const
 {
     return iconSize > 0.0f ? iconSize : static_cast<float> (std::min (getWidth(), getHeight())) * 2.0f / 3.0f;
-}
-
-void IconButton::setIcon (Icon newIcon)
-{
-    icon = newIcon;
-    repaint();
 }
 
 void IconButton::setLitColour (juce::Colour colour)
@@ -74,7 +64,7 @@ bool IconButton::isOff() const { return offLook && getToggleState(); }
 
 void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
 {
-    const float alpha = isEnabled() ? 1.0f : motion::disabledAlpha;
+    const float alpha = enabledAlpha (*this);
     const float side = static_cast<float> (std::min (getWidth(), getHeight()));
     const auto square = getLocalBounds().toFloat().withSizeKeepingCentre (side, side);
     // The icon's 16 px grid in a 24 px button, in proportion at other sizes.
@@ -84,12 +74,12 @@ void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     juce::Colour ink;
     if (isOff())
     {
-        g.setColour (brightened (colour::stateOffBg, highlighted, down).withMultipliedAlpha (alpha));
+        g.setColour (lit (colour::stateOffBg, highlighted, down).withMultipliedAlpha (alpha));
         g.fillRoundedRectangle (square, tokens::size::r2);
-        ink = brightened (colour::stateOff, highlighted, down);
+        ink = lit (colour::stateOff, highlighted, down);
     }
     else if (isLit())
-        ink = brightened (litColour, highlighted, down);
+        ink = lit (litColour, highlighted, down);
     else
         ink = highlighted || down ? colour::text1 : restColour;
     const juce::Graphics::ScopedSaveState saved (g);

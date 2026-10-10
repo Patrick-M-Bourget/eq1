@@ -84,27 +84,6 @@ double sineGainDb (juce::AudioProcessor& processor, double frequency, Content co
     return 10.0 * std::log10 (outputPower / inputPower);
 }
 
-// A layout with the given main input and output, and Sidechain (disabled when empty).
-juce::AudioProcessor::BusesLayout layoutOf (const juce::AudioChannelSet& in,
-                                           const juce::AudioChannelSet& out,
-                                           const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
-{
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (in);
-    layout.inputBuses.add (sidechain);
-    layout.outputBuses.add (out);
-    return layout;
-}
-
-// Switches the main input and output to the given layout, as a host does, and prepares to play.
-void useLayout (juce::AudioProcessor& processor,
-                const juce::AudioChannelSet& channels,
-                const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
-{
-    REQUIRE (processor.setBusesLayout (layoutOf (channels, channels, sidechain)));
-    processor.prepareToPlay (sampleRate, blockSize);
-}
-
 } // namespace
 
 TEST_CASE ("Plugin reports zero latency")
@@ -360,7 +339,7 @@ TEST_CASE ("Hosts can use the plugin on mono and stereo tracks")
     const auto mono = juce::AudioChannelSet::mono(), stereo = juce::AudioChannelSet::stereo();
 
     const auto supports = [&] (const juce::AudioChannelSet& in, const juce::AudioChannelSet& out) {
-        return processor.checkBusesLayoutSupported (layoutOf (in, out));
+        return processor.checkBusesLayoutSupported (harness::layoutOf (in, out));
     };
     CHECK (supports (mono, mono));
     CHECK (supports (stereo, stereo));
@@ -383,9 +362,9 @@ TEST_CASE ("The plugin offers a stereo Sidechain, and accepts a mono one or none
         for (const auto& sidechainLayout : { juce::AudioChannelSet::disabled(), mono, stereo })
         {
             CAPTURE (track.getDescription(), sidechainLayout.getDescription());
-            CHECK (processor.checkBusesLayoutSupported (layoutOf (track, track, sidechainLayout)));
+            CHECK (processor.checkBusesLayoutSupported (harness::layoutOf (track, track, sidechainLayout)));
         }
-    CHECK_FALSE (processor.checkBusesLayoutSupported (layoutOf (stereo, stereo, juce::AudioChannelSet::create5point1())));
+    CHECK_FALSE (processor.checkBusesLayoutSupported (harness::layoutOf (stereo, stereo, juce::AudioChannelSet::create5point1())));
 }
 
 TEST_CASE ("An External Dynamic Band ducks on the Sidechain, mono or stereo, and not on the main input")
@@ -394,7 +373,7 @@ TEST_CASE ("An External Dynamic Band ducks on the Sidechain, mono or stereo, and
     CAPTURE (sidechainLayout.getDescription());
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo(), sidechainLayout);
+    harness::useLayout (processor, juce::AudioChannelSet::stereo(), sidechainLayout);
     // A Bell on the bass at 100 Hz, ducked by a kick tone at 60 Hz in a Free Detection Range.
     setParameter (processor, "band1_in_use", 1.0f);
     setParameter (processor, "band1_frequency", 100.0f);
@@ -418,7 +397,7 @@ TEST_CASE ("With the Sidechain disabled, an External Dynamic Band doesn't move")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     setParameter (processor, "band1_in_use", 1.0f);
     setParameter (processor, "band1_dynamic_range", -10.0f);
     setParameter (processor, "band1_threshold_auto", 0.0f);
@@ -432,7 +411,7 @@ TEST_CASE ("Holding Detection Audition plays the detection signal; it is not a h
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo(), juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo(), juce::AudioChannelSet::stereo());
     setParameter (processor, "band3_in_use", 1.0f);
     setParameter (processor, "band3_frequency", 1000.0f);
     setParameter (processor, "band3_gain", 12.0f);
@@ -499,9 +478,9 @@ TEST_CASE ("Stereo Placement is available on stereo tracks only")
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
 
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     CHECK (processor.isStereoPlacementAvailable());
-    useLayout (processor, juce::AudioChannelSet::mono());
+    harness::useLayout (processor, juce::AudioChannelSet::mono());
     CHECK_FALSE (processor.isStereoPlacementAvailable());
 }
 
@@ -509,7 +488,7 @@ TEST_CASE ("On a mono track a Side Band has no effect, and its Stereo Placement 
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
 
     setParameter (processor, "band3_in_use", 1.0f);
     setParameter (processor, "band3_frequency", 1000.0f);
@@ -518,13 +497,13 @@ TEST_CASE ("On a mono track a Side Band has no effect, and its Stereo Placement 
     CHECK_THAT (sineGainDb (processor, 1000.0, Content::side), WithinAbs (12.0, 0.1));
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 
-    useLayout (processor, juce::AudioChannelSet::mono());
+    harness::useLayout (processor, juce::AudioChannelSet::mono());
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
     setParameter (processor, "band3_placement", 3.0f); // Mid
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (12.0, 0.1));
     setParameter (processor, "band3_placement", 4.0f);
 
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     CHECK_THAT (sineGainDb (processor, 1000.0, Content::side), WithinAbs (12.0, 0.1));
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 }
@@ -693,7 +672,7 @@ TEST_CASE ("With every parameter at its default, the output is the input bit for
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     const auto layout = GENERATE (juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo());
-    useLayout (processor, layout);
+    harness::useLayout (processor, layout);
 
     juce::Random random (75);
     juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
@@ -734,7 +713,7 @@ TEST_CASE ("Output Pan and Pan Mode on the host parameters balance the output, o
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     CHECK (processor.isOutputPanAvailable());
 
     // Fully right turns the left channel, where the level is measured, off.
@@ -749,7 +728,7 @@ TEST_CASE ("Output Pan and Pan Mode on the host parameters balance the output, o
     CHECK (sineGainDb (processor, 1000.0, Content::side) < -200.0);
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 
-    useLayout (processor, juce::AudioChannelSet::mono());
+    harness::useLayout (processor, juce::AudioChannelSet::mono());
     CHECK_FALSE (processor.isOutputPanAvailable());
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 }
@@ -817,7 +796,7 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     const auto layout = GENERATE (juce::AudioChannelSet::stereo(), juce::AudioChannelSet::mono());
     const int percent = GENERATE (75, 100, 125, 150, 200);
     CAPTURE (percent);
-    useLayout (processor, layout);
+    harness::useLayout (processor, layout);
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
     auto* scaleMenu = harness::findChild<eq1::UiScaleMenu> (*editor);
     REQUIRE (scaleMenu != nullptr);
@@ -862,7 +841,7 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     auto* readout = harness::findChild<eq1::OutputReadout> (*editor);
     REQUIRE (readout != nullptr);
     readout->onClick();
-    auto& popover = harness::findChild<eq1::FooterBar> (*editor)->outputPopover();
+    auto& popover = harness::findChild<eq1::FooterBar> (*editor)->getOutputPopover();
     REQUIRE (popover.isOpen());
     found = 0;
     visit (popover);
@@ -889,11 +868,5 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     processor.setOutputMeterShown (true);
     editor->resized();
 
-    if (const auto snapshot = juce::SystemStats::getEnvironmentVariable ("EQ1_EDITOR_SNAPSHOT", {}); snapshot.isNotEmpty())
-    {
-        juce::File file (snapshot + "-" + juce::String (percent) + (layout == juce::AudioChannelSet::mono() ? "-mono.png" : "-stereo.png"));
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds()), stream);
-    }
+    harness::writeSnapshot (*editor, "editor-" + juce::String (percent) + (layout == juce::AudioChannelSet::mono() ? "-mono" : "-stereo"), {}, 1.0f);
 }

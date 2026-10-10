@@ -23,17 +23,13 @@ juce::String analyzerButtonText (const AnalyzerSettings& settings);
 double nextAnalyzerTilt (double tilt);
 
 // The footer's Analyzer button (HANDOFF.md §5.7): a filled chip 28 tall reading analyzerButtonText,
-// with an up chevron. A click opens and closes the Analyzer popover.
+// with an up chevron, at least 92 px wide. A click opens and closes the Analyzer popover.
 class AnalyzerButton final : public staple::TextChip
 {
 public:
     AnalyzerButton();
 
     int getIdealWidth() const;
-    void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
-
-private:
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 };
 
 // One of the Analyzer popover's rows (Range, Resolution, Speed, Analyzer Tilt): a ComboBox drawn as a

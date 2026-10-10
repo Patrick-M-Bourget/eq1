@@ -22,14 +22,6 @@ void click (juce::Button& button)
     button.onClick();
 }
 
-// A left-click at at in component.
-juce::MouseEvent clickAt (juce::Component& component, juce::Point<float> at = {})
-{
-    const auto now = juce::Time::getCurrentTime();
-    return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier),
-                             1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &component, &component, now, at, now, 1, false);
-}
-
 // The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Room,
 // and an empty Drums/Brushes.
 struct Browser
@@ -164,7 +156,7 @@ TEST_CASE ("A single click on a Preset loads it, and the browser stays open")
     Browser host;
     host.browser.open ({}, nullptr);
     click (host.button ("Drums"));
-    host.list().getListBoxModel()->listBoxItemClicked (0, clickAt (host.list()));
+    host.list().getListBoxModel()->listBoxItemClicked (0, harness::mouseEvent (host.list(), {}, juce::ModifierKeys::leftButtonModifier));
     CHECK (host.loads == std::vector<juce::String> { "User/Drums: Kick" });
     CHECK (host.browser.isVisible());
 }
@@ -273,7 +265,7 @@ TEST_CASE ("The Preset browser opens as a modal over the whole editor; the scrim
 
     SECTION ("A click on the scrim")
     {
-        browser.mouseDown (clickAt (browser, { 20.0f, 700.0f }));
+        browser.mouseDown (harness::mouseEvent (browser, { 20.0f, 700.0f }, juce::ModifierKeys::leftButtonModifier));
     }
     SECTION ("Its close button")
     {
@@ -308,7 +300,7 @@ TEST_CASE ("A click on a Preset in the browser loads it as one undo step")
     const int steps = history.undoSteps();
     auto* list = findChild<juce::ListBox> (host.browser());
     REQUIRE (list != nullptr);
-    list->getListBoxModel()->listBoxItemClicked (0, clickAt (*list));
+    list->getListBoxModel()->listBoxItemClicked (0, harness::mouseEvent (*list, {}, juce::ModifierKeys::leftButtonModifier));
     CHECK (host.processor.loadedPresetName() == PresetLibrary::factoryPresets().front().name);
     CHECK (history.undoSteps() == steps + 1);
     CHECK (host.browser().isVisible());
@@ -327,12 +319,10 @@ TEST_CASE ("At the 960 x 600 minimum the Preset browser fits inside the window w
     CHECK (browser.getLocalBounds().reduced (PresetBrowser::margin).contains (browser.getPanelBounds()));
 }
 
-// Renders the browser for checking by hand against the prototype: EQ1_BROWSER_SNAPSHOT=<path prefix>
-// writes <prefix>-folder.png (a Factory Preset loaded, its folder shown) and -search.png, each the
-// whole window.
+// Renders the browser for checking by hand against the prototype (harness::writeSnapshot):
+// browser-folder (a Factory Preset loaded, its folder shown) and browser-search, each the whole window.
 TEST_CASE ("Preset browser snapshots: a folder, and a search", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_BROWSER_SNAPSHOT", {});
     Editor host;
     const auto factory = PresetLibrary::factoryPresets();
     REQUIRE (factory.size() > 1);
@@ -340,16 +330,7 @@ TEST_CASE ("Preset browser snapshots: a folder, and a search", "[.screens]")
     host.settle (300);
     host.open();
     host.settle (300);
-    const auto write = [&] (const char* name) {
-        const auto image = host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, 1.0f);
-        CHECK (image.isValid());
-        if (prefix.isEmpty())
-            return;
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
-    };
+    const auto write = [&] (const char* name) { harness::writeSnapshot (*host.editor, juce::String ("browser-") + name, {}, 1.0f); };
     write ("folder");
     auto* search = findChild<juce::TextEditor> (host.browser(), [] (juce::TextEditor& t) { return t.getTitle() == "Search Presets"; });
     REQUIRE (search != nullptr);

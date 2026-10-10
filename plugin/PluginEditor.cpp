@@ -30,7 +30,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     // The display's Gain range, saved with the plugin; the display follows it on its timer.
     content.addAndMakeVisible (displayRange);
-    content.addChildComponent (header.presets().browserPanel());
+    content.addChildComponent (header.presetBrowser());
 
     footer.onUiScalePicked = [this] (int percent) {
         eqProcessor.pickUiScale (percent);
@@ -41,7 +41,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     // Tab's order: the header (and the Preset browser while open), Display Range, the display and its
     // Bands, the Output Meter, the Band panel, its Detection Range bar and the footer.
     int order = 0;
-    for (juce::Component* child : std::initializer_list<juce::Component*> { &header, &header.presets().browserPanel(), &displayRange, &display,
+    for (juce::Component* child : std::initializer_list<juce::Component*> { &header, &header.presetBrowser(), &displayRange, &display,
                                                                              &meter, &panel, &detectionRange, &footer })
         child->setExplicitFocusOrder (++order);
 
@@ -60,8 +60,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
 void PluginEditor::applyUiScale()
 {
-    // In logical pixels: below the minimum the Band panel would collide with the frequency labels.
-    constexpr int minimumWidth = layout::minimumWidth, minimumHeight = layout::minimumHeight, maximumWidth = 2560, maximumHeight = 1600;
+    // In logical pixels.
+    using layout::minimumWidth, layout::minimumHeight, layout::maximumWidth, layout::maximumHeight;
     const auto stored = eqProcessor.editorSize();
     const juce::Point<int> size { juce::jlimit (minimumWidth, maximumWidth, stored.x), juce::jlimit (minimumHeight, maximumHeight, stored.y) };
     const int percent = eqProcessor.uiScalePercent();
@@ -122,10 +122,7 @@ void PluginEditor::timerCallback()
 {
     header.showUndoState();
     if (meter.isVisible() != eqProcessor.isOutputMeterShown())
-    {
-        footer.showMeterShown (eqProcessor.isOutputMeterShown());
         resized();
-    }
     if (eqProcessor.uiScalePercent() != shownScalePercent || eqProcessor.editorSize() != shownSize)
         applyUiScale();
 }
@@ -168,7 +165,7 @@ void PluginEditor::resized()
     panel.setAnchor ({ area.getCentreX(), area.getBottom() - layout::bandPanelAboveBottom });
     detectionRange.setDisplayBounds (area);
     // The Preset browser, a modal over everything.
-    header.presets().browserPanel().setBounds (content.getLocalBounds());
+    header.presetBrowser().setBounds (content.getLocalBounds());
 }
 
 } // namespace eq1

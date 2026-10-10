@@ -67,8 +67,6 @@ public:
 
     // After the Output Meter's toggle shows or hides it.
     std::function<void()> onMeterToggled;
-    // Whether the Output Meter is shown, as the processor holds it.
-    void showMeterShown (bool shown);
 
     // What the Output Pan slider reads now.
     juce::String panReadout() const;
@@ -77,8 +75,9 @@ public:
     void resized() override;
 
 private:
-    // Follows the track between mono and stereo.
-    void followLayout();
+    // Follows the processor: the track between mono and stereo, and whether the Output Meter is
+    // shown, which a restored session changes too.
+    void followProcessor();
     juce::Rectangle<int> panLabelsArea() const;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -94,7 +93,7 @@ private:
 
     std::unique_ptr<SliderAttachment> outputGainAttachment, outputPanAttachment;
     std::unique_ptr<ButtonAttachment> panModeAttachment, phaseInvertAttachment, autoGainAttachment;
-    juce::TimedCallback layoutCheck { [this] { followLayout(); } };
+    juce::TimedCallback follow { [this] { followProcessor(); } };
 };
 
 } // namespace eq1

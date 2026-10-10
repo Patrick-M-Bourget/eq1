@@ -29,17 +29,6 @@ void setParameter (juce::AudioProcessor& processor, const juce::String& id, floa
     FAIL ("No parameter " << id);
 }
 
-// Switches the main input and output to channels, with no Sidechain, and prepares to play.
-void useLayout (juce::AudioProcessor& processor, const juce::AudioChannelSet& channels)
-{
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (channels);
-    layout.inputBuses.add (juce::AudioChannelSet::disabled());
-    layout.outputBuses.add (channels);
-    REQUIRE (processor.setBusesLayout (layout));
-    processor.prepareToPlay (sampleRate, blockSize);
-}
-
 // Half a second of a 1 kHz sine at amplitude on every main channel, but silence on the channels
 // silent lists.
 void playSine (juce::AudioProcessor& processor, float amplitude, std::initializer_list<int> silent = {})
@@ -65,20 +54,6 @@ void readAll (eq1::PluginProcessor& processor)
         processor.readOutputLevel (ch);
 }
 
-// The first child of the editor, at any depth, that is a T and passes test.
-template <typename T>
-T* findChild (juce::Component& parent, std::function<bool (T&)> test = [] (T&) { return true; })
-{
-    for (auto* child : parent.getChildren())
-    {
-        if (auto* found = dynamic_cast<T*> (child); found != nullptr && test (*found))
-            return found;
-        if (auto* found = findChild<T> (*child, test))
-            return found;
-    }
-    return nullptr;
-}
-
 } // namespace
 
 TEST_CASE ("The Output Meter reads one channel on mono and two on stereo; a full-scale sine peaks at 0 dBFS with RMS about -3 dBFS, the Clip Light off")
@@ -86,7 +61,7 @@ TEST_CASE ("The Output Meter reads one channel on mono and two on stereo; a full
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     const auto layout = GENERATE (juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo());
-    useLayout (processor, layout);
+    harness::useLayout (processor, layout);
     REQUIRE (processor.outputLevelChannels() == layout.size());
 
     playSine (processor, 1.0f);
@@ -104,7 +79,7 @@ TEST_CASE ("An over lights its channel's Clip Light, which stays lit until clear
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
 
     // A sample at full scale is not an over; one a float step beyond it is.
     juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
@@ -146,7 +121,7 @@ TEST_CASE ("An over while nothing reads the Output Level, as with the editor clo
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     playSine (processor, 2.0f);
     playSine (processor, 0.1f);
     CHECK_FALSE (processor.isClipLit (0));
@@ -159,7 +134,7 @@ TEST_CASE ("Restoring a session puts out the Clip Lights, and they are not saved
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     playSine (processor, 2.0f);
     readAll (processor);
     REQUIRE (processor.isClipLit (0));
@@ -177,7 +152,7 @@ TEST_CASE ("During Global Bypass the Output Meter reads the input")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     setParameter (processor, "output_gain", -12.0f);
     playSine (processor, 1.0f);
     REQUIRE_THAT (processor.readOutputLevel (0).peakDb, WithinAbs (-12.0, 0.05));
@@ -241,10 +216,10 @@ TEST_CASE ("The output popover's Output Meter toggle hides the Output Meter, the
     REQUIRE (constrainer != nullptr);
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
 
-    auto* display = findChild<eq1::EqDisplay> (*editor);
-    auto* meter = findChild<eq1::OutputMeter> (*editor);
-    findChild<eq1::OutputReadout> (*editor)->onClick();
-    auto* button = findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getTitle() == "Output Meter"; });
+    auto* display = harness::findChild<eq1::EqDisplay> (*editor);
+    auto* meter = harness::findChild<eq1::OutputMeter> (*editor);
+    harness::findChild<eq1::OutputReadout> (*editor)->onClick();
+    auto* button = harness::findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getTitle() == "Output Meter"; });
     REQUIRE (display != nullptr);
     REQUIRE (meter != nullptr);
     REQUIRE (button != nullptr);
@@ -265,8 +240,8 @@ TEST_CASE ("The output popover's Output Meter toggle hides the Output Meter, the
 
     editor.reset (processor.createEditor());
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
-    CHECK_FALSE (findChild<eq1::OutputMeter> (*editor)->isVisible());
-    CHECK_FALSE (findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getTitle() == "Output Meter"; })->getToggleState());
+    CHECK_FALSE (harness::findChild<eq1::OutputMeter> (*editor)->isVisible());
+    CHECK_FALSE (harness::findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getTitle() == "Output Meter"; })->getToggleState());
 }
 
 namespace
@@ -317,7 +292,7 @@ TEST_CASE ("The Output Meter's rail: a 6 x 4 Clip Light at the top and a 6 px ba
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     const auto layout = GENERATE (juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo());
-    useLayout (processor, layout);
+    harness::useLayout (processor, layout);
     eq1::OutputMeter meter (processor);
     const auto image = paintMeter (meter, 500);
 
@@ -336,7 +311,7 @@ TEST_CASE ("The Output Meter's colours are fixed to the scale: -10 dBFS RMS draw
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     // A sine with RMS -10 dBFS (peak -7 dBFS).
     playSine (processor, static_cast<float> (std::sqrt (2.0) * std::pow (10.0, -0.5)));
     eq1::OutputMeter meter (processor);
@@ -358,7 +333,7 @@ TEST_CASE ("A lit Clip Light draws in meterClip, and clicking either Clip Light 
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     playSine (processor, 2.0f, { 0 });
     eq1::OutputMeter meter (processor);
     auto image = paintMeter (meter, 500);
@@ -366,11 +341,7 @@ TEST_CASE ("A lit Clip Light draws in meterClip, and clicking either Clip Light 
     CHECK (columnsIn (image, 12, staple::tokens::colour::meterClipOff) == std::vector<int> { 12, 13, 14, 15, 16, 17 });
 
     // A click a few px off the unlit left light, within its 10 px tall click area.
-    const auto now = juce::Time::getCurrentTime();
-    const juce::Point<float> at { 14.0f, 16.0f };
-    meter.mouseDown ({ juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier),
-                       juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
-                       juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, &meter, &meter, now, at, now, 1, false });
+    meter.mouseDown (harness::mouseEvent (meter, { 14.0f, 16.0f }, juce::ModifierKeys::leftButtonModifier));
     CHECK_FALSE (processor.isClipLit (0));
     CHECK_FALSE (processor.isClipLit (1));
     image = paintMeter (meter, 500);
@@ -379,23 +350,14 @@ TEST_CASE ("A lit Clip Light draws in meterClip, and clicking either Clip Light 
 
 TEST_CASE ("Output Meter snapshots: a playing signal, and a lit Clip Light", "[.screens]")
 {
-    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_METER_SNAPSHOT", {});
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    useLayout (processor, juce::AudioChannelSet::stereo());
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
     editor->setSize (1200, 760);
     const auto write = [&] (const char* name) {
         harness::settle (51); // three frames
-        const auto right = editor->getLocalBounds().removeFromRight (160);
-        const auto image = editor->createComponentSnapshot (right, true, 2.0f);
-        CHECK (image.isValid());
-        if (prefix.isEmpty())
-            return;
-        juce::File file (prefix + "-" + name + ".png");
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
+        harness::writeSnapshot (*editor, juce::String ("meter-") + name, editor->getLocalBounds().removeFromRight (160));
     };
     // Peaks at -4 dBFS on the left and -7 dBFS on the right.
     playSine (processor, 0.63f, { 1 });

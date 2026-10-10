@@ -483,7 +483,7 @@ TEST_CASE ("A focused Dynamic Range Handle steps the range 1 dB per arrow, 0.5 d
 
     host.press (juce::KeyPress (juce::KeyPress::upKey));
     CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (7.0, 1.0e-4));
-    host.press (juce::KeyPress (juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0));
+    host.press (harness::withShift (juce::KeyPress (juce::KeyPress::downKey)));
     CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (6.5, 1.0e-4));
     CHECK (history.undoSteps() == 2);
     host.hold (juce::KeyPress (juce::KeyPress::downKey));

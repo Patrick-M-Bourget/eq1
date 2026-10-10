@@ -68,6 +68,7 @@ target_sources(eq1 PRIVATE
     OutputMeter.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp
+    staple/Accessibility.cpp
     staple/Fonts.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
@@ -81,6 +82,7 @@ target_sources(eq1 PRIVATE
     staple/controls/ParseValue.cpp
     staple/controls/Popover.cpp
     staple/controls/TextChip.cpp
+    staple/controls/Tween.cpp
     KeyboardSlider.cpp
     KeyboardControl.cpp
     UserSettings.cpp)

@@ -11,21 +11,15 @@
 // How long the whole editor takes to draw a busy frame at 2x (docs/performance.md, "Paint time"): it
 // prints the median and fails above its ceiling. Hidden from the normal run, whose timings it would
 // flake: run it with `scripts/check.sh paint`, or `build/tests/eq1_plugin_tests "[paint]"` on a busy
-// machine. EQ1_PAINT_SNAPSHOT=<file.png> also saves the frame.
+// machine. With EQ1_SCREENS set, it also writes the frame as paint-frame and the display before any
+// audio as paint-display (harness::writeSnapshot).
 TEST_CASE ("Paint time: the editor at 1200 x 760 and 2x with 24 Dynamic Bells, every spectrum and the Output Meter", "[.paint]")
 {
     harness::OpenEditor host;
     host.editor->setSize (1200, 760);
     auto& processor = host.processor;
-    const auto stereo = juce::AudioChannelSet::stereo();
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (stereo);
-    layout.inputBuses.add (stereo); // the Sidechain
-    layout.outputBuses.add (stereo);
-    REQUIRE (processor.setBusesLayout (layout));
-    constexpr double sampleRate = 48000.0;
+    harness::useLayout (processor, juce::AudioChannelSet::stereo(), juce::AudioChannelSet::stereo()); // with a stereo Sidechain
     constexpr int blockSize = 512;
-    processor.prepareToPlay (sampleRate, blockSize);
 
     // 24 Dynamic Bells, a third of an octave apart from 30 Hz, Gains alternating; Band 12 at 0 dB, selected.
     for (int slot = 1; slot <= 24; ++slot)
@@ -39,14 +33,8 @@ TEST_CASE ("Paint time: the editor at 1200 x 760 and 2x with 24 Dynamic Bells, e
     host.settle();
     host.click (host.at (30.0 * std::pow (2.0, 11.0 / 3.0)));
     host.settle();
-    // EQ1_DISPLAY_SNAPSHOT=<file.png> saves the display alone before any audio, the same on every run.
-    if (const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_DISPLAY_SNAPSHOT", {}); path.isNotEmpty())
-    {
-        juce::File file (path);
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (host.display.createComponentSnapshot (host.display.getLocalBounds(), true, 2.0f), stream);
-    }
+    // The display alone before any audio, the same on every run, when EQ1_SCREENS asks for it.
+    harness::writeSnapshot (host.display, "paint-display");
 
     // Noise on the main input and the Sidechain, so every spectrum, Peak Hold and the meter have content.
     std::mt19937 random (1);
@@ -88,23 +76,14 @@ TEST_CASE ("Paint time: the editor at 1200 x 760 and 2x with 24 Dynamic Bells, e
     constexpr double ceilingMs = 200.0;
     CHECK (median < ceilingMs);
 
-    if (const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_PAINT_SNAPSHOT", {}); path.isNotEmpty())
-    {
-        juce::File file (path);
-        file.deleteFile();
-        juce::FileOutputStream stream (file);
-        juce::PNGImageFormat().writeImageToStream (frame, stream);
-    }
+    harness::writeSnapshot (frame, "paint-frame");
 }
 
 // The display as the Staple handoff's screenshot shows it, for checking by hand against the
-// prototype: 1200 x 760 at 2x, a few Bands, the Analyzer on noise, and a selected Dynamic Band.
-// Hidden; EQ1_SCREENSHOT=<file.png> names the file: `build/tests/eq1_plugin_tests "[screenshot]"`.
-TEST_CASE ("Screenshot: the editor with a few Bands, the Analyzer and a selected Dynamic Band", "[.screenshot]")
+// prototype: 1200 x 760 at 2x, a few Bands, the Analyzer on noise, and a selected Dynamic Band, as
+// screenshot (harness::writeSnapshot).
+TEST_CASE ("Screenshot: the editor with a few Bands, the Analyzer and a selected Dynamic Band", "[.screens]")
 {
-    const auto path = juce::SystemStats::getEnvironmentVariable ("EQ1_SCREENSHOT", {});
-    if (path.isEmpty())
-        SKIP ("EQ1_SCREENSHOT names the file to write");
     harness::OpenEditor host;
     host.editor->setSize (1200, 760);
     auto& processor = host.processor;
@@ -136,8 +115,5 @@ TEST_CASE ("Screenshot: the editor with a few Bands, the Analyzer and a selected
         }
         host.settle (20);
     }
-    juce::File file (path);
-    file.deleteFile();
-    juce::FileOutputStream stream (file);
-    juce::PNGImageFormat().writeImageToStream (host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, 2.0f), stream);
+    harness::writeSnapshot (*host.editor, "screenshot");
 }

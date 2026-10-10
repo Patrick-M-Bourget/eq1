@@ -5,7 +5,7 @@
 #include "PluginProcessor.h"
 #include "UiScale.h"
 #include "staple/Fonts.h"
-#include "staple/controls/Overlay.h"
+#include "staple/Light.h"
 
 #include "eq1/Response.h"
 
@@ -75,7 +75,7 @@ juce::String GainScaleReadout::text() const { return juce::String (juce::roundTo
 void GainScaleReadout::paint (juce::Graphics& g)
 {
     g.setFont (readoutFont());
-    g.setColour ((notApplied ? colour::text4 : colour::text1).withMultipliedAlpha (isEnabled() ? 1.0f : staple::tokens::motion::disabledAlpha));
+    g.setColour ((notApplied ? colour::text4 : colour::text1).withMultipliedAlpha (staple::enabledAlpha (*this)));
     g.drawText (text(), getLocalBounds().reduced (readoutPadding, 0), juce::Justification::centred, false);
 }
 
@@ -104,6 +104,7 @@ OutputReadout::OutputReadout() : staple::TextChip (outputReadoutText (0.0), Look
 {
     setName ("Output");
     setTitle ("Output");
+    setTextIsValue (true);
     setTooltip ("Output: Output Gain, with Auto Gain's estimate while Auto Gain is on. Click for the output controls");
     setInk (colour::text1);
 }
@@ -128,11 +129,6 @@ void OutputReadout::paintButton (juce::Graphics& g, bool highlighted, bool down)
         g.fillRoundedRectangle (getLocalBounds().toFloat(), size::r2);
     }
     staple::TextChip::paintButton (g, highlighted && ! open, down && ! open);
-}
-
-std::unique_ptr<juce::AccessibilityHandler> OutputReadout::createAccessibilityHandler()
-{
-    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
 }
 
 UiScaleMenu::UiScaleMenu() : staple::IconButton ("UI Scale", staple::Icon::uiScale)
@@ -171,8 +167,9 @@ std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHand
 }
 
 FooterBar::FooterBar (PluginProcessor& p)
-    : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerSettings (p), popover (p)
+    : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerPopover (p), outputPopover (p)
 {
+    bypassedFade.apply = [this] (float) { repaint(); };
     auto& state = processor.parameterState();
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slotValues.push_back (parameters::SlotValues::of (state, slot));
@@ -194,41 +191,41 @@ FooterBar::FooterBar (PluginProcessor& p)
     analyzerLabel.setAccessible (false); // the button carries the name
     addAndMakeVisible (analyzerLabel);
     analyzer.onClick = [this] {
-        if (analyzerSettings.isOpen())
-            analyzerSettings.close();
+        if (analyzerPopover.isOpen())
+            analyzerPopover.close();
         else
-            analyzerSettings.openFrom (analyzer, analyzerLabel);
+            analyzerPopover.openFrom (analyzer, analyzerLabel);
     };
     addAndMakeVisible (analyzer);
     // Back in the footer, hidden, once closed.
-    analyzerSettings.onClose = [this] { addChildComponent (analyzerSettings); };
-    analyzerSettings.onSettingsChanged = [this] { showAnalyzerSources(); };
-    addChildComponent (analyzerSettings);
+    analyzerPopover.onClose = [this] { addChildComponent (analyzerPopover); };
+    analyzerPopover.onSettingsChanged = [this] { showAnalyzerSources(); };
+    addChildComponent (analyzerPopover);
 
     gainScaleAttachment = std::make_unique<SliderAttachment> (state, parameters::gainScaleId, gainScale);
     gainScale.describe (*state.getParameter (parameters::gainScaleId));
     addAndMakeVisible (gainScale);
 
     output.onClick = [this] {
-        if (popover.isOpen())
-            popover.close();
+        if (outputPopover.isOpen())
+            outputPopover.close();
         else
         {
-            popover.openFrom (output);
-            output.setOpen (popover.isOpen());
+            outputPopover.openFrom (output);
+            output.setOpen (outputPopover.isOpen());
         }
     };
     addAndMakeVisible (output);
     // Back in the footer, hidden, once closed.
-    popover.onClose = [this] {
+    outputPopover.onClose = [this] {
         output.setOpen (false);
-        addChildComponent (popover);
+        addChildComponent (outputPopover);
     };
-    popover.onMeterToggled = [this] {
+    outputPopover.onMeterToggled = [this] {
         if (onMeterToggled != nullptr)
             onMeterToggled();
     };
-    addChildComponent (popover);
+    addChildComponent (outputPopover);
 
     uiScale.onPicked = [this] (int percent) {
         if (onUiScalePicked != nullptr)
@@ -250,18 +247,13 @@ FooterBar::FooterBar (PluginProcessor& p)
 FooterBar::~FooterBar()
 {
     stopTimer();
-    popover.onClose = nullptr;
-    analyzerSettings.onClose = nullptr;
+    outputPopover.onClose = nullptr;
+    analyzerPopover.onClose = nullptr;
 }
 
 void FooterBar::showUiScale (int percent)
 {
     uiScale.show (percent);
-}
-
-void FooterBar::showMeterShown (bool shown)
-{
-    popover.showMeterShown (shown);
 }
 
 void FooterBar::toggleGlobalBypass()
@@ -274,8 +266,6 @@ void FooterBar::timerCallback()
     showBypass();
     showOutputLevel();
     showAnalyzerSources();
-    if (bypassedShown && bypassedAlpha < 1.0f)
-        repaint();
 }
 
 void FooterBar::showBypass()
@@ -284,8 +274,9 @@ void FooterBar::showBypass()
     if (on == bypassedShown)
         return;
     bypassedShown = on;
-    bypassedSince = juce::Time::getMillisecondCounterHiRes();
-    bypassedAlpha = 0.0f;
+    bypassedFade.jump (0.0f);
+    if (on)
+        bypassedFade.towards (1.0f);
     gainScale.setNotApplied (on);
     output.setNotApplied (on);
     resized();
@@ -334,11 +325,10 @@ void FooterBar::paint (juce::Graphics& g)
     if (! bypassedShown)
         return;
     // "Bypassed" fades in beside Global Bypass over dur2.
-    bypassedAlpha = staple::ease (static_cast<float> ((juce::Time::getMillisecondCounterHiRes() - bypassedSince) / staple::tokens::motion::dur2Ms));
     const auto font = bypassedFont();
-    const int width = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (font, bypassedText)));
+    const int width = staple::textWidth (font, bypassedText);
     g.setFont (font);
-    g.setColour (colour::stateOff.withMultipliedAlpha (bypassedAlpha));
+    g.setColour (colour::stateOff.withMultipliedAlpha (bypassedFade.value()));
     g.drawText (bypassedText, globalBypass.getRight() + footerGap - bypassedOverlap, 0, width, getHeight(), juce::Justification::centredLeft, false);
 }
 
@@ -352,11 +342,11 @@ void FooterBar::resized()
     row.removeFromLeft (footerGap);
     if (bypassedShown)
     {
-        const int width = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (bypassedFont(), bypassedText)));
+        const int width = staple::textWidth (bypassedFont(), bypassedText);
         row.removeFromLeft (width - bypassedOverlap + footerGap);
     }
     // "Analyzer", then its button, 8 apart.
-    const int labelWidth = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (analyzerLabel.getFont(), analyzerLabel.getText())));
+    const int labelWidth = staple::textWidth (analyzerLabel.getFont(), analyzerLabel.getText());
     analyzerLabel.setBounds (row.removeFromLeft (labelWidth));
     row.removeFromLeft (analyzerLabelGap);
     analyzer.setBounds (row.removeFromLeft (analyzer.getIdealWidth()));
@@ -367,7 +357,7 @@ void FooterBar::resized()
     row.removeFromRight (4);
     output.setBounds (row.removeFromRight (std::max (outputWidth, output.getIdealWidth() + 2 * (readoutPadding - 6))));
     row.removeFromRight (2);
-    const int gainScaleText = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (readoutFont(), "200%")));
+    const int gainScaleText = staple::textWidth (readoutFont(), "200%");
     gainScale.setBounds (row.removeFromRight (std::max (gainScaleWidth, gainScaleText + 2 * readoutPadding)));
 }
 
