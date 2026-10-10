@@ -37,8 +37,9 @@ public:
     double liveGainDb() const;
 
     // Processes the piece of a run from position (0 to maxSubBlock - 1) on, numSamples long, at most
-    // to the run's end. A run's first piece starts at position 0; one the Band joins later (as a
-    // detector that starts listening) plays at the filter last designed until the next run.
+    // to the run's end. A run's first piece starts at position 0. A Band that missed the run's start
+    // (a detector with nothing to listen to for a while) plays at the filter last designed until the
+    // next run.
     void process (float* const* channels, int numChannels, int position, int numSamples);
 
 private:
