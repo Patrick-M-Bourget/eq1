@@ -42,9 +42,17 @@ public:
 
     void paint (juce::Graphics& g) override;
     bool keyPressed (const juce::KeyPress& key) override;
+    // Its own and, as their listener, its child Label's: the face lights up the moment the pointer
+    // enters either, until it leaves, and brighter while pressed.
+    void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+    void showPopup() override;
 
 private:
     const Side side;
+    bool hovered = false, pressed = false;
     juce::Colour edgeColour = tokens::colour::text1, iconColour = tokens::colour::text1;
     std::map<int, Icon> icons, contexts;
     std::map<int, juce::Colour> dots;

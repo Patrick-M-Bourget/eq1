@@ -571,6 +571,115 @@ TEST_CASE ("A Knob's outer ring lane reports presses, drags and hovers to its ha
     CHECK_THAT (ring.outer, WithinAbs (33.0 + 16.0, 1.0e-4));
 }
 
+namespace
+{
+// An Edge selector in a Kit window that counts the repaints asked of it. The pointer's events go to it
+// as JUCE delivers them: over its child Label, to the Label's mouse listeners, the selector among them.
+// (A window that isn't in front, as a test's isn't, takes no pointer from its peer, nor paints before
+// its next frame.)
+struct HoverKit
+{
+    // Stands in for the window's own drawing, which is all children's, and counts repaints asked of it.
+    struct Repaints final : juce::CachedComponentImage
+    {
+        int count = 0;
+        void paint (juce::Graphics&) override {}
+        bool invalidateAll() override { return ++count > 0; }
+        bool invalidate (const juce::Rectangle<int>&) override { return ++count > 0; }
+        void releaseResources() override {}
+    };
+
+    Kit kit;
+    staple::EdgeSelector shape { "Shape", staple::EdgeSelector::Side::left };
+    Repaints* repaints = new Repaints();
+
+    HoverKit()
+    {
+        addShapes (shape);
+        shape.setSelectedId (1);
+        shape.setEdgeColour (staple::tokens::band[3]);
+        shape.setIconColour (staple::tokens::band[3]);
+        kit.add (shape, { 20, 20, staple::tokens::layout::edgeSelectorWidth, staple::tokens::layout::edgeSelectorHeight });
+        kit.window.setCachedComponentImage (repaints); // owned by the window
+    }
+
+    ~HoverKit()
+    {
+        kit.window.setCachedComponentImage (nullptr);
+        juce::PopupMenu::dismissAllActiveMenus();
+    }
+
+    juce::Label& label() { return *harness::findChild<juce::Label> (shape); }
+
+    // An event at the Label's centre, from the Label, as its listeners get it.
+    juce::MouseEvent overLabel (juce::ModifierKeys mods = {})
+    {
+        const auto at = label().getLocalBounds().toFloat().getCentre();
+        return harness::mouseEvent (label(), at, mods);
+    }
+
+    // The face's mean brightness, as it paints now.
+    float brightness()
+    {
+        const auto image = shape.createComponentSnapshot (shape.getLocalBounds(), true, 1.0f);
+        const juce::Image::BitmapData pixels (image, juce::Image::BitmapData::readOnly);
+        double sum = 0.0;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto c = pixels.getPixelColour (x, y);
+                sum += (c.getFloatRed() + c.getFloatGreen() + c.getFloatBlue()) * c.getFloatAlpha();
+            }
+        return static_cast<float> (sum / (image.getWidth() * image.getHeight()));
+    }
+};
+} // namespace
+
+TEST_CASE ("An Edge selector paints brighter while hovered, and brighter again while pressed")
+{
+    HoverKit h;
+    const float rest = h.brightness();
+    const auto at = centreOf (h.shape);
+    h.shape.mouseEnter (harness::mouseEvent (h.shape, at));
+    const float hovered = h.brightness();
+    CHECK (hovered > rest * 1.02f);
+
+    Kit::press (h.shape);
+    const float pressed = h.brightness();
+    CHECK (pressed > hovered * 1.02f);
+    Kit::release (h.shape);
+    CHECK_THAT (h.brightness(), WithinAbs (hovered, 1.0e-6));
+    h.shape.mouseExit (harness::mouseEvent (h.shape, at));
+    CHECK_THAT (h.brightness(), WithinAbs (rest, 1.0e-6));
+}
+
+TEST_CASE ("An Edge selector lights the moment the pointer enters over its Label, and unlights the moment it leaves")
+{
+    HoverKit h;
+    const float rest = h.brightness();
+
+    const int before = h.repaints->count;
+    h.shape.mouseEnter (h.overLabel());
+    CHECK (h.repaints->count > before);
+    CHECK (h.brightness() > rest * 1.02f);
+
+    const int lit = h.repaints->count;
+    h.shape.mouseExit (h.overLabel());
+    CHECK (h.repaints->count > lit);
+    CHECK_THAT (h.brightness(), WithinAbs (rest, 1.0e-6));
+}
+
+TEST_CASE ("A disabled Edge selector paints the same hovered, pressed or not")
+{
+    HoverKit h;
+    h.shape.setEnabled (false);
+    const float rest = h.brightness();
+    h.shape.mouseEnter (h.overLabel());
+    CHECK_THAT (h.brightness(), WithinAbs (rest, 1.0e-6));
+    h.shape.mouseDown (h.overLabel (juce::ModifierKeys::leftButtonModifier));
+    CHECK_THAT (h.brightness(), WithinAbs (rest, 1.0e-6));
+}
+
 TEST_CASE ("Tab skips a disabled Knob")
 {
     Kit kit;
