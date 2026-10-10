@@ -3,10 +3,11 @@
 #include "BandClipboard.h"
 #include "BandMenu.h"
 #include "PluginProcessor.h"
-#include "eq1/Response.h"
-#include "staple/Fonts.h"
+#include "display/AnalyzerLayer.h"
+#include "display/CurvesLayer.h"
+#include "display/GridLayer.h"
+#include "display/HandlesLayer.h"
 #include "staple/LookAndFeel.h"
-#include "staple/Tokens.h"
 
 #include <cmath>
 
@@ -15,19 +16,7 @@ namespace eq1
 
 namespace
 {
-constexpr double lowestFrequency = 10.0, highestFrequency = 30000.0;
-constexpr float handleRadius = 9.0f;
-constexpr float pixelStep = 2.0f; // the curves are evaluated every this many pixels
-constexpr float ringRadius = handleRadius + 5.0f;
-
-namespace colour = staple::tokens::colour;
-namespace size = staple::tokens::size;
-
-// Each Band Slot keeps its own colour.
-juce::Colour colourOf (int slot)
-{
-    return staple::tokens::band[slot - 1];
-}
+constexpr float handleRadius = display::DisplayGeometry::handleRadius;
 
 // Exactly the same, field by field: any change at all counts, so the comparison is exact. (Settings'
 // own == would do, but its float comparison warns where it is defined.)
@@ -46,11 +35,6 @@ bool same (const Settings& a, const Settings& b)
     return true;
 }
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-
-juce::String frequencyText (double frequency)
-{
-    return frequency >= 1000.0 ? juce::String (frequency / 1000.0, 2) + " kHz" : juce::String (juce::roundToInt (frequency)) + " Hz";
-}
 } // namespace
 
 class EqDisplay::BandHandle final : public juce::Component
@@ -126,8 +110,7 @@ bool EqDisplay::updateAnalyzer()
 
 float EqDisplay::spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const
 {
-    const double level = spectrum.levelDb (frequencyAt (x), analyzer.tiltDbPerOctave);
-    return static_cast<float> (juce::jlimit (0.0, 1.0, -level / analyzer.rangeDb) * getHeight());
+    return display::spectrumYAt (geometry(), analyzer, spectrum, x);
 }
 
 AnalyzerSpectrum* EqDisplay::spectrumToGrab()
@@ -248,37 +231,16 @@ void EqDisplay::timerCallback()
     repaint();
 }
 
-float EqDisplay::xOf (double frequency) const
+display::DisplayGeometry EqDisplay::geometry() const
 {
-    return static_cast<float> (std::log (frequency / lowestFrequency) / std::log (highestFrequency / lowestFrequency) * getWidth());
+    return { .width = getWidth(), .height = getHeight(), .rangeDb = processor.displayRangeDb() };
 }
 
-double EqDisplay::frequencyAt (float x) const
-{
-    return lowestFrequency * std::pow (highestFrequency / lowestFrequency, juce::jlimit (0.0, 1.0, static_cast<double> (x) / getWidth()));
-}
-
-float EqDisplay::yOf (double db) const
-{
-    const auto range = static_cast<float> (processor.displayRangeDb());
-    const float half = static_cast<float> (getHeight()) * 0.5f;
-    return half - static_cast<float> (db) / range * (half - handleRadius);
-}
-
-double EqDisplay::dbAt (float y) const
-{
-    const auto range = static_cast<double> (processor.displayRangeDb());
-    const double half = getHeight() * 0.5;
-    return (half - y) / (half - handleRadius) * range;
-}
-
-juce::Point<float> EqDisplay::handleOf (const BandSettings& band) const
-{
-    // A Shape without Gain sits on the 0 dB line; one beyond the display range sits at its edge.
-    const auto range = static_cast<double> (processor.displayRangeDb());
-    const double gain = hasGain (band.shape) ? juce::jlimit (-range, range, band.gain) : 0.0;
-    return { xOf (band.frequency), yOf (gain) };
-}
+float EqDisplay::xOf (double frequency) const { return geometry().xOf (frequency); }
+double EqDisplay::frequencyAt (float x) const { return geometry().frequencyAt (x); }
+float EqDisplay::yOf (double db) const { return geometry().yOf (db); }
+double EqDisplay::dbAt (float y) const { return geometry().dbAt (y); }
+juce::Point<float> EqDisplay::handleOf (const BandSettings& band) const { return geometry().handleOf (band); }
 
 double EqDisplay::drawnGain (int slot, const BandSettings& band) const
 {
@@ -305,220 +267,26 @@ void EqDisplay::select (std::set<int> slots)
     repaint();
 }
 
-juce::Path EqDisplay::curve (const std::vector<double>& db) const
-{
-    juce::Path path;
-    const auto range = static_cast<double> (processor.displayRangeDb());
-    for (size_t i = 0; i < db.size(); ++i)
-    {
-        const juce::Point<float> point { static_cast<float> (i) * pixelStep, yOf (juce::jlimit (-range * 1.5, range * 1.5, db[i])) };
-        if (i == 0)
-            path.startNewSubPath (point);
-        else
-            path.lineTo (point);
-    }
-    return path;
-}
-
 void EqDisplay::paint (juce::Graphics& g)
 {
-    g.fillAll (colour::bg0);
-
-    // Grid: decades and their halves, and Gain lines a quarter of the range apart.
-    g.setFont (staple::font (size::fs2));
-    for (double f : { 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 })
-    {
-        const float x = xOf (f);
-        g.setColour (colour::gridMajor);
-        g.drawVerticalLine (juce::roundToInt (x), 0.0f, static_cast<float> (getHeight()));
-        g.setColour (colour::text3);
-        g.drawText (f >= 1000.0 ? juce::String (juce::roundToInt (f / 1000.0)) + "k" : juce::String (juce::roundToInt (f)),
-                    juce::Rectangle<float> (x + 3.0f, static_cast<float> (getHeight()) - 16.0f, 40.0f, 14.0f), juce::Justification::left);
-    }
-    // The Analyzer behind everything: pre-EQ filled, post-EQ filled and outlined, the Sidechain outlined.
-    const auto spectrumLine = [&] (const AnalyzerSpectrum& spectrum) {
-        juce::Path line;
-        for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
-        {
-            const juce::Point<float> point { x, spectrumYAt (spectrum, x) };
-            if (x == 0.0f)
-                line.startNewSubPath (point);
-            else
-                line.lineTo (point);
-        }
-        return line;
-    };
-    const auto areaUnder = [&] (juce::Path line) {
-        line.lineTo (line.getCurrentPosition().withY (static_cast<float> (getHeight())));
-        line.lineTo (0.0f, static_cast<float> (getHeight()));
-        line.closeSubPath();
-        return line;
-    };
-    // Peak Hold under the spectra, faint, in its spectrum's colour; nothing where it is below the
-    // Analyzer's range, so silence leaves no flat line.
-    if (held != nullptr)
-    {
-        juce::Path line;
-        bool drawing = false;
-        for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
-        {
-            const double level = held->heldLevelDb (frequencyAt (x), analyzer.tiltDbPerOctave);
-            if (level <= -analyzer.rangeDb)
-            {
-                drawing = false;
-                continue;
-            }
-            const juce::Point<float> point { x, static_cast<float> (juce::jlimit (0.0, 1.0, -level / analyzer.rangeDb) * getHeight()) };
-            if (drawing)
-                line.lineTo (point);
-            else
-                line.startNewSubPath (point);
-            drawing = true;
-        }
-        g.setColour (colour::anPeak);
-        g.strokePath (line, juce::PathStrokeType (1.0f));
-    }
-    if (analyzer.showPreEq)
-    {
-        g.setColour (colour::anFillMid);
-        g.fillPath (areaUnder (spectrumLine (preEq)));
-    }
-    if (analyzer.showPostEq)
-    {
-        const auto line = spectrumLine (postEq);
-        g.setColour (colour::anFillTop);
-        g.fillPath (areaUnder (line));
-        g.setColour (colour::anLine);
-        g.strokePath (line, juce::PathStrokeType (1.0f));
-    }
-    if (analyzer.showSidechain)
-    {
-        g.setColour (colour::anScLine);
-        g.strokePath (spectrumLine (sidechain), juce::PathStrokeType (1.0f));
-    }
-
-    const int range = processor.displayRangeDb();
-    for (int step = -2; step <= 2; ++step)
-    {
-        const double db = range * step / 2.0;
-        const float y = yOf (db);
-        g.setColour (step == 0 ? colour::gridZero : colour::gridMajor);
-        g.drawHorizontalLine (juce::roundToInt (y), 0.0f, static_cast<float> (getWidth()));
-        g.setColour (colour::text3);
-        // Above its line, except at the top edge.
-        const float labelY = y - 14.0f < 0.0f ? y + 2.0f : y - 14.0f;
-        g.drawText ((db > 0 ? "+" : "") + juce::String (db, 0), juce::Rectangle<float> (4.0f, labelY, 40.0f, 12.0f),
-                    juce::Justification::left);
-    }
-
-    // Each Band's own curve, then the whole EQ's: the sum of the Bands that are playing. Nothing plays
-    // above Nyquist, so the curves stay level from there. Before the host has prepared the plugin,
-    // they are drawn as at 48 kHz.
-    const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
-    std::vector<double> frequencies;
-    for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
-        frequencies.push_back (std::min (frequencyAt (x), 0.4999 * sampleRate));
-    // On mono a Side Band has nothing to process (#6): it plays no part in the whole EQ's curve.
-    const bool mono = ! processor.isStereoPlacementAvailable();
-    std::vector<double> total (frequencies.size(), 0.0), bandDb (frequencies.size());
+    const auto shape = geometry();
+    display::DisplayFrame frame { .bands = shown,
+                                  .selected = selected,
+                                  .soloedSlot = soloedSlot,
+                                  .dragging = dragging,
+                                  .marquee = marquee,
+                                  .allInUseMessage = allInUseMessageUntil != 0,
+                                  // Before the host has prepared the plugin, the curves are drawn as at 48 kHz.
+                                  .sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                                  .mono = ! processor.isStereoPlacementAvailable() };
     for (int slot = 1; slot <= numBandSlots; ++slot)
-    {
-        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-        if (! band.inUse)
-            continue;
-        const bool silent = band.bypass || (mono && band.placement == StereoPlacement::Side);
-        auto live = band;
-        live.gain = drawnGain (slot, band);
-        bandResponseDb (live, frequencies.data(), bandDb.data(), static_cast<int> (bandDb.size()), sampleRate);
-        if (! silent)
-            for (size_t i = 0; i < total.size(); ++i)
-                total[i] += bandDb[i];
-        g.setColour (colourOf (slot).withAlpha (silent ? 0.12f : selected.contains (slot) ? 0.6f : 0.3f));
-        g.strokePath (curve (bandDb), juce::PathStrokeType (1.2f));
-    }
-    g.setColour (colour::curveMain);
-    g.strokePath (curve (total), juce::PathStrokeType (2.0f));
+        frame.drawnGains[static_cast<size_t> (slot - 1)] = drawnGain (slot, shown.bands[static_cast<size_t> (slot - 1)]);
 
-    // Handles, numbered by Band Slot.
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-    {
-        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-        if (! band.inUse)
-            continue;
-        const auto centre = handleOf (band);
-        const auto circle = juce::Rectangle<float> (handleRadius * 2.0f, handleRadius * 2.0f).withCentre (centre);
-        g.setColour (colourOf (slot).withAlpha (band.bypass ? 0.35f : 1.0f));
-        g.fillEllipse (circle);
-        if (selected.contains (slot))
-        {
-            g.setColour (colour::text1);
-            g.drawEllipse (circle.expanded (2.0f), 1.5f);
-        }
-        g.setColour (colour::onLight);
-        g.drawText (juce::String (slot), circle, juce::Justification::centred);
-        if (isDynamic (band))
-        {
-            // The Dynamic Range ring: from the top, clockwise for a boost and anticlockwise for a cut, half
-            // a turn for 30 dB, shortened where Live Gain would go beyond +/-30 dB. Live Gain's movement
-            // is drawn on top of it.
-            const auto angleOf = [] (double db) { return static_cast<float> (db / liveGainLimitDb * juce::MathConstants<double>::pi); };
-            const double reach = juce::jlimit (-liveGainLimitDb, liveGainLimitDb, band.gain + band.dynamicRange) - band.gain;
-            const auto arc = [&] (double db) {
-                juce::Path path;
-                path.addCentredArc (centre.x, centre.y, ringRadius, ringRadius, 0.0f, 0.0f, angleOf (db), true);
-                return path;
-            };
-            g.setColour (colour::dynRange.withAlpha (band.dynamicsBypass ? 0.35f : 0.9f));
-            g.strokePath (arc (reach), juce::PathStrokeType (3.0f));
-            if (! band.dynamicsBypass)
-            {
-                g.setColour (colour::dynLive);
-                g.strokePath (arc (drawnGain (slot, band) - band.gain), juce::PathStrokeType (3.0f));
-            }
-        }
-        if (slot == soloedSlot)
-        {
-            g.setColour (colour::text1);
-            g.drawEllipse (circle.expanded (5.0f), 2.0f);
-            g.drawText ("Solo", circle.withY (circle.getY() - 22.0f).expanded (20.0f, 0.0f), juce::Justification::centred);
-        }
-    }
-
-    // Values beside the Bands being dragged.
-    if (dragging)
-        for (int slot : selected)
-        {
-            const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-            juce::String text = frequencyText (band.frequency);
-            if (hasGain (band.shape))
-                text << "  " << (band.gain > 0.0 ? "+" : "") << juce::String (band.gain, 1) << " dB";
-            text << "  Q " << juce::String (band.q, 2);
-            const auto centre = handleOf (band);
-            auto box = juce::Rectangle<float> (170.0f, 18.0f).withPosition (centre.x + 12.0f, centre.y - 26.0f);
-            box = box.constrainedWithin (getLocalBounds().toFloat());
-            g.setColour (colour::menu);
-            g.fillRoundedRectangle (box, 4.0f);
-            g.setColour (colour::text1);
-            g.drawText (text, box, juce::Justification::centred);
-        }
-
-    if (marquee)
-    {
-        g.setColour (colour::fill2);
-        g.fillRect (*marquee);
-        g.setColour (colour::text3);
-        g.drawRect (*marquee, 1.0f);
-    }
-
-    if (allInUseMessageUntil != 0)
-    {
-        const auto box = getLocalBounds().toFloat().withSizeKeepingCentre (300.0f, 30.0f).withY (12.0f);
-        g.setColour (colour::stateOffBg);
-        g.fillRoundedRectangle (box, 6.0f);
-        g.setColour (colour::text1);
-        g.setFont (staple::font (size::fs4));
-        g.drawText ("All 24 Bands are in use", box, juce::Justification::centred);
-    }
+    display::paintGridBehindAnalyzer (g, shape);
+    display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
+    display::paintGridOverAnalyzer (g, shape);
+    display::paintCurves (g, shape, frame);
+    display::paintHandles (g, shape, frame);
 }
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)

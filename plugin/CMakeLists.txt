@@ -43,6 +43,11 @@ target_sources(eq1 PRIVATE
     BandPanel.cpp
     DetectionArc.cpp
     EqDisplay.cpp
+    display/AnalyzerLayer.cpp
+    display/CurvesLayer.cpp
+    display/DisplayGeometry.cpp
+    display/GridLayer.cpp
+    display/HandlesLayer.cpp
     DisplayRange.cpp
     EditHistory.cpp
     ABCompare.cpp

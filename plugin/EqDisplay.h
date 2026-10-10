@@ -3,6 +3,7 @@
 #include "AnalyzerSettings.h"
 #include "BandEditing.h"
 #include "AnalyzerSpectrum.h"
+#include "display/DisplayGeometry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -74,7 +75,9 @@ private:
     // pre-EQ, else none.
     AnalyzerSpectrum* spectrumToGrab();
 
-    // Frequency runs on a log scale from 10 Hz to 30 kHz; dB over +/- the display range.
+    // Frequency runs on a log scale from 10 Hz to 30 kHz; dB over +/- the display range. The layers in
+    // plugin/display/ draw with it.
+    display::DisplayGeometry geometry() const;
     float xOf (double frequency) const;
     double frequencyAt (float x) const;
     float yOf (double db) const;
@@ -92,8 +95,6 @@ private:
     void copySelection();
     bool paste();
     void showMenu (const juce::MouseEvent& e);
-    // A curve through db, one value every pixelStep pixels from the left edge.
-    juce::Path curve (const std::vector<double>& db) const;
 
     PluginProcessor& processor;
     BandEditing& editing;
