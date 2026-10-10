@@ -81,6 +81,10 @@ public:
     // is drawn with Staple's LookAndFeel.
     static void keyUsed (juce::Component& component);
 
+    // Hover and press light a fill up: an opaque colour brightens, a translucent one (fill1, fill2) grows
+    // more opaque, which is what brightening it over the dark background looks like.
+    static juce::Colour lit (juce::Colour colour, bool highlighted, bool down);
+
 private:
     bool focusRingShown = false;
     // Keeps the typefaces loaded while the editor is open, so staple::font doesn't load them again.

@@ -807,6 +807,24 @@ TEST_CASE ("Detection Source and Detection Range switch with a click, each one u
     CHECK (host.control<staple::Knob> ("Band 1 Release").tooltipValue() == "Auto");
 }
 
+TEST_CASE ("Hovering and pressing the Detection Range button light its translucent fill more opaque")
+{
+    DynamicEditor host;
+    auto& range = host.control<juce::Button> ("Band 1 Detection Range");
+    // The fill's alpha at the button's left edge, clear of its icon and text.
+    const auto fillAlpha = [&range] (juce::Button::ButtonState state) {
+        range.setState (state);
+        const auto image = range.createComponentSnapshot (range.getLocalBounds(), true, 1.0f);
+        return image.getPixelAt (3, image.getHeight() / 2).getAlpha();
+    };
+    const auto normal = fillAlpha (juce::Button::buttonNormal);
+    const auto over = fillAlpha (juce::Button::buttonOver);
+    const auto down = fillAlpha (juce::Button::buttonDown);
+    CHECK (normal > 0);
+    CHECK (over > normal);
+    CHECK (down > over);
+}
+
 namespace
 {
 // A Dynamic Bell on a Free Detection Range from 120 Hz to 4.5 kHz.

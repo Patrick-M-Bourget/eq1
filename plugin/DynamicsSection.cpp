@@ -3,6 +3,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
+#include "staple/LookAndFeel.h"
 #include "staple/Tokens.h"
 #include "staple/controls/Overlay.h"
 
@@ -182,8 +183,7 @@ public:
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override
     {
         const auto bounds = getLocalBounds().toFloat();
-        const float brightness = down ? tokens::motion::pressedBrightness : highlighted ? tokens::motion::hoverBrightness : 1.0f;
-        g.setColour (colour::fill1.withMultipliedBrightness (brightness));
+        g.setColour (staple::LookAndFeel::lit (colour::fill1, highlighted, down));
         g.fillRoundedRectangle (bounds, tokens::size::r2);
         const auto font = staple::font (tokens::size::fs2, staple::Weight::medium);
         constexpr float iconWidth = 14.0f, iconHeight = 12.0f, gap = 6.0f;
