@@ -56,6 +56,10 @@ _Avoid_: Duplicate, separate
 Flipping the sign of a Band's Gain and Dynamic Range, so a boost becomes the same cut.
 _Avoid_: Flip, Phase Invert (for a Band)
 
+**Hover Card**:
+The small card of quick controls shown while the pointer rests on a Band's handle, which edits that Band without selecting it.
+_Avoid_: Hover snapshot, quick panel, tooltip
+
 ## Dynamics
 
 **Dynamic Band**:
