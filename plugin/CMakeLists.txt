@@ -66,7 +66,8 @@ target_sources(eq1 PRIVATE
     staple/controls/ParseValue.cpp
     staple/controls/Popover.cpp
     staple/controls/TextChip.cpp
-    KeyboardSlider.cpp)
+    KeyboardSlider.cpp
+    UserSettings.cpp)
 
 # The Factory Presets, bundled into the plugin.
 juce_add_binary_data(eq1_factory_presets

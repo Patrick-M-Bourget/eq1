@@ -138,6 +138,10 @@ _Avoid_: Freeze, max hold
 How many dB above and below 0 dB the EQ display shows Gain over; it changes the view, never the sound.
 _Avoid_: Zoom, range (unqualified), scale
 
+**UI Scale**:
+How large the whole editor is drawn, 75 to 200%, per instance; it changes the view, never the sound.
+_Avoid_: Zoom, size, Display Range
+
 **Preset**:
 A saved, named set of every setting that affects the sound: Factory (shipped with eq1) or User (saved by the user).
 _Avoid_: Patch, program, snapshot

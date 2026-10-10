@@ -51,6 +51,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/StapleControlsTest.cpp
         plugin/StapleTest.cpp
         plugin/StateTest.cpp
+        plugin/UiScaleTest.cpp
     )
     target_include_directories(eq1_plugin_tests PRIVATE
         ${PROJECT_SOURCE_DIR}/plugin
