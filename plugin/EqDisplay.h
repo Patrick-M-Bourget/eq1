@@ -12,6 +12,7 @@
 #include <array>
 #include <functional>
 #include <set>
+#include <tuple>
 #include <vector>
 
 namespace eq1
@@ -40,7 +41,9 @@ class PluginProcessor;
 // Range sits at its edge; a heard Gain changed to beyond it zooms the range out, once any drag has
 // ended. A screen reader reads the display as a group, "EQ display", of the Bands in use, each named
 // "Band 4" with its stored settings as its value (spokenBand), announced again whenever the Band moves,
-// and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle".
+// and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle". It paints no background: the
+// window's (staple/WindowBackground.h) shows through, and its edges fade into it, so its parent is the
+// window's content.
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
@@ -187,6 +190,12 @@ private:
     float globalBypassFade = 0.0f;
     juce::uint32 lastFadeStep = 0;
     bool isGlobalBypassOn() const;
+
+    // The window's background under the display's edges (display::edgeFadeOverlay), and what it was
+    // built for: the display's place in the window, the window's size and the scale it is drawn at.
+    juce::Image edgeFade;
+    std::tuple<juce::Rectangle<int>, juce::Rectangle<int>, float> edgeFadeFor;
+    const juce::Image& edgeFadeAt (float scale);
     // Moves every fade on by the time since the last step; true while any of them moved.
     bool stepFades();
 };

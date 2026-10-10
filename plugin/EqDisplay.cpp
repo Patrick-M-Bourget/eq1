@@ -11,6 +11,7 @@
 #include "display/GridLayer.h"
 #include "display/HandlesLayer.h"
 #include "staple/LookAndFeel.h"
+#include "staple/WindowBackground.h"
 
 #include <cmath>
 
@@ -531,16 +532,31 @@ int EqDisplay::bandAreaAt (juce::Point<float> position) const
     return display::bandAreaAt (geometry(), frame(), position);
 }
 
+const juce::Image& EqDisplay::edgeFadeAt (float scale)
+{
+    const auto* window = getParentComponent();
+    const auto windowBounds = window != nullptr ? window->getLocalBounds() : getLocalBounds();
+    const auto key = std::make_tuple (getBounds(), windowBounds, scale);
+    if (key != edgeFadeFor || ! edgeFade.isValid())
+    {
+        edgeFadeFor = key;
+        edgeFade = display::edgeFadeOverlay (geometry(), scale, [&] (juce::Graphics& g) {
+            g.addTransform (juce::AffineTransform::translation (-getPosition().toFloat()));
+            staple::paintWindowBackground (g, windowBounds.toFloat());
+        });
+    }
+    return edgeFade;
+}
+
 void EqDisplay::paint (juce::Graphics& g)
 {
     const auto shape = geometry();
     const auto frame = this->frame();
-    g.fillAll (staple::tokens::colour::bg0);
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
     display::paintCurves (g, shape, frame);
     // The handles and labels go over the edge fades, unfaded.
-    display::paintEdgeFades (g, shape);
+    display::paintEdgeFades (g, shape, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
     const auto shownGhost = ghostFade > 0.0f ? ghost() : std::nullopt;
     display::paintLabels (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
     display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
