@@ -20,5 +20,5 @@ Each builder gets its own worktree and touches different files where the plan al
 The handoff (`docs/staple-handoff/`) decides how it looks; spec #1 decides what it does, and its "Staple reskin" list names where they differ.
 
 - **Render the prototype** to compare against images, not markup: `python3 -m http.server -d docs/staple-handoff/prototype 8765`, then open `http://localhost:8765/Main.dc.html` (or `DesignSystem.dc.html` for single controls). For a PNG at the editor's size: Chrome `--headless=new --window-size=1200,760 --force-device-scale-factor=2 --screenshot=<file.png> <url>`.
-- **Render the editor** with the hidden `[.screens]` tests (`scripts/check.sh screens <dir>`) at the same size and scale, and check them side by side area by area. The PR attaches both.
+- **Render the editor** with the hidden `[.screens]` and `[.screenshot]` tests at the same size and scale, and check them side by side area by area. The PR attaches both.
 - Every colour and size comes from `plugin/staple/Tokens.h`; the editor has one LookAndFeel, `staple::LookAndFeel`.
