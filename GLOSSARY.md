@@ -101,7 +101,7 @@ Listening to the signal a Dynamic Band's detector hears instead of the plugin's 
 _Avoid_: Sidechain solo, listen, Solo (for detection)
 
 **Detection Level**:
-The level of a Dynamic Band's detection signal, as the detector compares it with the Threshold.
+The level of a Band's detection signal, as its detector compares it with the Threshold, in dB where a full-scale sine reads 0.
 _Avoid_: Input level, sidechain level
 
 **Clear Dynamics**:
@@ -160,7 +160,7 @@ _Avoid_: Bypass (unqualified) for the whole plugin
 
 **Output Gain**:
 The gain applied to the whole plugin's output, after every Band, in dB.
-_Avoid_: Master gain, output level, Gain (unqualified)
+_Avoid_: Master gain, Gain (unqualified)
 
 **Output Pan**:
 The balance of the whole plugin's output between the two sides of its Pan Mode; the centre leaves both alone. Unavailable on mono.
@@ -182,6 +182,14 @@ _Avoid_: Depth, master gain, amount
 Parameter changes recorded and played back by the DAW hosting the plugin.
 _Avoid_: Automation (unqualified)
 
+**Output Level**:
+The sample peak and RMS of what eq1 sends on, per channel, in dBFS; the input during Global Bypass.
+_Avoid_: Level (unqualified), loudness, output gain
+
+**Clip Light**:
+A per-channel indicator that lights when the Output Level peaks above 0 dBFS and stays lit until clicked.
+_Avoid_: Clip indicator, over light
+
 **Output Meter**:
-The display of the plugin's output level per channel, with a clip light that stays lit until cleared; separate from the Analyzer.
+The display of the Output Level per channel, with a Clip Light; separate from the Analyzer.
 _Avoid_: Meter (unqualified), level meter, VU
