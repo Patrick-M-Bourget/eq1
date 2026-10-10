@@ -43,6 +43,9 @@ public:
     // The card itself, in its parent's coordinates: the component is wider, for its shadow and arrow tip.
     juce::Rectangle<int> body() const { return bodyArea() + getPosition(); }
 
+    // The component is the card, its strip or inside one of them.
+    bool contains (const juce::Component* component) const;
+
     // The pointer is over the card.
     bool isPointerOver() const { return pointerOver; }
     // It stays up, whatever the pointer does, while its menu is open or a value is dragged or typed in;

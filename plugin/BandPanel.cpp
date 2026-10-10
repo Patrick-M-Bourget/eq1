@@ -39,7 +39,7 @@ static_assert (BandPanel::openWidth == BandPanel::width + layout::dynamicsSectio
 
 // The bell's spread, as a proportion of the width, and the panel's Bypassed opacity.
 constexpr float bellSigma = 0.14f;
-constexpr float bypassedAlpha = 0.38f;
+constexpr float bypassedAlpha = tokens::motion::bypassedAlpha;
 // The wash of the Band's colour from the top centre, and the hairline along the top edge.
 constexpr float washTop = 0.14f, washMid = 0.035f, hairlineAlpha = 0.45f;
 

@@ -430,8 +430,7 @@ bool EqDisplay::stepFades()
 std::optional<display::Ghost> EqDisplay::ghost() const
 {
     // A menu is modal while it shows.
-    if (dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency || juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0
-        || card.shownSlot() != 0)
+    if (isPressed() || juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0 || card.shownSlot() != 0)
         return std::nullopt;
     int inUse = 0;
     for (const auto& band : shown.bands)
@@ -466,6 +465,14 @@ void EqDisplay::showCard (int slot)
     card.show (slot, layer->getLocalPoint (this, handleOf (band)), layer->getLocalArea (this, getLocalBounds()));
 }
 
+bool EqDisplay::isPressed() const { return dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency; }
+
+void EqDisplay::pressedInEditor (const juce::Component* pressed)
+{
+    if (card.shownSlot() != 0 && ! card.contains (pressed))
+        hideCard();
+}
+
 void EqDisplay::hideCard()
 {
     card.hide();
@@ -493,8 +500,7 @@ void EqDisplay::updateCard()
             hideCard();
         return;
     }
-    const bool pressed = dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency;
-    if (restingSlot != 0 && ! pressed && now - restingSince >= hoverCardRestMilliseconds)
+    if (restingSlot != 0 && ! isPressed() && now - restingSince >= static_cast<juce::uint32> (staple::tokens::hoverCard::restMs))
         showCard (std::exchange (restingSlot, 0));
 }
 
@@ -632,7 +638,7 @@ void EqDisplay::paint (juce::Graphics& g)
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)
 {
-    // Any press here hides the card; a handle's then selects and drags as ever.
+    // Any press here hides the card; a press on a handle then selects and drags it.
     hideCard();
     // Right-click, or Ctrl-click on macOS: never a Solo, a drag or a marquee.
     if (e.mods.isPopupMenu())

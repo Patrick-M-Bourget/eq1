@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "HeaderBar.h"
 #include "HoverCard.h"
 #include "Parameters.h"
 #include "staple/controls/IconButton.h"
@@ -304,6 +305,13 @@ TEST_CASE ("The Hover Card's menu deletes only its Band, and the card stays up w
     CardOnBand4 f;
     auto& host = f.host;
     auto& card = *f.card;
+    control<juce::Button> (card, "Band 4 menu").onClick();
+    CHECK (card.isHeld());
+    host.display.mouseExit (host.mouseEvent ({ 1.0f, 1.0f }, {}, { 1.0f, 1.0f }));
+    host.settle (400);
+    CHECK (card.shownSlot() == 4);
+    juce::PopupMenu::dismissAllActiveMenus();
+
     const auto remove = actionOf (card.menu(), "Delete");
     REQUIRE (remove != nullptr);
     remove();
@@ -538,4 +546,27 @@ TEST_CASE ("Hover Card screenshots", "[.screens]")
     save ("bypassed");
     showOn (8000.0, 0.0);
     save ("high-cut");
+}
+
+TEST_CASE ("A click anywhere else in the editor hides the Hover Card, even with its Shape strip open, but not one on the card or its strip")
+{
+    CardOnBand4 f;
+    auto& host = f.host;
+    auto& card = *f.card;
+    const auto clickOn = [&] (juce::Component& target) {
+        const auto at = target.getLocalBounds().getCentre().toFloat();
+        host.editor->mouseDown (harness::mouseEvent (target, at, juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier)));
+    };
+    auto& shape = control<juce::Button> (card, "Band 4 Shape");
+    shape.onClick();
+    REQUIRE (card.shapeStrip() != nullptr);
+    clickOn (shape);
+    clickOn (*card.shapeStrip());
+    CHECK (card.shownSlot() == 4);
+
+    auto* header = harness::findChild<eq1::HeaderBar> (*host.editor);
+    REQUIRE (header != nullptr);
+    clickOn (*header);
+    CHECK (card.shownSlot() == 0);
+    CHECK (card.shapeStrip() == nullptr);
 }

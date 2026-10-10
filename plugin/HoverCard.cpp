@@ -6,6 +6,7 @@
 #include "PluginProcessor.h"
 #include "ShapeIcon.h"
 #include "staple/Fonts.h"
+#include "staple/Light.h"
 #include "staple/Tokens.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/Overlay.h"
@@ -28,6 +29,12 @@ constexpr int columnGap = (card::width - 2 * card::padding - leftColumn - values
 constexpr int shapeWidth = 26, shapeHeight = 20;
 // The strip: each Shape 32 x 28 px, 1 px apart, inside a 1 px border and 3 px of padding.
 constexpr int optionWidth = 32, optionHeight = 28, optionGap = 1, stripInset = 4, stripGap = 6;
+
+// The x that keeps something width wide, wanted at x, 6 px inside the display's left and right.
+int insideDisplay (juce::Rectangle<int> display, int width, int x)
+{
+    return juce::jlimit (display.getX() + card::inset, std::max (display.getX() + card::inset, display.getRight() - card::inset - width), x);
+}
 } // namespace
 
 //==============================================================================
@@ -44,12 +51,12 @@ public:
     juce::Colour iconColour = colour::text2;
     bool marked = false; // the strip's Shape now, or the card's Shape while its strip is open
 
-    void paintButton (juce::Graphics& g, bool highlighted, bool) override
+    void paintButton (juce::Graphics& g, bool highlighted, bool down) override
     {
         const auto area = getLocalBounds().toFloat();
-        if (marked || highlighted)
+        if (marked || highlighted || down)
         {
-            g.setColour (marked ? colour::fill2 : colour::fill1);
+            g.setColour (staple::lit (marked ? colour::fill2 : colour::fill1, highlighted, down));
             g.fillRoundedRectangle (area, tokens::size::r1);
         }
         staple::drawIcon (g, shapeIcon (shown), juce::Rectangle<float> (20.0f, 12.0f).withCentre (area.getCentre()), iconColour);
@@ -316,7 +323,7 @@ void HoverCard::placeStrip()
         return;
     const auto cardArea = body();
     const int width = strip->getWidth(), height = strip->getHeight();
-    const int x = juce::jlimit (within.getX() + card::inset, std::max (within.getX() + card::inset, within.getRight() - card::inset - width), cardArea.getX());
+    const int x = insideDisplay (within, width, cardArea.getX());
     const bool room = cardArea.getBottom() + stripGap + height <= within.getBottom() - card::inset;
     strip->setTopLeftPosition (x, room ? cardArea.getBottom() + stripGap : cardArea.getY() - stripGap - height);
 }
@@ -336,8 +343,7 @@ void HoverCard::show (int newSlot, juce::Point<float> handle, juce::Rectangle<in
     above = y - within.getY() > card::roomAbove;
     auto area = juce::Rectangle<int> (card::width, card::height).withCentre ({ x, 0 });
     area.setY (above ? y - card::gap - card::height : y + card::gap);
-    area.setX (juce::jlimit (within.getX() + card::inset, std::max (within.getX() + card::inset, within.getRight() - card::inset - card::width),
-                             area.getX()));
+    area.setX (insideDisplay (within, card::width, area.getX()));
     const float newTipX = handle.x - static_cast<float> (area.getX() - margin);
     setBounds (area.expanded (margin));
     placeStrip();
@@ -391,7 +397,7 @@ void HoverCard::attach (int newSlot)
     more.setTitle (band + " menu");
     shape->setTitle (band + " Shape");
     closeStrip();
-    fade.jump (editing.band (slot).bypass ? card::bypassedAlpha : 1.0f);
+    fade.jump (editing.band (slot).bypass ? tokens::motion::bypassedAlpha : 1.0f);
     repaint();
 }
 
@@ -412,7 +418,7 @@ void HoverCard::refresh()
     gain->readOnlyText = isCut (band.shape) ? slopeText (band.slope, band.brickwall) : "No Gain";
     // Flat Tilt's design ignores Q.
     q->setEnabled (band.shape != Shape::FlatTilt);
-    fade.towards (band.bypass ? card::bypassedAlpha : 1.0f);
+    fade.towards (band.bypass ? tokens::motion::bypassedAlpha : 1.0f);
 }
 
 juce::PopupMenu HoverCard::menu()
@@ -498,6 +504,12 @@ void HoverCard::paint (juce::Graphics& g)
     outline.lineTo (tipX + reach, edge);
     g.setColour (border);
     g.strokePath (outline, juce::PathStrokeType (1.0f));
+}
+
+bool HoverCard::contains (const juce::Component* component) const
+{
+    return component != nullptr
+           && (component == this || isParentOf (component) || (strip != nullptr && (component == strip.get() || strip->isParentOf (component))));
 }
 
 bool HoverCard::hitTest (int x, int y) { return bodyArea().contains (x, y); }

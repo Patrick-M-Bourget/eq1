@@ -39,9 +39,10 @@ class PluginProcessor;
 // the selected Band, and of each Dynamic Band, sets its Dynamic Range: drag it, double-click it to clear
 // it, or ↑/↓ while it has focus. A Dynamic Band's curve follows its Live Gain, and the selected one has
 // a wash between its curves at Gain and Gain + Dynamic Range. Hovering a handle or a curve lights the
-// Band's curve; resting 300 ms on a handle shows its Hover Card (HoverCard.h), which another handle's
-// replaces at once and which hides 220 ms after the pointer leaves handle and card, unless held, or at
-// once on any press here or when its Band goes, and Global Bypass fades every curve and handle to its bypassed look (plugin/display/).
+// Band's curve. Resting on a handle shows its Hover Card (HoverCard.h): another handle's replaces it at
+// once, and it hides a moment after the pointer leaves handle and card unless held there, or at once on
+// a press elsewhere or when its Band goes. Global Bypass fades every curve and handle to its bypassed
+// look (plugin/display/).
 // The curve comes from the Engine's own response maths (eq1/Response.h). A handle beyond the Display
 // Range sits at its edge; a heard Gain changed to beyond it zooms the range out, once any drag has
 // ended. A screen reader reads the display as a group, "EQ display", of the Bands in use, each named
@@ -61,6 +62,8 @@ public:
     // Selects one Band alone, as a click on its handle does (the Band panel's ‹ and ›).
     void selectBand (int slot) { select ({ slot }); }
     const std::set<int>& selection() const { return selected; }
+    // A press anywhere in the editor, which hides the Hover Card unless it is on the card or its strip.
+    void pressedInEditor (const juce::Component* pressed);
 
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
@@ -198,9 +201,8 @@ private:
     bool isGlobalBypassOn() const;
 
     // The Hover Card, in the editor's overlay layer so it draws over the Band panel. It shows once the
-    // pointer has rested on a handle (restingSlot's, from restingSince) for hoverCardRestMilliseconds.
+    // pointer has rested on a handle (restingSlot's, from restingSince) for hoverCard::restMs.
     HoverCard card;
-    static constexpr juce::uint32 hoverCardRestMilliseconds = staple::tokens::hoverCard::restMs;
     int restingSlot = 0;
     juce::uint32 restingSince = 0;
     // Since when the pointer has been off the shown card and its handle: it hides hoverFadeMs later.
@@ -210,6 +212,8 @@ private:
     void hideCard();
     // On the timer: shows the card once the pointer has rested long enough, and keeps it at its handle.
     void updateCard();
+    // The mouse is pressed here: a drag, a marquee, a Dynamic Range Handle or a Spectrum Grab under way.
+    bool isPressed() const;
 
     // The window's background under the display's edges (display::edgeFadeOverlay), built again only
     // when the display's place in the window, the window's size or the scale it is drawn at changes.
