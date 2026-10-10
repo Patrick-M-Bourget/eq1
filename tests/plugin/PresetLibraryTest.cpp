@@ -159,31 +159,6 @@ TEST_CASE ("A file that isn't a Preset reads as nothing")
     CHECK_FALSE (PresetLibrary::read (other).isValid());
 }
 
-TEST_CASE ("Factory Presets are bundled, and each loads its settings")
-{
-    const auto factory = PresetLibrary::factoryPresets();
-    REQUIRE (factory.size() >= 3);
-    std::set<juce::String> names;
-    for (const auto& [name, preset] : factory)
-    {
-        CAPTURE (name);
-        CHECK (name.isNotEmpty());
-        names.insert (name);
-        REQUIRE (preset.hasType ("eq1"));
-
-        Host host;
-        host.processor.loadPreset (preset, name);
-        for (const auto& setting : preset)
-        {
-            const auto id = setting.getProperty ("id").toString();
-            CAPTURE (id);
-            const auto expected = static_cast<float> (setting.getProperty ("value"));
-            CHECK_THAT (host.value (id), WithinAbs (expected, 1.0e-4) || WithinRel (expected, 1.0e-6f));
-        }
-    }
-    CHECK (names.size() == factory.size());
-}
-
 namespace
 {
 

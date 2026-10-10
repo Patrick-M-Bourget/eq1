@@ -100,7 +100,8 @@ std::vector<PresetLibrary::FactoryPreset> PresetLibrary::factoryPresets()
     {
         int size = 0;
         const auto* data = FactoryPresets::getNamedResource (FactoryPresets::namedResourceList[i], size);
-        const auto name = juce::String (FactoryPresets::originalFilenames[i]).upToLastOccurrenceOf (fileExtension, false, false);
+        // Filenames are UTF-8: Factory names hold an en dash ("Drums \u2013 Kick In Punch").
+        const auto name = juce::String::fromUTF8 (FactoryPresets::originalFilenames[i]).upToLastOccurrenceOf (fileExtension, false, false);
         presets.push_back ({ name, fromXml (juce::XmlDocument::parse (juce::String::fromUTF8 (data, size))) });
     }
     std::sort (presets.begin(), presets.end(), [] (const FactoryPreset& a, const FactoryPreset& b) { return byName (a.name, b.name); });
