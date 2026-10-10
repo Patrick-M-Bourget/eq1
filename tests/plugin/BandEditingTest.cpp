@@ -751,3 +751,65 @@ TEST_CASE ("Paste with fewer free Band Slots than Bands pastes the lowest-Freque
     CHECK (host.editing.paste (bands).empty());
     CHECK (host.processor.editHistory().undoSteps() == 1);
 }
+
+TEST_CASE ("A Dynamic Range drag sets the stored Dynamic Range so its heard end is where the drag puts it, as one gesture and one undo step")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 4.0f);
+    auto* gainScale = host.processor.parameterState().getParameter (eq1::parameters::gainScaleId);
+    GestureLog log;
+    host.processor.addListener (&log);
+
+    SECTION ("at Gain Scale 100 %: the end at +10 dB heard is +6 dB of range, rounded to 0.5 dB")
+    {
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (7.3);
+        host.editing.dragDynamicRangeTo (10.1);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (6.0, 1.0e-4));
+    }
+    SECTION ("at Gain Scale 50 %: Gain 4 is heard at +2, so an end at -3 dB heard is -10 dB of stored range")
+    {
+        gainScale->setValueNotifyingHost (gainScale->convertTo0to1 (50.0f));
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (-3.0);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-10.0, 1.0e-4));
+    }
+    SECTION ("beyond the parameter's range it stops at +/-30 dB")
+    {
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (80.0);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (30.0, 1.0e-4));
+    }
+    SECTION ("at Gain Scale 0 % nothing is heard, so the drag changes nothing")
+    {
+        gainScale->setValueNotifyingHost (0.0f);
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (12.0);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+        host.processor.removeListener (&log);
+        return;
+    }
+    const auto index = indexOf (host.processor, "band1_dynamic_range");
+    CHECK (log.begins[index] == 1);
+    CHECK (log.ends[index] == 1);
+    CHECK (host.processor.editHistory().undoSteps() == 1);
+    host.processor.editHistory().undo();
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+    host.processor.removeListener (&log);
+}
+
+TEST_CASE ("Setting a Band's Dynamic Range is one gesture, within +/-30 dB")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 4.0f);
+    host.set (1, "dynamic_range", 6.0f);
+    host.editing.setDynamicRange (1, 0.0);
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+    host.editing.setDynamicRange (1, -45.0);
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-30.0, 1.0e-4));
+    CHECK (host.processor.editHistory().undoSteps() == 2);
+}

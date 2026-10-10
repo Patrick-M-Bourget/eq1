@@ -2,6 +2,7 @@
 #include "FooterBar.h"
 #include "OutputMeter.h"
 #include "PluginProcessor.h"
+#include "staple/Tokens.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -265,4 +266,146 @@ TEST_CASE ("The output popover's Output Meter toggle hides the Output Meter, the
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
     CHECK_FALSE (findChild<eq1::OutputMeter> (*editor)->isVisible());
     CHECK_FALSE (findChild<juce::Button> (*editor, [] (juce::Button& b) { return b.getTitle() == "Output Meter"; })->getToggleState());
+}
+
+namespace
+{
+
+// The Output Meter, height px tall in its 40 px rail, as it paints after reading the Output Level once.
+juce::Image paintMeter (eq1::OutputMeter& meter, int height)
+{
+    meter.setBounds (0, 0, 40, height);
+    juce::Image image (juce::Image::ARGB, 40, height, true);
+    juce::Graphics g (image);
+    meter.paintEntireComponent (g, false);
+    return image;
+}
+
+// The columns of row y painted in colour, give or take tolerance on each channel and alpha.
+std::vector<int> columnsIn (const juce::Image& image, int y, juce::Colour colour, int tolerance = 4)
+{
+    std::vector<int> columns;
+    for (int x = 0; x < image.getWidth(); ++x)
+    {
+        const auto pixel = image.getPixelAt (x, y);
+        if (std::abs (pixel.getAlpha() - colour.getAlpha()) <= tolerance && std::abs (pixel.getRed() - colour.getRed()) <= tolerance
+            && std::abs (pixel.getGreen() - colour.getGreen()) <= tolerance && std::abs (pixel.getBlue() - colour.getBlue()) <= tolerance)
+            columns.push_back (x);
+    }
+    return columns;
+}
+
+bool near (juce::Colour actual, juce::Colour expected, int tolerance = 4)
+{
+    return std::abs (actual.getAlpha() - expected.getAlpha()) <= tolerance && std::abs (actual.getRed() - expected.getRed()) <= tolerance
+           && std::abs (actual.getGreen() - expected.getGreen()) <= tolerance && std::abs (actual.getBlue() - expected.getBlue()) <= tolerance;
+}
+
+// Where the rail draws db: its bars run from 22 px down (10 padding, the 4 px Clip Lights, an 8 px
+// gap) to 12 px above the bottom.
+float yOf (double db, int height)
+{
+    const float top = 22.0f, bottom = static_cast<float> (height - 12);
+    return bottom - static_cast<float> (eq1::OutputMeter::position (db)) * (bottom - top);
+}
+
+} // namespace
+
+TEST_CASE ("The Output Meter's rail: a 6 x 4 Clip Light at the top and a 6 px bar on a dark track per channel, 3 px apart and centred")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    const auto layout = GENERATE (juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo());
+    useLayout (processor, layout);
+    eq1::OutputMeter meter (processor);
+    const auto image = paintMeter (meter, 500);
+
+    const std::vector<int> expected = layout.size() == 1 ? std::vector<int> { 17, 18, 19, 20, 21, 22 }
+                                                         : std::vector<int> { 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26 };
+    // Silent, the bars show only their track, and the Clip Lights are off.
+    CHECK (columnsIn (image, 300, staple::tokens::colour::meterTrack) == expected);
+    CHECK (columnsIn (image, 12, staple::tokens::colour::meterClipOff) == expected);
+    CHECK (columnsIn (image, 8, staple::tokens::colour::meterClipOff).empty());
+    CHECK (columnsIn (image, 15, staple::tokens::colour::meterClipOff).empty());
+    // No background.
+    CHECK (image.getPixelAt (2, 300).getAlpha() == 0);
+}
+
+TEST_CASE ("The Output Meter's colours are fixed to the scale: -10 dBFS RMS draws in the meter2-meter3 blend at any rail height")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo());
+    // A sine with RMS -10 dBFS (peak -7 dBFS).
+    playSine (processor, static_cast<float> (std::sqrt (2.0) * std::pow (10.0, -0.5)));
+    eq1::OutputMeter meter (processor);
+    // -10 dBFS is 60 % of the way from meter2 at -16 dBFS to meter3 at -6 dBFS.
+    const auto expected = staple::tokens::colour::meter2.interpolatedWith (staple::tokens::colour::meter3, 0.6f);
+    for (const int height : { 300, 612 })
+    {
+        CAPTURE (height);
+        const auto image = paintMeter (meter, height);
+        const auto pixel = image.getPixelAt (14, juce::roundToInt (yOf (-10.0, height)) + 1);
+        CAPTURE (pixel.toString(), expected.toString());
+        CHECK (near (pixel, expected, 6));
+        // Lower down, the colour is the scale's, not the same as at -10 dBFS.
+        CHECK_FALSE (near (image.getPixelAt (14, juce::roundToInt (yOf (-40.0, height))), expected, 20));
+    }
+}
+
+TEST_CASE ("A lit Clip Light draws in meterClip, and clicking either Clip Light puts out both")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo());
+    playSine (processor, 2.0f, { 0 });
+    eq1::OutputMeter meter (processor);
+    auto image = paintMeter (meter, 500);
+    CHECK (columnsIn (image, 12, staple::tokens::colour::meterClip) == std::vector<int> { 21, 22, 23, 24, 25, 26 });
+    CHECK (columnsIn (image, 12, staple::tokens::colour::meterClipOff) == std::vector<int> { 12, 13, 14, 15, 16, 17 });
+
+    // A click a few px off the unlit left light, within its 10 px tall click area.
+    const auto now = juce::Time::getCurrentTime();
+    const juce::Point<float> at { 14.0f, 16.0f };
+    meter.mouseDown ({ juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier),
+                       juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation, juce::MouseInputSource::defaultRotation,
+                       juce::MouseInputSource::defaultTiltX, juce::MouseInputSource::defaultTiltY, &meter, &meter, now, at, now, 1, false });
+    CHECK_FALSE (processor.isClipLit (0));
+    CHECK_FALSE (processor.isClipLit (1));
+    image = paintMeter (meter, 500);
+    CHECK (columnsIn (image, 12, staple::tokens::colour::meterClip).empty());
+}
+
+TEST_CASE ("Output Meter snapshots: a playing signal, and a lit Clip Light", "[.screens]")
+{
+    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_METER_SNAPSHOT", {});
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    useLayout (processor, juce::AudioChannelSet::stereo());
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    editor->setSize (1200, 760);
+    const auto write = [&] (const char* name) {
+        for (int frame = 0; frame < 3; ++frame)
+        {
+            juce::Timer::callPendingTimersSynchronously();
+            juce::Thread::sleep (17);
+        }
+        const auto right = editor->getLocalBounds().removeFromRight (160);
+        const auto image = editor->createComponentSnapshot (right, true, 2.0f);
+        CHECK (image.isValid());
+        if (prefix.isEmpty())
+            return;
+        juce::File file (prefix + "-" + name + ".png");
+        file.deleteFile();
+        juce::FileOutputStream stream (file);
+        juce::PNGImageFormat().writeImageToStream (image, stream);
+    };
+    // Peaks at -4 dBFS on the left and -7 dBFS on the right.
+    playSine (processor, 0.63f, { 1 });
+    playSine (processor, 0.45f, { 0 });
+    playSine (processor, 0.63f);
+    write ("playing");
+    playSine (processor, 1.5f, { 0 });
+    playSine (processor, 0.5f);
+    write ("clip");
 }
