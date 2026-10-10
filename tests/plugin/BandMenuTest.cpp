@@ -1,5 +1,6 @@
 #include "BandClipboard.h"
 #include "BandMenu.h"
+#include "BandSettingsByName.h"
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -285,7 +286,7 @@ TEST_CASE ("Paste adds the clipboard's Bands and selects them, as one undo step,
 
     item (host.menu ({ 1 }), "Paste").action();
     CHECK (host.selected == std::vector<int> { 2 });
-    CHECK (host.editing.band (2) == host.editing.band (1));
+    CHECK (byName (host.editing.band (2)) == byName (host.editing.band (1)));
     item (host.menu ({}), "Paste").action();
     CHECK (host.selected == std::vector<int> { 3 });
     CHECK (host.processor.editHistory().undoSteps() == 2);
@@ -320,6 +321,6 @@ TEST_CASE ("With fewer free Band Slots than Bands on the clipboard, Paste reads 
     CHECK (textsOf (menu)[0] == "Paste (2 of 3)");
     item (menu, "Paste (2 of 3)").action();
     CHECK (host.selected == std::vector<int> { 23, 24 });
-    CHECK (host.editing.band (23) == host.editing.band (2));
-    CHECK (host.editing.band (24) == host.editing.band (3));
+    CHECK (byName (host.editing.band (23)) == byName (host.editing.band (2)));
+    CHECK (byName (host.editing.band (24)) == byName (host.editing.band (3)));
 }

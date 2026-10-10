@@ -1,4 +1,5 @@
 #include "BandEditing.h"
+#include "BandSettingsByName.h"
 #include "PluginProcessor.h"
 #include "eq1/Engine.h"
 
@@ -639,24 +640,6 @@ TEST_CASE ("A split Dynamic Band's halves each move with their own channel only"
     CHECK_THAT (played.liveGains[0], WithinAbs (-9.0, 0.05));
     CHECK (played.liveGains[1] == 0.0);
 }
-
-namespace
-{
-// The same Band to within a parameter's round trip through a normalised value, as a Preset loads.
-bool near (eq1::BandSettings a, const eq1::BandSettings& b)
-{
-    using Field = double eq1::BandSettings::*;
-    for (Field field : { &eq1::BandSettings::frequency, &eq1::BandSettings::gain, &eq1::BandSettings::q, &eq1::BandSettings::slope,
-                         &eq1::BandSettings::detectionLow, &eq1::BandSettings::detectionHigh, &eq1::BandSettings::dynamicRange,
-                         &eq1::BandSettings::threshold, &eq1::BandSettings::attack, &eq1::BandSettings::release })
-    {
-        if (std::abs (a.*field - b.*field) > 1.0e-5 * std::max (1.0, std::abs (b.*field)))
-            return false;
-        a.*field = b.*field;
-    }
-    return a == b;
-}
-} // namespace
 
 TEST_CASE ("Paste adds the Bands in the lowest free Band Slots with every stored setting, as one undo step, returning their slots")
 {

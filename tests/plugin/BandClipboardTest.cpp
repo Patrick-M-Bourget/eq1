@@ -1,5 +1,6 @@
 #include "BandClipboard.h"
 #include "BandEditing.h"
+#include "BandSettingsByName.h"
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -66,7 +67,7 @@ TEST_CASE ("Copied Bands read back from the clipboard text with every stored set
 {
     const std::vector<BandSettings> bands { everySettingChanged(), bandAt (80.0) };
     const auto text = eq1::captureBands (bands).toXmlString();
-    CHECK (eq1::clipboardBands (text) == bands);
+    CHECK (byName (eq1::clipboardBands (text)) == byName (bands));
 }
 
 TEST_CASE ("The clipboard holds each Band's settings in the Preset form, relative to the Band, stamped with the state version")
@@ -103,7 +104,7 @@ TEST_CASE ("Bands from a newer eq1 read what this one knows; a setting a Band le
     auto first = bandAt (500.0);
     auto second = bandAt (1000.0);
     second.gain = -6.0;
-    CHECK (eq1::clipboardBands (text) == std::vector<BandSettings> { first, second });
+    CHECK (byName (eq1::clipboardBands (text)) == byName (std::vector<BandSettings> { first, second }));
 }
 
 TEST_CASE ("Copy then Paste in another instance recreates the Bands with every stored setting, whatever either Gain Scale")
