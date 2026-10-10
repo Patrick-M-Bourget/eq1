@@ -170,6 +170,58 @@ TEST_CASE ("Dragging several Bands moves them together, stopping together at the
     CHECK_THAT (host.value (4, "gain"), WithinAbs (5.0, 1.0e-4));
 }
 
+TEST_CASE ("A nudge moves Bands by semitones and heard dB from where they are, stopping together at the edges of the ranges")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 3.0f);
+    host.addBand (2, 100.0f, -2.0f);
+    host.addBand (3, 50.0f, 5.0f);
+    host.set (3, "shape", 2.0f); // Low Cut: no Gain
+    const double semitone = std::pow (2.0, 1.0 / 12.0);
+
+    host.editing.nudge ({ 1 }, 1.0, 0.5);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (static_cast<float> (1000.0 * semitone), 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.5, 1.0e-4));
+    host.editing.nudge ({ 1 }, -1.0, -0.5);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.0, 1.0e-4));
+    host.editing.nudge ({ 1 }, 0.1, -0.05);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (static_cast<float> (1000.0 * std::pow (2.0, 0.1 / 12.0)), 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (2.95, 1.0e-4));
+
+    // Band 1 reaches 30 kHz first going up and Band 3 10 Hz going down; Band 1 +30 dB and Band 2
+    // -30 dB. The rest stop with them, keeping their spacing, and the Cut keeps its stored Gain.
+    for (int press = 0; press < 100; ++press)
+        host.editing.nudge ({ 1, 2, 3 }, 1.0, 0.5);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (30000.0f, 1.0e-4f));
+    CHECK_THAT (host.value (2, "frequency"), WithinRel (static_cast<float> (3000.0 / std::pow (2.0, 0.1 / 12.0)), 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (30.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-2.0 + (30.0 - 2.95), 1.0e-4));
+    CHECK_THAT (host.value (3, "gain"), WithinAbs (5.0, 1.0e-4));
+    for (int press = 0; press < 400; ++press)
+        host.editing.nudge ({ 1, 2, 3 }, -1.0, -0.5);
+    CHECK_THAT (host.value (3, "frequency"), WithinRel (10.0f, 1.0e-3f));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-30.0, 1.0e-4));
+    CHECK_THAT (host.value (3, "gain"), WithinAbs (5.0, 1.0e-4));
+}
+
+TEST_CASE ("A nudge moves Gain as heard under Gain Scale, and is one undo step on every Band it moves")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 4.0f);
+    host.addBand (2, 2000.0f, 4.0f);
+    auto* gainScale = host.processor.parameterState().getParameter ("gain_scale");
+    gainScale->setValueNotifyingHost (gainScale->convertTo0to1 (50.0f));
+
+    host.editing.nudge ({ 1, 2 }, 0.0, 0.5);
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (5.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (5.0, 1.0e-4));
+    CHECK (host.processor.editHistory().undoSteps() == 1);
+    host.processor.editHistory().undo();
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (4.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (4.0, 1.0e-4));
+}
+
 TEST_CASE ("Under Gain Scale, Gains added and dragged on the display are the Gains heard")
 {
     Host host;
