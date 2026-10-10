@@ -106,8 +106,10 @@ public:
     // or levelFloorDb. From one reader thread, the message thread.
     double readDetectionLevel() { return engine.readDetectionLevel(); }
 
-    // A Band Slot's Live Gain in dB, for the display: from any thread.
+    // A Band Slot's Live Gain in dB, as Gain Scale plays it, for the display: from any thread. Only
+    // meaningful once audio has been processed since the host last prepared the plugin.
     double liveGainDb (int slot) const { return engine.liveGainDb (slot); }
+    bool hasProcessedAudio() const { return processedAudio.load (std::memory_order_relaxed); }
 
     AnalyzerSettings analyzerSettings() const;
     void setAnalyzerSettings (const AnalyzerSettings& settings);
@@ -166,6 +168,7 @@ private:
     juce::SpinLock seenGainsLock; // a host may restore a session from another thread
     HeardGains currentHeardGains() const;
     std::atomic<int> heldSoloSlot { 0 };
+    std::atomic<bool> processedAudio { false };
     std::atomic<int> heldAuditionSlot { 0 };
     std::atomic<int> heldMeteredSlot { 0 };
     std::array<std::atomic<bool>, 2> clipLit {}; // per channel, not saved; mono and stereo only

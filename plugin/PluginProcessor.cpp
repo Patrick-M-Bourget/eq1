@@ -24,6 +24,7 @@ PluginProcessor::PluginProcessor (juce::File userSettingsFile)
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
 {
     engine.prepare (sampleRate, maximumExpectedSamplesPerBlock, getTotalNumOutputChannels());
+    processedAudio.store (false, std::memory_order_relaxed);
 }
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -55,6 +56,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const ConstAudioBlock sidechain { sidechainBuffer.getArrayOfReadPointers(), sidechainBuffer.getNumChannels(), sidechainBuffer.getNumSamples() };
     engine.process ({ main.getArrayOfWritePointers(), main.getNumChannels(), main.getNumSamples() },
                     sidechain.numChannels > 0 ? &sidechain : nullptr);
+    processedAudio.store (true, std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* PluginProcessor::createEditor()

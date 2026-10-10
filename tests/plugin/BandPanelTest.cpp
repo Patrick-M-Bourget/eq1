@@ -554,6 +554,49 @@ TEST_CASE ("The ring's range is faint under Dynamics Bypass, and its Live Gain a
         CHECK_THAT (ring.rangeAlpha(), WithinAbs (0.3, 1.0e-6));
 }
 
+TEST_CASE ("The ring's Live Gain arc measures Live Gain's movement as Gain Scale plays it, and is absent before any audio is processed")
+{
+    DynamicEditor host;
+    auto& ring = host.ring();
+    host.set (1, "gain", 10.0f);
+    host.settle (120);
+    // Nothing processed yet: no movement to show.
+    CHECK_FALSE (ring.liveGainShown().has_value());
+
+    host.set ("gain_scale", 50.0f);
+    host.set (1, "threshold_auto", 0.0f);
+    const auto play = [&] (float level) {
+        juce::Random random (1);
+        juce::AudioBuffer<float> buffer (2, 512);
+        juce::MidiBuffer midi;
+        for (int block = 0; block < 40; ++block)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                for (int n = 0; n < 512; ++n)
+                    buffer.setSample (ch, n, level * (random.nextFloat() - 0.5f));
+            host.processor.processBlock (buffer, midi);
+        }
+        host.settle (60);
+    };
+
+    SECTION ("dynamics idle: Live Gain is the scaled Gain, so no arc")
+    {
+        host.set (1, "threshold", 0.0f);
+        play (0.0f);
+        REQUIRE_THAT (host.processor.liveGainDb (1), WithinAbs (5.0, 0.01));
+        CHECK_FALSE (ring.liveGainShown().has_value());
+    }
+    SECTION ("dynamics moving: the arc ends where the movement, unscaled, takes Gain")
+    {
+        host.set (1, "threshold", -60.0f);
+        play (1.0f);
+        const double movement = host.processor.liveGainDb (1) - 5.0;
+        REQUIRE (movement < -1.0);
+        REQUIRE (ring.liveGainShown().has_value());
+        CHECK_THAT (*ring.liveGainShown(), WithinAbs (10.0 + movement / 0.5, 0.1));
+    }
+}
+
 TEST_CASE ("The dynamics icons show only on a Dynamic Band: Clear Dynamics clears it in one undo step, Dynamics Bypass toggles")
 {
     PanelEditor host;

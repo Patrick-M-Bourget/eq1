@@ -237,9 +237,12 @@ void DynamicRangeRing::timerCallback()
     if (slot != 0 && isVisible() && getValue() != 0.0 && ! parameterIsOn (parameters::dynamicsBypassId (slot))
         && ! parameterIsOn (parameters::bypassId (slot)) && ! parameterIsOn (parameters::globalBypassId))
     {
-        const double db = processor.liveGainDb (slot);
-        if (std::abs (db - gain.getValue()) >= tokens::knob::liveGainMinimum)
-            live = db;
+        // Live Gain is heard under Gain Scale, the ring shows stored dB: its movement from the heard
+        // Gain, unscaled, is drawn from the stored Gain.
+        const double scale = processor.parameterState().getRawParameterValue (parameters::gainScaleId)->load() / 100.0;
+        const double movement = processor.liveGainDb (slot) - gain.getValue() * scale;
+        if (processor.hasProcessedAudio() && scale > 0.0 && std::abs (movement) >= tokens::knob::liveGainMinimum)
+            live = gain.getValue() + movement / scale;
     }
     const bool changed = live.has_value() != liveGain.has_value() || (live.has_value() && std::abs (*live - *liveGain) > repaintStepDb);
     if (changed)
