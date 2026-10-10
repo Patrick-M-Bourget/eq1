@@ -6,6 +6,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -58,6 +59,19 @@ public:
 
     void setShape (int slot, Shape shape);
 
+    // The context menu's edits on a selection. Each is one edit, on every given Band it applies to.
+    void setBypass (const std::vector<int>& slots, bool bypass);
+    // Negates Gain and Dynamic Range on the Bands whose Shape has Gain; the others keep theirs.
+    void invertGain (const std::vector<int>& slots);
+    // Every dynamics setting back to its default, on the Bands whose Shape has dynamics.
+    void clearDynamics (const std::vector<int>& slots);
+    void setShape (const std::vector<int>& slots, Shape shape);
+    // Slope in dB/oct on the Bands that have a Slope; it turns Brickwall off on a Cut.
+    void setSlope (const std::vector<int>& slots, double slope);
+    // Brickwall on the Cuts; the other Bands keep theirs.
+    void setBrickwall (const std::vector<int>& slots);
+    void setPlacement (const std::vector<int>& slots, StereoPlacement placement);
+
     BandSettings band (int slot) const;
     // Every Band's stored settings, and the whole-plugin ones.
     Settings settings() const;
@@ -69,6 +83,8 @@ private:
     void setWithinGesture (const juce::String& id, double value);
     // The stored Gain for a Gain heard under Gain Scale.
     double storedGain (double heard) const;
+    // Calls edit with each slot and its settings before the edit, all as one edit.
+    void editEach (const std::vector<int>& slots, const std::function<void (int, const BandSettings&)>& edit);
 
     struct Dragged
     {
