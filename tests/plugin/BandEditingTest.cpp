@@ -323,3 +323,157 @@ TEST_CASE ("Analyzer settings are saved with the session")
     restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
     CHECK (restored.analyzerSettings() == changed);
 }
+
+TEST_CASE ("Bypass on a selection bypasses every Band, as one undo step, and Remove Bypass restores them")
+{
+    Host host;
+    for (int slot = 1; slot <= 3; ++slot)
+        host.addBand (slot, 100.0f * static_cast<float> (slot), 3.0f);
+    host.set (2, "bypass", 1.0f);
+    auto& history = host.processor.editHistory();
+
+    host.editing.setBypass ({ 1, 2, 3 }, true);
+    for (int slot = 1; slot <= 3; ++slot)
+        CHECK (host.value (slot, "bypass") == 1.0f);
+    CHECK (history.undoSteps() == 1);
+
+    host.editing.setBypass ({ 1, 2, 3 }, false);
+    for (int slot = 1; slot <= 3; ++slot)
+        CHECK (host.value (slot, "bypass") == 0.0f);
+    history.undo();
+    for (int slot = 1; slot <= 3; ++slot)
+        CHECK (host.value (slot, "bypass") == 1.0f);
+}
+
+TEST_CASE ("Invert Gain negates Gain and Dynamic Range on Bands with Gain, as one undo step; a Cut keeps its stored Gain")
+{
+    Host host;
+    host.addBand (1, 500.0f, 6.0f);
+    host.set (1, "dynamic_range", -4.0f);
+    host.addBand (2, 2000.0f, -3.0f);
+    host.set (2, "shape", 7.0f); // Tilt Shelf
+    host.addBand (3, 50.0f, 5.0f);
+    host.set (3, "shape", 2.0f); // Low Cut: no Gain
+    host.set (3, "dynamic_range", 8.0f);
+
+    host.editing.invertGain ({ 1, 2, 3 });
+
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (-6.0, 1.0e-4));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (4.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (3.0, 1.0e-4));
+    CHECK_THAT (host.value (3, "gain"), WithinAbs (5.0, 1.0e-4));
+    CHECK_THAT (host.value (3, "dynamic_range"), WithinAbs (8.0, 1.0e-4));
+    auto& history = host.processor.editHistory();
+    CHECK (history.undoSteps() == 1);
+    history.undo();
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (6.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-3.0, 1.0e-4));
+}
+
+TEST_CASE ("Clear Dynamics puts every dynamics setting back to its default, as one undo step, on Bands with dynamics")
+{
+    Host host;
+    const auto makeDynamic = [&] (int slot) {
+        host.set (slot, "dynamic_range", -12.0f);
+        host.set (slot, "threshold", -45.0f);
+        host.set (slot, "threshold_auto", 0.0f);
+        host.set (slot, "attack", 10.0f);
+        host.set (slot, "release", 90.0f);
+        host.set (slot, "dynamics_bypass", 1.0f);
+        host.set (slot, "detection_source", 1.0f); // External
+        host.set (slot, "detection_range", 1.0f);  // Free
+        host.set (slot, "detection_low", 200.0f);
+        host.set (slot, "detection_high", 4000.0f);
+    };
+    host.addBand (1, 500.0f, 3.0f);
+    makeDynamic (1);
+    host.addBand (2, 100.0f, 0.0f);
+    host.set (2, "shape", 5.0f); // Notch: no dynamics, so it keeps them
+    makeDynamic (2);
+
+    host.editing.clearDynamics ({ 1, 2 });
+
+    const eq1::BandSettings defaults;
+    const auto cleared = host.editing.band (1);
+    CHECK_FALSE (eq1::isDynamic (cleared));
+    CHECK_THAT (cleared.dynamicRange, WithinAbs (defaults.dynamicRange, 1.0e-9));
+    CHECK_THAT (cleared.threshold, WithinAbs (defaults.threshold, 1.0e-4));
+    CHECK (cleared.thresholdAuto == defaults.thresholdAuto);
+    CHECK_THAT (cleared.attack, WithinAbs (defaults.attack, 1.0e-4));
+    CHECK_THAT (cleared.release, WithinAbs (defaults.release, 1.0e-4));
+    CHECK (cleared.dynamicsBypass == defaults.dynamicsBypass);
+    CHECK (cleared.detectionSource == defaults.detectionSource);
+    CHECK (cleared.detectionRange == defaults.detectionRange);
+    CHECK_THAT (cleared.detectionLow, WithinRel (defaults.detectionLow, 1.0e-4));
+    CHECK_THAT (cleared.detectionHigh, WithinRel (defaults.detectionHigh, 1.0e-4));
+    CHECK_THAT (host.value (2, "dynamic_range"), WithinAbs (-12.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "detection_low"), WithinRel (200.0f, 1.0e-4f));
+
+    auto& history = host.processor.editHistory();
+    CHECK (history.undoSteps() == 1);
+    history.undo();
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-12.0, 1.0e-4));
+    CHECK_THAT (host.value (1, "detection_high"), WithinRel (4000.0f, 1.0e-4f));
+}
+
+TEST_CASE ("Shape and Stereo Placement on a selection change every Band, as one undo step each")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    host.addBand (2, 1000.0f, -3.0f);
+    host.set (2, "shape", 2.0f);
+
+    host.editing.setShape ({ 1, 2 }, Shape::HighShelf);
+    host.editing.setPlacement ({ 1, 2 }, eq1::StereoPlacement::Side);
+
+    for (int slot : { 1, 2 })
+    {
+        CAPTURE (slot);
+        CHECK (host.value (slot, "shape") == 3.0f);
+        CHECK (host.value (slot, "placement") == 4.0f);
+    }
+    auto& history = host.processor.editHistory();
+    CHECK (history.undoSteps() == 2);
+    history.undo();
+    CHECK (host.value (1, "placement") == 0.0f);
+    CHECK (host.value (2, "placement") == 0.0f);
+    history.undo();
+    CHECK (host.value (1, "shape") == 0.0f);
+    CHECK (host.value (2, "shape") == 2.0f);
+}
+
+TEST_CASE ("Slope on a selection sets the Bands that have a Slope, turning a Cut's Brickwall off; Brickwall turns it on for Cuts only")
+{
+    Host host;
+    host.addBand (1, 50.0f, 0.0f);
+    host.set (1, "shape", 2.0f); // Low Cut, Brickwall
+    host.set (1, "brickwall", 1.0f);
+    host.addBand (2, 500.0f, 0.0f); // Bell: no Slope
+    host.set (2, "slope", 30.0f);
+    host.addBand (3, 5000.0f, 2.0f);
+    host.set (3, "shape", 3.0f); // High Shelf
+    host.addBand (4, 800.0f, 2.0f);
+    host.set (4, "shape", 8.0f); // Flat Tilt: no Slope
+    host.set (4, "slope", 30.0f);
+    auto& history = host.processor.editHistory();
+
+    host.editing.setSlope ({ 1, 2, 3, 4 }, 36.0);
+    CHECK (host.value (1, "slope") == 36.0f);
+    CHECK (host.value (1, "brickwall") == 0.0f);
+    CHECK (host.value (3, "slope") == 36.0f);
+    CHECK (host.value (2, "slope") == 30.0f);
+    CHECK (host.value (4, "slope") == 30.0f);
+    CHECK (history.undoSteps() == 1);
+
+    host.editing.setBrickwall ({ 1, 2, 3, 4 });
+    CHECK (host.value (1, "brickwall") == 1.0f);
+    for (int slot : { 2, 3, 4 })
+        CHECK (host.value (slot, "brickwall") == 0.0f);
+    CHECK (history.undoSteps() == 2);
+
+    history.undo();
+    history.undo();
+    CHECK (host.value (1, "brickwall") == 1.0f);
+    CHECK (host.value (1, "slope") == 12.0f);
+    CHECK (host.value (3, "slope") == 12.0f);
+}

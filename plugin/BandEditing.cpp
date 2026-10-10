@@ -193,4 +193,75 @@ void BandEditing::setShape (int slot, Shape shape)
     set (parameters::shapeId (slot), static_cast<double> (shape));
 }
 
+void BandEditing::editEach (const std::vector<int>& slotsToEdit, const std::function<void (int, const BandSettings&)>& edit)
+{
+    history.beginTransaction();
+    for (int slot : slotsToEdit)
+        edit (slot, band (slot));
+    history.endTransaction();
+}
+
+void BandEditing::setBypass (const std::vector<int>& slotsToEdit, bool bypass)
+{
+    editEach (slotsToEdit, [&] (int slot, const BandSettings&) { set (parameters::bypassId (slot), bypass ? 1.0 : 0.0); });
+}
+
+void BandEditing::invertGain (const std::vector<int>& slotsToEdit)
+{
+    editEach (slotsToEdit, [&] (int slot, const BandSettings& settings) {
+        if (! hasGain (settings.shape))
+            return;
+        set (parameters::gainId (slot), -settings.gain);
+        set (parameters::dynamicRangeId (slot), -settings.dynamicRange);
+    });
+}
+
+void BandEditing::clearDynamics (const std::vector<int>& slotsToEdit)
+{
+    const BandSettings defaults;
+    editEach (slotsToEdit, [&] (int slot, const BandSettings& settings) {
+        if (! hasDynamics (settings.shape))
+            return;
+        set (parameters::dynamicRangeId (slot), defaults.dynamicRange);
+        set (parameters::thresholdId (slot), defaults.threshold);
+        set (parameters::thresholdAutoId (slot), static_cast<double> (defaults.thresholdAuto));
+        set (parameters::attackId (slot), defaults.attack);
+        set (parameters::releaseId (slot), defaults.release);
+        set (parameters::dynamicsBypassId (slot), static_cast<double> (defaults.dynamicsBypass));
+        set (parameters::detectionSourceId (slot), static_cast<double> (defaults.detectionSource));
+        set (parameters::detectionRangeId (slot), static_cast<double> (defaults.detectionRange));
+        set (parameters::detectionLowId (slot), defaults.detectionLow);
+        set (parameters::detectionHighId (slot), defaults.detectionHigh);
+    });
+}
+
+void BandEditing::setShape (const std::vector<int>& slotsToEdit, Shape shape)
+{
+    editEach (slotsToEdit, [&] (int slot, const BandSettings&) { setShape (slot, shape); });
+}
+
+void BandEditing::setSlope (const std::vector<int>& slotsToEdit, double slope)
+{
+    editEach (slotsToEdit, [&] (int slot, const BandSettings& settings) {
+        if (! hasSlope (settings.shape))
+            return;
+        set (parameters::slopeId (slot), slope);
+        if (isCut (settings.shape))
+            set (parameters::brickwallId (slot), 0.0);
+    });
+}
+
+void BandEditing::setBrickwall (const std::vector<int>& slotsToEdit)
+{
+    editEach (slotsToEdit, [&] (int slot, const BandSettings& settings) {
+        if (isCut (settings.shape))
+            set (parameters::brickwallId (slot), 1.0);
+    });
+}
+
+void BandEditing::setPlacement (const std::vector<int>& slotsToEdit, StereoPlacement placement)
+{
+    editEach (slotsToEdit, [&] (int slot, const BandSettings&) { set (parameters::placementId (slot), static_cast<double> (placement)); });
+}
+
 } // namespace eq1
