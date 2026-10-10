@@ -7,7 +7,8 @@
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
-#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget")
+#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget"); on a
+#                               Mac busy with other work it measures nothing and exits 3
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
@@ -131,6 +132,17 @@ focus() {
 # On its own, after the tests: timings taken while anything else runs are meaningless.
 cpu() {
     step "CPU budget"
+    # Timings taken while the machine is busy (other builds, other agents) measure the machine, not the
+    # Engine: refuse rather than report a false overrun. CI's runners are quiet, so it always measures.
+    if [ "$os" = macos ] && [ -z "${GITHUB_ACTIONS:-}" ]; then
+        local load cores
+        load=$(sysctl -n vm.loadavg | awk '{ print $2 }')
+        cores=$(sysctl -n hw.ncpu)
+        if awk -v l="$load" -v c="$cores" 'BEGIN { exit ! (l > c / 2) }'; then
+            echo "Machine busy (load $load on $cores cores): CPU budget not measured; CI measures it on every PR" >&2
+            return 3
+        fi
+    fi
     cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget
     local exe=$BUILD_DIR/tests/eq1_cpu_budget
     [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/eq1_cpu_budget
