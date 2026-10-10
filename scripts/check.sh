@@ -2,10 +2,11 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script, a stage at a time), and the local-only
 # paint time, on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            docs, build, test, cpu, paint, tsan and validate
+#   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
 #                               glossary, no test reads a saved state as raw bytes, runs timers itself or has a non-ASCII
 #                               title, and no colour is hard-coded in plugin/ outside plugin/staple/
+#   scripts/check.sh hooks      the Claude Code worktree hook's tests (not run by git hooks, which run docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -101,6 +102,12 @@ docs() {
     fi
     [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes, tests wait with harness::settle and have ASCII titles"
     return "$broken"
+}
+
+# The worktree hook (.claude/hooks/one-branch-per-worktree.sh) against its cases.
+hooks() {
+    step "Worktree hook"
+    .claude/hooks/one-branch-per-worktree.test.sh
 }
 
 # Every colour in the editor comes from Staple's tokens (plugin/staple/Tokens.h): a colour written as a
@@ -328,7 +335,8 @@ case "${1:-all}" in
     tsan) tsan ;;
     validate) validate ;;
     docs) docs; colours ;;
+    hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
-    all) docs; colours; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,19p' "$0" >&2; exit 2 ;;
+    all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
+    *) sed -n '2,20p' "$0" >&2; exit 2 ;;
 esac

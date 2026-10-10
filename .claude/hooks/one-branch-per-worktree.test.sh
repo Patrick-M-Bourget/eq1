@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests one-branch-per-worktree.sh against a throwaway repository with one linked worktree.
-# Run: .claude/hooks/one-branch-per-worktree.test.sh
+# Run: scripts/check.sh hooks (by hand, or in a full check; never from a git hook).
 set -uo pipefail
 # Inside a git hook, GIT_DIR and GIT_INDEX_FILE point at the repository being committed to; left set,
 # the throwaway repository's git init and commit would land there.
