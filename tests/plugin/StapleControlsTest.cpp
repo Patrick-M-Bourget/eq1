@@ -328,9 +328,13 @@ TEST_CASE ("A Band's Off button lights its translucent tint while hovered, more 
     REQUIRE (bypass.isOff());
     // The tint alone, on nothing, at the square's top middle, clear of the icon.
     const auto tint = [&bypass] (bool highlighted, bool down) {
-        juce::Image image (juce::Image::ARGB, 24, 24, true);
-        juce::Graphics g (image);
-        bypass.paintButton (g, highlighted, down);
+        // A software image, and the Graphics gone before the read: a GPU-backed image (Direct2D on
+        // Windows) holds its drawing until its context ends.
+        juce::Image image (juce::Image::ARGB, 24, 24, true, juce::SoftwareImageType());
+        {
+            juce::Graphics g (image);
+            bypass.paintButton (g, highlighted, down);
+        }
         return static_cast<int> (image.getPixelAt (12, 2).getAlpha());
     };
     const auto rest = tint (false, false), hovered = tint (true, false), pressed = tint (false, true);
