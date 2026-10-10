@@ -1,5 +1,7 @@
 #include "BandMenu.h"
 
+#include "BandClipboard.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -47,6 +49,17 @@ juce::PopupMenu BandMenu::build() const
     auto& edit = editing;
     const auto slots = selection;
 
+    // Paste, with the Bands on the clipboard that fit into the free Band Slots.
+    const auto pasted = clipboardBands (clipboard);
+    const auto toPaste = static_cast<int> (pasted.size());
+    const int pastes = std::min (toPaste, editing.freeSlots());
+    const auto addPaste = [&] {
+        menu.addItem (pastes > 0 && pastes < toPaste ? "Paste (" + juce::String (pastes) + " of " + juce::String (toPaste) + ")" : juce::String ("Paste"),
+                      pastes > 0,
+                      false,
+                      [&edit, pasted, selectPasted = select] { selectPasted (edit.paste (pasted)); });
+    };
+
     if (! bands.empty())
     {
         const bool allBypassed = ! any ([] (const BandSettings& b) { return ! b.bypass; });
@@ -89,8 +102,19 @@ juce::PopupMenu BandMenu::build() const
         }
         menu.addSubMenu ("Stereo Placement", placements, stereoPlacementAvailable);
 
-        // Cut, Copy and Paste (#43) join at the top of the next group.
         menu.addSeparator();
+        const auto copy = [&edit, slots, toClipboard = copyToClipboard] {
+            std::vector<BandSettings> copied;
+            for (int slot : slots)
+                copied.push_back (edit.band (slot));
+            toClipboard (captureBands (copied).toXmlString());
+        };
+        menu.addItem ("Cut", [copy, deleteBands = deleteSelection] {
+            copy();
+            deleteBands();
+        });
+        menu.addItem ("Copy", copy);
+        addPaste();
         const auto toSplit = static_cast<int> (std::count_if (bands.begin(), bands.end(), [] (const BandSettings& b) {
             return b.placement == StereoPlacement::Stereo;
         }));
@@ -101,6 +125,11 @@ juce::PopupMenu BandMenu::build() const
                       [&edit, slots, selectHalves = select] { selectHalves (edit.split (slots)); });
         menu.addSeparator();
         menu.addItem ("Delete", deleteSelection);
+        menu.addSeparator();
+    }
+    else
+    {
+        addPaste();
         menu.addSeparator();
     }
     menu.addItem ("Select All", selectAll);

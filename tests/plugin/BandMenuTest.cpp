@@ -1,3 +1,4 @@
+#include "BandClipboard.h"
 #include "BandMenu.h"
 #include "PluginProcessor.h"
 
@@ -17,6 +18,7 @@ struct Host
     eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
     int deletes = 0, selectAlls = 0;
     std::vector<int> selected;
+    juce::String clipboard; // the system clipboard's text, which the tests never touch
 
     float value (int slot, const char* control)
     {
@@ -39,8 +41,14 @@ struct Host
 
     juce::PopupMenu menu (std::vector<int> selection, bool stereo = true)
     {
-        return eq1::BandMenu { editing, std::move (selection), stereo, [this] { ++deletes; }, [this] { ++selectAlls; },
-                              [this] (std::vector<int> slots) { selected = std::move (slots); } }
+        return eq1::BandMenu { editing,
+                               std::move (selection),
+                               stereo,
+                               [this] { ++deletes; },
+                               [this] { ++selectAlls; },
+                               [this] (std::vector<int> slots) { selected = std::move (slots); },
+                               clipboard,
+                               [this] (const juce::String& text) { clipboard = text; } }
             .build();
     }
 };
@@ -83,13 +91,13 @@ std::vector<juce::String> ticked (const juce::PopupMenu& menu)
 
 } // namespace
 
-TEST_CASE ("The Band menu lists its actions in groups on a selection, and only Select All on empty space")
+TEST_CASE ("The Band menu lists its actions in groups on a selection, and only Paste and Select All on empty space")
 {
     Host host;
     host.addBand (1, 100.0f, 3.0f);
 
     const std::vector<juce::String> onBands { "Bypass", "Invert Gain", "Clear Dynamics", "-", "Shape",  "Slope",
-                                              "Stereo Placement", "-", "Split", "-", "Delete", "-", "Select All" };
+                                              "Stereo Placement", "-", "Cut", "Copy", "Paste", "Split", "-", "Delete", "-", "Select All" };
     CHECK (textsOf (host.menu ({ 1 })) == onBands);
     CHECK (textsOf (submenu (host.menu ({ 1 }), "Shape")) == std::vector<juce::String> (eq1::parameters::shapeNames().begin(), eq1::parameters::shapeNames().end()));
     CHECK (textsOf (submenu (host.menu ({ 1 }), "Slope"))
@@ -99,7 +107,7 @@ TEST_CASE ("The Band menu lists its actions in groups on a selection, and only S
            == std::vector<juce::String> (eq1::parameters::placementNames().begin(), eq1::parameters::placementNames().end()));
 
     const auto onEmptySpace = host.menu ({});
-    CHECK (textsOf (onEmptySpace) == std::vector<juce::String> { "Select All" });
+    CHECK (textsOf (onEmptySpace) == std::vector<juce::String> { "Paste", "-", "Select All" });
     item (onEmptySpace, "Select All").action();
     CHECK (host.selectAlls == 1);
     item (host.menu ({ 1 }), "Delete").action();
@@ -245,8 +253,73 @@ TEST_CASE ("With fewer free Band Slots than selected Stereo Bands, Split reads h
     host.set (4, "placement", 3.0f); // Mid: not counted
 
     const auto menu = host.menu ({ 1, 2, 3, 4 });
-    CHECK (textsOf (menu)[8] == "Split (2 of 3)");
+    CHECK (textsOf (menu)[11] == "Split (2 of 3)");
     item (menu, "Split (2 of 3)").action();
     CHECK (host.selected == std::vector<int> { 1, 2, 23, 24 });
     CHECK (host.value (3, "placement") == 0.0f);
+}
+
+TEST_CASE ("Copy puts the selected Bands on the clipboard with no undo step; Cut also deletes them")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    host.addBand (2, 1000.0f, -3.0f);
+    const auto copied = eq1::captureBands ({ host.editing.band (1), host.editing.band (2) }).toXmlString();
+
+    item (host.menu ({ 1, 2 }), "Copy").action();
+    CHECK (host.clipboard == copied);
+    CHECK (host.deletes == 0);
+    CHECK (host.processor.editHistory().undoSteps() == 0);
+
+    host.clipboard = {};
+    item (host.menu ({ 1, 2 }), "Cut").action();
+    CHECK (host.clipboard == copied);
+    CHECK (host.deletes == 1);
+}
+
+TEST_CASE ("Paste adds the clipboard's Bands and selects them, as one undo step, from a Band or empty space")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    item (host.menu ({ 1 }), "Copy").action();
+
+    item (host.menu ({ 1 }), "Paste").action();
+    CHECK (host.selected == std::vector<int> { 2 });
+    CHECK (host.editing.band (2) == host.editing.band (1));
+    item (host.menu ({}), "Paste").action();
+    CHECK (host.selected == std::vector<int> { 3 });
+    CHECK (host.processor.editHistory().undoSteps() == 2);
+}
+
+TEST_CASE ("Paste is unavailable with nothing of eq1's on the clipboard or no free Band Slot")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    CHECK_FALSE (item (host.menu ({ 1 }), "Paste").isEnabled);
+    host.clipboard = "some text";
+    CHECK_FALSE (item (host.menu ({}), "Paste").isEnabled);
+
+    item (host.menu ({ 1 }), "Copy").action();
+    CHECK (item (host.menu ({}), "Paste").isEnabled);
+    for (int slot = 2; slot <= eq1::numBandSlots; ++slot)
+        host.addBand (slot, 100.0f, 3.0f);
+    CHECK_FALSE (item (host.menu ({ 1 }), "Paste").isEnabled);
+}
+
+TEST_CASE ("With fewer free Band Slots than Bands on the clipboard, Paste reads how many it pastes and pastes the lowest-Frequency ones")
+{
+    Host host;
+    host.addBand (1, 5000.0f, 3.0f);
+    host.addBand (2, 100.0f, 3.0f);
+    host.addBand (3, 1000.0f, 3.0f);
+    item (host.menu ({ 1, 2, 3 }), "Copy").action();
+    for (int slot = 4; slot <= 22; ++slot)
+        host.addBand (slot, 100.0f, 3.0f);
+
+    const auto menu = host.menu ({});
+    CHECK (textsOf (menu)[0] == "Paste (2 of 3)");
+    item (menu, "Paste (2 of 3)").action();
+    CHECK (host.selected == std::vector<int> { 23, 24 });
+    CHECK (host.editing.band (23) == host.editing.band (2));
+    CHECK (host.editing.band (24) == host.editing.band (3));
 }

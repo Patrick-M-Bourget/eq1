@@ -1,5 +1,6 @@
 #include "EqDisplay.h"
 
+#include "BandClipboard.h"
 #include "BandMenu.h"
 #include "PluginProcessor.h"
 #include "eq1/Response.h"
@@ -601,7 +602,9 @@ void EqDisplay::showMenu (const juce::MouseEvent& e)
                           [display] (std::vector<int> slots) {
                               if (display != nullptr)
                                   display->select ({ slots.begin(), slots.end() });
-                          } };
+                          },
+                          juce::SystemClipboard::getTextFromClipboard(),
+                          [] (const juce::String& text) { juce::SystemClipboard::copyTextToClipboard (text); } };
     // Closed unchosen if the display goes, so the Band actions never outlive the editing they use.
     menu.build().showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withMousePosition());
 }
@@ -613,6 +616,24 @@ void EqDisplay::selectAll()
         if (editing.band (slot).inUse)
             inUse.insert (slot);
     select (inUse);
+}
+
+void EqDisplay::copySelection()
+{
+    std::vector<BandSettings> bands;
+    for (int slot : selected)
+        bands.push_back (editing.band (slot));
+    juce::SystemClipboard::copyTextToClipboard (captureBands (bands).toXmlString());
+}
+
+bool EqDisplay::paste()
+{
+    const auto pasted = editing.paste (clipboardBands (juce::SystemClipboard::getTextFromClipboard()));
+    if (pasted.empty())
+        return false;
+    select ({ pasted.begin(), pasted.end() });
+    shown = heardSettings();
+    return true;
 }
 
 void EqDisplay::deleteSelection()
@@ -634,6 +655,16 @@ bool EqDisplay::keyPressed (const juce::KeyPress& key)
         selectAll();
         return true;
     }
+    const bool cut = key == juce::KeyPress ('x', juce::ModifierKeys::commandModifier, 0);
+    if ((cut || key == juce::KeyPress ('c', juce::ModifierKeys::commandModifier, 0)) && ! selected.empty())
+    {
+        copySelection();
+        if (cut)
+            deleteSelection();
+        return true;
+    }
+    if (key == juce::KeyPress ('v', juce::ModifierKeys::commandModifier, 0))
+        return paste();
     return false;
 }
 
