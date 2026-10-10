@@ -525,3 +525,24 @@ TEST_CASE ("The Preset browser's list takes Tab, moves with the arrow keys, load
     CHECK_FALSE (browser.isVisible());
     CHECK (presets.hasKeyboardFocus (false));
 }
+
+TEST_CASE ("Space or Return on the Output Meter puts out its Clip Lights")
+{
+    EveryControl host;
+    host.processor.prepareToPlay (48000.0, 512);
+    for (const auto key : { space, returnKey })
+    {
+        juce::AudioBuffer<float> buffer (host.processor.getTotalNumInputChannels(), 512);
+        juce::MidiBuffer midi;
+        buffer.clear();
+        buffer.setSample (0, 10, 2.0f);
+        host.processor.processBlock (buffer, midi);
+        for (int ch = 0; ch < host.processor.outputLevelChannels(); ++ch)
+            host.processor.readOutputLevel (ch);
+        REQUIRE (host.processor.isClipLit (0));
+
+        named<juce::Component> (host, "Output Meter").grabKeyboardFocus();
+        CHECK (host.press (key));
+        CHECK_FALSE (host.processor.isClipLit (0));
+    }
+}
