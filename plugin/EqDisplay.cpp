@@ -159,6 +159,7 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editi
     }
     shown = heardSettings();
     tapSamples.resize (1 << 16);
+    card.onSelectAll = [this] { selectAll(); };
     // An editor opened under Global Bypass shows it at once.
     globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
     lastFadeStep = juce::Time::getMillisecondCounter();
@@ -457,7 +458,8 @@ void EqDisplay::parentHierarchyChanged()
 
 void EqDisplay::showCard (int slot)
 {
-    const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
+    // Where the Band is now, whatever moved it.
+    const auto band = heardSettings().bands[static_cast<size_t> (slot - 1)];
     auto* layer = card.getParentComponent();
     if (layer == nullptr)
         return;
@@ -476,7 +478,14 @@ void EqDisplay::updateCard()
     const auto now = juce::Time::getMillisecondCounter();
     if (const int slot = card.shownSlot(); slot != 0)
     {
-        if (card.isPointerOver() || (pointer && slotAt (*pointer) == slot))
+        // Deleted, or taken out of use from anywhere: gone at once. Otherwise it follows its Band.
+        if (! editing.band (slot).inUse)
+        {
+            hideCard();
+            return;
+        }
+        showCard (slot);
+        if (card.isHeld() || card.isPointerOver() || (pointer && slotAt (*pointer) == slot))
             cardLeftSince.reset();
         else if (! cardLeftSince)
             cardLeftSince = now;

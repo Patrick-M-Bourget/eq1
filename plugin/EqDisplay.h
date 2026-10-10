@@ -8,6 +8,7 @@
 #include "display/DisplayGeometry.h"
 #include "display/EdgeFadeLayer.h"
 #include "display/GhostLayer.h"
+#include "staple/Tokens.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -197,7 +198,7 @@ private:
     // The Hover Card, in the editor's overlay layer so it draws over the Band panel. It shows once the
     // pointer has rested on a handle (restingSlot's, from restingSince) for hoverCardRestMilliseconds.
     HoverCard card;
-    static constexpr juce::uint32 hoverCardRestMilliseconds = 300;
+    static constexpr juce::uint32 hoverCardRestMilliseconds = staple::tokens::hoverCard::restMs;
     int restingSlot = 0;
     juce::uint32 restingSince = 0;
     // Since when the pointer has been off the shown card and its handle: it hides hoverFadeMs later.
