@@ -3,17 +3,23 @@
 <eq1 version="3">
   <PARAM id="band1_in_use" value="1.0"/>
   <PARAM id="band1_shape" value="2.0"/>
-  <PARAM id="band1_frequency" value="25.0"/>
+  <PARAM id="band1_frequency" value="30.0"/>
+  <PARAM id="band1_q" value="0.71"/>
   <PARAM id="band1_slope" value="24.0"/>
   <PARAM id="band2_in_use" value="1.0"/>
-  <PARAM id="band2_frequency" value="60.0"/>
+  <PARAM id="band2_frequency" value="65.0"/>
   <PARAM id="band2_gain" value="3.0"/>
-  <PARAM id="band2_q" value="1.4"/>
+  <PARAM id="band2_q" value="1.2"/>
   <PARAM id="band3_in_use" value="1.0"/>
-  <PARAM id="band3_frequency" value="350.0"/>
-  <PARAM id="band3_gain" value="-4.0"/>
-  <PARAM id="band3_q" value="1.5"/>
+  <PARAM id="band3_frequency" value="380.0"/>
+  <PARAM id="band3_gain" value="-3.0"/>
+  <PARAM id="band3_q" value="1.4"/>
+  <PARAM id="band3_dynamic_range" value="-3.0"/>
   <PARAM id="band4_in_use" value="1.0"/>
-  <PARAM id="band4_frequency" value="4000.0"/>
+  <PARAM id="band4_frequency" value="3500.0"/>
   <PARAM id="band4_gain" value="3.0"/>
+  <PARAM id="band5_in_use" value="1.0"/>
+  <PARAM id="band5_shape" value="4.0"/>
+  <PARAM id="band5_frequency" value="12000.0"/>
+  <PARAM id="band5_q" value="0.71"/>
 </eq1>
