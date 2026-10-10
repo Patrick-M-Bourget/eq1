@@ -87,6 +87,14 @@ public:
     void setDetectionAudition (int slot) { heldAuditionSlot = slot; }
     int detectionAuditionSlot() const { return heldAuditionSlot.load(); }
 
+    // The Metered Band, while the editor shows it: its Band Slot (1 to 24), or 0. Like Solo: not a host
+    // parameter, not saved, let go on restore.
+    void setMeteredBand (int slot) { heldMeteredSlot = slot; }
+    int meteredSlot() const { return heldMeteredSlot.load(); }
+    // The Metered Band's Detection Level, in dB on Threshold's scale: the loudest since the last read,
+    // or levelFloorDb. From one reader thread, the message thread.
+    double readDetectionLevel() { return engine.readDetectionLevel(); }
+
     // A Band Slot's Live Gain in dB, for the display: from any thread.
     double liveGainDb (int slot) const { return engine.liveGainDb (slot); }
 
@@ -117,6 +125,7 @@ private:
     std::atomic<int> displayRange { 12 };
     std::atomic<int> heldSoloSlot { 0 };
     std::atomic<int> heldAuditionSlot { 0 };
+    std::atomic<int> heldMeteredSlot { 0 };
     AnalyzerSettings analyzer;
     mutable juce::SpinLock analyzerLock; // the editor sets it while a host may be saving
 

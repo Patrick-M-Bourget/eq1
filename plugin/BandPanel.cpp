@@ -72,6 +72,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
         thresholdDragging = false;
     };
     threshold.onValueChange = [this] { storeThreshold(); };
+    addAndMakeVisible (detectionArc);
 
     for (auto* button : { &brickwall, &bypass, &dynamicsBypass })
         addAndMakeVisible (*button);
@@ -96,6 +97,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
 BandPanel::~BandPanel()
 {
     releaseAudition();
+    processor.setMeteredBand (0);
 }
 
 void BandPanel::releaseAudition()
@@ -132,6 +134,7 @@ void BandPanel::show (int newSlot)
         getChildComponent (i)->setVisible (slot != 0 || getChildComponent (i) == &title);
     if (slot == 0)
     {
+        processor.setMeteredBand (0);
         title.setText ("Double-click the display to add a Band", juce::dontSendNotification);
         return;
     }
@@ -207,15 +210,16 @@ void BandPanel::updateVisibility()
     for (auto* c : std::initializer_list<juce::Component*> { &gain, &gainLabel })
         c->setVisible (hasGain (band.shape));
     // Cut, Notch, Band Pass and All Pass keep their dynamics settings but don't offer them.
-    for (auto* c : std::initializer_list<juce::Component*> { &dynamicRange, &dynamicRangeLabel, &threshold, &thresholdLabel, &attack,
-                                                             &attackLabel, &release, &releaseLabel, &dynamicsBypass, &detectionSource,
-                                                             &detectionRange, &audition })
+    for (auto* c : std::initializer_list<juce::Component*> { &dynamicRange, &dynamicRangeLabel, &threshold, &thresholdLabel, &detectionArc,
+                                                             &attack, &attackLabel, &release, &releaseLabel, &dynamicsBypass,
+                                                             &detectionSource, &detectionRange, &audition })
         c->setVisible (hasDynamics (band.shape));
     for (auto* c : std::initializer_list<juce::Component*> { &detectionLow, &detectionLowLabel, &detectionHigh, &detectionHighLabel })
         c->setVisible (hasDynamics (band.shape) && band.detectionRange == DetectionRange::Free);
-    // A Shape without dynamics has no detection signal to audition.
+    // A Shape without dynamics has no detection signal to audition or meter.
     if (! hasDynamics (band.shape))
         releaseAudition();
+    processor.setMeteredBand (hasDynamics (band.shape) ? slot : 0);
     brickwall.setVisible (isCut (band.shape));
     // Brickwall overrides a Cut's Slope.
     const bool usesSlope = hasSlope (band.shape) && ! (isCut (band.shape) && band.brickwall);
@@ -267,6 +271,7 @@ void BandPanel::resized()
         label->setBounds (column.removeFromTop (16));
         slider->setBounds (column);
     }
+    detectionArc.setBounds (threshold.getBounds());
 }
 
 } // namespace eq1

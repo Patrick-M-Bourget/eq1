@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DetectionArc.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -19,7 +21,8 @@ class BandEditing;
 // show only on Shapes that have them, the Free limits only on a Free Detection Range, Brickwall only
 // on Cuts, and Stereo Placement only on stereo tracks. Threshold's top position is Auto, which is its
 // own host parameter (ADR 0003). Holding Detection Audition plays the Band's detection signal (Detection
-// Audition) until it is released.
+// Audition) until it is released. The Band shown is the Metered Band while its Shape has dynamics, and
+// its Detection Level is drawn around the Threshold knob.
 class BandPanel final : public juce::Component, private juce::Timer
 {
 public:
@@ -55,6 +58,7 @@ private:
     juce::Slider frequency, gain, q, slope, dynamicRange, threshold, attack, release, detectionLow, detectionHigh;
     juce::Label frequencyLabel, gainLabel, qLabel, slopeLabel, dynamicRangeLabel, thresholdLabel, attackLabel, releaseLabel,
         detectionLowLabel, detectionHighLabel;
+    DetectionArc detectionArc { processor, threshold };
     juce::ToggleButton brickwall { "Brickwall" }, bypass { "Bypass" }, dynamicsBypass { "Dynamics Bypass" };
     juce::TextButton deleteButton { "Delete" }, audition { "Detection Audition" };
 

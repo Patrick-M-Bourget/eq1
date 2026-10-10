@@ -41,6 +41,7 @@ target_sources(eq1 PRIVATE
     BandEditing.cpp
     BandMenu.cpp
     BandPanel.cpp
+    DetectionArc.cpp
     EqDisplay.cpp
     EditHistory.cpp
     ABCompare.cpp
