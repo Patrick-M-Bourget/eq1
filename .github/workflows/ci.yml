@@ -10,6 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 # Each step runs one part of scripts/check.sh, so a local run of the script checks what CI checks.
+# On a pull request, macOS leaves out the two slowest steps, ThreadSanitizer and plugin validation
+# (about 8 of its 13 minutes): they run on main after the merge.
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -78,11 +80,12 @@ jobs:
         run: scripts/check.sh cpu
 
       - name: Engine tests under ThreadSanitizer
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && github.event_name == 'push'
         timeout-minutes: 15
         run: scripts/check.sh tsan
 
       - name: Validate plugins (pluginval, auval, clap-validator, AAX and Standalone built)
+        if: runner.os == 'Windows' || github.event_name == 'push'
         timeout-minutes: 8
         run: scripts/check.sh validate
 
