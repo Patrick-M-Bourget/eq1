@@ -1,8 +1,6 @@
 #include "TextChip.h"
 
 #include "../Accessibility.h"
-#include "../Fonts.h"
-#include "../Icons.h"
 #include "../Light.h"
 
 #include <cmath>
@@ -15,30 +13,32 @@ namespace
 namespace colour = tokens::colour;
 
 constexpr float filledPadding = 8.0f, plainPadding = 6.0f;
-constexpr float chevronSize = 8.0f, chevronGap = 5.0f, chevronAlpha = 0.55f;
 } // namespace
 
-TextChip::TextChip (const juce::String& text, Look l, float size) : juce::Button (text), look (l), fontSize (size)
+TextChip::TextChip (const juce::String& text, Look l, float size, Weight w)
+    : juce::Button (text), look (l), fontSize (size), weight (w), paddingLeft (look == Look::filled ? filledPadding : plainPadding),
+      paddingRight (paddingLeft)
 {
     setHasFocusOutline (true);
     setMouseClickGrabsKeyboardFocus (false);
 }
 
-void TextChip::setLook (Look newLook)
-{
-    look = newLook;
-    repaint();
-}
-
-void TextChip::setFontSize (float size)
-{
-    fontSize = size;
-    repaint();
-}
-
 void TextChip::setChevron (bool shown)
 {
-    chevron = shown;
+    chevron = shown ? std::optional<Chevron> (Chevron {}) : std::nullopt;
+    repaint();
+}
+
+void TextChip::setChevron (Chevron newLook)
+{
+    chevron = newLook;
+    repaint();
+}
+
+void TextChip::setPadding (float left, float right)
+{
+    paddingLeft = left;
+    paddingRight = right;
     repaint();
 }
 
@@ -48,14 +48,13 @@ void TextChip::setInk (std::optional<juce::Colour> colour)
     repaint();
 }
 
-juce::Font TextChip::textFont() const { return font (fontSize, Weight::medium); }
+juce::Font TextChip::textFont() const { return font (fontSize, weight); }
 
 int TextChip::getIdealWidth() const
 {
-    const float padding = look == Look::filled ? filledPadding : plainPadding;
-    float width = juce::GlyphArrangement::getStringWidth (textFont(), getButtonText()) + 2.0f * padding;
+    float width = juce::GlyphArrangement::getStringWidth (textFont(), getButtonText()) + paddingLeft + paddingRight;
     if (chevron)
-        width += chevronGap + chevronSize;
+        width += chevron->gap + chevron->size;
     return static_cast<int> (std::ceil (width));
 }
 
@@ -76,12 +75,13 @@ void TextChip::paintButton (juce::Graphics& g, bool highlighted, bool down)
 
     const auto ink = fixedInk.value_or (look == Look::filled || highlighted || down || getToggleState() ? colour::text1 : colour::text2)
                          .withMultipliedAlpha (alpha);
-    auto area = bounds.reduced (look == Look::filled ? filledPadding : plainPadding, 0.0f);
+    auto area = bounds.withTrimmedLeft (paddingLeft).withTrimmedRight (paddingRight);
     if (chevron)
-        drawIcon (g, Icon::dropdown, area.removeFromRight (chevronSize).withSizeKeepingCentre (chevronSize, chevronSize),
-                  ink.withMultipliedAlpha (chevronAlpha));
-    if (chevron)
-        area.removeFromRight (chevronGap);
+    {
+        drawIcon (g, chevron->icon, area.removeFromRight (chevron->size).withSizeKeepingCentre (chevron->size, chevron->size),
+                  ink.withMultipliedAlpha (chevron->alpha));
+        area.removeFromRight (chevron->gap);
+    }
     g.setFont (textFont());
     g.setColour (ink);
     g.drawText (getButtonText(), area, chevron ? juce::Justification::centredLeft : juce::Justification::centred, true);

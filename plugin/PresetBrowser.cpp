@@ -40,24 +40,6 @@ void focusOn (juce::Component& component)
 } // namespace
 
 //==============================================================================
-PresetBrowser::TextAction::TextAction (const juce::String& text) : juce::Button (text)
-{
-    setTitle (text);
-}
-
-void PresetBrowser::TextAction::paintButton (juce::Graphics& g, bool highlighted, bool down)
-{
-    if (highlighted || down)
-    {
-        g.setColour (down ? colour::fill2 : colour::fill1);
-        g.fillRoundedRectangle (getLocalBounds().toFloat(), size::r2);
-    }
-    g.setColour (colour::text1);
-    g.setFont (staple::font (size::fs3));
-    g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centred, false);
-}
-
-//==============================================================================
 PresetBrowser::FolderRow::FolderRow (PresetBrowser& b, const PresetLibrary::Folder& f) : juce::Button (f.name), browser (b), folder (f)
 {
     setTitle (folder.name);
@@ -256,7 +238,9 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
     };
     for (auto* button : { &save, &loadFile, &showFolder })
     {
-        button->setMouseClickGrabsKeyboardFocus (false);
+        button->setTitle (button->getButtonText());
+        button->setInk (colour::text1);
+        button->setPadding (actionPad, actionPad);
         panel.addAndMakeVisible (*button);
     }
 
@@ -560,15 +544,12 @@ void PresetBrowser::layOutPanel()
         c.setBounds (footer.removeFromLeft (w).withSizeKeepingCentre (w, &c == &nameField ? nameFieldHeight : actionHeight));
         footer.removeFromLeft (footerGap);
     };
-    const auto widthOf = [] (TextAction& b) {
-        return staple::textWidth (staple::font (size::fs3), b.getButtonText()) + 2 * actionPad;
-    };
-    place (save, widthOf (save));
+    place (save, save.getIdealWidth());
     // The name field opens beside Save as, before the other actions.
     if (nameField.isVisible())
         place (nameField, nameFieldWidth);
-    place (loadFile, widthOf (loadFile));
-    place (showFolder, widthOf (showFolder));
+    place (loadFile, loadFile.getIdealWidth());
+    place (showFolder, showFolder.getIdealWidth());
 
     folderView.setBounds (area.removeFromLeft (folderWidth - 1));
     area.removeFromLeft (1);

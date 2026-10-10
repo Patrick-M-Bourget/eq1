@@ -22,8 +22,8 @@ constexpr int sourceHeight = 28, sourcePadding = 2, sourceGap = 4, rowHeight = 2
 constexpr int numRows = 4;
 constexpr int cardHeight = padding + sourceHeight + 2 * sourcePadding + gap + numRows * rowHeight + gap + 1 + gap + peakHoldHeight + padding;
 constexpr float dotSize = 5.0f, dotGap = 7.0f;
-constexpr int buttonMinimumWidth = 92, buttonPaddingLeft = 12, buttonPaddingRight = 10, chevronSize = 10, chevronGap = 10;
-constexpr float chevronAlpha = 0.6f;
+constexpr int buttonMinimumWidth = 92;
+constexpr float buttonPaddingLeft = 12.0f, buttonPaddingRight = 10.0f;
 
 // Analyzer Tilt's listed values, which a click cycles through; the arrow keys step it by tiltStep.
 constexpr std::array<double, 4> listedTilts { 0.0, 3.0, 4.5, 6.0 };
@@ -63,30 +63,11 @@ AnalyzerButton::AnalyzerButton() : staple::TextChip (analyzerButtonText ({}), Lo
     setName ("Analyzer");
     setTitle ("Analyzer");
     setTooltip ("Analyzer: what it shows and how. Click for its settings");
+    setChevron (Chevron { .icon = staple::Icon::chevronUp, .size = 10.0f, .gap = 10.0f, .alpha = 0.6f });
+    setPadding (buttonPaddingLeft, buttonPaddingRight);
 }
 
-int AnalyzerButton::getIdealWidth() const
-{
-    const int text = staple::textWidth (labelFont(), getButtonText());
-    return std::max (buttonMinimumWidth, buttonPaddingLeft + text + chevronGap + chevronSize + buttonPaddingRight);
-}
-
-void AnalyzerButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
-{
-    const float alpha = staple::enabledAlpha (*this);
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour (staple::lit (colour::fill1, highlighted, down).withMultipliedAlpha (alpha));
-    g.fillRoundedRectangle (bounds, size::r2);
-
-    auto area = getLocalBounds().withTrimmedLeft (buttonPaddingLeft).withTrimmedRight (buttonPaddingRight).toFloat();
-    const auto ink = colour::text1.withMultipliedAlpha (alpha);
-    staple::drawIcon (g, staple::Icon::chevronUp, area.removeFromRight (static_cast<float> (chevronSize)).withSizeKeepingCentre (chevronSize, chevronSize),
-                      ink.withMultipliedAlpha (chevronAlpha));
-    area.removeFromRight (static_cast<float> (chevronGap));
-    g.setFont (labelFont());
-    g.setColour (ink);
-    g.drawText (getButtonText(), area, juce::Justification::centredLeft, true);
-}
+int AnalyzerButton::getIdealWidth() const { return std::max (buttonMinimumWidth, staple::TextChip::getIdealWidth()); }
 
 AnalyzerRow::AnalyzerRow (const juce::String& title, const juce::String& l) : juce::ComboBox (title), label (l)
 {
