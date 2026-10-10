@@ -5,9 +5,9 @@
 #include "Band.h"
 #include "Dynamics.h"
 #include "LatestValue.h"
-#include "LevelMeter.h"
 #include "NoSubnormals.h"
 #include "Output.h"
+#include "OutputLevelTap.h"
 #include "Smoother.h"
 #include "Solo.h"
 
@@ -133,7 +133,7 @@ struct Engine::Impl
     AnalysisFifo preEq, postEq, sidechain;
 
     // The Output Level, per channel prepared.
-    std::unique_ptr<LevelMeter[]> outputLevels;
+    std::unique_ptr<OutputLevelTap[]> outputLevels;
     int outputLevelChannels = 0;
 
     static void pushMonoMix (AnalysisFifo& fifo, const float* const* channels, int numChannels, int numSamples)
@@ -288,7 +288,7 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     impl->sidechain.allocate (Impl::analysisCapacity);
     if (numChannels != impl->outputLevelChannels)
     {
-        impl->outputLevels = std::make_unique<LevelMeter[]> (static_cast<size_t> (std::max (numChannels, 0)));
+        impl->outputLevels = std::make_unique<OutputLevelTap[]> (static_cast<size_t> (std::max (numChannels, 0)));
         impl->outputLevelChannels = std::max (numChannels, 0);
     }
     for (int ch = 0; ch < impl->outputLevelChannels; ++ch)

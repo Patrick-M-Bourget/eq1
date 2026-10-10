@@ -16,7 +16,7 @@ namespace eq1
 //
 // Peak is the largest absolute sample since the last read. RMS is over a rectangular window of the
 // last 300 ms, defined in samples, so it doesn't depend on how the audio is cut into blocks.
-class LevelMeter
+class OutputLevelTap
 {
 public:
     static constexpr double windowSeconds = 0.3;

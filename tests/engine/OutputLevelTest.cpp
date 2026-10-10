@@ -15,8 +15,8 @@ using Catch::Matchers::WithinAbs;
 
 namespace
 {
-// Plays a sine of the given amplitude on every channel for the given time, in blocks whose sizes
-// cycle through 1, 37, 512 and 160 samples.
+// Plays signals through the Engine, the same on every channel, in blocks whose sizes cycle through
+// 1, 37, 512 and 160 samples.
 struct Player
 {
     Engine& engine;
@@ -26,45 +26,44 @@ struct Player
 
     void sine (double seconds, double amplitude, double frequency = 997.0)
     {
+        play (seconds, [&] (long long n) {
+            return static_cast<float> (amplitude * std::sin (2.0 * std::numbers::pi * frequency * static_cast<double> (n) / sampleRate));
+        });
+    }
+
+    void silence (double seconds) { sine (seconds, 0.0); }
+
+    // White noise, uniform between -amplitude and amplitude.
+    void noise (double seconds, double amplitude, unsigned seed)
+    {
+        std::mt19937 random (seed);
+        std::uniform_real_distribution<float> uniform (static_cast<float> (-amplitude), static_cast<float> (amplitude));
+        play (seconds, [&] (long long) { return uniform (random); });
+    }
+
+private:
+    // Plays sampleAt(position) onwards for the given time.
+    template <typename SampleAt>
+    void play (double seconds, SampleAt sampleAt)
+    {
         constexpr int blockSizes[] = { 1, 37, 512, 160 };
-        const auto total = static_cast<long long> (std::llround (seconds * sampleRate));
         std::vector<std::vector<float>> blocks (static_cast<size_t> (numChannels), std::vector<float> (512));
         std::vector<float*> channels;
         for (auto& block : blocks)
             channels.push_back (block.data());
+        const auto total = std::llround (seconds * sampleRate);
         for (long long done = 0, cut = 0; done < total; ++cut)
         {
             const int count = static_cast<int> (std::min<long long> (blockSizes[cut % 4], total - done));
             for (int i = 0; i < count; ++i)
             {
-                const auto s = static_cast<float> (amplitude * std::sin (2.0 * std::numbers::pi * frequency * static_cast<double> (position + i) / sampleRate));
+                const float s = sampleAt (position + i);
                 for (auto& block : blocks)
                     block[static_cast<size_t> (i)] = s;
             }
             engine.process ({ channels.data(), numChannels, count });
             position += count;
             done += count;
-        }
-    }
-
-    void silence (double seconds) { sine (seconds, 0.0); }
-
-    // White noise, uniform between -amplitude and amplitude, in 512-sample blocks.
-    void noise (double seconds, double amplitude, unsigned seed)
-    {
-        std::mt19937 random (seed);
-        std::uniform_real_distribution<float> uniform (static_cast<float> (-amplitude), static_cast<float> (amplitude));
-        std::vector<std::vector<float>> blocks (static_cast<size_t> (numChannels), std::vector<float> (512));
-        std::vector<float*> channels;
-        for (auto& block : blocks)
-            channels.push_back (block.data());
-        for (auto left = std::llround (seconds * sampleRate); left > 0; left -= 512)
-        {
-            const int count = static_cast<int> (std::min<long long> (512, left));
-            for (auto& block : blocks)
-                std::generate_n (block.begin(), count, [&] { return uniform (random); });
-            engine.process ({ channels.data(), numChannels, count });
-            position += count;
         }
     }
 };
