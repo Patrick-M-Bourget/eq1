@@ -15,6 +15,8 @@ The reviewer checks the diff against the ticket's Agent Brief, spec #1 (includin
 
 ## Merging
 
+A session that built a PR can't review it: when it posts the verdict itself, from a review it ran, the user's go-ahead to merge is the human review. It asks for that go-ahead once CI is green, quotes it in the verdict comment, and runs `merge-on-green.sh` after it.
+
 `scripts/merge-on-green.sh <PR>` waits for CI, then for a pass verdict on the head commit, and squash-merges as "<title> (#PR)" with "Squashed from #PR". It stops on a conflict with main, failed checks, a changes verdict or a new push. After a merge, other open PRs may conflict: rebase them before they can merge. ThreadSanitizer and macOS plugin validation run on main after each merge, not on PRs: a failure there is fixed forward.
 
 ## Integration branches

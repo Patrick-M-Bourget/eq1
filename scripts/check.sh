@@ -2,10 +2,11 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script, a stage at a time), and the local-only
 # paint time, on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            docs, build, test, cpu, paint, tsan and validate
+#   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
-#                               glossary, no test reads a saved state as raw bytes or runs timers itself, and no colour is
-#                               hard-coded in plugin/ outside plugin/staple/
+#                               glossary, no test reads a saved state as raw bytes, runs timers itself or has a non-ASCII
+#                               title, and no colour is hard-coded in plugin/ outside plugin/staple/
+#   scripts/check.sh hooks      the Claude Code worktree hook's tests (not run by git hooks, which run docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -91,8 +92,22 @@ docs() {
         printf '%s\n' "$loops" | sed 's/$/: runs timers itself; wait with harness::settle (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes, and tests wait with harness::settle"
+    # ctest hands a test's name to the test executable in the machine's code page, which on Windows
+    # can't hold "…" or "–": a title with them matches no test there. Titles stay ASCII.
+    local titles
+    titles=$(LC_ALL=C git grep -nE '(TEST_CASE|SECTION) *\("[^"]*[^ -~]' -- tests || true)
+    if [ -n "$titles" ]; then
+        printf '%s\n' "$titles" | sed 's/$/: a test title outside ASCII; ctest on Windows runs no test by that name/' >&2
+        broken=1
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes, tests wait with harness::settle and have ASCII titles"
     return "$broken"
+}
+
+# The worktree hook (.claude/hooks/one-branch-per-worktree.sh) against its cases.
+hooks() {
+    step "Worktree hook"
+    .claude/hooks/one-branch-per-worktree.test.sh
 }
 
 # Every colour in the editor comes from Staple's tokens (plugin/staple/Tokens.h): a colour written as a
@@ -157,11 +172,22 @@ run_tests() {
     ctest --test-dir "$BUILD_DIR" -C Release -j 8 --output-on-failure
 }
 
-# A test filter that matches nothing is an error here, not a silent pass.
+# A test filter that matches nothing is an error here, not a silent pass. Its output goes to a log, as
+# the hooks' does: the summary on success; the compiler's errors, or the failing tests' output, on failure.
 focus() {
     step "Tests matching $1"
-    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_engine_tests eq1_plugin_tests
-    ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure
+    local log=$BUILD_DIR/focus.log
+    if ! cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_engine_tests eq1_plugin_tests > "$log" 2>&1; then
+        grep -E 'error|FAILED:' "$log" >&2
+        echo "Build failed; log in $log" >&2
+        return 1
+    fi
+    if ! ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure >> "$log" 2>&1; then
+        sed -n '/^Test project/,$p' "$log" | grep -vE '^ +Start +[0-9]+:|Test +#[0-9]+: .* Passed' >&2
+        echo "Log in $log" >&2
+        return 1
+    fi
+    grep -E '^[0-9]+% tests passed' "$log"
 }
 
 # Timings taken while the machine is busy (other builds, other agents) measure the machine, not eq1:
@@ -309,7 +335,8 @@ case "${1:-all}" in
     tsan) tsan ;;
     validate) validate ;;
     docs) docs; colours ;;
+    hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
-    all) docs; colours; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,19p' "$0" >&2; exit 2 ;;
+    all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
+    *) sed -n '2,20p' "$0" >&2; exit 2 ;;
 esac

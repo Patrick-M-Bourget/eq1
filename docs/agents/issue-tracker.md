@@ -33,7 +33,7 @@ Create a GitHub issue.
 ## When a skill says "fetch the relevant ticket"
 
 Read it as in **Read an issue** above.
-A ticket's spec is its latest `## Agent Brief` comment when it has one; the brief supersedes the body. Decisions settled in conversation before implementing (tolerances, scope, what an ambiguous criterion means) are posted as a new Agent Brief first, so the ticket keeps them. `gh issue view <number> --comments` prints the comments without the body, so read with `--json` as above.
+A ticket's spec is its latest `## Agent Brief` comment when it has one; the brief supersedes the body. Each acceptance criterion's test must be able to go red (`CODING_STANDARDS.md`, "Red without the change"): for a data race, the criterion names a seam ThreadSanitizer runs (the Engine tests), or says no test can show it, and why. Decisions settled in conversation before implementing (tolerances, scope, what an ambiguous criterion means) are posted as a new Agent Brief first, so the ticket keeps them. `gh issue view <number> --comments` prints the comments without the body, so read with `--json` as above.
 
 ## Wayfinding operations
 

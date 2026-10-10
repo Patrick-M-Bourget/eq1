@@ -2,7 +2,8 @@
 # Blocks a push whose build or tests fail (.githooks/gate.sh). A rebase rewrites commits without running
 # the pre-commit hook, so the pushed commits get the same gate here. It builds and tests the working
 # tree, so it requires the pushed commit to be the checked-out one, with nothing uncommitted in what the
-# build reads. A push of Markdown changes alone, or of a branch deletion, isn't gated.
+# build reads. A push of Markdown changes alone, or of a branch deletion, isn't gated, nor is a tree the
+# gate already passed (the commit hook's, when nothing was rebased since).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -27,5 +28,10 @@ if [ -n "$dirty" ]; then
     echo "pre-push: these differ from the pushed commit; commit them or set them aside first:" >&2
     printf '%s\n' "$dirty" >&2
     exit 1
+fi
+# The commit hook's gate already built and tested this exact tree (no rebase or amend since).
+if [ "$(cat "${BUILD_DIR:-build}/gate-passed-tree" 2> /dev/null)" = "$(git rev-parse 'HEAD^{tree}')" ]; then
+    echo "pre-push: this tree already passed the build and tests; not run again"
+    exit 0
 fi
 exec .githooks/gate.sh pre-push

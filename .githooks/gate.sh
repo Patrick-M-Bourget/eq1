@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # The build-and-test gate the hooks share: builds the working tree and runs every test but the slow
 # frequency response grids ([response]), which are left to CI. Its output goes to a log: only the
-# summary on success, all of it on failure. Usage: .githooks/gate.sh <hook name>
+# summary on success, all of it on failure. A pass records the tree it tested (the staged one, which the
+# pre-commit hook makes the working tree's), so pre-push can skip a tree that already passed.
+# Usage: .githooks/gate.sh <hook name>
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -19,3 +21,4 @@ if ! { cmake --build "$BUILD_DIR" --config Release --parallel \
     exit 1
 fi
 grep -E '^[0-9]+% tests passed' "$log"
+git write-tree > "$BUILD_DIR/gate-passed-tree"
