@@ -70,6 +70,11 @@ namespace colour
     inline const juce::Colour anPeak { 0x29DDE3F5 };    // Peak Hold, 16 %
     inline const juce::Colour anPre { 0x33DDE3F5 };     // the pre spectrum beside the post one, 20 %
     inline const juce::Colour anScLine { 0x8C7FCFC4 };  // the Sidechain spectrum, anSc at 55 %
+
+    // Band handles and the ghost Bell.
+    inline const juce::Colour handleRing { 0x8C0A0B0E }; // rgba (10, 11, 14, 0.55), around an unselected handle
+    inline const juce::Colour handleSelectedRing { 0xFFFFFFFF }; // and a selected one's, white
+    inline const juce::Colour ghostGlow { 0xFFFFC482 };  // rgb (255, 196, 130), at the ghost Bell's peak
 } // namespace colour
 
 // 24 band colours (slot 1-24) and their desaturated bypassed variants
@@ -151,12 +156,38 @@ namespace dynamics
     constexpr float columnAlpha = 0.16f;
 } // namespace dynamics
 
-// Band handles on the display.
+// Band handles on the display (HANDOFF.md §4 "Band handles"): sizes in px, alphas 0 to 1.
 namespace handle
 {
     constexpr float diameter = 16.0f, hoverScale = 1.15f, selectedDiameter = 22.0f;
     constexpr float selectedRing = 2.0f, glow = 10.0f, glowAlpha = 0.4f, sheenAlpha = 0.16f;
+    constexpr float sheenReach = 0.7f;                            // of the radius, where the sheen reaches 0
+    constexpr float ring = 1.0f;                                  // handleRing, around an unselected handle
+    constexpr float bypassedAlpha = 0.85f, bypassedRingAlpha = 0.6f; // a Bypassed handle, and its selected ring
+    constexpr float hitRadius = 9.0f;                             // at least, from the centre
+    constexpr float soloRing = 2.0f, soloRingOffset = 5.0f;       // the Solo cue's ring, outside the handle
 } // namespace handle
+
+// The Dynamic Range grip on the display: two triangles in the Band's colour, in a hit area.
+namespace grip
+{
+    constexpr float triangleWidth = 10.0f, triangleHeight = 7.0f, gap = 3.0f;
+    constexpr float width = 18.0f, height = 26.0f;
+    constexpr float belowHandle = 26.0f, edgeInset = 14.0f; // with no Dynamic Range; kept inside the top and bottom
+    constexpr float restingAlpha = 0.55f;                   // other Dynamic Bands' grips, until hovered
+} // namespace grip
+
+// The ghost Bell over empty space (HANDOFF.md §5.1).
+namespace ghost
+{
+    constexpr double q = 1.0, minimumGainProportion = 0.12; // of the Display Range, away from 0 dB
+    constexpr float peakClearance = 60.0f, span = 190.0f;   // the peak from the top and bottom; the Bell either side
+    constexpr float stroke = 1.75f, strokeAlpha = 0.38f;
+    constexpr float lineTopAlpha = 0.03f, lineMiddleAlpha = 0.16f, lineBottomAlpha = 0.1f;
+    constexpr float glowDiameter = 90.0f, glowAlpha = 0.16f, glowMiddleAlpha = 0.05f;
+    constexpr float readoutAboveBottom = 10.0f, labelClearance = 46.0f, fadedLabelAlpha = 0.12f;
+    constexpr int fadeInMs = 600;
+} // namespace ghost
 
 // Curves on the display (HANDOFF.md §4 "Display", §5.12): widths in px, alphas 0 to 1.
 namespace curve
@@ -182,6 +213,7 @@ namespace shadow
     inline const juce::DropShadow knobSmall { colour::shadow.withAlpha (0.35f), 8, { 0, 3 } }; // 30 px and below
     inline const juce::DropShadow handle { colour::shadow.withAlpha (0.45f), 5, { 0, 0 } };
     inline const juce::DropShadow thumb { colour::shadow.withAlpha (0.5f), 5, { 0, 2 } }; // the fader's thumb, the bar's pills
+    inline const juce::DropShadow selectedHandle { colour::shadow.withAlpha (0.45f), 8, { 0, 0 } };
 } // namespace shadow
 
 namespace motion

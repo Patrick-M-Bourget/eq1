@@ -49,6 +49,7 @@ target_sources(eq1 PRIVATE
     display/CurvesLayer.cpp
     display/DisplayGeometry.cpp
     display/EdgeFadeLayer.cpp
+    display/GhostLayer.cpp
     display/GridLayer.cpp
     display/HandlesLayer.cpp
     DisplayRange.cpp

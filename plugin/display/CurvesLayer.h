@@ -36,6 +36,11 @@ float sumCurveAlpha (float globalBypass);
 // halo: the sum of the Bands that are playing, each Dynamic Band at its Live Gain. Nothing plays above
 // Nyquist, so the curves stay level from there. The curves come from the Engine's own response maths
 // (eq1/Response.h).
+// The Band whose filled curve contains a point, or 0: between 0 dB and its curve as drawn (at its Live
+// Gain) at the point's Frequency, within 0.3 dB, where the curve is at least 0.4 dB from 0 dB. Bypassed
+// Bands count. Where several contain it, the one nearest 0 dB there wins.
+int bandAreaAt (const DisplayGeometry& geometry, const DisplayFrame& frame, juce::Point<float> point);
+
 void paintCurves (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame);
 
 } // namespace eq1::display
