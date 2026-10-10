@@ -19,6 +19,11 @@ namespace eq1
 // Stereo Bands. Copy puts the selected Bands on the clipboard (BandClipboard.h), as no edit; Cut
 // also deletes them. Paste adds the clipboard's Bands and selects them; it needs eq1's Bands on the
 // clipboard and a free Band Slot, and reads "Paste (N of M)" as Split does.
+// The Slope list, shared by the Band menu's Slope submenu and the Band panel's Slope button: 6, 12,
+// 18, 24, 30, 36, 48, 72 and 96 dB/oct, then Brickwall on Cuts. Each item sets the given Bands, as one
+// edit, and is ticked as the Band menu ticks. The items keep editing by reference.
+juce::PopupMenu slopeMenu (BandEditing& editing, const std::vector<int>& slots);
+
 struct BandMenu
 {
     BandEditing& editing;
