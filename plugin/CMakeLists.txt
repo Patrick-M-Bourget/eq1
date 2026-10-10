@@ -90,16 +90,13 @@ target_sources(eq1 PRIVATE
     KeyboardControl.cpp
     UserSettings.cpp)
 
-# The Factory Presets, bundled into the plugin.
+# The Factory Presets, bundled into the plugin: every file in presets/factory, found again at each
+# build (CONFIGURE_DEPENDS), so adding or removing one needs no edit here.
+file(GLOB eq1_factory_preset_files CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/presets/factory/*.eq1preset")
 juce_add_binary_data(eq1_factory_presets
     NAMESPACE FactoryPresets
     HEADER_NAME FactoryPresets.h
-    SOURCES
-        ${PROJECT_SOURCE_DIR}/presets/factory/Default.eq1preset
-        "${PROJECT_SOURCE_DIR}/presets/factory/De-Esser.eq1preset"
-        "${PROJECT_SOURCE_DIR}/presets/factory/Kick Punch.eq1preset"
-        "${PROJECT_SOURCE_DIR}/presets/factory/Master Polish.eq1preset"
-        "${PROJECT_SOURCE_DIR}/presets/factory/Vocal Presence.eq1preset")
+    SOURCES ${eq1_factory_preset_files})
 
 # Staple's one font, Manrope (SIL Open Font License 1.1, assets/fonts/OFL.txt), bundled so the editor
 # never falls back to a system font.
