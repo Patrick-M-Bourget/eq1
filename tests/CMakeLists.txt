@@ -7,6 +7,7 @@ FetchContent_MakeAvailable(Catch2)
 
 include(Catch)
 
+# One source per line, sorted, so tickets adding tests in parallel merge cleanly.
 add_executable(eq1_engine_tests
     engine/AllocationGuard.cpp
     engine/AnalysisTapTest.cpp
@@ -14,26 +15,37 @@ add_executable(eq1_engine_tests
     engine/BellResponseTest.cpp
     engine/BellStabilityTest.cpp
     engine/ClickFreeTest.cpp
+    engine/DynamicsTest.cpp
     engine/OutputLevelTest.cpp
     engine/OutputTest.cpp
-    engine/DynamicsTest.cpp
     engine/RealtimeSafetyTest.cpp
+    engine/ResponseTest.cpp
     engine/RobustnessTest.cpp
     engine/SampleRateAndBlockSizeTest.cpp
-    engine/ResponseTest.cpp
     engine/SettingsHandoffTest.cpp
-    engine/StereoPlacementTest.cpp
     engine/ShapeResponseTest.cpp
     engine/SoloTest.cpp
+    engine/StereoPlacementTest.cpp
 )
 target_link_libraries(eq1_engine_tests PRIVATE eq1::engine Catch2::Catch2WithMain)
 catch_discover_tests(eq1_engine_tests ADD_TAGS_AS_LABELS)
 
 if(EQ1_BUILD_PLUGIN)
-    # Host-level checks drive the Plugin Shell the way a host does.
-    add_executable(eq1_plugin_tests plugin/PluginShellTest.cpp plugin/BandEditingTest.cpp plugin/BandMenuTest.cpp plugin/BandPanelTest.cpp plugin/AnalyzerSpectrumTest.cpp
-        plugin/StateTest.cpp plugin/EditHistoryTest.cpp plugin/ABCompareTest.cpp plugin/PresetTest.cpp plugin/PresetLibraryTest.cpp plugin/HostSessionTest.cpp
-        plugin/OutputMeterTest.cpp)
+    # Host-level checks drive the Plugin Shell the way a host does. One source per line, as above.
+    add_executable(eq1_plugin_tests
+        plugin/ABCompareTest.cpp
+        plugin/AnalyzerSpectrumTest.cpp
+        plugin/BandEditingTest.cpp
+        plugin/BandMenuTest.cpp
+        plugin/BandPanelTest.cpp
+        plugin/EditHistoryTest.cpp
+        plugin/HostSessionTest.cpp
+        plugin/OutputMeterTest.cpp
+        plugin/PluginShellTest.cpp
+        plugin/PresetLibraryTest.cpp
+        plugin/PresetTest.cpp
+        plugin/StateTest.cpp
+    )
     target_include_directories(eq1_plugin_tests PRIVATE
         ${PROJECT_SOURCE_DIR}/plugin
         $<TARGET_PROPERTY:eq1,INCLUDE_DIRECTORIES>)
