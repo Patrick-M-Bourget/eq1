@@ -498,8 +498,14 @@ int EqDisplay::slotAt (juce::Point<float> position) const
 void EqDisplay::select (std::set<int> slots)
 {
     selected = std::move (slots);
-    if (onSelectionChanged)
-        onSelectionChanged (selected.empty() ? 0 : *selected.rbegin());
+    // The Band panel rebuilds itself and lets go of its Solo when told, so it hears only of a change
+    // of the Band it shows, not of every mouse move of a marquee.
+    const int shown = selected.empty() ? 0 : *selected.rbegin();
+    if (shown != panelSlot && onSelectionChanged)
+    {
+        panelSlot = shown;
+        onSelectionChanged (shown);
+    }
     // The selected Band shows its grip.
     placeHandles();
     repaint();
