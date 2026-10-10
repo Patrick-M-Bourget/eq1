@@ -193,3 +193,37 @@ _Avoid_: Clip indicator, over light
 **Output Meter**:
 The display of the Output Level per channel, with a Clip Light; separate from the Analyzer.
 _Avoid_: Meter (unqualified), level meter, VU
+
+## Licensing
+
+**Tier**:
+What this machine is entitled to use: the Free Tier, a Trial or the Pro Tier. It belongs to the machine, never to a session or Preset.
+_Avoid_: Edition, plan, license level
+
+**Free Tier**:
+The Tier that needs no License Key: every feature, up to the Band Cap.
+_Avoid_: Free (unqualified, which is a Detection Range), Lite, demo
+
+**Trial**:
+The Pro Tier for 14 days from when the user starts it, once per machine.
+_Avoid_: Demo, evaluation
+
+**Pro Tier**:
+The paid Tier, unlocked by a License Key: all 24 Band Slots.
+_Avoid_: Full version, paid version, Pro (unqualified)
+
+**Band Cap**:
+The number of Bands that process audio under the Free Tier: 6. Bands beyond it are kept but bypassed.
+_Avoid_: Band limit, band count
+
+**License Key**:
+A signed proof of purchase that names its owner and the major version it unlocks.
+_Avoid_: Serial, activation code, license file
+
+**Heartbeat**:
+The anonymous once-a-day report that an eq1 install is in use, which also tells eq1 the latest version.
+_Avoid_: Ping, analytics, phone-home
+
+**Update Notice**:
+A dismissible sign in the editor that a newer version of eq1 is available.
+_Avoid_: Update alert, update prompt
