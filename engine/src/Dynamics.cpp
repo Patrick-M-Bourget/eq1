@@ -15,6 +15,8 @@ namespace
 constexpr double levelTimeConstantSeconds = 0.005;
 // The gain computer's soft knee: movement starts this far below Threshold.
 constexpr double kneeDb = 3.0;
+// The full Dynamic Range arrives this far above Threshold (plus the knee), whatever its size.
+constexpr double fullRangeOvershootDb = 12.0;
 // Auto Threshold sits this far above the average level of the region, which it follows over about
 // this long. Levels below the gate (silence) don't pull it down.
 constexpr double autoThresholdMarginDb = 4.0;
@@ -251,13 +253,14 @@ double Dynamics::finishRun()
     // Until Auto Threshold has heard the region, nothing moves.
     const bool listening = ! thresholdAuto || samplesHeard > 0.0;
     const double thresholdDb = thresholdAuto ? averageLevel + autoThresholdMarginDb : threshold;
-    const double span = 2.0 * std::abs (dynamicRange) + 2.0 * kneeDb;
+    const double span = fullRangeOvershootDb + 2.0 * kneeDb;
     const double loudest = levels.empty() ? nothingHeardDb : *std::max_element (levels.begin(), levels.end());
     const double attackCoefficient = coefficientFor (autoAttackSeconds (loudest - thresholdDb) * attackScale, sampleRate);
     const double releaseCoefficient = coefficientFor (autoReleaseSeconds() * releaseScale, sampleRate);
     for (const double level : levels)
     {
-        // A soft knee from kneeDb below Threshold, then about 2:1 until the full Dynamic Range.
+        // A soft knee from kneeDb below Threshold, then smoothly to the full Dynamic Range at
+        // fullRangeOvershootDb + kneeDb above it.
         const double x = listening ? std::clamp ((level - thresholdDb + kneeDb) / span, 0.0, 1.0) : 0.0;
         const double target = x * x * (3.0 - 2.0 * x);
         movement += (target > movement ? attackCoefficient : releaseCoefficient) * (target - movement);

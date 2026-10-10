@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "BandClipboard.h"
 #include "DisplayRangeChip.h"
 #include "Parameters.h"
 #include "staple/Tokens.h"
@@ -55,6 +56,50 @@ TEST_CASE ("Cmd/Ctrl+A on the display selects every Band in use")
     host.press (juce::KeyPress (juce::KeyPress::deleteKey));
     for (int slot : { 2, 5, 9 })
         CHECK (host.value (slot, "in_use") == 0.0f);
+}
+
+namespace
+{
+// The system clipboard holding text for a test's length, and what it held before afterwards.
+struct ClipboardHolding
+{
+    juce::String before = juce::SystemClipboard::getTextFromClipboard();
+    explicit ClipboardHolding (const juce::String& text) { juce::SystemClipboard::copyTextToClipboard (text); }
+    ~ClipboardHolding() { juce::SystemClipboard::copyTextToClipboard (before); }
+};
+} // namespace
+
+TEST_CASE ("Cmd/Ctrl+V on the display keeps the key from the host with eq1's Bands on the clipboard, even with no free Band Slot")
+{
+    OpenEditor host;
+    // Every Band Slot in use, a third of an octave apart from 25 Hz.
+    for (int slot = 1; slot <= eq1::numBandSlots; ++slot)
+        host.addBand (slot, 25.0f * std::pow (2.0f, static_cast<float> (slot - 1) / 3.0f), 0.0f);
+    host.settle();
+    host.click (host.at (host.value (5, "frequency")));
+    const auto steps = host.processor.editHistory().undoSteps();
+    const auto paste = juce::KeyPress ('v', juce::ModifierKeys::commandModifier, 0);
+
+    SECTION ("eq1's Bands: used, and nothing changes")
+    {
+        const auto bands = eq1::captureBands ({ eq1::BandSettings {} }).toXmlString();
+        REQUIRE (eq1::clipboardBands (bands).size() == 1);
+        const ClipboardHolding clipboard (bands);
+        host.display.grabKeyboardFocus();
+        CHECK (host.press (paste));
+        CHECK (host.processor.editHistory().undoSteps() == steps);
+    }
+    SECTION ("Other text: passed on")
+    {
+        const ClipboardHolding clipboard ("some text");
+        host.display.grabKeyboardFocus();
+        CHECK_FALSE (host.press (paste));
+    }
+
+    // Band 5 is still the selection, alone.
+    host.press (juce::KeyPress (juce::KeyPress::deleteKey));
+    for (int slot = 1; slot <= eq1::numBandSlots; ++slot)
+        CHECK (host.value (slot, "in_use") == (slot == 5 ? 0.0f : 1.0f));
 }
 
 namespace
