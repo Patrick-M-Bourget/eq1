@@ -190,3 +190,42 @@ TEST_CASE ("Peak Hold holds a short burst's unsmoothed level, even at Very Slow,
     CHECK_THAT (spectrum.heldLevelDb (frequency, 0.0), WithinAbs (-6.0 * (2.0 - 2048.0 / sampleRate), 0.5));
     CHECK (spectrum.heldLevelDb (frequency, 0.0) > spectrum.levelDb (frequency, 0.0));
 }
+
+TEST_CASE ("Analyzer Tilt moves Peak Hold as it moves the spectrum")
+{
+    AnalyzerSpectrum spectrum;
+    spectrum.prepare (sampleRate, AnalyzerResolution::medium);
+    play (spectrum, { { 300.0, 0.5 }, { 3000.0, 0.5 } }, 1.0, AnalyzerSpeed::medium);
+
+    for (double f : { 100.0, 300.0, 1000.0, 3000.0, 12000.0 })
+    {
+        CAPTURE (f);
+        CHECK_THAT (spectrum.heldLevelDb (f, 4.5) - spectrum.heldLevelDb (f, 0.0), WithinAbs (4.5 * std::log2 (f / 1000.0), 1.0e-9));
+    }
+}
+
+TEST_CASE ("When the tap goes silent, Peak Hold falls away rather than resting at a level")
+{
+    AnalyzerSpectrum spectrum;
+    spectrum.prepare (sampleRate, AnalyzerResolution::medium);
+    play (spectrum, { { 1000.0, 1.0 } }, 0.5, AnalyzerSpeed::medium);
+    // 6 dB/s takes it below the deepest Analyzer range, 120 dB, within 21 seconds.
+    for (int frame = 0; frame < 25 * 60; ++frame)
+        spectrum.update (1.0 / 60.0, AnalyzerSpeed::medium);
+    CHECK (spectrum.heldLevelDb (1000.0, 0.0) < -120.0);
+}
+
+TEST_CASE ("Peak Hold starts afresh when cleared or prepared again")
+{
+    AnalyzerSpectrum spectrum;
+    spectrum.prepare (sampleRate, AnalyzerResolution::medium);
+    play (spectrum, { { 1000.0, 1.0 } }, 0.5, AnalyzerSpeed::medium);
+    REQUIRE (spectrum.heldLevelDb (1000.0, 0.0) > -3.0);
+    spectrum.clearPeakHold();
+    CHECK (spectrum.heldLevelDb (1000.0, 0.0) < -120.0);
+
+    play (spectrum, { { 1000.0, 1.0 } }, 0.5, AnalyzerSpeed::medium);
+    REQUIRE (spectrum.heldLevelDb (1000.0, 0.0) > -3.0);
+    spectrum.prepare (sampleRate, AnalyzerResolution::high);
+    CHECK (spectrum.heldLevelDb (1000.0, 0.0) < -120.0);
+}

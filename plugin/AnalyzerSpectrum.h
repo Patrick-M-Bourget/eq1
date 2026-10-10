@@ -53,6 +53,9 @@ public:
     // Peak Hold's level at frequency, plus Analyzer Tilt as for levelDb.
     double heldLevelDb (double frequency, double tiltDbPerOctave) const;
 
+    // Forgets what Peak Hold holds.
+    void clearPeakHold();
+
     // The Frequency of the highest peak of the spectrum within a sixth of an octave of frequency, or
     // frequency itself when there is none.
     double peakNear (double frequency) const;

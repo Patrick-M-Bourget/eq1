@@ -127,6 +127,11 @@ double AnalyzerSpectrum::heldLevelDb (double frequency, double tiltDbPerOctave) 
     return levelDbOf (held, frequency, tiltDbPerOctave);
 }
 
+void AnalyzerSpectrum::clearPeakHold()
+{
+    std::fill (held.begin(), held.end(), silence);
+}
+
 double AnalyzerSpectrum::peakNear (double frequency) const
 {
     if (power.size() < 3)
