@@ -1,5 +1,7 @@
 #include "PresetBrowser.h"
 
+#include "staple/Tokens.h"
+
 #include <algorithm>
 
 namespace eq1
@@ -7,14 +9,13 @@ namespace eq1
 
 PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
 {
-    search.setTextToShowWhenEmpty ("Search Presets", juce::Colours::grey);
+    search.setTextToShowWhenEmpty ("Search Presets", staple::tokens::colour::text3);
     search.setPopupMenuEnabled (false);
     search.onTextChange = [this] { showRows(); };
     search.onEscapeKey = [this] { close(); };
     addAndMakeVisible (search);
 
     list.setRowHeight (22);
-    list.setColour (juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
     list.setWantsKeyboardFocus (false);
     addAndMakeVisible (list);
 
@@ -114,26 +115,26 @@ void PresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int width, int
     auto area = juce::Rectangle<int> (width, height).reduced (8, 0);
     if (entry == nullptr)
     {
-        g.setColour (juce::Colours::grey);
+        g.setColour (staple::tokens::colour::text3);
         g.setFont (juce::FontOptions (13.0f, juce::Font::bold));
         g.drawText (text, area, juce::Justification::centredLeft, true);
         return;
     }
-    // The Loaded Preset's entry, which ‹ › step from, is lit in the display's blue.
+    // The Loaded Preset's entry, which ‹ › step from, is lit.
     if (isLoaded (*entry))
     {
-        g.setColour (juce::Colour (0x602f8fd0));
+        g.setColour (staple::tokens::colour::fill3);
         g.fillRect (0, 0, width, height);
     }
     g.setFont (juce::FontOptions (14.0f));
     if (folder.isNotEmpty())
     {
-        g.setColour (juce::Colours::grey);
+        g.setColour (staple::tokens::colour::text3);
         g.drawText (folder, area.removeFromRight (area.getWidth() / 2), juce::Justification::centredRight, true);
     }
     else
         area.removeFromLeft (12); // Indented under its folder's name.
-    g.setColour (juce::Colours::white);
+    g.setColour (staple::tokens::colour::text1);
     g.drawText (text, area, juce::Justification::centredLeft, true);
 }
 
@@ -163,8 +164,9 @@ void PresetBrowser::mouseDown (const juce::MouseEvent& event)
 
 void PresetBrowser::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xf01d2027));
-    g.setColour (juce::Colour (0x40ffffff));
+    // A popover: the handoff's menu fill and line2 edge.
+    g.fillAll (staple::tokens::colour::menu);
+    g.setColour (staple::tokens::colour::line2);
     g.drawRect (getLocalBounds());
 }
 

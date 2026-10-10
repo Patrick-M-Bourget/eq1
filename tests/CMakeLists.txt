@@ -46,6 +46,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/PluginShellTest.cpp
         plugin/PresetLibraryTest.cpp
         plugin/PresetTest.cpp
+        plugin/StapleTest.cpp
         plugin/StateTest.cpp
     )
     target_include_directories(eq1_plugin_tests PRIVATE

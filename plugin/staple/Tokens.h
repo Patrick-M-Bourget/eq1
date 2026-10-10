@@ -1,0 +1,142 @@
+#pragma once
+// Staple's design tokens: the values in docs/staple-handoff/tokens.json and HANDOFF.md's visual spec,
+// kept by hand. The only place in plugin/ a colour is written as a number (scripts/check.sh docs).
+#include <juce_graphics/juce_graphics.h>
+
+namespace staple::tokens
+{
+namespace colour
+{
+    inline const juce::Colour bg0 { 0xFF0B0C0F };
+    inline const juce::Colour surface1 { 0x09FFFFFF };
+    inline const juce::Colour fill1 { 0x0FFFFFFF };
+    inline const juce::Colour fill2 { 0x1AFFFFFF };
+    inline const juce::Colour fill3 { 0x26FFFFFF };
+    inline const juce::Colour raised { 0xD114161A };
+    inline const juce::Colour menu { 0xFF16181C };
+    // Contrast on bg0: 16.4, 9.1, 5.3 and 2.6 : 1. text4 is below readable contrast: disabled states
+    // and decoration only, never text a user must read.
+    inline const juce::Colour text1 { 0xFFEEEBE5 };
+    inline const juce::Colour text2 { 0xBDEEEBE5 };
+    inline const juce::Colour text3 { 0x8AEEEBE5 };
+    inline const juce::Colour text4 { 0x52EEEBE5 };
+    inline const juce::Colour onLight { 0xFF121316 };
+    inline const juce::Colour line1 { 0x0DFFFFFF };
+    inline const juce::Colour line2 { 0x1AFFFFFF };
+    inline const juce::Colour line3 { 0x2EFFFFFF };
+    inline const juce::Colour focus { 0xBFFFFFFF };
+    inline const juce::Colour curveMain { 0xFFF5B930 };
+    inline const juce::Colour curveMainHalo { 0x1AF5B930 };
+    inline const juce::Colour anSc { 0xFF7FCFC4 };
+    inline const juce::Colour dynRange { 0xFFD6455A };
+    inline const juce::Colour dynLive { 0xFFF5C451 };
+    inline const juce::Colour stateOff { 0xFFE5506A };
+    inline const juce::Colour stateOffBg { 0x29E5506A };
+    inline const juce::Colour placeLeft { 0xFFEEEBE5 };
+    inline const juce::Colour placeRight { 0xFFE5604F };
+    inline const juce::Colour placeStereo { 0xFFE9B44C };
+    inline const juce::Colour placeMid { 0xFF5FCB76 };
+    inline const juce::Colour placeSide { 0xFF4FA9E8 };
+    inline const juce::Colour meter1 { 0xFF3FC79A };
+    inline const juce::Colour meter2 { 0xFFA9D66A };
+    inline const juce::Colour meter3 { 0xFFE9B44C };
+    inline const juce::Colour meterClip { 0xFFE5604F };
+    inline const juce::Colour edgeSelectorBase { 0xFF141519 };
+    inline const juce::Colour knobFaceTop { 0xFF35373D }, knobFaceMid { 0xFF27282D }, knobFaceEdge { 0xFF1C1D21 };
+    inline const juce::Colour knobRim { 0x38FFFFFF };      // white 22 %
+    inline const juce::Colour knobRingLane { 0x0FFFFFFF }; // white 6 %
+    inline const juce::Colour dynRangeInner { 0xFF9C3344 }, dynLiveInner { 0xFFC49A34 };
+    inline const juce::Colour shadow { 0xFF000000 };
+
+    // The display: grid lines, and the Analyzer's spectra.
+    inline const juce::Colour gridMinor { 0x06FFFFFF }; // white 2.5 %
+    inline const juce::Colour gridMajor { 0x0FFFFFFF }; // white 6 %
+    inline const juce::Colour gridZero { 0x38FFFFFF };  // white 22 %, the 0 dB line
+    inline const juce::Colour anFillTop { 0x33C3CCE6 }, anFillMid { 0x12C3CCE6 }; // 20 % at the top, 7 % at 60 % down, then 0
+    inline const juce::Colour anLine { 0x6BCBD3EA };    // the post spectrum, 42 %
+    inline const juce::Colour anPeak { 0x29DDE3F5 };    // Peak Hold, 16 %
+    inline const juce::Colour anPre { 0x33DDE3F5 };     // the pre spectrum beside the post one, 20 %
+    inline const juce::Colour anScLine { 0x8C7FCFC4 };  // the Sidechain spectrum, anSc at 55 %
+} // namespace colour
+
+// 24 band colours (slot 1-24) and their desaturated bypassed variants
+inline const juce::Colour band[24] = {
+    juce::Colour (0xFF58C0F8), juce::Colour (0xFFF19E63), juce::Colour (0xFF7FC982), juce::Colour (0xFFDC98E0), juce::Colour (0xFF28CBDA), juce::Colour (0xFFFA938C), juce::Colour (0xFFBAA4FB), juce::Colour (0xFFD9AD4C), juce::Colour (0xFF8DB2FF), juce::Colour (0xFFB2BE5A), juce::Colour (0xFFF291B8), juce::Colour (0xFF46CEB0),
+    juce::Colour (0xFF9BD0FF), juce::Colour (0xFFF3C085), juce::Colour (0xFF92DEB5), juce::Colour (0xFFF5B3DE), juce::Colour (0xFF7FD9F5), juce::Colour (0xFFFFB69C), juce::Colour (0xFFDEBAF9), juce::Colour (0xFFD9CC83), juce::Colour (0xFFBEC4FF), juce::Colour (0xFFB6D795), juce::Colour (0xFFFFB1BC), juce::Colour (0xFF7ADFD8)
+};
+inline const juce::Colour bandBypassed[24] = {
+    juce::Colour (0xFF8AAABD), juce::Colour (0xFFBC9E8A), juce::Colour (0xFF94AD94), juce::Colour (0xFFB49BB4), juce::Colour (0xFF84ADB2), juce::Colour (0xFFBF9A96), juce::Colour (0xFFA6A0BE), juce::Colour (0xFFB2A385), juce::Colour (0xFF97A5C2), juce::Colour (0xFFA3A888), juce::Colour (0xFFBD99A6), juce::Colour (0xFF88AEA3),
+    juce::Colour (0xFF90A7C0), juce::Colour (0xFFB7A087), juce::Colour (0xFF8DAE9B), juce::Colour (0xFFB99AAE), juce::Colour (0xFF86ACB8), juce::Colour (0xFFBE9C90), juce::Colour (0xFFAD9DBA), juce::Colour (0xFFABA686), juce::Colour (0xFF9EA2C1), juce::Colour (0xFF9BAB8D), juce::Colour (0xFFBF999E), juce::Colour (0xFF85AEAB)
+};
+
+namespace size
+{
+    constexpr float fs1 = 10.0f;
+    constexpr float fs2 = 11.0f;
+    constexpr float fs3 = 12.0f;
+    constexpr float fs4 = 13.0f;
+    constexpr float fs5 = 16.0f;
+    constexpr float r1 = 4.0f;
+    constexpr float r2 = 6.0f;
+    constexpr float r3 = 10.0f;
+    constexpr float iconStroke = 1.5f;
+    constexpr float iconGrid = 16.0f;
+    constexpr float focusWidth = 2.0f, focusOffset = 2.0f;
+    constexpr int windowWidth = 1200, windowHeight = 760;
+} // namespace size
+
+// The window and its areas at 100 % UI scale (HANDOFF.md §2, §4, §9).
+namespace layout
+{
+    constexpr int outerPadding = 14;
+    constexpr int headerHeight = 52, footerHeight = 44;
+    constexpr int displayWidth = 1134, displayWidthWithoutMeter = 1186, displayHeight = 612;
+    constexpr int minimumWidth = 960, minimumHeight = 600;
+    // The display's edges dissolve over these distances (grid, Analyzer and curve fills only).
+    constexpr float fadeTop = 18.0f, fadeBottom = 84.0f, fadeLeft = 36.0f, fadeRight = 56.0f;
+    constexpr int bandPanelAboveBottom = 36, bandPanelBell = 22;
+    constexpr int bandPanelPaddingTop = 22, bandPanelPaddingSide = 26, bandPanelPaddingBottom = 10;
+    constexpr int detectionRangeBarAbovePanel = 30;
+    constexpr int edgeSelectorWidth = 104, edgeSelectorHeight = 34, slopeButtonWidth = 90;
+    constexpr int iconButton = 24;
+    constexpr int menuItemHeight = 30, menuPadding = 6, menuSeparatorMargin = 5;
+} // namespace layout
+
+// Knobs and the Dynamic Range ring around the Gain knob.
+namespace knob
+{
+    constexpr float frequency = 50.0f, gain = 66.0f, q = 50.0f, small = 30.0f;
+    constexpr float rim = 2.0f, rimSmall = 1.5f;           // rimSmall at 30 px and below
+    constexpr float arc = 3.0f, arcSmall = 2.0f;           // arcSmall below 40 px
+    constexpr float arcInset = 4.5f, arcInsetProportion = 0.1f; // the arc's radius is r - max (arcInset, d x arcInsetProportion)
+    constexpr float sweepDegrees = 270.0f;
+    constexpr float ringLane = 12.0f, ringOffset = 10.0f;
+} // namespace knob
+
+// Band handles on the display.
+namespace handle
+{
+    constexpr float diameter = 16.0f, hoverScale = 1.15f, selectedDiameter = 22.0f;
+    constexpr float selectedRing = 2.0f, glow = 10.0f, glowAlpha = 0.4f, sheenAlpha = 0.16f;
+} // namespace handle
+
+// Shadows: CSS blur radius and offset, as juce::DropShadow takes them.
+namespace shadow
+{
+    inline const juce::DropShadow shadow1 { colour::shadow.withAlpha (0.45f), 24, { 0, 8 } };  // menus, popovers, tooltips
+    inline const juce::DropShadow shadow2 { colour::shadow.withAlpha (0.55f), 48, { 0, 18 } }; // the context menu, dialogs
+    inline const juce::DropShadow knob { colour::shadow.withAlpha (0.4f), 14, { 0, 6 } };
+    inline const juce::DropShadow handle { colour::shadow.withAlpha (0.45f), 5, { 0, 0 } };
+} // namespace shadow
+
+namespace motion
+{
+    constexpr int dur1Ms = 120, dur2Ms = 180, dur3Ms = 240; // hover/press, menus/cards, panels
+    constexpr int hoverFadeMs = 220;                        // a Band curve's hover fade, and the hover card's hide delay
+    // The one easing curve: cubic-bezier (0.2, 0.7, 0.2, 1).
+    constexpr float easeX1 = 0.2f, easeY1 = 0.7f, easeX2 = 0.2f, easeY2 = 1.0f;
+    // Menus, popovers and cards pop in from 3 px lower at 98.5 % scale.
+    constexpr float popInOffset = 3.0f, popInScale = 0.985f;
+    constexpr float hoverBrightness = 1.18f, pressedBrightness = 1.3f, disabledAlpha = 0.35f;
+} // namespace motion
+} // namespace staple::tokens
