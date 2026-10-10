@@ -1,3 +1,4 @@
+#include "EditorHarness.h"
 #include "PluginProcessor.h"
 #include "SavedState.h"
 
@@ -732,13 +733,18 @@ TEST_CASE ("Saved state restores the output controls, Global Bypass included")
             }
 }
 
-TEST_CASE ("The editor fits every output control in its row, at its smallest and on mono")
+TEST_CASE ("The editor fits every output control in its row and the UI Scale menu, at its smallest at every UI Scale and on mono")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     const auto layout = GENERATE (juce::AudioChannelSet::stereo(), juce::AudioChannelSet::mono());
+    const int percent = GENERATE (75, 100, 125, 150, 200);
+    CAPTURE (percent);
     useLayout (processor, layout);
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    auto* scaleMenu = harness::findChild<juce::ComboBox> (*editor, [] (juce::ComboBox& c) { return c.getTitle() == "UI Scale"; });
+    REQUIRE (scaleMenu != nullptr);
+    scaleMenu->setSelectedId (percent, juce::sendNotificationSync);
     const auto* constrainer = editor->getConstrainer();
     REQUIRE (constrainer != nullptr);
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
@@ -752,7 +758,7 @@ TEST_CASE ("The editor fits every output control in its row, at its smallest and
                     return button->getButtonText();
                 return {};
             }();
-            if (name == "Auto Gain" || name == "Phase Invert" || name == "Global Bypass")
+            if (name == "Auto Gain" || name == "Phase Invert" || name == "Global Bypass" || child->getTitle() == "UI Scale")
             {
                 CAPTURE (name);
                 ++found;
@@ -765,10 +771,10 @@ TEST_CASE ("The editor fits every output control in its row, at its smallest and
         }
     };
     visit (*editor);
-    CHECK (found == 3);
+    CHECK (found == 4);
     if (const auto snapshot = juce::SystemStats::getEnvironmentVariable ("EQ1_EDITOR_SNAPSHOT", {}); snapshot.isNotEmpty())
     {
-        juce::File file (snapshot + (layout == juce::AudioChannelSet::mono() ? "-mono.png" : "-stereo.png"));
+        juce::File file (snapshot + "-" + juce::String (percent) + (layout == juce::AudioChannelSet::mono() ? "-mono.png" : "-stereo.png"));
         file.deleteFile();
         juce::FileOutputStream stream (file);
         juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds()), stream);

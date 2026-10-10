@@ -39,13 +39,21 @@ private:
     PluginProcessor& eqProcessor;
     // Every component below draws with it, so it outlives them all.
     staple::LookAndFeel lookAndFeel;
+    // Everything the editor shows, laid out in logical pixels (as at 100%) and drawn at the UI Scale
+    // through one transform on it, so it all stays vectors. It holds every component below.
+    juce::Component content;
     BandEditing editing;
     EqDisplay display;
     BandPanel panel;
     OutputPanel output;
     PresetBar presetBar;
-    juce::TooltipWindow tooltips { this };
+    juce::TooltipWindow tooltips { &content };
     juce::ComboBox displayRange;
+    juce::ComboBox uiScale;
+    // The UI Scale, as a factor, and the logical size the window holds at it.
+    float scale = 1.0f;
+    juce::Point<int> logicalSize { 1200, 760 };
+    void applyUiScale (int percent);
     OutputMeter meter;
     juce::ToggleButton showMeter { "Meter" }; // shows or hides the Output Meter, saved with the plugin
     juce::TextButton undoButton { "Undo" }, redoButton { "Redo" };
