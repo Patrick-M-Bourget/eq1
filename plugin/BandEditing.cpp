@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <numeric>
 #include <utility>
 
 namespace eq1
@@ -314,6 +315,51 @@ std::vector<int> BandEditing::split (const std::vector<int>& slotsToSplit)
     history.endTransaction();
     std::sort (halves.begin(), halves.end());
     return halves;
+}
+
+std::vector<int> BandEditing::paste (const std::vector<BandSettings>& bands)
+{
+    std::vector<int> free;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        if (! band (slot).inUse)
+            free.push_back (slot);
+    // The lowest-Frequency Bands that fit, then back in the order given.
+    std::vector<size_t> chosen (bands.size());
+    std::iota (chosen.begin(), chosen.end(), size_t { 0 });
+    std::stable_sort (chosen.begin(), chosen.end(), [&bands] (size_t a, size_t b) { return bands[a].frequency < bands[b].frequency; });
+    chosen.resize (std::min (chosen.size(), free.size()));
+    std::sort (chosen.begin(), chosen.end());
+
+    std::vector<int> pasted;
+    history.beginTransaction();
+    for (size_t i : chosen)
+    {
+        const auto& pastedBand = bands[i];
+        const int slot = free[pasted.size()];
+        // The slot's settings first, so the audio never plays the Band with what the slot held before.
+        set (parameters::bypassId (slot), static_cast<double> (pastedBand.bypass));
+        set (parameters::shapeId (slot), static_cast<double> (pastedBand.shape));
+        set (parameters::frequencyId (slot), pastedBand.frequency);
+        set (parameters::gainId (slot), pastedBand.gain);
+        set (parameters::qId (slot), pastedBand.q);
+        set (parameters::slopeId (slot), pastedBand.slope);
+        set (parameters::brickwallId (slot), static_cast<double> (pastedBand.brickwall));
+        set (parameters::placementId (slot), static_cast<double> (pastedBand.placement));
+        set (parameters::dynamicRangeId (slot), pastedBand.dynamicRange);
+        set (parameters::thresholdId (slot), pastedBand.threshold);
+        set (parameters::thresholdAutoId (slot), static_cast<double> (pastedBand.thresholdAuto));
+        set (parameters::attackId (slot), pastedBand.attack);
+        set (parameters::releaseId (slot), pastedBand.release);
+        set (parameters::dynamicsBypassId (slot), static_cast<double> (pastedBand.dynamicsBypass));
+        set (parameters::detectionSourceId (slot), static_cast<double> (pastedBand.detectionSource));
+        set (parameters::detectionRangeId (slot), static_cast<double> (pastedBand.detectionRange));
+        set (parameters::detectionLowId (slot), pastedBand.detectionLow);
+        set (parameters::detectionHighId (slot), pastedBand.detectionHigh);
+        set (parameters::inUseId (slot), 1.0);
+        pasted.push_back (slot);
+    }
+    history.endTransaction();
+    return pasted;
 }
 
 } // namespace eq1

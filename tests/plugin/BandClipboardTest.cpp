@@ -1,7 +1,11 @@
 #include "BandClipboard.h"
+#include "BandEditing.h"
 #include "PluginProcessor.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+using Catch::Matchers::WithinRel;
 
 using eq1::BandSettings;
 
@@ -31,6 +35,22 @@ BandSettings everySettingChanged()
              .release = 80.0,
              .dynamicsBypass = true };
 }
+
+// A plugin as a host has it, with the editing rules the editor uses on top, at a Gain Scale in %.
+struct Host
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
+
+    explicit Host (float gainScale)
+    {
+        auto* p = processor.parameterState().getParameter (eq1::parameters::gainScaleId);
+        p->setValueNotifyingHost (p->convertTo0to1 (gainScale));
+    }
+
+    float value (const juce::String& id) { return processor.parameterState().getRawParameterValue (id)->load(); }
+};
 
 BandSettings bandAt (double frequency)
 {
@@ -84,4 +104,22 @@ TEST_CASE ("Bands from a newer eq1 read what this one knows; a setting a Band le
     auto second = bandAt (1000.0);
     second.gain = -6.0;
     CHECK (eq1::clipboardBands (text) == std::vector<BandSettings> { first, second });
+}
+
+TEST_CASE ("Copy then Paste in another instance recreates the Bands with every stored setting, whatever either Gain Scale")
+{
+    Host from (50.0f), to (200.0f);
+    REQUIRE (from.editing.paste ({ everySettingChanged(), bandAt (80.0) }) == std::vector<int> { 1, 2 });
+    to.editing.add (100.0, 3.0);
+
+    const auto text = eq1::captureBands ({ from.editing.band (1), from.editing.band (2) }).toXmlString();
+    CHECK (to.editing.paste (eq1::clipboardBands (text)) == std::vector<int> { 2, 3 });
+    for (const auto& control : { "bypass", "shape", "frequency", "gain", "q", "slope", "brickwall", "placement", "dynamic_range", "threshold",
+                                 "threshold_auto", "attack", "release", "dynamics_bypass", "detection_source", "detection_range",
+                                 "detection_low", "detection_high", "in_use" })
+    {
+        INFO (control);
+        CHECK_THAT (to.value ("band2_" + juce::String (control)), WithinRel (from.value ("band1_" + juce::String (control)), 1.0e-5f));
+        CHECK_THAT (to.value ("band3_" + juce::String (control)), WithinRel (from.value ("band2_" + juce::String (control)), 1.0e-5f));
+    }
 }

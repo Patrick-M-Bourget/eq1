@@ -77,6 +77,11 @@ public:
     // lowest-Frequency Stereo Bands are split, the lower slot first on a tie. Returns both halves of
     // every split Band, in slot order: the selection after a split.
     std::vector<int> split (const std::vector<int>& slots);
+    // Adds Bands with every stored setting as given, In Use aside, into the lowest free Band Slots, as
+    // one edit: Paste. Gain and Dynamic Range are stored ones, not heard. With too few free slots, the
+    // lowest-Frequency Bands are added, the earlier given first on a tie. Returns their slots, in
+    // order: the selection after a Paste.
+    std::vector<int> paste (const std::vector<BandSettings>& bands);
 
     BandSettings band (int slot) const;
     // Every Band's stored settings, and the whole-plugin ones.
