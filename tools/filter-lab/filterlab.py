@@ -10,6 +10,7 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py high-cut --orders 1 2 16 32 --q 0.71 10
     python3 tools/filter-lab/filterlab.py band-pass --orders 1 4 16 --q 0.1 2 40
     python3 tools/filter-lab/filterlab.py all-pass --orders 1 2 8 --q 0.71
+    python3 tools/filter-lab/filterlab.py gain-computer --overshoots 9 12 15
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report().
@@ -470,11 +471,40 @@ def report_phase(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {order:>5}  {error:7.2f}")
 
 
+# --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------
+
+KNEE_DB = 3.0
+
+
+def movement(overshoot_db, full_range_overshoot_db, knee_db=KNEE_DB):
+    """A Dynamic Band's movement, 0 to 1 of its Dynamic Range, for a steady level overshoot_db above
+    Threshold: a smoothstep from knee_db below Threshold to full_range_overshoot_db + knee_db above it."""
+    x = min(max((overshoot_db + knee_db) / (full_range_overshoot_db + 2 * knee_db), 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def report_gain_computer(full_range_overshoots, ranges=(6, 12, 18, 30), overshoots=(0, 3, 6, 9, 12, 15)):
+    """Movement in dB at each overshoot above Threshold, per Dynamic Range, and the steepest slope
+    (dB of movement per dB of level, at the curve's middle); a slope above 1 means a cut Band's
+    output falls as its detection rises there."""
+    for full in full_range_overshoots:
+        print(f"full range at {full:g} dB + {KNEE_DB:g} dB knee above Threshold")
+        print(f"{'range':>6}  " + " ".join(f"{o:>6g}" for o in overshoots) + f"  {'slope':>6}")
+        for r in ranges:
+            moved = " ".join(f"{r * movement(o, full):6.2f}" for o in overshoots)
+            print(f"{r:>6g}  {moved}  {1.5 * r / (full + 2 * KNEE_DB):6.2f}")
+        print()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("shape", choices=SHAPES)
+    parser.add_argument("shape", choices=[*SHAPES, "gain-computer"])
     parser.add_argument("--q", type=float, nargs="+", default=[0.71])
     parser.add_argument("--orders", type=int, nargs="+", default=[2])
+    parser.add_argument("--overshoots", type=float, nargs="+", default=[12])
     args = parser.parse_args()
+    if args.shape == "gain-computer":
+        report_gain_computer(args.overshoots)
+        raise SystemExit
     reporter = report_phase if args.shape == "all-pass" else report_cut if args.shape in CUTS else report
     reporter(SHAPES[args.shape], qs=args.q, orders=args.orders)
