@@ -96,6 +96,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
 BandPanel::~BandPanel()
 {
     releaseAudition();
+    processor.setMeteredBand (0);
 }
 
 void BandPanel::releaseAudition()
@@ -132,6 +133,7 @@ void BandPanel::show (int newSlot)
         getChildComponent (i)->setVisible (slot != 0 || getChildComponent (i) == &title);
     if (slot == 0)
     {
+        processor.setMeteredBand (0);
         title.setText ("Double-click the display to add a Band", juce::dontSendNotification);
         return;
     }
@@ -213,9 +215,10 @@ void BandPanel::updateVisibility()
         c->setVisible (hasDynamics (band.shape));
     for (auto* c : std::initializer_list<juce::Component*> { &detectionLow, &detectionLowLabel, &detectionHigh, &detectionHighLabel })
         c->setVisible (hasDynamics (band.shape) && band.detectionRange == DetectionRange::Free);
-    // A Shape without dynamics has no detection signal to audition.
+    // A Shape without dynamics has no detection signal to audition or meter.
     if (! hasDynamics (band.shape))
         releaseAudition();
+    processor.setMeteredBand (hasDynamics (band.shape) ? slot : 0);
     brickwall.setVisible (isCut (band.shape));
     // Brickwall overrides a Cut's Slope.
     const bool usesSlope = hasSlope (band.shape) && ! (isCut (band.shape) && band.brickwall);
