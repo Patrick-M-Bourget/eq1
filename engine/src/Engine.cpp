@@ -3,6 +3,7 @@
 #include "AnalysisFifo.h"
 #include "AutoGain.h"
 #include "Band.h"
+#include "DetectionLevelTap.h"
 #include "Dynamics.h"
 #include "LatestValue.h"
 #include "NoSubnormals.h"
@@ -128,6 +129,10 @@ struct Engine::Impl
         return 0.0f;
     }
 
+    // The metered Band Slot, 0 for none: one in use, not Bypassed, whose Shape has dynamics.
+    int meteredSlot = 0;
+    DetectionLevelTap detectionLevel;
+
     // About 1.4 s at 48 kHz: enough for the Analyzer to read at display rate.
     static constexpr int analysisCapacity = 1 << 16;
     AnalysisFifo preEq, postEq, sidechain;
@@ -199,6 +204,13 @@ struct Engine::Impl
             if (playing == wanted && ! snapToSettings)
                 soloRegion.setSettings (wantedSoloRegion, false);
         }
+        const auto* metered = bandIn (settings.meteredSlot);
+        const int newMeteredSlot = metered != nullptr && ! metered->bypass && hasDynamics (metered->shape) ? settings.meteredSlot : 0;
+        if (newMeteredSlot != meteredSlot)
+            detectionLevel.clear();
+        meteredSlot = newMeteredSlot;
+        for (size_t band = 0; band < dynamics.size(); ++band)
+            dynamics[band].setMetered (meteredSlot == static_cast<int> (band) + 1);
         if (snapToSettings)
         {
             heldMix.reset (0.0);
@@ -315,6 +327,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
         Impl::pushMonoMix (impl->sidechain, sidechain->channels, sidechain->numChannels, main.numSamples);
     const int sidechainChannels = sidechainConnected ? std::min (sidechain->numChannels, 2) : 0;
 
+    double loudestDetection = Dynamics::nothingHeardDb;
     for (int start = 0; start < main.numSamples; start += Band::maxSubBlock)
     {
         const int count = std::min (Band::maxSubBlock, main.numSamples - start);
@@ -336,6 +349,8 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
         for (size_t band = 0; band < impl->bands.size(); ++band)
             impl->bands[band].setDynamicOffset (impl->dynamics[band].process (impl->subBlock.data(), channels,
                                                                               impl->sidechainSubBlock.data(), sidechainChannels, count));
+        if (impl->meteredSlot != 0)
+            loudestDetection = std::max (loudestDetection, impl->dynamics[static_cast<size_t> (impl->meteredSlot - 1)].detectionLevelDb());
         for (auto& band : impl->bands)
             band.process (impl->subBlock.data(), channels, count);
 
@@ -378,6 +393,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
     Impl::pushMonoMix (impl->postEq, main.channels, channels, main.numSamples);
     for (int ch = 0; ch < channels; ++ch)
         impl->outputLevels[static_cast<size_t> (ch)].process (main.channels[ch], main.numSamples);
+    impl->detectionLevel.hold (loudestDetection);
     for (size_t band = 0; band < impl->bands.size(); ++band)
         impl->liveGains[band].store (impl->bands[band].liveGainDb(), std::memory_order_relaxed);
 }
@@ -395,6 +411,11 @@ int Engine::outputLevelChannels() const
 OutputLevel Engine::readOutputLevel (int channel)
 {
     return channel >= 0 && channel < impl->outputLevelChannels ? impl->outputLevels[static_cast<size_t> (channel)].read() : OutputLevel {};
+}
+
+double Engine::readDetectionLevel()
+{
+    return impl->detectionLevel.read();
 }
 
 int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples)

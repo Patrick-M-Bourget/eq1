@@ -93,7 +93,7 @@ TEST_CASE ("Engine does not allocate with 24 Brickwall Bands")
     REQUIRE (guard.allocations() == 0);
 }
 
-TEST_CASE ("Engine does not allocate with 24 Dynamic Bands")
+TEST_CASE ("Engine does not allocate with 24 Dynamic Bands, one of them metered")
 {
     constexpr int blockSize = 512;
     Engine engine;
@@ -109,8 +109,8 @@ TEST_CASE ("Engine does not allocate with 24 Dynamic Bands")
     {
         // Loud and quiet in turn, so every Band moves; every dynamic Shape, Stereo Placement, Auto and
         // set Threshold, timing, and Dynamics Bypass switching; Internal and External detection, Band
-        // and Free Detection Range, a stereo, mono and no Sidechain, and Detection Audition moving
-        // from Band to Band.
+        // and Free Detection Range, a stereo, mono and no Sidechain, and Detection Audition and
+        // metering moving from Band to Band.
         for (size_t i = 0; i < left.size(); ++i)
         {
             const float level = block % 4 < 2 ? 0.5f : 0.001f;
@@ -140,10 +140,12 @@ TEST_CASE ("Engine does not allocate with 24 Dynamic Bands")
                                      .dynamicsBypass = (block + static_cast<int> (slot)) % 9 == 0 };
         }
         settings.auditionSlot = block % 5 == 4 ? 0 : 1 + (block / 5) % numBandSlots;
+        settings.meteredSlot = block % 6 == 5 ? 0 : 1 + (block / 2) % numBandSlots;
         const ConstAudioBlock sidechain { sidechainChannels, block % 3 == 0 ? 1 : 2, blockSize };
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize }, block % 7 == 6 ? nullptr : &sidechain);
         REQUIRE (std::isfinite (engine.liveGainDb (1)));
+        REQUIRE (std::isfinite (engine.readDetectionLevel()));
     }
 
     REQUIRE (guard.allocations() == 0);

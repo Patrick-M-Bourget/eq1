@@ -4,6 +4,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <numbers>
@@ -42,6 +43,7 @@ struct Sidechain
 struct Run
 {
     std::vector<double> liveGain;              // slot 1's Live Gain after each block
+    std::vector<double> detectionLevel;        // the metered Band's Detection Level, read after each block
     std::vector<std::vector<float>> output;    // per channel
 };
 
@@ -84,6 +86,7 @@ Run play (int numChannels,
                 sidechainSamples[static_cast<size_t> (ch)][static_cast<size_t> (i)] = static_cast<float> (sidechain->signal (ch, n + i));
         engine.process ({ channels.data(), numChannels, blockSize }, sidechain != nullptr ? &sidechainBlock : nullptr);
         run.liveGain.push_back (engine.liveGainDb (1));
+        run.detectionLevel.push_back (engine.readDetectionLevel());
         for (int ch = 0; ch < numChannels; ++ch)
             run.output[static_cast<size_t> (ch)].insert (run.output[static_cast<size_t> (ch)].end(), block[static_cast<size_t> (ch)].begin(),
                                                          block[static_cast<size_t> (ch)].end());
@@ -269,6 +272,18 @@ TEST_CASE ("Auto Threshold lets a Band rest on steady material and move on what 
         CHECK (run.liveGain[blockAt (start + burstLength) - 1] < -3.0);
         CHECK (run.liveGain[blockAt (start + period) - 1] > -1.0);
     }
+}
+
+TEST_CASE ("Auto Threshold starts afresh when a Band becomes active again, so it follows what plays now")
+{
+    // Quiet material for a second, Dynamics Bypass for a second, then material 30 dB louder: a
+    // Threshold learned on the quiet material would duck the loud one at once.
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    band.thresholdAuto = true;
+    const auto run = play (1, 2.5, withBand (band), [] (int, int n) { return sine (1000.0, n < 2.0 * sampleRate ? -40.0 : -10.0, n); },
+                           [] (double seconds, Settings& s) { s.bands[0].dynamicsBypass = seconds >= 1.0 && seconds < 2.0; });
+    for (size_t b = blockAt (2.0) / 4; b < run.liveGain.size(); ++b)
+        REQUIRE (run.liveGain[b] > -1.0);
 }
 
 TEST_CASE ("A Mid or Side Dynamic Band reacts only to Mid or Side content")
@@ -632,4 +647,173 @@ TEST_CASE ("With a mono Sidechain, an External Side Band ducks on every kick and
         CHECK (deepest < -6.0);
         CHECK (run.liveGain[blockAt (hit + beat) - 1] > -3.0);
     }
+}
+
+TEST_CASE ("A metered Band reads a full-scale sine in its region at 0 dB, whatever its dynamics state")
+{
+    const int state = GENERATE (0, 1, 2); // active, Dynamics Bypass on, Dynamic Range 0
+    const bool thresholdAuto = GENERATE (false, true);
+    CAPTURE (state, thresholdAuto);
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    band.thresholdAuto = thresholdAuto;
+    band.dynamicsBypass = state == 1;
+    band.dynamicRange = state == 2 ? 0.0 : -9.0;
+    auto settings = withBand (band);
+    settings.meteredSlot = 1;
+    const auto run = play (1, 0.5, settings, tone (1000.0, 0.0));
+    CHECK_THAT (run.detectionLevel.back(), WithinAbs (0.0, 0.1));
+}
+
+TEST_CASE ("An active Dynamic Band meters what its detector compares with Threshold, as an idle one does")
+{
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    auto settings = withBand (band);
+    settings.meteredSlot = 1;
+    // A level that falls by 2 dB every 0.1 s, from above Threshold to below it, so the Band moves.
+    const auto falling = [] (int, int n) { return sine (1000.0, -20.0 - 2.0 * std::floor (n / (0.1 * sampleRate)), n); };
+    const auto active = play (1, 1.0, settings, falling);
+    settings.bands[0].dynamicsBypass = true;
+    const auto idle = play (1, 1.0, settings, falling);
+    CHECK (*std::min_element (active.liveGain.begin(), active.liveGain.end()) < -1.0); // it moved
+    CHECK_THAT (active.detectionLevel[static_cast<size_t> (0.05 * sampleRate / 64)], WithinAbs (-20.0, 0.1));
+    CHECK_THAT (active.detectionLevel.back(), WithinAbs (-38.0, 0.1));
+    CHECK (active.detectionLevel == idle.detectionLevel);
+}
+
+TEST_CASE ("A Stereo Band meters the louder detection channel")
+{
+    auto settings = withBand (dynamicBell (0.0, -9.0, -30.0));
+    settings.meteredSlot = 1;
+    const auto run = play (2, 0.5, settings, [] (int ch, int n) { return sine (1000.0, ch == 0 ? -20.0 : -6.0, n); });
+    CHECK_THAT (run.detectionLevel.back(), WithinAbs (-6.0, 0.1));
+}
+
+TEST_CASE ("A short burst between two reads is reported by the next read, and not by the one after")
+{
+    auto settings = withBand (dynamicBell (0.0, 0.0, -30.0));
+    settings.meteredSlot = 1;
+    // Reads every 0.1 s; a 20 ms burst in the second block.
+    const auto run = play (1, 0.3, settings, burst (0.12, 0.02, -6.0), {}, 4800);
+    REQUIRE (run.detectionLevel.size() == 3);
+    CHECK (run.detectionLevel[0] == levelFloorDb);
+    CHECK_THAT (run.detectionLevel[1], WithinAbs (-6.0, 0.2));
+    CHECK (run.detectionLevel[2] < -40.0); // only what's left of its 5 ms smoothing
+}
+
+TEST_CASE ("The Detection Level follows the Detection Range and Detection Source")
+{
+    auto band = dynamicBell (0.0, 0.0, -30.0);
+    const auto level = [&] (const std::function<double (int, int)>& main, const Sidechain* sidechain = nullptr) {
+        auto settings = withBand (band);
+        settings.meteredSlot = 1;
+        return play (1, 0.5, settings, main, {}, 64, sidechain).detectionLevel.back();
+    };
+
+    SECTION ("Internal, Band: the Bell's region")
+    {
+        CHECK_THAT (level (tone (1000.0, -12.0)), WithinAbs (-12.0, 0.1));
+        CHECK (level (tone (8000.0, -12.0)) < -30.0);
+    }
+
+    SECTION ("Free: between its limits, wherever the Band is")
+    {
+        band.detectionRange = DetectionRange::Free;
+        band.detectionLow = 50.0;
+        band.detectionHigh = 200.0;
+        // A low tone ripples through the 5 ms smoothing, and the loudest level is the ripple's peak.
+        CHECK_THAT (level (tone (100.0, -12.0)), WithinAbs (-12.0, 1.0));
+        CHECK (level (tone (1000.0, -12.0)) < -30.0);
+    }
+
+    SECTION ("External: the Sidechain, not the main input")
+    {
+        band.detectionSource = DetectionSource::External;
+        const Sidechain key { 1, tone (1000.0, -12.0) };
+        const Sidechain quiet { 1, silence };
+        CHECK_THAT (level (silence, &key), WithinAbs (-12.0, 0.1));
+        CHECK (level (tone (1000.0, -6.0), &quiet) == levelFloorDb);
+    }
+}
+
+TEST_CASE ("The Detection Level reads the floor when no Band with dynamics is metered, or it has nothing to listen to")
+{
+    auto band = dynamicBell (0.0, -9.0, -30.0);
+    auto settings = withBand (band);
+    settings.meteredSlot = 1;
+    const auto loud = tone (1000.0, -6.0);
+    const auto floorOf = [&] (int numChannels, const Settings& s) {
+        for (double level : play (numChannels, 0.25, s, loud).detectionLevel)
+            if (level != levelFloorDb)
+                return false;
+        return true;
+    };
+
+    SECTION ("no Band metered") { settings.meteredSlot = 0; CHECK (floorOf (1, settings)); }
+    SECTION ("an unused slot") { settings.meteredSlot = 2; CHECK (floorOf (1, settings)); }
+    SECTION ("a slot out of range") { settings.meteredSlot = 25; CHECK (floorOf (1, settings)); }
+    SECTION ("a Shape without dynamics") { settings.bands[0].shape = Shape::Notch; CHECK (floorOf (1, settings)); }
+    SECTION ("a Bypassed Band") { settings.bands[0].bypass = true; CHECK (floorOf (1, settings)); }
+    SECTION ("External with no Sidechain") { settings.bands[0].detectionSource = DetectionSource::External; CHECK (floorOf (2, settings)); }
+    SECTION ("a Side Band on mono") { settings.bands[0].placement = StereoPlacement::Side; CHECK (floorOf (1, settings)); }
+}
+
+TEST_CASE ("Metering never changes the output, even of a Band metered while idle that becomes active mid-render")
+{
+    const bool thresholdAuto = GENERATE (false, true);
+    const int activation = GENERATE (0, 1); // Dynamics Bypass turned off, or Dynamic Range raised from 0
+    // Idle from the start, or active first, so Auto Threshold has learned the region before it idles.
+    const bool activeFirst = GENERATE (false, true);
+    CAPTURE (thresholdAuto, activation, activeFirst);
+    auto band = dynamicBell (3.0, -9.0, -30.0);
+    band.thresholdAuto = thresholdAuto;
+    const auto idle = [&] (Settings& s) {
+        if (activation == 0)
+            s.bands[0].dynamicsBypass = true;
+        else
+            s.bands[0].dynamicRange = 0.0;
+    };
+    // Louder while idle than before or after, so a detector that learned while metered would start
+    // in a different place.
+    const auto signal = [=] (int, int n) {
+        const double seconds = n / sampleRate;
+        const double db = activeFirst ? (seconds < 0.3 ? -24.0 : seconds < 0.7 ? -3.0 : -12.0) : (seconds < 0.6 ? -3.0 : -24.0);
+        return sine (1000.0, db, n) + sine (1100.0, -30.0, n);
+    };
+    const auto change = [&] (int meteredSlot) {
+        return [=] (double seconds, Settings& s) {
+            s.bands[0] = band;
+            if (seconds < 0.7 && (! activeFirst || seconds >= 0.3))
+                idle (s);
+            s.meteredSlot = meteredSlot;
+        };
+    };
+    const auto unmetered = play (2, 1.5, withBand (band), signal, change (0));
+    const auto metered = play (2, 1.5, withBand (band), signal, change (1));
+    CHECK (metered.detectionLevel[static_cast<size_t> (0.5 * sampleRate / 64)] > -10.0); // it was metered while idle
+    CHECK (metered.output == unmetered.output);
+}
+
+TEST_CASE ("Metering another Band forgets the last one's level, even before it is read")
+{
+    auto settings = withBand (dynamicBell (0.0, -9.0, -30.0));
+    settings.bands[1] = dynamicBell (0.0, -9.0, -30.0);
+    settings.bands[1].frequency = 8000.0;
+    settings.meteredSlot = 1;
+    Engine engine;
+    engine.prepare (sampleRate, 512, 1);
+    std::vector<float> block (512);
+    float* channels[] = { block.data() };
+    const auto playTone = [&] (int blocks) {
+        for (int b = 0, n = 0; b < blocks; ++b)
+        {
+            for (int i = 0; i < 512; ++i, ++n)
+                block[static_cast<size_t> (i)] = static_cast<float> (sine (1000.0, -6.0, n));
+            engine.setSettings (settings);
+            engine.process ({ channels, 1, 512 });
+        }
+    };
+    playTone (20);
+    settings.meteredSlot = 2; // a Bell at 8 kHz hears little of a 1 kHz tone
+    playTone (1);
+    CHECK (engine.readDetectionLevel() < -20.0);
 }

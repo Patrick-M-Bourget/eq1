@@ -21,8 +21,8 @@ constexpr int blockSize = 512;
 constexpr int runs = 5;
 constexpr double secondsPerRun = 4.0;
 
-// 24 Bells across the spectrum, each a Dynamic Band; every Detection Range and Threshold kind, so
-// every Band's filter is redesigned as its Live Gain moves.
+// 24 Bells across the spectrum, each a Dynamic Band, one of them metered; every Detection Range and
+// Threshold kind, so every Band's filter is redesigned as its Live Gain moves.
 Settings dynamicBands()
 {
     Settings settings;
@@ -38,6 +38,7 @@ Settings dynamicBands()
                                  .dynamicRange = slot % 2 == 0 ? -12.0 : 6.0,
                                  .threshold = -30.0,
                                  .thresholdAuto = slot % 3 == 0 };
+    settings.meteredSlot = 1;
     return settings;
 }
 

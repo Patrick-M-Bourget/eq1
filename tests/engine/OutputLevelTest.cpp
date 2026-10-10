@@ -104,7 +104,7 @@ TEST_CASE ("Output Level is measured after Output Gain and Output Pan, and reads
         engine.setSettings (settings);
         Player { engine, sampleRate, 2 }.sine (0.5, 0.5);
         CHECK_THAT (engine.readOutputLevel (0).peakDb, WithinAbs (-6.02 - 12.0, 0.01));
-        CHECK (engine.readOutputLevel (1).peakDb == outputLevelFloorDb);
+        CHECK (engine.readOutputLevel (1).peakDb == levelFloorDb);
     }
 
     SECTION ("Global Bypass")
@@ -148,8 +148,8 @@ TEST_CASE ("Output Level RMS covers only the last 300 ms, and silence reads exac
     SECTION ("before anything is processed")
     {
         const auto level = engine.readOutputLevel (0);
-        CHECK (level.peakDb == outputLevelFloorDb);
-        CHECK (level.rmsDb == outputLevelFloorDb);
+        CHECK (level.peakDb == levelFloorDb);
+        CHECK (level.rmsDb == levelFloorDb);
     }
 
     Player player { engine, sampleRate, 1 };
@@ -171,8 +171,8 @@ TEST_CASE ("Output Level RMS covers only the last 300 ms, and silence reads exac
             player.silence (0.3);
             engine.readOutputLevel (0); // the loud passage's peak
             const auto level = engine.readOutputLevel (0);
-            CHECK (level.rmsDb == outputLevelFloorDb);
-            CHECK (level.peakDb == outputLevelFloorDb);
+            CHECK (level.rmsDb == levelFloorDb);
+            CHECK (level.peakDb == levelFloorDb);
         }
     }
 

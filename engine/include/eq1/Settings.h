@@ -143,6 +143,11 @@ struct Settings
     // It takes precedence over Solo.
     int auditionSlot = 0;
 
+    // The Band Slot (1 to 24) whose Detection Level the Engine publishes, or 0. Like Solo, it lasts
+    // while the editor holds it and is never saved. Only a Band in use, not Bypassed, whose Shape has
+    // dynamics is metered, whatever its dynamics state; metering never changes the output.
+    int meteredSlot = 0;
+
     // Gain Scale, 0 to 2 (0% to 200%): scales every Band's Gain and Dynamic Range in dB, on the Shapes
     // that have a Gain. Live Gain stays within +/-30 dB.
     double gainScale = 1.0;

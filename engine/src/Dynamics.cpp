@@ -94,7 +94,6 @@ void Dynamics::setSettings (const BandSettings& settings, bool snap)
     }
     if (snap)
     {
-        samplesHeard = 0.0;
         dynamicRangeGlide.reset (dynamicRange);
         active.reset (activeTarget);
     }
@@ -111,6 +110,7 @@ void Dynamics::startAfresh()
     highLimit.setSettings (highLimitSettings, true);
     power = {};
     movement = sustain = 0.0;
+    samplesHeard = 0.0; // Auto Threshold learns the material playing now
 }
 
 void Dynamics::setAuditioned (bool newAuditioned)
@@ -118,6 +118,13 @@ void Dynamics::setAuditioned (bool newAuditioned)
     if (newAuditioned && ! running())
         startAfresh();
     auditioned = newAuditioned;
+}
+
+void Dynamics::setMetered (bool newMetered)
+{
+    if (newMetered && ! metered && ! running())
+        startAfresh();
+    metered = newMetered;
 }
 
 float Dynamics::auditionSample (int outputChannels, int ch, int i) const
@@ -188,7 +195,9 @@ double Dynamics::autoReleaseSeconds() const
 
 double Dynamics::process (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int numSamples)
 {
-    if (! running())
+    loudestLevel = nothingHeardDb;
+    const bool moving = running();
+    if (! moving && ! metered)
         return 0.0;
 
     const int detectionCount = detectionChannelCount = takeDetectionSignal (input, numChannels, sidechain, sidechainChannels, numSamples);
@@ -202,7 +211,7 @@ double Dynamics::process (const float* const* input, int numChannels, const floa
 
     // The level of each sample: the louder detection channel's power, where a full-scale sine reads 0 dB.
     std::array<double, Band::maxSubBlock> levels;
-    double loudest = -1000.0;
+    double loudest = nothingHeardDb;
     for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
     {
         double peakPower = 0.0;
@@ -215,13 +224,18 @@ double Dynamics::process (const float* const* input, int numChannels, const floa
         levels[i] = 10.0 * std::log10 (2.0 * peakPower + 1.0e-30);
         // The mean of every level heard, until the time constant's worth has been: then the mean
         // over about the last time constant.
-        if (levels[i] > autoThresholdGateDb)
+        if (moving && levels[i] > autoThresholdGateDb)
         {
             samplesHeard = std::min (samplesHeard + 1.0, 1.0 / averageCoefficient);
             averageLevel += (levels[i] - averageLevel) / samplesHeard;
         }
         loudest = std::max (loudest, levels[i]);
     }
+    if (detectionCount > 0)
+        loudestLevel = loudest;
+    // Metered only: whatever comes next starts afresh, as if never metered.
+    if (! moving)
+        return 0.0;
 
     // Until Auto Threshold has heard the region, nothing moves.
     const bool listening = ! thresholdAuto || samplesHeard > 0.0;
