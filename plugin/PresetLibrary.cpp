@@ -19,12 +19,12 @@ juce::ValueTree fromXml (const std::unique_ptr<juce::XmlElement>& xml)
 
 bool byName (const juce::String& a, const juce::String& b) { return a.compareNatural (b) < 0; }
 
+// Files by the name of the Preset they hold, folders by their whole name.
 std::vector<juce::File> byFileName (const juce::Array<juce::File>& found)
 {
+    const auto name = [] (const juce::File& f) { return f.isDirectory() ? f.getFileName() : f.getFileNameWithoutExtension(); };
     std::vector<juce::File> files (found.begin(), found.end());
-    std::sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b) {
-        return byName (a.getFileNameWithoutExtension(), b.getFileNameWithoutExtension());
-    });
+    std::sort (files.begin(), files.end(), [&] (const juce::File& a, const juce::File& b) { return byName (name (a), name (b)); });
     return files;
 }
 } // namespace
@@ -41,9 +41,9 @@ std::vector<juce::File> PresetLibrary::userPresets() const
     std::vector<juce::File> files;
     // A folder's own Presets, then each subfolder's, depth-first; a folder reached twice (by a link
     // back up the tree) is read once.
-    std::set<juce::String> read;
+    std::set<juce::String> visited;
     const std::function<void (const juce::File&)> collect = [&] (const juce::File& folder) {
-        if (! read.insert (folder.getLinkedTarget().getFullPathName()).second)
+        if (! visited.insert (folder.getLinkedTarget().getFullPathName()).second)
             return;
         for (const auto& found : byFileName (folder.findChildFiles (juce::File::findFiles, false, "*" + fileExtension)))
             files.push_back (found);

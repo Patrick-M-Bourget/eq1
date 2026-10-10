@@ -8,8 +8,8 @@
 namespace eq1
 {
 
-// Where Presets are kept: User Presets as files in a folder, one per Preset, named after it; Factory
-// Presets bundled with eq1. A Preset file is plain XML in the saved state's format
+// Where Presets are kept: User Presets as files in a folder and its subfolders, one per Preset, named
+// after it; Factory Presets bundled with eq1. A Preset file is plain XML in the saved state's format
 // (PluginProcessor::presetState), so it moves between machines and opens in newer versions.
 class PresetLibrary
 {
