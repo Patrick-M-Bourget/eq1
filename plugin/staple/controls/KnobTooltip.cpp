@@ -51,9 +51,8 @@ void KnobTooltip::refresh()
 {
     title = knob.tooltipTitle();
     value = knob.tooltipValue();
-    const float textWidth = std::max (juce::GlyphArrangement::getStringWidth (font (size::fs2), title),
-                                      juce::GlyphArrangement::getStringWidth (font (size::fs4), value));
-    const int width = std::max (minimumWidth, static_cast<int> (std::ceil (textWidth)) + 2 * paddingSide);
+    const int text = std::max (textWidth (font (size::fs2), title), textWidth (font (size::fs4), value));
+    const int width = std::max (minimumWidth, text + 2 * paddingSide);
     const int height = paddingTop + titleLine + valueLine + paddingBottom;
 
     if (auto* layer = getParentComponent())

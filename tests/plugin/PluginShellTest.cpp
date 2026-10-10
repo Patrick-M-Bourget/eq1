@@ -84,18 +84,6 @@ double sineGainDb (juce::AudioProcessor& processor, double frequency, Content co
     return 10.0 * std::log10 (outputPower / inputPower);
 }
 
-// A layout with the given main input and output, and Sidechain (disabled when empty).
-juce::AudioProcessor::BusesLayout layoutOf (const juce::AudioChannelSet& in,
-                                           const juce::AudioChannelSet& out,
-                                           const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
-{
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (in);
-    layout.inputBuses.add (sidechain);
-    layout.outputBuses.add (out);
-    return layout;
-}
-
 } // namespace
 
 TEST_CASE ("Plugin reports zero latency")
@@ -351,7 +339,7 @@ TEST_CASE ("Hosts can use the plugin on mono and stereo tracks")
     const auto mono = juce::AudioChannelSet::mono(), stereo = juce::AudioChannelSet::stereo();
 
     const auto supports = [&] (const juce::AudioChannelSet& in, const juce::AudioChannelSet& out) {
-        return processor.checkBusesLayoutSupported (layoutOf (in, out));
+        return processor.checkBusesLayoutSupported (harness::layoutOf (in, out));
     };
     CHECK (supports (mono, mono));
     CHECK (supports (stereo, stereo));
@@ -374,9 +362,9 @@ TEST_CASE ("The plugin offers a stereo Sidechain, and accepts a mono one or none
         for (const auto& sidechainLayout : { juce::AudioChannelSet::disabled(), mono, stereo })
         {
             CAPTURE (track.getDescription(), sidechainLayout.getDescription());
-            CHECK (processor.checkBusesLayoutSupported (layoutOf (track, track, sidechainLayout)));
+            CHECK (processor.checkBusesLayoutSupported (harness::layoutOf (track, track, sidechainLayout)));
         }
-    CHECK_FALSE (processor.checkBusesLayoutSupported (layoutOf (stereo, stereo, juce::AudioChannelSet::create5point1())));
+    CHECK_FALSE (processor.checkBusesLayoutSupported (harness::layoutOf (stereo, stereo, juce::AudioChannelSet::create5point1())));
 }
 
 TEST_CASE ("An External Dynamic Band ducks on the Sidechain, mono or stereo, and not on the main input")

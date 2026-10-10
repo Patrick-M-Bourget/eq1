@@ -121,10 +121,9 @@ void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyl
 void paintReadout (juce::Graphics& g, const DisplayGeometry& geometry, juce::Point<float> handleCentre, const Readout& readout)
 {
     const auto titleFont = staple::font (size::fs2), valueFont = staple::font (size::fs4);
-    const float textWidth = std::max (juce::GlyphArrangement::getStringWidth (titleFont, readout.title),
-                                      juce::GlyphArrangement::getStringWidth (valueFont, readout.value));
+    const int textWidth = std::max (staple::textWidth (titleFont, readout.title), staple::textWidth (valueFont, readout.value));
     const float height = readoutPaddingTop + readoutTitleLine + readoutValueLine + readoutPaddingBottom;
-    auto box = juce::Rectangle<float> (std::ceil (textWidth) + 2.0f * readoutPaddingSide, height)
+    auto box = juce::Rectangle<float> (static_cast<float> (textWidth) + 2.0f * readoutPaddingSide, height)
                    .withPosition (handleCentre.x + readoutOffset, handleCentre.y - readoutOffset - height)
                    .constrainedWithin (geometry.bounds());
     staple::drawSoftShadow (g, box, size::r2, tokens::shadow::shadow1);

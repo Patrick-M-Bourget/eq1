@@ -84,17 +84,25 @@ inline juce::MouseEvent mouseEvent (juce::Component& target, juce::Point<float> 
 // The key with Shift held.
 inline juce::KeyPress withShift (juce::KeyPress key) { return { key.getKeyCode(), juce::ModifierKeys::shiftModifier, 0 }; }
 
+// A layout with the given main input and output, and Sidechain (disabled unless given).
+inline juce::AudioProcessor::BusesLayout layoutOf (const juce::AudioChannelSet& in,
+                                                  const juce::AudioChannelSet& out,
+                                                  const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
+{
+    juce::AudioProcessor::BusesLayout layout;
+    layout.inputBuses.add (in);
+    layout.inputBuses.add (sidechain);
+    layout.outputBuses.add (out);
+    return layout;
+}
+
 // Switches the main input and output to channels, with sidechain, and prepares to play at 48 kHz in
 // blocks of 512, as a host does.
 inline void useLayout (juce::AudioProcessor& processor,
                        const juce::AudioChannelSet& channels,
                        const juce::AudioChannelSet& sidechain = juce::AudioChannelSet::disabled())
 {
-    juce::AudioProcessor::BusesLayout layout;
-    layout.inputBuses.add (channels);
-    layout.inputBuses.add (sidechain);
-    layout.outputBuses.add (channels);
-    REQUIRE (processor.setBusesLayout (layout));
+    REQUIRE (processor.setBusesLayout (layoutOf (channels, channels, sidechain)));
     processor.prepareToPlay (48000.0, 512);
 }
 
