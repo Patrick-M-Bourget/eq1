@@ -1,6 +1,7 @@
 #include "EdgeSelector.h"
 
 #include "../Fonts.h"
+#include "../Light.h"
 #include "../LookAndFeel.h"
 
 namespace staple
@@ -81,27 +82,31 @@ void EdgeSelector::paint (juce::Graphics& g)
     const auto bounds = getLocalBounds().toFloat();
     if (! isEnabled())
         g.beginTransparencyLayer (tokens::motion::disabledAlpha);
+    // Hover and press light the whole face up.
+    const auto light = [over = isEnabled() && hovered, down = isEnabled() && pressed] (juce::Colour c)
+    { return lit (c, over, down); };
+    const auto litEdge = light (edgeColour), litIcon = light (iconColour);
 
     // Rounded on the inner side only.
     const float r = tokens::size::r3;
     juce::Path shape;
     shape.addRoundedRectangle (bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight(), r, r, ! left, left, ! left, left);
-    g.setColour (colour::edgeSelectorBase);
+    g.setColour (light (colour::edgeSelectorBase));
     g.fillPath (shape);
 
     const float innerX = left ? bounds.getRight() : bounds.getX();
     const float towardFlush = left ? -1.0f : 1.0f;
     {
-        juce::ColourGradient wash (edgeColour.withAlpha (washAlpha), innerX, bounds.getY(), edgeColour.withAlpha (0.0f),
+        juce::ColourGradient wash (litEdge.withAlpha (washAlpha), innerX, bounds.getY(), litEdge.withAlpha (0.0f),
                                    innerX + towardFlush * washReach * bounds.getWidth(), bounds.getY(), true);
         g.setGradientFill (wash);
         g.fillPath (shape);
     }
     {
         const float w = bounds.getWidth();
-        juce::ColourGradient hairline (edgeColour.withAlpha (hairlineInner), innerX, 0.0f, edgeColour.withAlpha (0.0f),
+        juce::ColourGradient hairline (litEdge.withAlpha (hairlineInner), innerX, 0.0f, litEdge.withAlpha (0.0f),
                                        innerX + towardFlush * 0.9f * w, 0.0f, false);
-        hairline.addColour (0.45 / 0.9, edgeColour.withAlpha (hairlineMid));
+        hairline.addColour (0.45 / 0.9, litEdge.withAlpha (hairlineMid));
         g.setGradientFill (hairline);
         juce::Path edge;
         const auto line = bounds.reduced (0.5f);
@@ -130,22 +135,59 @@ void EdgeSelector::paint (juce::Graphics& g)
     {
         const auto iconArea = row.removeFromLeft (iconWidth).withSizeKeepingCentre (iconWidth, iconHeight);
         if (const auto context = contexts.find (id); context != contexts.end())
-            drawIcon (g, context->second, iconArea, iconColour.withMultipliedAlpha (contextAlpha));
-        drawIcon (g, icon->second, iconArea, iconColour);
+            drawIcon (g, context->second, iconArea, litIcon.withMultipliedAlpha (contextAlpha));
+        drawIcon (g, icon->second, iconArea, litIcon);
         row.removeFromLeft (iconGap);
     }
     if (dot != dots.end())
     {
-        g.setColour (dot->second);
+        g.setColour (light (dot->second));
         g.fillEllipse (row.removeFromLeft (dotSize).withSizeKeepingCentre (dotSize, dotSize));
         row.removeFromLeft (dotGap);
     }
     g.setFont (textFont);
-    g.setColour (colour::text1);
+    g.setColour (light (colour::text1));
     g.drawText (text, row, juce::Justification::centredLeft, true);
 
     if (! isEnabled())
         g.endTransparencyLayer();
+}
+
+void EdgeSelector::mouseEnter (const juce::MouseEvent& e)
+{
+    hovered = true;
+    repaint();
+    juce::ComboBox::mouseEnter (e);
+}
+
+void EdgeSelector::mouseExit (const juce::MouseEvent& e)
+{
+    // Leaving the box for its Label enters the Label next, which lights it again.
+    hovered = false;
+    repaint();
+    juce::ComboBox::mouseExit (e);
+}
+
+void EdgeSelector::mouseDown (const juce::MouseEvent& e)
+{
+    pressed = isEnabled() && ! e.mods.isPopupMenu();
+    repaint();
+    juce::ComboBox::mouseDown (e);
+}
+
+void EdgeSelector::mouseUp (const juce::MouseEvent& e)
+{
+    pressed = false;
+    repaint();
+    juce::ComboBox::mouseUp (e);
+}
+
+void EdgeSelector::showPopup()
+{
+    // The list is modal, so the exit and release it takes never arrive here: unlit until entered again.
+    hovered = pressed = false;
+    repaint();
+    juce::ComboBox::showPopup();
 }
 
 bool EdgeSelector::keyPressed (const juce::KeyPress& key)
