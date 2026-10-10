@@ -21,6 +21,7 @@ BandEditing::BandEditing (juce::AudioProcessorValueTreeState& parametersToEdit, 
 BandEditing::~BandEditing()
 {
     endDrag();
+    endDynamicRangeDrag();
 }
 
 juce::RangedAudioParameter& BandEditing::parameter (const juce::String& id) const
@@ -183,6 +184,39 @@ void BandEditing::endDrag()
     dragged.clear();
     if (std::exchange (grabbing, false))
         history.endTransaction();
+}
+
+void BandEditing::beginDynamicRangeDrag (int slot)
+{
+    endDynamicRangeDrag();
+    rangeDragged = slot;
+    history.beginTransaction();
+    parameter (parameters::dynamicRangeId (slot)).beginChangeGesture();
+}
+
+void BandEditing::dragDynamicRangeTo (double heardEnd)
+{
+    if (rangeDragged == 0)
+        return;
+    Settings whole;
+    output.readInto (whole);
+    if (whole.gainScale < 0.01)
+        return;
+    const double stored = heardEnd / whole.gainScale - band (rangeDragged).gain;
+    setWithinGesture (parameters::dynamicRangeId (rangeDragged), std::round (stored * 2.0) / 2.0);
+}
+
+void BandEditing::endDynamicRangeDrag()
+{
+    if (rangeDragged == 0)
+        return;
+    parameter (parameters::dynamicRangeId (std::exchange (rangeDragged, 0))).endChangeGesture();
+    history.endTransaction();
+}
+
+void BandEditing::setDynamicRange (int slot, double dynamicRange)
+{
+    set (parameters::dynamicRangeId (slot), dynamicRange);
 }
 
 void BandEditing::nudge (const std::vector<int>& slotsToNudge, double semitones, double gainOffset)
