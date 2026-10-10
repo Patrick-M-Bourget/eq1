@@ -35,7 +35,7 @@ juce::String outputPanText (double pan, bool midSide)
 class OutputPopover::PanModeChip final : public staple::TextChip
 {
 public:
-    PanModeChip() : staple::TextChip ("Pan Mode", Look::filled, size::fs1)
+    PanModeChip() : staple::TextChip ("Pan Mode", Look::filled, size::fs1, staple::Weight::semiBold)
     {
         setClickingTogglesState (true);
         setTitle ("Pan Mode");
@@ -53,7 +53,7 @@ public:
 
     int idealWidth() const
     {
-        return staple::textWidth (font(), "M/S") + 2 * chipPadding;
+        return staple::textWidth (textFont(), "M/S") + 2 * chipPadding;
     }
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override
@@ -61,13 +61,10 @@ public:
         const float alpha = staple::enabledAlpha (*this);
         g.setColour (staple::lit (colour::fill1, highlighted, down).withMultipliedAlpha (alpha));
         g.fillRoundedRectangle (getLocalBounds().toFloat(), size::r1);
-        g.setFont (font());
+        g.setFont (textFont());
         g.setColour ((highlighted || down ? colour::text1 : colour::text2).withMultipliedAlpha (alpha));
         g.drawText (getButtonText(), getLocalBounds(), juce::Justification::centred, false);
     }
-
-private:
-    static juce::Font font() { return staple::font (size::fs1, staple::Weight::semiBold); }
 };
 
 OutputPanSlider::OutputPanSlider() : KeyboardSlider ("Output Pan")

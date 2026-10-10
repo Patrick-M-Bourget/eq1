@@ -53,9 +53,9 @@ public:
 
 protected:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    juce::Font textFont() const;
 
 private:
-    juce::Font textFont() const;
 
     Look look;
     float fontSize;
