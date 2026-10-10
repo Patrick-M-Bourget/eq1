@@ -2,6 +2,7 @@
 
 #include "ABCompare.h"
 #include "AnalyzerSettings.h"
+#include "DisplayRange.h"
 #include "EditHistory.h"
 #include "Parameters.h"
 #include "eq1/Engine.h"
@@ -73,9 +74,15 @@ public:
     juce::String loadedPresetName() const { return compare.loadedPresetName(); }
     bool isLoadedPresetModified() const { return compare.isModified(); }
 
-    // The EQ display's Gain range, +/- this many dB: 6, 12 or 30. Saved with the plugin.
+    // The Display Range, +/- this many dB: 6, 12 or 30. Saved with the plugin, whether picked by hand
+    // or zoomed out by fitDisplayRangeToHeardGains().
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
+    // The editor's look at the Bands, each frame while it is open and when a drag ends: when a Band's
+    // heard Gain has changed since the last look to beyond the Display Range, the range zooms out to
+    // fit it (fittedDisplayRangeDb). Nothing while an edit is in progress, so a drag zooms when it
+    // ends. Restoring a session takes its Bands as seen. Message thread only.
+    void fitDisplayRangeToHeardGains();
 
     // Solo, while the editor holds a Band: its Band Slot (1 to 24), or 0. Not a host parameter, not
     // saved, not undoable; restoring a session lets go of it.
@@ -135,6 +142,11 @@ private:
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
     std::atomic<bool> outputMeterShown { true };
+    // The heard Gains at the editor's last look, or as a session restored them: not saved, and kept
+    // while the editor is closed.
+    HeardGains seenGains;
+    juce::SpinLock seenGainsLock; // a host may restore a session from another thread
+    HeardGains currentHeardGains() const;
     std::atomic<int> heldSoloSlot { 0 };
     std::atomic<int> heldAuditionSlot { 0 };
     std::atomic<int> heldMeteredSlot { 0 };
