@@ -224,9 +224,9 @@ TEST_CASE ("Tab reaches every visible, enabled control and every Band in use, in
     const std::vector<juce::String> expected {
         // The header.
         "Presets", "Previous Preset", "Next Preset", "A", "B", "Copy A to B", "Undo", "Redo",
-        // The Analyzer and Display Range.
+        // The Analyzer, Display Range and UI Scale.
         "Pre", "Post", "Sidechain", "Peak Hold", "Analyzer Range", "Analyzer Speed", "Analyzer Resolution", "Analyzer Tilt",
-        "Meter", "Display Range",
+        "Meter", "Display Range", "UI Scale",
         // The EQ display and its Bands, by Frequency, then the Output Meter's Clip Lights.
         "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter",
         // The Band panel: its top row, its left column, then its knobs.

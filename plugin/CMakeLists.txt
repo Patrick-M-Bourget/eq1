@@ -59,7 +59,8 @@ target_sources(eq1 PRIVATE
     staple/Icons.cpp
     staple/LookAndFeel.cpp
     KeyboardSlider.cpp
-    KeyboardControl.cpp)
+    KeyboardControl.cpp
+    UserSettings.cpp)
 
 # The Factory Presets, bundled into the plugin.
 juce_add_binary_data(eq1_factory_presets

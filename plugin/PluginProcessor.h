@@ -5,6 +5,8 @@
 #include "DisplayRange.h"
 #include "EditHistory.h"
 #include "Parameters.h"
+#include "UiScale.h"
+#include "UserSettings.h"
 #include "eq1/Engine.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -17,7 +19,9 @@ namespace eq1
 class PluginProcessor final : public juce::AudioProcessor
 {
 public:
-    PluginProcessor();
+    // userSettingsFile keeps the UI Scale last picked, across instances (UserSettings). Without one, as in
+    // tests, nothing is kept and a new instance opens at 100%.
+    explicit PluginProcessor (juce::File userSettingsFile = {});
 
     void prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock) override;
     void releaseResources() override {}
@@ -122,6 +126,16 @@ public:
     bool isOutputMeterShown() const { return outputMeterShown.load(); }
     void setOutputMeterShown (bool shown) { outputMeterShown = shown; }
 
+    // The editor's window: its size in logical pixels (as at 100%) and its UI Scale in percent (one of
+    // uiScale::percents). Saved with the session, not in Presets, not undoable. Message thread only.
+    juce::Point<int> editorSize() const { return { editorWidth.load(), editorHeight.load() }; }
+    void setEditorSize (juce::Point<int> logical);
+    // An instance that has never had a UI Scale, new or from a session saved before it, takes the one
+    // last picked in any instance here, and keeps it from then on.
+    int uiScalePercent();
+    // The UI Scale picked by hand: this instance's, and the default for new ones.
+    void pickUiScale (int percent);
+
     // The version of the saved state's format. setStateInformation() brings older states up to it one
     // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
     // version. Bump it, and add a step to the migration, whenever the format changes.
@@ -142,6 +156,10 @@ private:
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
     std::atomic<bool> outputMeterShown { true };
+    static constexpr int newEditorWidth = 1200, newEditorHeight = 760;
+    std::atomic<int> editorWidth { newEditorWidth }, editorHeight { newEditorHeight };
+    std::atomic<int> uiScale { 0 }; // 0 until the instance has one
+    UserSettings userSettings;
     // The heard Gains at the editor's last look, or as a session restored them: not saved, and kept
     // while the editor is closed.
     HeardGains seenGains;

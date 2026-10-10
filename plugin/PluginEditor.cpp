@@ -13,12 +13,12 @@ PluginEditor::PluginEditor (PluginProcessor& p)
       keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
-    addAndMakeVisible (display);
-    addAndMakeVisible (panel);
-    addAndMakeVisible (output);
+    content.addAndMakeVisible (display);
+    content.addAndMakeVisible (panel);
+    content.addAndMakeVisible (output);
     presetBar.onEdit = [this] { showUndoState(); };
-    addAndMakeVisible (presetBar);
-    addChildComponent (presetBar.browserPanel());
+    content.addAndMakeVisible (presetBar);
+    content.addChildComponent (presetBar.browserPanel());
 
     // The display's Gain range, saved with the plugin.
     for (int range : { 6, 12, 30 })
@@ -29,16 +29,27 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         eqProcessor.setDisplayRangeDb (displayRange.getSelectedId());
         display.repaint();
     };
-    addAndMakeVisible (displayRange);
+    content.addAndMakeVisible (displayRange);
 
-    addChildComponent (meter);
+    uiScale.setTitle ("UI Scale");
+    uiScale.setTooltip ("UI Scale");
+    for (int percent : uiScale::percents)
+        uiScale.addItem (juce::String (percent) + "%", percent);
+    uiScale.onChange = [this] {
+        eqProcessor.pickUiScale (uiScale.getSelectedId());
+        applyUiScale();
+    };
+    uiScale.setName ("UI Scale");
+    content.addAndMakeVisible (uiScale);
+
+    content.addChildComponent (meter);
     showMeter.setToggleState (eqProcessor.isOutputMeterShown(), juce::dontSendNotification);
     showMeter.setTooltip ("Show the Output Meter");
     showMeter.onClick = [this] {
         eqProcessor.setOutputMeterShown (showMeter.getToggleState());
         resized();
     };
-    addAndMakeVisible (showMeter);
+    content.addAndMakeVisible (showMeter);
 
     undoButton.onClick = [this] { undo(); };
     redoButton.onClick = [this] { redo(); };
@@ -46,14 +57,14 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     {
         // Tab reaches them, but a click leaves focus where it was, so Delete still reaches the display.
         button->setMouseClickGrabsKeyboardFocus (false);
-        addAndMakeVisible (*button);
+        content.addAndMakeVisible (*button);
     }
     showUndoState();
 
     for (auto* toggle : { &showPreEq, &showPostEq, &showSidechain, &peakHold })
     {
         toggle->onClick = [this] { storeAnalyzerSettings(); };
-        addAndMakeVisible (*toggle);
+        content.addAndMakeVisible (*toggle);
     }
     for (int range : { 60, 90, 120 })
         analyzerRange.addItem (juce::String (range) + " dB", range);
@@ -65,10 +76,10 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     for (auto* combo : { &analyzerRange, &analyzerSpeed, &analyzerResolution })
     {
         combo->onChange = [this] { storeAnalyzerSettings(); };
-        addAndMakeVisible (*combo);
+        content.addAndMakeVisible (*combo);
     }
     analyzerTiltLabel.setText ("Analyzer Tilt", juce::dontSendNotification);
-    addAndMakeVisible (analyzerTiltLabel);
+    content.addAndMakeVisible (analyzerTiltLabel);
     analyzerTilt.setSliderStyle (juce::Slider::LinearHorizontal);
     // In 0.5 dB/oct steps (the Staple Analyzer popover, #84, cycles Off, 3, 4.5 and 6): an arrow key
     // moves it one step, as a step smaller than the interval would round back.
@@ -76,31 +87,49 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     analyzerTilt.setTextValueSuffix (" dB/oct");
     analyzerTilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 20);
     analyzerTilt.onValueChange = [this] { storeAnalyzerSettings(); };
-    addAndMakeVisible (analyzerTilt);
+    content.addAndMakeVisible (analyzerTilt);
     showAnalyzerSettings();
 
-    // Tab's order: the header, the Analyzer and Display Range, the display and its Bands, the Output
-    // Meter, the Band panel and the output panel. Within a row, left to right.
+    // Tab's order: the header, the Analyzer, Display Range and UI Scale, the display and its Bands, the
+    // Output Meter, the Band panel and the output panel. Within a row, left to right.
     int order = 0;
     for (juce::Component* child : std::initializer_list<juce::Component*> {
              &presetBar, &presetBar.browserPanel(), &undoButton, &redoButton, &showPreEq, &showPostEq, &showSidechain, &peakHold,
-             &analyzerRange, &analyzerSpeed, &analyzerResolution, &analyzerTilt, &showMeter, &displayRange, &display, &meter,
+             &analyzerRange, &analyzerSpeed, &analyzerResolution, &analyzerTilt, &showMeter, &displayRange, &uiScale, &display, &meter,
              &panel, &output })
         child->setExplicitFocusOrder (++order);
-
-    keyboard.adopt (*this);
-    addMouseListener (this, true);
 
     startTimerHz (4);
 
     // Once every component is in place: each one that keeps something from its look (a Slider's
     // text box, a ComboBox's label colours) takes it again from this.
     setLookAndFeel (&lookAndFeel);
+    addAndMakeVisible (content);
+    keyboard.adopt (*this);
+    addMouseListener (this, true);
 
     setResizable (true, true);
-    // Wide enough for the output controls' row and the toolbar.
-    setResizeLimits (1040, 484, 2560, 1600);
-    setSize (1100, 664);
+    applyUiScale();
+}
+
+void PluginEditor::applyUiScale()
+{
+    // In logical pixels: wide enough for the output controls' row and the toolbar.
+    constexpr int minimumWidth = 1120, minimumHeight = 600, maximumWidth = 2560, maximumHeight = 1600;
+    const auto stored = eqProcessor.editorSize();
+    const juce::Point<int> size { juce::jlimit (minimumWidth, maximumWidth, stored.x), juce::jlimit (minimumHeight, maximumHeight, stored.y) };
+    const int percent = eqProcessor.uiScalePercent();
+    uiScale.setSelectedId (percent, juce::dontSendNotification);
+    shownScalePercent = percent;
+    scale = static_cast<float> (percent) / 100.0f;
+    content.setTransform (juce::AffineTransform::scale (scale));
+    const auto scaled = [this] (int logical) { return juce::roundToInt (static_cast<float> (logical) * scale); };
+    // New limits can resize the window on the way to its size: keep that from the processor.
+    applyingScale = true;
+    setResizeLimits (scaled (minimumWidth), scaled (minimumHeight), scaled (maximumWidth), scaled (maximumHeight));
+    setSize (scaled (size.x), scaled (size.y));
+    applyingScale = false;
+    resized();
 }
 
 PluginEditor::~PluginEditor()
@@ -193,6 +222,8 @@ void PluginEditor::timerCallback()
         showMeter.setToggleState (eqProcessor.isOutputMeterShown(), juce::dontSendNotification);
         resized();
     }
+    if (eqProcessor.uiScalePercent() != shownScalePercent || eqProcessor.editorSize() != shownSize)
+        applyUiScale();
     showAnalyzerSettings();
 }
 
@@ -203,7 +234,14 @@ void PluginEditor::paint (juce::Graphics& g)
 
 void PluginEditor::resized()
 {
-    auto area = getLocalBounds();
+    const juce::Point<int> logical { juce::roundToInt (static_cast<float> (getWidth()) / scale), juce::roundToInt (static_cast<float> (getHeight()) / scale) };
+    if (! applyingScale)
+    {
+        eqProcessor.setEditorSize (logical);
+        shownSize = eqProcessor.editorSize();
+    }
+    content.setBounds (0, 0, logical.x, logical.y);
+    auto area = content.getLocalBounds();
     auto header = area.removeFromTop (32).reduced (6, 4);
     auto toolbar = area.removeFromTop (32).reduced (6, 4);
     output.setBounds (area.removeFromBottom (32));
@@ -219,6 +257,8 @@ void PluginEditor::resized()
     undoButton.setBounds (header.removeFromRight (52));
     presetBar.setBounds (header);
 
+    uiScale.setBounds (toolbar.removeFromRight (72));
+    toolbar.removeFromRight (6);
     displayRange.setBounds (toolbar.removeFromRight (110));
     toolbar.removeFromRight (6);
     showMeter.setBounds (toolbar.removeFromRight (64));
