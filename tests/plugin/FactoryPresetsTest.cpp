@@ -274,6 +274,18 @@ TEST_CASE ("The Factory library has the Utility and Drums Presets")
         CHECK (names.contains (named (name)));
 }
 
+TEST_CASE ("The Factory library has the Guitar, Keys, Synth and Orchestral Presets")
+{
+    juce::StringArray names;
+    for (const auto& preset : PresetLibrary::factoryPresets())
+        names.add (preset.name);
+    for (const auto* name : { "Guitar \xe2\x80\x93 Acoustic Body & Sparkle", "Guitar \xe2\x80\x93 Acoustic Boom Control",
+                              "Guitar \xe2\x80\x93 Electric Cut Through", "Guitar \xe2\x80\x93 Electric Fizz Tamer", "Keys \xe2\x80\x93 Piano Bright",
+                              "Keys \xe2\x80\x93 Piano Mud Cut", "Keys \xe2\x80\x93 Rhodes Warmth", "Synth \xe2\x80\x93 Pad Make Room",
+                              "Synth \xe2\x80\x93 Lead Bite", "Orchestral \xe2\x80\x93 Strings Smooth", "Orchestral \xe2\x80\x93 Brass Tame Blare" })
+        CHECK (names.contains (named (name)));
+}
+
 TEST_CASE ("The Factory gate rejects a name outside the scheme")
 {
     CHECK (namingProblem (preset ("Default")) == "");
