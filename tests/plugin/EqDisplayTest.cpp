@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "DisplayRangeChip.h"
 #include "Parameters.h"
 #include "staple/Tokens.h"
 
@@ -197,4 +198,46 @@ TEST_CASE ("Hovering a Band's handle lights its curve and fill, and they fade ba
     host.display.mouseExit (host.mouseEvent ({ 1.0f, 1.0f }, {}, { 1.0f, 1.0f }));
     host.settle (400);
     CHECK_THAT (blue(), Catch::Matchers::WithinAbs (resting, 0.01));
+}
+
+TEST_CASE ("The Display Range chip reads the range, sets it from its menu, follows auto-zoom, and is named Display Range")
+{
+    OpenEditor host;
+    const juce::String pm = juce::String::charToString (0x00B1);
+    auto* chip = harness::findChild<eq1::DisplayRangeChip> (*host.editor);
+    REQUIRE (chip != nullptr);
+    CHECK (chip->getButtonText() == pm + "12 dB");
+    auto* handler = chip->getAccessibilityHandler();
+    REQUIRE (handler != nullptr);
+    CHECK (handler->getTitle() == "Display Range");
+    CHECK (handler->getValueInterface()->getCurrentValueAsString() == pm + "12 dB");
+    // Top right of the display, 6 px in and 8 px down, 24 px tall.
+    const auto display = host.display.getBoundsInParent();
+    CHECK (chip->getRight() == display.getRight() - 6);
+    CHECK (chip->getY() == display.getY() + 8);
+    CHECK (chip->getHeight() == 24);
+
+    // Its menu: the three ranges, the current one ticked; picking one sets it.
+    const auto menu = chip->menu();
+    std::vector<juce::String> items;
+    for (juce::PopupMenu::MenuItemIterator it (menu); it.next();)
+    {
+        auto& item = it.getItem();
+        items.push_back (item.text);
+        CHECK (item.isTicked == (item.text == pm + "12 dB"));
+        if (item.text == pm + "30 dB")
+            item.action();
+    }
+    CHECK (items == std::vector<juce::String> { pm + "6 dB", pm + "12 dB", pm + "30 dB" });
+    CHECK (host.processor.displayRangeDb() == 30);
+    host.settle (300);
+    CHECK (chip->getButtonText() == pm + "30 dB");
+
+    // Auto-zoom shows on it too.
+    host.processor.setDisplayRangeDb (6);
+    host.settle (300);
+    CHECK (chip->getButtonText() == pm + "6 dB");
+    host.addBand (1, 1000.0f, 10.0f);
+    host.settle (300);
+    CHECK (chip->getButtonText() == pm + "12 dB");
 }

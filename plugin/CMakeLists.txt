@@ -50,6 +50,7 @@ target_sources(eq1 PRIVATE
     display/GridLayer.cpp
     display/HandlesLayer.cpp
     DisplayRange.cpp
+    DisplayRangeChip.cpp
     EditHistory.cpp
     ABCompare.cpp
     PresetSettings.cpp

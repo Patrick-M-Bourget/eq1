@@ -778,7 +778,7 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
         }
     };
     visit (*editor);
-    CHECK (found >= 20);
+    CHECK (found >= 19);
 
     auto* display = harness::findChild<eq1::EqDisplay> (*editor);
     auto* panel = harness::findChild<eq1::BandPanel> (*editor);

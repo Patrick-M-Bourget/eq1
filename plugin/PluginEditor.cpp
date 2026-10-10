@@ -12,7 +12,7 @@ namespace layout = staple::tokens::layout;
 
 PluginEditor::PluginEditor (PluginProcessor& p)
     : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), header (p),
-      footer (p), meter (p), keyboard (p.editHistory())
+      footer (p), displayRange (p), meter (p), keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
     content.addAndMakeVisible (display);
@@ -22,16 +22,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     content.addAndMakeVisible (header);
     content.addAndMakeVisible (footer);
 
-    // The display's Gain range, saved with the plugin.
-    for (int range : { 6, 12, 30 })
-        displayRange.addItem ("+/- " + juce::String (range) + " dB", range);
-    displayRange.setName ("Display Range");
-    displayRange.setTitle ("Display Range");
-    displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
-    displayRange.onChange = [this] {
-        eqProcessor.setDisplayRangeDb (displayRange.getSelectedId());
-        display.repaint();
-    };
+    // The display's Gain range, saved with the plugin; the display follows it on its timer.
     content.addAndMakeVisible (displayRange);
     content.addChildComponent (header.presets().browserPanel());
 
@@ -119,10 +110,6 @@ bool PluginEditor::keyPressed (const juce::KeyPress& key)
 void PluginEditor::timerCallback()
 {
     header.showUndoState();
-    // Follows settings restored with the plugin's state.
-    if (displayRange.getSelectedId() != eqProcessor.displayRangeDb())
-        displayRange.setName ("Display Range");
-    displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
     if (meter.isVisible() != eqProcessor.isOutputMeterShown())
     {
         footer.showMeterShown (eqProcessor.isOutputMeterShown());
@@ -186,8 +173,9 @@ void PluginEditor::resized()
 
     // Over the display: Display Range at its top right, the Band panel centred along its bottom, and
     // the Preset browser.
-    constexpr int displayRangeWidth = 110, displayRangeHeight = 24, panelHeight = 170;
-    displayRange.setBounds (area.getRight() - 6 - displayRangeWidth, area.getY() + 8, displayRangeWidth, displayRangeHeight);
+    constexpr int displayRangeRight = 6, displayRangeTop = 8, displayRangeHeight = 24, panelHeight = 170;
+    const int displayRangeWidth = displayRange.getIdealWidth();
+    displayRange.setBounds (area.getRight() - displayRangeRight - displayRangeWidth, area.getY() + displayRangeTop, displayRangeWidth, displayRangeHeight);
     panel.setBounds (area.reduced (layout::bandPanelPaddingSide, 0)
                          .withTrimmedBottom (layout::bandPanelAboveBottom)
                          .removeFromBottom (panelHeight));
