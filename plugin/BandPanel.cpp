@@ -167,13 +167,14 @@ void BandPanel::SlopeButton::mouseUp (const juce::MouseEvent& e)
         gesture.reset();
         return;
     }
-    if (isEnabled() && ! e.mods.isPopupMenu() && ! e.mouseWasDraggedSinceMouseDown())
+    // A double-click's second release leaves the list its first one opened.
+    if (isEnabled() && ! e.mods.isPopupMenu() && e.getNumberOfClicks() == 1 && ! e.mouseWasDraggedSinceMouseDown())
         openList();
 }
 
 bool BandPanel::SlopeButton::keyPressed (const juce::KeyPress& key)
 {
-    if (key != juce::KeyPress::spaceKey && key != juce::KeyPress::returnKey)
+    if (! isEnabled() || (key != juce::KeyPress::spaceKey && key != juce::KeyPress::returnKey))
         return staple::Knob::keyPressed (key);
     openList();
     return true;
