@@ -124,3 +124,19 @@ TEST_CASE ("Copy then Paste in another instance recreates the Bands with every s
         CHECK_THAT (to.value ("band3_" + juce::String (control)), WithinRel (from.value ("band2_" + juce::String (control)), 1.0e-5f));
     }
 }
+
+TEST_CASE ("A copied selection's clipboard text holds its Bands' stored settings, in the selection's order")
+{
+    Host host (50.0f);
+    REQUIRE (host.editing.paste ({ bandAt (80.0), everySettingChanged(), bandAt (900.0) }) == std::vector<int> { 1, 2, 3 });
+
+    const auto copied = eq1::clipboardBands (eq1::copiedText (host.editing, { 3, 2 }));
+    REQUIRE (copied.size() == 2);
+    CHECK_THAT (copied[0].frequency, WithinRel (900.0, 1.0e-5));
+    CHECK (copied[0].shape == eq1::Shape::Bell);
+    CHECK_THAT (copied[1].frequency, WithinRel (2500.0, 1.0e-5));
+    CHECK (copied[1].shape == eq1::Shape::HighShelf);
+    CHECK (copied[1].placement == eq1::StereoPlacement::Side);
+    CHECK_THAT (copied[1].gain, WithinRel (-7.5, 1.0e-5)); // stored, not heard at 50%
+    CHECK (eq1::copiedText (host.editing, {}) == eq1::captureBands ({}).toXmlString());
+}

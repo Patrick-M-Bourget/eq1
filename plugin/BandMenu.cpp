@@ -124,12 +124,7 @@ juce::PopupMenu BandMenu::build() const
         menu.addSubMenu ("Stereo Placement", placements, stereoPlacementAvailable);
 
         menu.addSeparator();
-        const auto copy = [&edit, slots, toClipboard = copyToClipboard] {
-            std::vector<BandSettings> copied;
-            for (int slot : slots)
-                copied.push_back (edit.band (slot));
-            toClipboard (captureBands (copied).toXmlString());
-        };
+        const auto copy = [&edit, slots, toClipboard = copyToClipboard] { toClipboard (copiedText (edit, slots)); };
         menu.addItem ("Cut", [copy, deleteBands = deleteSelection] {
             copy();
             deleteBands();

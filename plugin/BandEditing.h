@@ -104,6 +104,8 @@ public:
     Settings settings() const;
 
 private:
+    // The free Band Slots, lowest first: the one place add, split and Paste find where a new Band goes.
+    std::vector<int> lowestFreeSlots() const;
     juce::RangedAudioParameter& parameter (const juce::String& id) const;
     // Sets a parameter to a plain value, within its range, as one gesture.
     void set (const juce::String& id, double value);
