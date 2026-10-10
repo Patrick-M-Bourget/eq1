@@ -1,6 +1,7 @@
 #include "OutputMeter.h"
 
 #include "PluginProcessor.h"
+#include "staple/Tokens.h"
 
 namespace eq1
 {
@@ -66,7 +67,7 @@ void OutputMeter::timerCallback()
 
 void OutputMeter::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff101216));
+    g.fillAll (staple::tokens::colour::bg0);
     auto area = getLocalBounds().toFloat().reduced (margin);
     const auto lights = area.removeFromTop (clipLightHeight);
     area.removeFromTop (margin);
@@ -75,7 +76,7 @@ void OutputMeter::paint (juce::Graphics& g)
     // A tick every 6 dB, 0 dBFS marked.
     for (double db = bottomDb; db <= topDb; db += tickStepDb)
     {
-        g.setColour (juce::exactlyEqual (db, 0.0) ? juce::Colour (0x80ffffff) : juce::Colour (0x20ffffff));
+        g.setColour (juce::exactlyEqual (db, 0.0) ? staple::tokens::colour::text3 : staple::tokens::colour::line2);
         g.drawHorizontalLine (juce::roundToInt (yOf (db)), area.getX(), area.getRight());
     }
 
@@ -89,17 +90,17 @@ void OutputMeter::paint (juce::Graphics& g)
         const float x = area.getX() + static_cast<float> (ch) * (width + gap);
         const auto bar = juce::Rectangle<float> (x, area.getY(), width, area.getHeight());
 
-        g.setColour (juce::Colour (0x40a0d8ff));
+        g.setColour (staple::tokens::colour::meter1.withAlpha (0.35f));
         g.fillRect (bar.withTop (yOf (channel.peakDb())));
-        g.setColour (juce::Colour (0xc02f8fd0));
+        g.setColour (staple::tokens::colour::meter1);
         g.fillRect (bar.withTop (yOf (channel.rmsDb())));
         if (channel.heldPeakDb() > bottomDb)
         {
-            g.setColour (juce::Colour (0xe0ffffff));
+            g.setColour (staple::tokens::colour::text1);
             g.fillRect (bar.withTop (yOf (channel.heldPeakDb()) - 1.0f).withHeight (2.0f));
         }
 
-        g.setColour (processor.isClipLit (ch) ? juce::Colour (0xffe04040) : juce::Colour (0xff3a2224));
+        g.setColour (processor.isClipLit (ch) ? staple::tokens::colour::meterClip : staple::tokens::colour::stateOffBg);
         g.fillRect (lights.withX (x).withWidth (width));
     }
 }
