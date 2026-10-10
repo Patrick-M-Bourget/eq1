@@ -40,7 +40,8 @@ bool KeyboardControl::keyPressed (const juce::KeyPress& key, juce::Component* or
     const bool arrow = code == juce::KeyPress::upKey || code == juce::KeyPress::downKey || code == juce::KeyPress::leftKey
                        || code == juce::KeyPress::rightKey;
     const bool press = code == juce::KeyPress::spaceKey || code == juce::KeyPress::returnKey;
-    if (arrow || press || code == juce::KeyPress::tabKey)
+    // In a text field the arrows, Space and Return are typing, not moving around the editor.
+    if (code == juce::KeyPress::tabKey || ((arrow || press) && dynamic_cast<juce::TextEditor*> (origin) == nullptr))
         staple::LookAndFeel::keyUsed (*origin);
 
     const bool plain = ! key.getModifiers().isAnyModifierKeyDown();
