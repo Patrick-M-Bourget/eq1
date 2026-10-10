@@ -102,8 +102,8 @@ TEST_CASE ("The Band menu lists its actions in groups on a selection, and only P
     CHECK (textsOf (host.menu ({ 1 })) == onBands);
     CHECK (textsOf (submenu (host.menu ({ 1 }), "Shape")) == std::vector<juce::String> (eq1::parameters::shapeNames().begin(), eq1::parameters::shapeNames().end()));
     CHECK (textsOf (submenu (host.menu ({ 1 }), "Slope"))
-           == std::vector<juce::String> { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "36 dB/oct", "48 dB/oct", "72 dB/oct",
-                                          "96 dB/oct", "Brickwall" });
+           == std::vector<juce::String> { "6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "30 dB/oct", "36 dB/oct", "48 dB/oct",
+                                          "72 dB/oct", "96 dB/oct", "Brickwall" });
     CHECK (textsOf (submenu (host.menu ({ 1 }), "Stereo Placement"))
            == std::vector<juce::String> (eq1::parameters::placementNames().begin(), eq1::parameters::placementNames().end()));
 
@@ -150,6 +150,8 @@ TEST_CASE ("Band menu items act on the whole selection, each as one undo step")
     CHECK_FALSE (item (host.menu ({ 1, 2 }), "Clear Dynamics").isEnabled);
     item (host.menu ({ 1, 2 }), "24 dB/oct").action();
     CHECK (host.value (2, "slope") == 24.0f);
+    item (host.menu ({ 1, 2 }), "30 dB/oct").action();
+    CHECK (host.value (2, "slope") == 30.0f);
     item (host.menu ({ 1, 2 }), "Brickwall").action();
     CHECK (host.value (2, "brickwall") == 1.0f);
     item (host.menu ({ 1, 2 }), "High Shelf").action();
@@ -158,7 +160,7 @@ TEST_CASE ("Band menu items act on the whole selection, each as one undo step")
     item (host.menu ({ 1, 2 }), "Mid").action();
     CHECK (host.value (1, "placement") == 3.0f);
     CHECK (host.value (2, "placement") == 3.0f);
-    CHECK (history.undoSteps() == 6);
+    CHECK (history.undoSteps() == 7);
 }
 
 TEST_CASE ("Band menu items that apply to no selected Band are unavailable")
@@ -204,7 +206,13 @@ TEST_CASE ("Band menu submenus tick a value only when every selected Band it app
     CHECK (ticked (submenu (host.menu ({ 2 }), "Shape")) == std::vector<juce::String> { "High Shelf" });
 
     // A Slope between the listed values ticks none.
+    host.set (2, "slope", 33.0f);
+    CHECK (ticked (submenu (host.menu ({ 1, 2 }), "Slope")).empty());
+    // 30 dB/oct is listed: ticked when every selected Band is at exactly 30.
+    host.set (1, "slope", 30.0f);
     host.set (2, "slope", 30.0f);
+    CHECK (ticked (submenu (host.menu ({ 1, 2 }), "Slope")) == std::vector<juce::String> { "30 dB/oct" });
+    host.set (2, "slope", 30.5f);
     CHECK (ticked (submenu (host.menu ({ 1, 2 }), "Slope")).empty());
 
     // Brickwall when every selected Cut has it; a Brickwall Cut no longer has its dB/oct value.

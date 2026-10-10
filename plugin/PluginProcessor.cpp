@@ -7,13 +7,14 @@
 namespace eq1
 {
 
-PluginProcessor::PluginProcessor()
+PluginProcessor::PluginProcessor (juce::File userSettingsFile)
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withInput ("Sidechain", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "eq1", parameters::createLayout()),
-      output (eq1::parameters::OutputValues::of (parameters))
+      output (eq1::parameters::OutputValues::of (parameters)),
+      userSettings (std::move (userSettingsFile))
 {
     for (int slot = 1; slot <= numBandSlots; ++slot)
         slots[static_cast<size_t> (slot - 1)] = eq1::parameters::SlotValues::of (parameters, slot);
@@ -23,6 +24,7 @@ PluginProcessor::PluginProcessor()
 void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock)
 {
     engine.prepare (sampleRate, maximumExpectedSamplesPerBlock, getTotalNumOutputChannels());
+    processedAudio.store (false, std::memory_order_relaxed);
 }
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -54,6 +56,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     const ConstAudioBlock sidechain { sidechainBuffer.getArrayOfReadPointers(), sidechainBuffer.getNumChannels(), sidechainBuffer.getNumSamples() };
     engine.process ({ main.getArrayOfWritePointers(), main.getNumChannels(), main.getNumSamples() },
                     sidechain.numChannels > 0 ? &sidechain : nullptr);
+    processedAudio.store (true, std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* PluginProcessor::createEditor()
@@ -63,7 +66,8 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 
 namespace
 {
-const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" }, outputMeterShownProperty { "outputMeterShown" };
+const juce::Identifier versionProperty { "version" }, displayRangeProperty { "displayRangeDb" }, outputMeterShownProperty { "outputMeterShown" },
+    editorWidthProperty { "editorWidth" }, editorHeightProperty { "editorHeight" }, uiScaleProperty { "uiScalePercent" };
 
 // Brings a saved state from an older version up to stateVersion, one version at a time.
 void migrate (juce::ValueTree& state)
@@ -155,6 +159,30 @@ void PluginProcessor::setDisplayRangeDb (int rangeDb)
     displayRange = rangeDb == 6 || rangeDb == 30 ? rangeDb : 12;
 }
 
+void PluginProcessor::setEditorSize (juce::Point<int> logical)
+{
+    if (logical.x > 0 && logical.y > 0)
+    {
+        editorWidth = logical.x;
+        editorHeight = logical.y;
+    }
+}
+
+int PluginProcessor::uiScalePercent()
+{
+    if (uiScale.load() == 0)
+        uiScale = userSettings.uiScalePercent();
+    return uiScale.load();
+}
+
+void PluginProcessor::pickUiScale (int percent)
+{
+    if (! uiScale::isOffered (percent))
+        return;
+    uiScale = percent;
+    userSettings.setUiScalePercent (percent);
+}
+
 HeardGains PluginProcessor::currentHeardGains() const
 {
     Settings settings;
@@ -195,6 +223,10 @@ void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty (versionProperty, stateVersion, nullptr);
     state.setProperty (displayRangeProperty, displayRangeDb(), nullptr);
     state.setProperty (outputMeterShownProperty, isOutputMeterShown(), nullptr);
+    state.setProperty (editorWidthProperty, editorWidth.load(), nullptr);
+    state.setProperty (editorHeightProperty, editorHeight.load(), nullptr);
+    if (const int percent = uiScale.load(); percent != 0)
+        state.setProperty (uiScaleProperty, percent, nullptr);
     state.appendChild (toTree (analyzerSettings()), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -216,6 +248,12 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         // Shown in a session saved before the Output Meter.
         setOutputMeterShown (state.getProperty (outputMeterShownProperty, true));
         state.removeProperty (outputMeterShownProperty, nullptr);
+        // A session saved before them opens like a new instance.
+        setEditorSize ({ state.getProperty (editorWidthProperty, newEditorWidth), state.getProperty (editorHeightProperty, newEditorHeight) });
+        const int percent = state.getProperty (uiScaleProperty, 0);
+        uiScale = uiScale::isOffered (percent) ? percent : 0;
+        for (const auto& property : { editorWidthProperty, editorHeightProperty, uiScaleProperty })
+            state.removeProperty (property, nullptr);
         if (auto saved = state.getChildWithName (analyzerType); saved.isValid())
         {
             setAnalyzerSettings (fromTree (saved));
@@ -237,5 +275,5 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new eq1::PluginProcessor();
+    return new eq1::PluginProcessor (eq1::UserSettings::defaultFile());
 }

@@ -41,22 +41,6 @@ juce::ValueTree presetWith (const std::initializer_list<std::pair<const char*, f
     return maker.processor.presetState();
 }
 
-// The buttons in an editor showing text.
-std::vector<juce::Button*> buttonsShowing (juce::Component& editor, const juce::String& text)
-{
-    std::vector<juce::Button*> found;
-    std::function<void (juce::Component&)> visit = [&] (juce::Component& component) {
-        for (auto* child : component.getChildren())
-        {
-            if (auto* button = dynamic_cast<juce::Button*> (child); button != nullptr && button->getButtonText() == text)
-                found.push_back (button);
-            visit (*child);
-        }
-    };
-    visit (editor);
-    return found;
-}
-
 std::unique_ptr<juce::XmlElement> fixture (const char* name)
 {
     auto xml = juce::XmlDocument::parse (juce::File (EQ1_TEST_FIXTURES).getChildFile (name));
@@ -272,7 +256,7 @@ TEST_CASE ("Undo of a Preset load puts back the side's previous Loaded Preset, o
     CHECK_FALSE (host.processor.isLoadedPresetModified());
 }
 
-TEST_CASE ("Copy A to B, and B's first selection, give B A's Loaded Preset and Modified state")
+TEST_CASE ("Copy to the other side, and B's first selection, give the other side the Loaded Preset and Modified state")
 {
     const auto vocal = presetWith ({ { "band2_in_use", 1.0f } });
     const auto kick = presetWith ({ { "band1_in_use", 1.0f } });
@@ -280,24 +264,22 @@ TEST_CASE ("Copy A to B, and B's first selection, give B A's Loaded Preset and M
     const auto how = GENERATE (Catch::Generators::as<std::string> {}, "first selection", "copy from A", "copy from B");
     CAPTURE (modified, how);
     Host host;
+    // The side copied from holds Vocal; the other side Kick, until the copy.
+    const auto from = how == "copy from B" ? CompareSide::B : CompareSide::A;
+    const auto to = from == CompareSide::A ? CompareSide::B : CompareSide::A;
     if (how != "first selection")
     {
-        host.processor.selectCompareSide (CompareSide::B);
+        host.processor.selectCompareSide (to);
         host.processor.loadPreset (kick, "Kick");
-        host.processor.selectCompareSide (CompareSide::A);
     }
+    host.processor.selectCompareSide (from);
     host.processor.loadPreset (vocal, "Vocal");
     if (modified)
         host.edit ("band2_gain", 4.0f);
 
-    if (how == "copy from A")
-        host.processor.copyAToB();
-    else if (how == "copy from B")
-    {
-        host.processor.selectCompareSide (CompareSide::B);
-        host.processor.copyAToB();
-    }
-    host.processor.selectCompareSide (CompareSide::B);
+    if (how != "first selection")
+        host.processor.copyToOther();
+    host.processor.selectCompareSide (to);
     CHECK (host.processor.loadedPresetName() == "Vocal");
     CHECK (host.processor.isLoadedPresetModified() == modified);
 }
@@ -324,20 +306,3 @@ TEST_CASE ("Settings saved as a Preset make it the side's Loaded Preset, unmodif
     CHECK (host.processor.isLoadedPresetModified());
 }
 
-TEST_CASE ("The Presets button shows the Loaded Preset's name, followed by * when Modified, or Presets for none")
-{
-    const juce::String name = "Warm Vocal Presence With Air";
-    Host host;
-    const auto presetsButton = [&] (const juce::String& text) {
-        std::unique_ptr<juce::AudioProcessorEditor> editor (host.processor.createEditor());
-        const auto found = buttonsShowing (*editor, text);
-        REQUIRE (found.size() == 1);
-        CHECK (found.front()->getTooltip() == (text == "Presets" ? juce::String() : name));
-    };
-    presetsButton ("Presets");
-
-    host.processor.loadPreset (presetWith ({ { "band2_in_use", 1.0f } }), name);
-    presetsButton (name);
-    host.edit ("band2_gain", 2.0f);
-    presetsButton (name + "*");
-}

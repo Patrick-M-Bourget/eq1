@@ -4,6 +4,7 @@
 #include "Tokens.h"
 
 #include <cmath>
+#include <utility>
 
 namespace staple
 {
@@ -19,14 +20,6 @@ constexpr float defaultLabelHeight = 15.0f;
 
 // The column at the left of a menu item for its tick or icon, and the padding either side.
 constexpr float menuTickColumn = 16.0f, menuItemPadding = 10.0f;
-
-// Hover and press light a fill up: an opaque colour brightens, a translucent one (fill1, fill2) grows
-// more opaque, which is what brightening it over the dark background looks like.
-juce::Colour lit (juce::Colour colour, bool highlighted, bool down)
-{
-    const float factor = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
-    return colour.isOpaque() ? colour.withMultipliedBrightness (factor) : colour.withMultipliedAlpha (factor);
-}
 
 float enabledAlpha (const juce::Component& component)
 {
@@ -45,6 +38,12 @@ Weight weightOf (const juce::Font& font)
     return Weight::regular;
 }
 } // namespace
+
+juce::Colour LookAndFeel::lit (juce::Colour colour, bool highlighted, bool down)
+{
+    const float factor = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
+    return colour.isOpaque() ? colour.withMultipliedBrightness (factor) : colour.withMultipliedAlpha (factor);
+}
 
 LookAndFeel::LookAndFeel()
     : juce::LookAndFeel_V4 ({ colour::bg0, colour::fill1, colour::menu, colour::line2, colour::text1, colour::fill3,
@@ -289,7 +288,8 @@ void LookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<in
     g.drawFittedText (text, row.toNearestInt(), juce::Justification::centredLeft, 1);
 }
 
-void LookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator, int, int& idealWidth, int& idealHeight)
+void LookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSeparator, int standardMenuItemHeight, int& idealWidth,
+                                              int& idealHeight)
 {
     if (isSeparator)
     {
@@ -297,7 +297,8 @@ void LookAndFeel::getIdealPopupMenuItemSize (const juce::String& text, bool isSe
         idealHeight = 1 + 2 * tokens::layout::menuSeparatorMargin;
         return;
     }
-    idealHeight = tokens::layout::menuItemHeight;
+    // A menu may ask for its own row height (the Display Range chip's 26 px).
+    idealHeight = standardMenuItemHeight > 0 ? standardMenuItemHeight : tokens::layout::menuItemHeight;
     // Room for the tick column, padding either side, and a submenu chevron or shortcut.
     idealWidth = juce::roundToInt (juce::GlyphArrangement::getStringWidth (getPopupMenuFont(), text) + menuTickColumn
                                    + 2.0f * menuItemPadding + 24.0f);
@@ -494,6 +495,8 @@ std::unique_ptr<juce::FocusOutline> LookAndFeel::createFocusOutlineForComponent 
 {
     struct Ring final : public juce::FocusOutline::OutlineWindowProperties
     {
+        explicit Ring (const LookAndFeel& owner) : lookAndFeel (owner) {}
+
         juce::Rectangle<int> getOutlineBounds (juce::Component& component) override
         {
             return component.getScreenBounds().expanded (static_cast<int> (size::focusOffset + size::focusWidth));
@@ -501,12 +504,31 @@ std::unique_ptr<juce::FocusOutline> LookAndFeel::createFocusOutlineForComponent 
 
         void drawOutline (juce::Graphics& g, int width, int height) override
         {
+            if (! lookAndFeel.isFocusRingShown())
+                return;
             const auto ring = juce::Rectangle<int> (width, height).toFloat().reduced (size::focusWidth / 2.0f);
             g.setColour (colour::focus);
             g.drawRoundedRectangle (ring, size::r2 + size::focusOffset + size::focusWidth / 2.0f, size::focusWidth);
         }
+
+        const LookAndFeel& lookAndFeel;
     };
-    return std::make_unique<juce::FocusOutline> (std::make_unique<Ring>());
+    return std::make_unique<juce::FocusOutline> (std::make_unique<Ring> (*this));
+}
+
+void LookAndFeel::showFocusRing (bool shown)
+{
+    if (std::exchange (focusRingShown, shown) == shown)
+        return;
+    // The ring is drawn over the focused component's parent, around it.
+    if (auto* focused = juce::Component::getCurrentlyFocusedComponent(); focused != nullptr && focused->getParentComponent() != nullptr)
+        focused->getParentComponent()->repaint (focused->getBounds().expanded (static_cast<int> (size::focusOffset + size::focusWidth)));
+}
+
+void LookAndFeel::keyUsed (juce::Component& component)
+{
+    if (auto* lookAndFeel = dynamic_cast<LookAndFeel*> (&component.getLookAndFeel()))
+        lookAndFeel->showFocusRing (true);
 }
 
 } // namespace staple

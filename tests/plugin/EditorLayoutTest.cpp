@@ -1,0 +1,116 @@
+#include "BandPanel.h"
+#include "EditorHarness.h"
+#include "FooterBar.h"
+#include "HeaderBar.h"
+#include "OutputMeter.h"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+
+#include <memory>
+
+using harness::findChild;
+
+namespace
+{
+
+// The editor's areas, in the editor's own pixels.
+struct Areas
+{
+    juce::Rectangle<int> header, display, meter, footer;
+    bool meterShown;
+};
+
+Areas areasOf (juce::AudioProcessorEditor& editor)
+{
+    const auto in = [&editor] (juce::Component* c) {
+        REQUIRE (c != nullptr);
+        return editor.getLocalArea (c->getParentComponent(), c->getBounds());
+    };
+    auto* meter = findChild<eq1::OutputMeter> (editor);
+    return { in (findChild<eq1::HeaderBar> (editor)), in (findChild<eq1::EqDisplay> (editor)), in (meter),
+             in (findChild<eq1::FooterBar> (editor)), meter->isVisible() };
+}
+
+} // namespace
+
+TEST_CASE ("The window is a 52 px header, the display with the meter's 40 px rail, and a 44 px footer, and only the display resizes")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    REQUIRE (editor->getWidth() == 1200);
+    REQUIRE (editor->getHeight() == 760);
+
+    // 14 px padding and 12 px gaps; the display runs flush to the window's left edge.
+    auto areas = areasOf (*editor);
+    CHECK (areas.header == juce::Rectangle<int> (14, 14, 1172, 52));
+    CHECK (areas.display == juce::Rectangle<int> (0, 78, 1134, 612));
+    CHECK (areas.meterShown);
+    CHECK (areas.meter == juce::Rectangle<int> (1146, 78, 40, 612));
+    CHECK (areas.footer == juce::Rectangle<int> (14, 702, 1172, 44));
+
+    // Larger: the header and footer keep their height and the rail its width.
+    editor->setSize (1500, 900);
+    areas = areasOf (*editor);
+    CHECK (areas.header == juce::Rectangle<int> (14, 14, 1472, 52));
+    CHECK (areas.display == juce::Rectangle<int> (0, 78, 1434, 752));
+    CHECK (areas.meter == juce::Rectangle<int> (1446, 78, 40, 752));
+    CHECK (areas.footer == juce::Rectangle<int> (14, 842, 1472, 44));
+
+    // With the meter hidden the display takes its rail and gap.
+    editor->setSize (1200, 760);
+    processor.setOutputMeterShown (false);
+    editor->resized();
+    areas = areasOf (*editor);
+    CHECK_FALSE (areas.meterShown);
+    CHECK (areas.display == juce::Rectangle<int> (0, 78, 1186, 612));
+}
+
+TEST_CASE ("The Band panel floats over the display's bottom, centred, 36 px above it, at every size and UI Scale, and takes clicks on its slab and bell only")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    auto* display = findChild<eq1::EqDisplay> (*editor);
+    auto* panel = findChild<eq1::BandPanel> (*editor);
+    auto* scaleMenu = findChild<eq1::UiScaleMenu> (*editor);
+    REQUIRE (display != nullptr);
+    REQUIRE (panel != nullptr);
+    REQUIRE (scaleMenu != nullptr);
+    editor->setVisible (true); // as a host shows it, so it takes clicks
+    auto& band = *processor.parameterState().getParameter ("band1_in_use");
+    band.setValueNotifyingHost (1.0f);
+    panel->show (1);
+
+    const int percent = GENERATE (75, 100, 200);
+    CAPTURE (percent);
+    scaleMenu->pick (percent);
+    const auto scaled = [percent] (int logical) { return juce::roundToInt (logical * percent / 100.0); };
+    for (const auto size : { juce::Point<int> (1200, 760), juce::Point<int> (960, 600), juce::Point<int> (1700, 1000) })
+    {
+        CAPTURE (size.x, size.y);
+        editor->setSize (scaled (size.x), scaled (size.y));
+        // In the display's own pixels: it and the panel share a parent. Its size never changes.
+        CHECK (panel->getBottom() == display->getBottom() - 36);
+        CHECK (std::abs ((panel->getX() - display->getX()) - (display->getRight() - panel->getRight())) <= 1);
+        CHECK (panel->getWidth() == 492);
+        CHECK (panel->getHeight() == 137);
+
+        // A click on the slab or the bell's peak lands on it, never on the display under it; one beside
+        // the bell, above the slab, reaches the display.
+        const auto inEditor = [&] (int x, int y) { return editor->getLocalPoint (panel, juce::Point<int> (x, y)); };
+        for (const auto point : { inEditor (246, 80), inEditor (246, 3), inEditor (4, 133), inEditor (488, 40) })
+        {
+            CAPTURE (point.x, point.y);
+            auto* hit = editor->getComponentAt (point);
+            REQUIRE (hit != nullptr);
+            CHECK ((hit == panel || panel->isParentOf (hit)));
+        }
+        for (const auto point : { inEditor (20, 10), inEditor (470, 10) })
+        {
+            CAPTURE (point.x, point.y);
+            CHECK (editor->getComponentAt (point) == display);
+        }
+    }
+}

@@ -41,9 +41,19 @@ target_sources(eq1 PRIVATE
     BandEditing.cpp
     BandMenu.cpp
     BandPanel.cpp
-    DetectionArc.cpp
+    DetectionRangeBar.cpp
+    DynamicRangeRing.cpp
+    DynamicsSection.cpp
     EqDisplay.cpp
+    display/AnalyzerLayer.cpp
+    display/CurvesLayer.cpp
+    display/DisplayGeometry.cpp
+    display/EdgeFadeLayer.cpp
+    display/GhostLayer.cpp
+    display/GridLayer.cpp
+    display/HandlesLayer.cpp
     DisplayRange.cpp
+    DisplayRangeChip.cpp
     EditHistory.cpp
     ABCompare.cpp
     PresetSettings.cpp
@@ -51,13 +61,28 @@ target_sources(eq1 PRIVATE
     PresetLibrary.cpp
     PresetBar.cpp
     PresetBrowser.cpp
-    OutputPanel.cpp
+    OutputPopover.cpp
+    HeaderBar.cpp
+    AnalyzerPopover.cpp
+    FooterBar.cpp
     OutputMeter.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp
     staple/Fonts.cpp
     staple/Icons.cpp
-    staple/LookAndFeel.cpp)
+    staple/LookAndFeel.cpp
+    Accessibility.cpp
+    staple/controls/EdgeSelector.cpp
+    staple/controls/IconButton.cpp
+    staple/controls/Knob.cpp
+    staple/controls/KnobTooltip.cpp
+    staple/controls/Overlay.cpp
+    staple/controls/ParseValue.cpp
+    staple/controls/Popover.cpp
+    staple/controls/TextChip.cpp
+    KeyboardSlider.cpp
+    KeyboardControl.cpp
+    UserSettings.cpp)
 
 # The Factory Presets, bundled into the plugin.
 juce_add_binary_data(eq1_factory_presets

@@ -5,6 +5,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
+#include <memory>
 
 namespace eq1
 {
@@ -33,21 +34,36 @@ private:
 };
 
 // The Output Meter: a bar per channel of the Output Level, with a Clip Light above each. Clicking
-// either Clip Light puts out both. Read and repainted at 60 Hz, like the EQ display.
+// either Clip Light, or Space or Return while the meter has keyboard focus, puts out both. Read and
+// repainted at 60 Hz, like the EQ display. A screen reader reads each Clip Light as a button, "Clip
+// Light Left" and "Clip Light Right" ("Clip Light" on mono), "Lit" or "Off"; pressing either puts out
+// both.
 class OutputMeter final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
 {
 public:
     explicit OutputMeter (PluginProcessor& processor);
+    ~OutputMeter() override;
 
     // Where a level sits on the scale, 0 at -60 dBFS and below to 1 at +6 dBFS and above, linear in dB.
     static double position (double db);
 
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
+    bool keyPressed (const juce::KeyPress& key) override;
+    void resized() override;
 
 private:
     void timerCallback() override;
+    // Where clicks put out the Clip Lights: over both, at least 10 px tall.
     juce::Rectangle<float> clipLightArea() const;
+    // Where the bars run, from -60 dBFS at the bottom to +6 dBFS at the top, across the rail.
+    juce::Rectangle<float> barsArea() const;
+    // Where channel's bar is drawn across, left to right.
+    juce::Range<float> columnOf (int channel) const;
+    void clearClipLights();
+    class ClipLight;
+    std::array<std::unique_ptr<ClipLight>, 2> clipLights;
+    void placeClipLights();
 
     PluginProcessor& processor;
     std::array<OutputMeterChannel, 2> channels;

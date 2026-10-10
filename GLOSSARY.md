@@ -66,6 +66,10 @@ _Avoid_: Dynamic filter, compressor band
 The signed amount, in dB, by which a Dynamic Band's Live Gain can move away from its Gain.
 _Avoid_: Depth, range, ratio
 
+**Dynamic Range Handle**:
+The ▲▼ marker on the EQ display at a Band's Gain plus Dynamic Range, dragged to set its Dynamic Range; the Band panel sets the same value with the ring around its Gain knob.
+_Avoid_: Range handle, Dynamic Range (when meaning the marker)
+
 **Live Gain**:
 The Gain a Dynamic Band is applying at this moment, between its Gain and its Gain plus Dynamic Range.
 _Avoid_: Current gain, dynamic gain, Gain (when meaning the moving value)
@@ -137,6 +141,10 @@ _Avoid_: Freeze, max hold
 **Display Range**:
 How many dB above and below 0 dB the EQ display shows Gain over; it changes the view, never the sound.
 _Avoid_: Zoom, range (unqualified), scale
+
+**UI Scale**:
+How large the whole editor is drawn, 75 to 200%, per instance; it changes the view, never the sound.
+_Avoid_: Zoom, size, Display Range
 
 **Preset**:
 A saved, named set of every setting that affects the sound: Factory (shipped with eq1) or User (saved by the user).

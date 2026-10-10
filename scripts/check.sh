@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
+# Runs the checks CI runs (.github/workflows/ci.yml calls this script, a stage at a time), and the local-only
+# paint time, on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            docs, build, test, cpu, tsan and validate
+#   scripts/check.sh            docs, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
 #                               glossary, no test reads a saved state as raw bytes, and no colour is hard-coded in plugin/
 #                               outside plugin/staple/
@@ -11,6 +12,8 @@
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
 #   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget"); on a
 #                               Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh paint      the editor's paint time against its ceiling (docs/performance.md, "Paint time"); local
+#                               only, not in CI; on a Mac busy with other work it measures nothing and exits 3
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
@@ -153,25 +156,33 @@ focus() {
     ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure
 }
 
+# Timings taken while the machine is busy (other builds, other agents) measure the machine, not eq1:
+# a timing stage refuses, saying why, rather than report a false overrun. CI's runners are quiet, so CI
+# always measures.
+busy() {
+    [ "$os" = macos ] && [ -z "${GITHUB_ACTIONS:-}" ] || return 1
+    local load cores
+    load=$(sysctl -n vm.loadavg | awk '{ print $2 }')
+    cores=$(sysctl -n hw.ncpu)
+    awk -v l="$load" -v c="$cores" 'BEGIN { exit ! (l > c / 2) }' || return 1
+    echo "Machine busy (load $load on $cores cores): $1" >&2
+}
+
+# A test executable built in BUILD_DIR/tests (in its Release folder with Visual Studio).
+test_exe() {
+    local exe=$BUILD_DIR/tests/$1
+    [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/$1
+    printf '%s\n' "$exe"
+}
+
 # On its own, after the tests: timings taken while anything else runs are meaningless.
 cpu() {
     step "CPU budget"
-    # Timings taken while the machine is busy (other builds, other agents) measure the machine, not the
-    # Engine: refuse rather than report a false overrun. CI's runners are quiet, so it always measures.
-    if [ "$os" = macos ] && [ -z "${GITHUB_ACTIONS:-}" ]; then
-        local load cores
-        load=$(sysctl -n vm.loadavg | awk '{ print $2 }')
-        cores=$(sysctl -n hw.ncpu)
-        if awk -v l="$load" -v c="$cores" 'BEGIN { exit ! (l > c / 2) }'; then
-            echo "Machine busy (load $load on $cores cores): CPU budget not measured; CI measures it on every PR" >&2
-            return 3
-        fi
-    fi
+    busy "CPU budget not measured; CI measures it on every PR" && return 3
     # `all` calls cpu under ||, where set -e is off: return a failed build rather than time a stale exe.
     cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget || return
-    local exe=$BUILD_DIR/tests/eq1_cpu_budget
-    [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/eq1_cpu_budget
-    local out status=0
+    local exe out status=0
+    exe=$(test_exe eq1_cpu_budget)
     out=$("$exe") || status=$?
     printf '%s\n' "$out"
     # In CI the numbers also go to the job summary and as annotations: once the job ends, one API call
@@ -183,6 +194,16 @@ cpu() {
         grep 'kHz' <<< "$out" | while IFS= read -r line; do echo "::notice title=CPU budget ($os)::$line"; done
     fi
     return "$status"
+}
+
+# The editor drawing a busy frame at 2x, from the hidden [paint] test, which fails above its ceiling.
+# Local only: CI has no step for it.
+paint() {
+    step "Paint time"
+    busy "paint time not measured" && return 3
+    # `all` calls paint under ||, where set -e is off: return a failed build rather than time a stale exe.
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_plugin_tests || return
+    "$(test_exe eq1_plugin_tests)" "[paint]"
 }
 
 tsan() {
@@ -275,11 +296,12 @@ case "${1:-all}" in
     build) build ;;
     test) run_tests ;;
     cpu) cpu ;;
+    paint) paint ;;
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     tsan) tsan ;;
     validate) validate ;;
     docs) docs; colours ;;
-    # A busy machine skips the CPU budget (exit 3) but not the stages after it.
-    all) docs; colours; build; run_tests; cpu || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,16p' "$0" >&2; exit 2 ;;
+    # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
+    all) docs; colours; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
+    *) sed -n '2,19p' "$0" >&2; exit 2 ;;
 esac

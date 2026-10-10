@@ -170,6 +170,58 @@ TEST_CASE ("Dragging several Bands moves them together, stopping together at the
     CHECK_THAT (host.value (4, "gain"), WithinAbs (5.0, 1.0e-4));
 }
 
+TEST_CASE ("A nudge moves Bands by semitones and heard dB from where they are, stopping together at the edges of the ranges")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 3.0f);
+    host.addBand (2, 100.0f, -2.0f);
+    host.addBand (3, 50.0f, 5.0f);
+    host.set (3, "shape", 2.0f); // Low Cut: no Gain
+    const double semitone = std::pow (2.0, 1.0 / 12.0);
+
+    host.editing.nudge ({ 1 }, 1.0, 0.5);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (static_cast<float> (1000.0 * semitone), 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.5, 1.0e-4));
+    host.editing.nudge ({ 1 }, -1.0, -0.5);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.0, 1.0e-4));
+    host.editing.nudge ({ 1 }, 0.1, -0.05);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (static_cast<float> (1000.0 * std::pow (2.0, 0.1 / 12.0)), 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (2.95, 1.0e-4));
+
+    // Band 1 reaches 30 kHz first going up and Band 3 10 Hz going down; Band 1 +30 dB and Band 2
+    // -30 dB. The rest stop with them, keeping their spacing, and the Cut keeps its stored Gain.
+    for (int press = 0; press < 100; ++press)
+        host.editing.nudge ({ 1, 2, 3 }, 1.0, 0.5);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (30000.0f, 1.0e-4f));
+    CHECK_THAT (host.value (2, "frequency"), WithinRel (static_cast<float> (3000.0 / std::pow (2.0, 0.1 / 12.0)), 1.0e-4f));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (30.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-2.0 + (30.0 - 2.95), 1.0e-4));
+    CHECK_THAT (host.value (3, "gain"), WithinAbs (5.0, 1.0e-4));
+    for (int press = 0; press < 400; ++press)
+        host.editing.nudge ({ 1, 2, 3 }, -1.0, -0.5);
+    CHECK_THAT (host.value (3, "frequency"), WithinRel (10.0f, 1.0e-3f));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-30.0, 1.0e-4));
+    CHECK_THAT (host.value (3, "gain"), WithinAbs (5.0, 1.0e-4));
+}
+
+TEST_CASE ("A nudge moves Gain as heard under Gain Scale, and is one undo step on every Band it moves")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 4.0f);
+    host.addBand (2, 2000.0f, 4.0f);
+    auto* gainScale = host.processor.parameterState().getParameter ("gain_scale");
+    gainScale->setValueNotifyingHost (gainScale->convertTo0to1 (50.0f));
+
+    host.editing.nudge ({ 1, 2 }, 0.0, 0.5);
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (5.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (5.0, 1.0e-4));
+    CHECK (host.processor.editHistory().undoSteps() == 1);
+    host.processor.editHistory().undo();
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (4.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (4.0, 1.0e-4));
+}
+
 TEST_CASE ("Under Gain Scale, Gains added and dragged on the display are the Gains heard")
 {
     Host host;
@@ -698,4 +750,66 @@ TEST_CASE ("Paste with fewer free Band Slots than Bands pastes the lowest-Freque
     CHECK_THAT (host.value (24, "gain"), WithinAbs (2.0, 1.0e-4));
     CHECK (host.editing.paste (bands).empty());
     CHECK (host.processor.editHistory().undoSteps() == 1);
+}
+
+TEST_CASE ("A Dynamic Range drag sets the stored Dynamic Range so its heard end is where the drag puts it, as one gesture and one undo step")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 4.0f);
+    auto* gainScale = host.processor.parameterState().getParameter (eq1::parameters::gainScaleId);
+    GestureLog log;
+    host.processor.addListener (&log);
+
+    SECTION ("at Gain Scale 100 %: the end at +10 dB heard is +6 dB of range, rounded to 0.5 dB")
+    {
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (7.3);
+        host.editing.dragDynamicRangeTo (10.1);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (6.0, 1.0e-4));
+    }
+    SECTION ("at Gain Scale 50 %: Gain 4 is heard at +2, so an end at -3 dB heard is -10 dB of stored range")
+    {
+        gainScale->setValueNotifyingHost (gainScale->convertTo0to1 (50.0f));
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (-3.0);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-10.0, 1.0e-4));
+    }
+    SECTION ("beyond the parameter's range it stops at +/-30 dB")
+    {
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (80.0);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (30.0, 1.0e-4));
+    }
+    SECTION ("at Gain Scale 0 % nothing is heard, so the drag changes nothing")
+    {
+        gainScale->setValueNotifyingHost (0.0f);
+        host.editing.beginDynamicRangeDrag (1);
+        host.editing.dragDynamicRangeTo (12.0);
+        host.editing.endDynamicRangeDrag();
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+        host.processor.removeListener (&log);
+        return;
+    }
+    const auto index = indexOf (host.processor, "band1_dynamic_range");
+    CHECK (log.begins[index] == 1);
+    CHECK (log.ends[index] == 1);
+    CHECK (host.processor.editHistory().undoSteps() == 1);
+    host.processor.editHistory().undo();
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+    host.processor.removeListener (&log);
+}
+
+TEST_CASE ("Setting a Band's Dynamic Range is one gesture, within +/-30 dB")
+{
+    Host host;
+    host.addBand (1, 1000.0f, 4.0f);
+    host.set (1, "dynamic_range", 6.0f);
+    host.editing.setDynamicRange (1, 0.0);
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+    host.editing.setDynamicRange (1, -45.0);
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-30.0, 1.0e-4));
+    CHECK (host.processor.editHistory().undoSteps() == 2);
 }

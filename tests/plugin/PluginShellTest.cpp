@@ -1,3 +1,7 @@
+#include "BandPanel.h"
+#include "EditorHarness.h"
+#include "FooterBar.h"
+#include "OutputMeter.h"
 #include "PluginProcessor.h"
 #include "SavedState.h"
 
@@ -787,43 +791,88 @@ TEST_CASE ("Saved state restores the output controls, Global Bypass included")
             }
 }
 
-TEST_CASE ("The editor fits every output control in its row, at its smallest and on mono")
+TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits every control, the Band panel lies over the display and the meter beside it")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     const auto layout = GENERATE (juce::AudioChannelSet::stereo(), juce::AudioChannelSet::mono());
+    const int percent = GENERATE (75, 100, 125, 150, 200);
+    CAPTURE (percent);
     useLayout (processor, layout);
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    auto* scaleMenu = harness::findChild<eq1::UiScaleMenu> (*editor);
+    REQUIRE (scaleMenu != nullptr);
+    scaleMenu->pick (percent);
     const auto* constrainer = editor->getConstrainer();
     REQUIRE (constrainer != nullptr);
+    // 960 x 600 logical.
+    CHECK (constrainer->getMinimumWidth() == juce::roundToInt (960 * percent / 100.0));
+    CHECK (constrainer->getMinimumHeight() == juce::roundToInt (600 * percent / 100.0));
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
+    // A Band selected, so the Band panel shows.
+    processor.parameterState().getParameter ("band1_in_use")->setValueNotifyingHost (1.0f);
+    harness::findChild<eq1::BandPanel> (*editor)->show (1);
 
+    const auto inEditor = [&editor] (juce::Component& c) { return editor->getLocalArea (c.getParentComponent(), c.getBounds()); };
+    // Visible, as are all its parents up to the editor (which isn't on screen here).
+    const auto shown = [&editor] (juce::Component& c) {
+        for (auto* p = &c; p != editor.get(); p = p->getParentComponent())
+            if (! p->isVisible())
+                return false;
+        return true;
+    };
     int found = 0;
     std::function<void (juce::Component&)> visit = [&] (juce::Component& component) {
         for (auto* child : component.getChildren())
         {
-            const auto name = [&]() -> juce::String {
-                if (auto* button = dynamic_cast<juce::Button*> (child))
-                    return button->getButtonText();
-                return {};
-            }();
-            if (name == "Auto Gain" || name == "Phase Invert" || name == "Global Bypass")
+            const bool control = dynamic_cast<juce::Button*> (child) != nullptr || dynamic_cast<juce::Slider*> (child) != nullptr
+                                 || dynamic_cast<juce::ComboBox*> (child) != nullptr || dynamic_cast<juce::Label*> (child) != nullptr;
+            if (control && shown (*child))
             {
-                CAPTURE (name);
+                CAPTURE (child->getName(), child->getTitle());
                 ++found;
-                const auto bounds = editor->getLocalArea (child->getParentComponent(), child->getBounds());
-                CHECK (child->isVisible());
-                CHECK (editor->getLocalBounds().contains (bounds));
-                CHECK (bounds.getWidth() > 0);
+                CHECK (editor->getLocalBounds().contains (inEditor (*child)));
             }
             visit (*child);
         }
     };
     visit (*editor);
-    CHECK (found == 3);
+    // The header's, Display Range, the Clip Lights and the footer's, with no Band selected.
+    CHECK (found >= 15);
+    // And the output popover's, open above the footer.
+    auto* readout = harness::findChild<eq1::OutputReadout> (*editor);
+    REQUIRE (readout != nullptr);
+    readout->onClick();
+    auto& popover = harness::findChild<eq1::FooterBar> (*editor)->outputPopover();
+    REQUIRE (popover.isOpen());
+    found = 0;
+    visit (popover);
+    CHECK (found == 6);
+    popover.close();
+
+    auto* display = harness::findChild<eq1::EqDisplay> (*editor);
+    auto* panel = harness::findChild<eq1::BandPanel> (*editor);
+    auto* meter = harness::findChild<eq1::OutputMeter> (*editor);
+    REQUIRE (display != nullptr);
+    REQUIRE (panel != nullptr);
+    REQUIRE (meter != nullptr);
+    CHECK (display->getBounds().contains (panel->getBounds()));
+    CHECK (meter->isVisible());
+    CHECK (meter->getX() > display->getRight());
+    CHECK (meter->getY() == display->getY());
+    CHECK (meter->getHeight() == display->getHeight());
+    CHECK (editor->getLocalBounds().contains (inEditor (*meter)));
+    const int withMeter = display->getWidth();
+    processor.setOutputMeterShown (false);
+    editor->resized();
+    CHECK_FALSE (meter->isVisible());
+    CHECK (display->getWidth() == withMeter + 52);
+    processor.setOutputMeterShown (true);
+    editor->resized();
+
     if (const auto snapshot = juce::SystemStats::getEnvironmentVariable ("EQ1_EDITOR_SNAPSHOT", {}); snapshot.isNotEmpty())
     {
-        juce::File file (snapshot + (layout == juce::AudioChannelSet::mono() ? "-mono.png" : "-stereo.png"));
+        juce::File file (snapshot + "-" + juce::String (percent) + (layout == juce::AudioChannelSet::mono() ? "-mono.png" : "-stereo.png"));
         file.deleteFile();
         juce::FileOutputStream stream (file);
         juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds()), stream);

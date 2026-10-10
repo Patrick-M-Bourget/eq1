@@ -5,6 +5,8 @@
 #include "DisplayRange.h"
 #include "EditHistory.h"
 #include "Parameters.h"
+#include "UiScale.h"
+#include "UserSettings.h"
 #include "eq1/Engine.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -17,7 +19,9 @@ namespace eq1
 class PluginProcessor final : public juce::AudioProcessor
 {
 public:
-    PluginProcessor();
+    // userSettingsFile keeps the UI Scale last picked, across instances (UserSettings). Without one, as in
+    // tests, nothing is kept and a new instance opens at 100%.
+    explicit PluginProcessor (juce::File userSettingsFile = {});
 
     void prepareToPlay (double sampleRate, int maximumExpectedSamplesPerBlock) override;
     void releaseResources() override {}
@@ -54,11 +58,11 @@ public:
     // The undo history of the editor's edits. It outlives the editor, and restoring a session empties it.
     EditHistory& editHistory() { return history; }
 
-    // A/B Compare: which side the host parameters hold, from any thread; selecting a side and Copy A
-    // to B, each one undo step, from the message thread only.
+    // A/B Compare: which side the host parameters hold, from any thread; selecting a side and copying
+    // the side you're on to the other side, each one undo step, from the message thread only.
     CompareSide compareSide() const { return compare.side(); }
     void selectCompareSide (CompareSide side) { compare.select (side); }
-    void copyAToB() { compare.copyAToB(); }
+    void copyToOther() { compare.copyToOther(); }
 
     // The settings a Preset holds, from the side you're on, in the saved state's format.
     juce::ValueTree presetState();
@@ -86,8 +90,32 @@ public:
 
     // Solo, while the editor holds a Band: its Band Slot (1 to 24), or 0. Not a host parameter, not
     // saved, not undoable; restoring a session lets go of it.
-    void setSolo (int slot) { heldSoloSlot = slot; }
+    void setSolo (int slot)
+    {
+        soloHolder = SoloHolder::none;
+        heldSoloSlot = slot;
+    }
     int soloSlot() const { return heldSoloSlot.load(); }
+    // The editor's two ways to hold Solo share it: holding takes Solo over from the other, and letting
+    // go releases it only while this holder still has it, so neither lets go of the other's Solo.
+    // Message thread only.
+    enum class SoloHolder
+    {
+        none,
+        display, // a held handle
+        panel    // the Band panel's Solo button
+    };
+    void holdSolo (int slot, SoloHolder holder)
+    {
+        heldSoloSlot = slot;
+        soloHolder = holder;
+    }
+    void releaseSolo (SoloHolder holder)
+    {
+        if (soloHolder == holder)
+            setSolo (0);
+    }
+    bool holdsSolo (SoloHolder holder) const { return soloHolder == holder; }
 
     // Detection Audition, while the editor holds it: the Band Slot (1 to 24) whose detection signal
     // plays instead of the output, or 0. Like Solo: not a host parameter, not saved, let go on restore.
@@ -102,8 +130,10 @@ public:
     // or levelFloorDb. From one reader thread, the message thread.
     double readDetectionLevel() { return engine.readDetectionLevel(); }
 
-    // A Band Slot's Live Gain in dB, for the display: from any thread.
+    // A Band Slot's Live Gain in dB, as Gain Scale plays it, for the display: from any thread. Only
+    // meaningful once audio has been processed since the host last prepared the plugin.
     double liveGainDb (int slot) const { return engine.liveGainDb (slot); }
+    bool hasProcessedAudio() const { return processedAudio.load (std::memory_order_relaxed); }
 
     AnalyzerSettings analyzerSettings() const;
     void setAnalyzerSettings (const AnalyzerSettings& settings);
@@ -121,6 +151,16 @@ public:
     // Whether the editor shows the Output Meter. Saved with the session, not in Presets, not undoable.
     bool isOutputMeterShown() const { return outputMeterShown.load(); }
     void setOutputMeterShown (bool shown) { outputMeterShown = shown; }
+
+    // The editor's window: its size in logical pixels (as at 100%) and its UI Scale in percent (one of
+    // uiScale::percents). Saved with the session, not in Presets, not undoable. Message thread only.
+    juce::Point<int> editorSize() const { return { editorWidth.load(), editorHeight.load() }; }
+    void setEditorSize (juce::Point<int> logical);
+    // An instance that has never had a UI Scale, new or from a session saved before it, takes the one
+    // last picked in any instance here, and keeps it from then on.
+    int uiScalePercent();
+    // The UI Scale picked by hand: this instance's, and the default for new ones.
+    void pickUiScale (int percent);
 
     // The version of the saved state's format. setStateInformation() brings older states up to it one
     // version at a time, and loads what it knows of newer ones. 0 is the state from before it had a
@@ -142,12 +182,18 @@ private:
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
     std::atomic<bool> outputMeterShown { true };
+    static constexpr int newEditorWidth = 1200, newEditorHeight = 760;
+    std::atomic<int> editorWidth { newEditorWidth }, editorHeight { newEditorHeight };
+    std::atomic<int> uiScale { 0 }; // 0 until the instance has one
+    UserSettings userSettings;
     // The heard Gains at the editor's last look, or as a session restored them: not saved, and kept
     // while the editor is closed.
     HeardGains seenGains;
     juce::SpinLock seenGainsLock; // a host may restore a session from another thread
     HeardGains currentHeardGains() const;
     std::atomic<int> heldSoloSlot { 0 };
+    SoloHolder soloHolder = SoloHolder::none;
+    std::atomic<bool> processedAudio { false };
     std::atomic<int> heldAuditionSlot { 0 };
     std::atomic<int> heldMeteredSlot { 0 };
     std::array<std::atomic<bool>, 2> clipLit {}; // per channel, not saved; mono and stereo only

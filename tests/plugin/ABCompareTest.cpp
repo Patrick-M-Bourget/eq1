@@ -78,31 +78,76 @@ TEST_CASE ("Global Bypass belongs to neither side: switching sides leaves it alo
     CHECK (host.value ("global_bypass") == 0.0f);
 }
 
-TEST_CASE ("Copy A to B, from either side, overwrites B with A")
+TEST_CASE ("Copy from A overwrites B with A, and leaves you on A")
 {
     Host host;
-    const bool fromB = GENERATE (false, true);
-    CAPTURE (fromB);
     host.edit ("band2_in_use", 1.0f);
     host.processor.selectCompareSide (CompareSide::B);
     host.edit ("band2_in_use", 0.0f);
     host.edit ("gain_scale", 50.0f);
     host.processor.selectCompareSide (CompareSide::A);
     host.edit ("band2_frequency", 120.0f);
-    if (fromB)
-        host.processor.selectCompareSide (CompareSide::B);
 
-    host.processor.copyAToB();
-    CHECK (host.processor.compareSide() == (fromB ? CompareSide::B : CompareSide::A));
+    host.processor.copyToOther();
+    CHECK (host.processor.compareSide() == CompareSide::A);
+    CHECK (host.value ("band2_in_use") == 1.0f);
+    CHECK_THAT (host.value ("band2_frequency"), WithinAbs (120.0, 1.0e-3));
     host.processor.selectCompareSide (CompareSide::B);
     CHECK (host.value ("band2_in_use") == 1.0f);
     CHECK_THAT (host.value ("band2_frequency"), WithinAbs (120.0, 1.0e-3));
     CHECK_THAT (host.value ("gain_scale"), WithinAbs (100.0, 1.0e-3));
+}
 
-    // A is unchanged.
+TEST_CASE ("Copy from B overwrites A with B, leaving you on B with the parameters unchanged")
+{
+    Host host;
+    host.edit ("band2_in_use", 1.0f);
+    host.edit ("band2_frequency", 120.0f);
+    host.processor.selectCompareSide (CompareSide::B);
+    host.edit ("band2_in_use", 0.0f);
+    host.edit ("gain_scale", 50.0f);
+
+    struct Changes final : juce::AudioProcessorListener
+    {
+        int count = 0;
+        void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override { ++count; }
+        void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
+    } changes;
+    host.processor.addListener (&changes);
+    host.processor.copyToOther();
+    host.processor.removeListener (&changes);
+    CHECK (changes.count == 0);
+    CHECK (host.processor.compareSide() == CompareSide::B);
+    CHECK (host.value ("band2_in_use") == 0.0f);
+    CHECK_THAT (host.value ("gain_scale"), WithinAbs (50.0, 1.0e-3));
+
     host.processor.selectCompareSide (CompareSide::A);
-    CHECK (host.value ("band2_in_use") == 1.0f);
-    CHECK_THAT (host.value ("band2_frequency"), WithinAbs (120.0, 1.0e-3));
+    CHECK (host.value ("band2_in_use") == 0.0f);
+    CHECK_THAT (host.value ("gain_scale"), WithinAbs (50.0, 1.0e-3));
+}
+
+TEST_CASE ("A session saved right after a copy holds both sides whole")
+{
+    Host host;
+    const bool fromB = GENERATE (false, true);
+    CAPTURE (fromB);
+    host.edit ("band1_gain", 6.0f);
+    host.processor.selectCompareSide (CompareSide::B);
+    host.edit ("band1_gain", -3.0f);
+    if (! fromB)
+        host.processor.selectCompareSide (CompareSide::A);
+    host.processor.copyToOther();
+    juce::MemoryBlock saved;
+    host.processor.getStateInformation (saved);
+
+    eq1::PluginProcessor restored;
+    restored.setStateInformation (saved.getData(), static_cast<int> (saved.getSize()));
+    const float expected = fromB ? -3.0f : 6.0f;
+    for (const auto side : { CompareSide::A, CompareSide::B })
+    {
+        restored.selectCompareSide (side);
+        CHECK_THAT (restored.parameterState().getRawParameterValue ("band1_gain")->load(), WithinAbs (expected, 1.0e-4));
+    }
 }
 
 TEST_CASE ("Undo crosses an A/B switch: one history for both sides, a switch is one step")
@@ -135,7 +180,7 @@ TEST_CASE ("Undo crosses an A/B switch: one history for both sides, a switch is 
     CHECK_THAT (host.value ("band1_gain"), WithinAbs (6.0, 1.0e-4));
 }
 
-TEST_CASE ("Copy A to B is one undo step, from either side")
+TEST_CASE ("Copy to the other side is one undo step, from either side")
 {
     Host host;
     const bool fromB = GENERATE (false, true);
@@ -149,10 +194,13 @@ TEST_CASE ("Copy A to B is one undo step, from either side")
         host.processor.selectCompareSide (CompareSide::B);
     const int steps = history.undoSteps();
 
-    host.processor.copyAToB();
+    host.processor.copyToOther();
     CHECK (history.undoSteps() == steps + 1);
     history.undo();
+    // Both sides as they were, and you on the side you copied from.
     CHECK (host.processor.compareSide() == (fromB ? CompareSide::B : CompareSide::A));
+    host.processor.selectCompareSide (CompareSide::A);
+    CHECK_THAT (host.value ("band1_gain"), WithinAbs (6.0, 1.0e-4));
     host.processor.selectCompareSide (CompareSide::B);
     CHECK_THAT (host.value ("band1_gain"), WithinAbs (-3.0, 1.0e-4));
 }

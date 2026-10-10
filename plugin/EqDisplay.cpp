@@ -1,11 +1,16 @@
 #include "EqDisplay.h"
 
+#include "Accessibility.h"
 #include "BandClipboard.h"
 #include "BandMenu.h"
+#include "Parameters.h"
 #include "PluginProcessor.h"
-#include "eq1/Response.h"
-#include "staple/Fonts.h"
-#include "staple/Tokens.h"
+#include "display/AnalyzerLayer.h"
+#include "display/CurvesLayer.h"
+#include "display/EdgeFadeLayer.h"
+#include "display/GridLayer.h"
+#include "display/HandlesLayer.h"
+#include "staple/LookAndFeel.h"
 
 #include <cmath>
 
@@ -14,19 +19,7 @@ namespace eq1
 
 namespace
 {
-constexpr double lowestFrequency = 10.0, highestFrequency = 30000.0;
-constexpr float handleRadius = 9.0f;
-constexpr float pixelStep = 2.0f; // the curves are evaluated every this many pixels
-constexpr float ringRadius = handleRadius + 5.0f;
-
-namespace colour = staple::tokens::colour;
-namespace size = staple::tokens::size;
-
-// Each Band Slot keeps its own colour.
-juce::Colour colourOf (int slot)
-{
-    return staple::tokens::band[slot - 1];
-}
+constexpr float handleRadius = display::DisplayGeometry::handleRadius;
 
 // Exactly the same, field by field: any change at all counts, so the comparison is exact. (Settings'
 // own == would do, but its float comparison warns where it is defined.)
@@ -45,18 +38,128 @@ bool same (const Settings& a, const Settings& b)
     return true;
 }
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-
-juce::String frequencyText (double frequency)
-{
-    return frequency >= 1000.0 ? juce::String (frequency / 1000.0, 2) + " kHz" : juce::String (juce::roundToInt (frequency)) + " Hz";
-}
 } // namespace
+
+class EqDisplay::BandHandle final : public juce::Component
+{
+public:
+    BandHandle (EqDisplay& d, int s) : display (d), slot (s)
+    {
+        setName ("Band " + juce::String (slot));
+        setTitle (getName());
+        setInterceptsMouseClicks (false, false);
+        setWantsKeyboardFocus (true);
+    }
+
+    void focusGained (FocusChangeType) override
+    {
+        if (display.selected != std::set<int> { slot })
+            display.select ({ slot });
+    }
+    void focusLost (FocusChangeType) override { display.endHeldNudge(); }
+
+    // Tells a screen reader when what it reads has changed: the Band moved, by any means.
+    void announce()
+    {
+        auto text = display.spokenBand (slot);
+        if (text == spoken)
+            return;
+        spoken = std::move (text);
+        if (auto* handler = getAccessibilityHandler())
+            handler->notifyAccessibilityEvent (juce::AccessibilityEvent::valueChanged);
+    }
+
+    EqDisplay& display;
+    const int slot;
+
+private:
+    // Read-only: the keys and the Band panel adjust the Band.
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
+    {
+        return accessibility::handler (*this, juce::AccessibilityRole::slider, [this] { return display.spokenBand (slot); });
+    }
+
+    juce::String spoken;
+};
+
+class EqDisplay::RangeGrip final : public juce::Component
+{
+public:
+    RangeGrip (EqDisplay& d, int s) : display (d), slot (s)
+    {
+        setName ("Band " + juce::String (slot) + " Dynamic Range Handle");
+        setTitle (getName());
+        setInterceptsMouseClicks (false, false);
+        setWantsKeyboardFocus (true);
+    }
+
+    void focusGained (FocusChangeType) override
+    {
+        if (display.selected != std::set<int> { slot })
+            display.select ({ slot });
+    }
+    void focusLost (FocusChangeType) override { display.endHeldNudge(); }
+
+    bool keyPressed (const juce::KeyPress& key) override
+    {
+        const int code = key.getKeyCode();
+        const auto mods = key.getModifiers();
+        if ((code != juce::KeyPress::upKey && code != juce::KeyPress::downKey)
+            || (mods.getRawFlags() & ~juce::ModifierKeys::shiftModifier & juce::ModifierKeys::allKeyboardModifiers) != 0)
+            return false;
+        staple::LookAndFeel::keyUsed (*this);
+        const double step = mods.isShiftDown() ? 0.5 : 1.0;
+        display.stepDynamicRange (slot, code == juce::KeyPress::upKey ? step : -step);
+        return true;
+    }
+
+    // Tells a screen reader when the Dynamic Range has changed, by any means.
+    void announce()
+    {
+        auto text = value();
+        if (text == spoken)
+            return;
+        spoken = std::move (text);
+        if (auto* handler = getAccessibilityHandler())
+            handler->notifyAccessibilityEvent (juce::AccessibilityEvent::valueChanged);
+    }
+
+    EqDisplay& display;
+    const int slot;
+
+private:
+    juce::String value() const
+    {
+        const auto& parameter = *display.processor.parameterState().getParameter (parameters::dynamicRangeId (slot));
+        return accessibility::spokenValue (parameter, parameter.getValue());
+    }
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
+    {
+        return accessibility::handler (*this, juce::AccessibilityRole::slider, [this] { return value(); });
+    }
+
+    juce::String spoken;
+};
 
 EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e)
 {
+    setName ("EQ Display");
+    setTitle ("EQ display");
     setWantsKeyboardFocus (true);
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        auto& handle = handles[static_cast<size_t> (slot - 1)];
+        handle = std::make_unique<BandHandle> (*this, slot);
+        addChildComponent (*handle);
+        auto& grip = rangeGrips[static_cast<size_t> (slot - 1)];
+        grip = std::make_unique<RangeGrip> (*this, slot);
+        addChildComponent (*grip);
+    }
     shown = heardSettings();
     tapSamples.resize (1 << 16);
+    // An editor opened under Global Bypass shows it at once.
+    globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
+    lastFadeStep = juce::Time::getMillisecondCounter();
     startTimerHz (60);
 }
 
@@ -97,8 +200,7 @@ bool EqDisplay::updateAnalyzer()
 
 float EqDisplay::spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const
 {
-    const double level = spectrum.levelDb (frequencyAt (x), analyzer.tiltDbPerOctave);
-    return static_cast<float> (juce::jlimit (0.0, 1.0, -level / analyzer.rangeDb) * getHeight());
+    return display::spectrumYAt (geometry(), analyzer, spectrum, x);
 }
 
 AnalyzerSpectrum* EqDisplay::spectrumToGrab()
@@ -116,15 +218,122 @@ Settings EqDisplay::heardSettings() const
 
 EqDisplay::~EqDisplay()
 {
+    endHeldNudge();
     releaseSolo();
+}
+
+void EqDisplay::resized()
+{
+    placeHandles();
+}
+
+void EqDisplay::placeHandles()
+{
+    const bool reorder = focusedSlot() == 0;
+    std::vector<int> inUse;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
+        auto& handle = *handles[static_cast<size_t> (slot - 1)];
+        handle.setVisible (band.inUse);
+        if (! band.inUse)
+            continue;
+        inUse.push_back (slot);
+        handle.announce();
+        handle.setBounds (juce::Rectangle<float> (handleRadius * 2.0f, handleRadius * 2.0f).withCentre (handleOf (band)).getSmallestIntegerContainer());
+    }
+    std::array<bool, numBandSlots> gripShown {};
+    for (const auto& grip : display::dynamicRangeGrips (geometry(), frame()))
+    {
+        gripShown[static_cast<size_t> (grip.slot - 1)] = true;
+        auto& element = *rangeGrips[static_cast<size_t> (grip.slot - 1)];
+        element.setBounds (display::gripArea (grip.centre).getSmallestIntegerContainer());
+        element.announce();
+    }
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        rangeGrips[static_cast<size_t> (slot - 1)]->setVisible (gripShown[static_cast<size_t> (slot - 1)]);
+    if (! reorder)
+        return;
+    // By Frequency, the lower Band Slot first on a tie (std::stable_sort keeps slot order), each grip
+    // after its Band.
+    std::stable_sort (inUse.begin(), inUse.end(), [this] (int a, int b) {
+        return shown.bands[static_cast<size_t> (a - 1)].frequency < shown.bands[static_cast<size_t> (b - 1)].frequency;
+    });
+    for (size_t i = 0; i < inUse.size(); ++i)
+    {
+        handles[static_cast<size_t> (inUse[i] - 1)]->setExplicitFocusOrder (2 * static_cast<int> (i) + 1);
+        rangeGrips[static_cast<size_t> (inUse[i] - 1)]->setExplicitFocusOrder (2 * static_cast<int> (i) + 2);
+    }
+}
+
+int EqDisplay::gripAt (juce::Point<float> position) const
+{
+    const auto grips = display::dynamicRangeGrips (geometry(), frame());
+    for (auto grip = grips.rbegin(); grip != grips.rend(); ++grip)
+        if (display::gripArea (grip->centre).contains (position))
+            return grip->slot;
+    return 0;
+}
+
+void EqDisplay::stepDynamicRange (int slot, double db)
+{
+    if (! nudging)
+    {
+        processor.editHistory().beginTransaction();
+        nudging = true;
+    }
+    editing.setDynamicRange (slot, editing.band (slot).dynamicRange + db);
+    shown = heardSettings();
+    placeHandles();
+    repaint();
+}
+
+juce::String EqDisplay::spokenBand (int slot) const
+{
+    auto& state = processor.parameterState();
+    const auto band = editing.band (slot);
+    const auto value = [&state] (const juce::String& id) {
+        const auto& parameter = *state.getParameter (id);
+        return accessibility::spokenValue (parameter, parameter.getValue());
+    };
+    juce::StringArray parts { parameters::shapeNames()[static_cast<int> (band.shape)], value (parameters::frequencyId (slot)) };
+    if (hasGain (band.shape))
+        parts.add (value (parameters::gainId (slot)));
+    parts.add ("Q " + value (parameters::qId (slot)));
+    if (band.bypass)
+        parts.add ("Bypassed");
+    if (isDynamic (band))
+        parts.add ("Dynamic Band");
+    return parts.joinIntoString (", ");
+}
+
+std::unique_ptr<juce::AccessibilityHandler> EqDisplay::createAccessibilityHandler()
+{
+    return accessibility::handler (*this, juce::AccessibilityRole::group, nullptr);
+}
+
+int EqDisplay::focusedSlot() const
+{
+    for (const auto& handle : handles)
+        if (handle->hasKeyboardFocus (false))
+            return handle->slot;
+    for (const auto& grip : rangeGrips)
+        if (grip->hasKeyboardFocus (false))
+            return grip->slot;
+    return 0;
 }
 
 void EqDisplay::releaseSolo()
 {
-    if (soloedSlot == 0)
+    processor.releaseSolo (PluginProcessor::SoloHolder::display);
+    showSolo();
+}
+
+void EqDisplay::showSolo()
+{
+    if (processor.soloSlot() == soloedSlot)
         return;
-    soloedSlot = 0;
-    processor.setSolo (0);
+    soloedSlot = processor.soloSlot();
     repaint();
 }
 
@@ -132,22 +341,25 @@ void EqDisplay::timerCallback()
 {
     if (heldSlot != 0 && juce::Time::getMillisecondCounter() - heldSince >= soloHoldMilliseconds)
     {
-        soloedSlot = heldSlot;
+        processor.holdSolo (heldSlot, PluginProcessor::SoloHolder::display);
         heldSlot = 0;
-        processor.setSolo (soloedSlot);
-        repaint();
     }
-    // A Band deleted, or taken out of use by automation, while Soloed lets go of its Solo for good.
-    if (soloedSlot != 0 && ! editing.band (soloedSlot).inUse)
+    // A Band deleted, or taken out of use by automation, while Soloed by a held handle lets go of its
+    // Solo for good.
+    if (processor.soloSlot() != 0 && ! editing.band (processor.soloSlot()).inUse)
         releaseSolo();
+    // Solo held here or on the Band panel draws its cue.
+    showSolo();
     // A heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
+    const bool fading = stepFades();
 
     if (updateAnalyzer())
     {
         // The spectra move every frame.
         shown = heardSettings();
         shownRangeDb = processor.displayRangeDb();
+        placeHandles();
         repaint();
         return;
     }
@@ -166,6 +378,8 @@ void EqDisplay::timerCallback()
         liveGainsMoved = liveGainsMoved || ! juce::exactlyEqual (live, shownLiveGains[static_cast<size_t> (slot - 1)]);
         shownLiveGains[static_cast<size_t> (slot - 1)] = live;
     }
+    if (fading)
+        repaint();
     if (same (latest, shown) && range == shownRangeDb && ! messageExpired && ! liveGainsMoved)
         return;
     shown = latest;
@@ -176,40 +390,88 @@ void EqDisplay::timerCallback()
     std::erase_if (stillInUse, [this] (int slot) { return ! shown.bands[static_cast<size_t> (slot - 1)].inUse; });
     if (stillInUse != selected)
         select (stillInUse);
+    placeHandles();
     repaint();
 }
 
-float EqDisplay::xOf (double frequency) const
+bool EqDisplay::isGlobalBypassOn() const
 {
-    return static_cast<float> (std::log (frequency / lowestFrequency) / std::log (highestFrequency / lowestFrequency) * getWidth());
+    return processor.parameterState().getRawParameterValue (parameters::globalBypassId)->load() >= 0.5f;
 }
 
-double EqDisplay::frequencyAt (float x) const
+bool EqDisplay::stepFades()
 {
-    return lowestFrequency * std::pow (highestFrequency / lowestFrequency, juce::jlimit (0.0, 1.0, static_cast<double> (x) / getWidth()));
+    const auto now = juce::Time::getMillisecondCounter();
+    const auto elapsed = static_cast<float> (now - lastFadeStep);
+    lastFadeStep = now;
+    const auto toward = [elapsed] (float& fade, bool on, int milliseconds) {
+        const float target = on ? 1.0f : 0.0f;
+        const float moved = juce::jlimit (fade - elapsed / static_cast<float> (milliseconds), fade + elapsed / static_cast<float> (milliseconds), target);
+        const bool changed = ! juce::exactlyEqual (moved, fade);
+        fade = moved;
+        return changed;
+    };
+    namespace motion = staple::tokens::motion;
+    bool moved = toward (globalBypassFade, isGlobalBypassOn(), motion::globalBypassFadeMs);
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        moved = toward (hoverFades[static_cast<size_t> (slot - 1)], slot == hoveredSlot, motion::hoverFadeMs) || moved;
+    // The ghost fades in as it appears, and goes at once.
+    if (ghost())
+        moved = toward (ghostFade, true, staple::tokens::ghost::fadeInMs) || moved;
+    else if (std::exchange (ghostFade, 0.0f) > 0.0f)
+        moved = true;
+    return moved;
 }
 
-float EqDisplay::yOf (double db) const
+std::optional<display::Ghost> EqDisplay::ghost() const
 {
-    const auto range = static_cast<float> (processor.displayRangeDb());
-    const float half = static_cast<float> (getHeight()) * 0.5f;
-    return half - static_cast<float> (db) / range * (half - handleRadius);
+    // A menu is modal while it shows.
+    if (dragging || marquee || rangeDragSlot != 0 || pressedOnEmpty || grabFrequency || juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0)
+        return std::nullopt;
+    int inUse = 0;
+    for (const auto& band : shown.bands)
+        inUse += band.inUse ? 1 : 0;
+    if (inUse == numBandSlots)
+        return std::nullopt;
+    if (pointer)
+    {
+        if (slotAt (*pointer) != 0 || gripAt (*pointer) != 0 || bandAreaAt (*pointer) != 0)
+            return std::nullopt;
+        return display::ghostBell (geometry(), *pointer);
+    }
+    if (inUse == 0)
+        return display::restingGhost (geometry());
+    return std::nullopt;
 }
 
-double EqDisplay::dbAt (float y) const
+void EqDisplay::mouseMove (const juce::MouseEvent& e)
 {
-    const auto range = static_cast<double> (processor.displayRangeDb());
-    const double half = getHeight() * 0.5;
-    return (half - y) / (half - handleRadius) * range;
+    pointer = e.position;
+    if (ghost() || ghostFade > 0.0f)
+        repaint();
+    // A handle, or else a Band's filled curve.
+    hoveredSlot = slotAt (e.position);
+    if (hoveredSlot == 0)
+        hoveredSlot = bandAreaAt (e.position);
 }
 
-juce::Point<float> EqDisplay::handleOf (const BandSettings& band) const
+void EqDisplay::mouseExit (const juce::MouseEvent&)
 {
-    // A Shape without Gain sits on the 0 dB line; one beyond the display range sits at its edge.
-    const auto range = static_cast<double> (processor.displayRangeDb());
-    const double gain = hasGain (band.shape) ? juce::jlimit (-range, range, band.gain) : 0.0;
-    return { xOf (band.frequency), yOf (gain) };
+    hoveredSlot = 0;
+    pointer.reset();
+    repaint();
 }
+
+display::DisplayGeometry EqDisplay::geometry() const
+{
+    return { .width = getWidth(), .height = getHeight(), .rangeDb = processor.displayRangeDb() };
+}
+
+float EqDisplay::xOf (double frequency) const { return geometry().xOf (frequency); }
+double EqDisplay::frequencyAt (float x) const { return geometry().frequencyAt (x); }
+float EqDisplay::yOf (double db) const { return geometry().yOf (db); }
+double EqDisplay::dbAt (float y) const { return geometry().dbAt (y); }
+juce::Point<float> EqDisplay::handleOf (const BandSettings& band) const { return geometry().handleOf (band); }
 
 double EqDisplay::drawnGain (int slot, const BandSettings& band) const
 {
@@ -218,13 +480,18 @@ double EqDisplay::drawnGain (int slot, const BandSettings& band) const
 
 int EqDisplay::slotAt (juce::Point<float> position) const
 {
-    // The highest slot wins where handles overlap, as it is drawn on top.
-    for (int slot = numBandSlots; slot >= 1; --slot)
-    {
-        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-        if (band.inUse && handleOf (band).getDistanceFrom (position) <= handleRadius)
-            return slot;
-    }
+    // A selected handle wins where handles overlap, as it is drawn on top, then the highest slot. Each
+    // reaches as far as it is drawn, and at least 9 px.
+    namespace handle = staple::tokens::handle;
+    for (const bool onTop : { true, false })
+        for (int slot = numBandSlots; slot >= 1; --slot)
+        {
+            const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
+            const bool isSelected = selected.contains (slot);
+            const float reach = std::max (handle::hitRadius, (isSelected ? handle::selectedDiameter : handle::diameter) / 2.0f);
+            if (band.inUse && isSelected == onTop && handleOf (band).getDistanceFrom (position) <= reach)
+                return slot;
+        }
     return 0;
 }
 
@@ -233,223 +500,50 @@ void EqDisplay::select (std::set<int> slots)
     selected = std::move (slots);
     if (onSelectionChanged)
         onSelectionChanged (selected.empty() ? 0 : *selected.rbegin());
+    // The selected Band shows its grip.
+    placeHandles();
     repaint();
 }
 
-juce::Path EqDisplay::curve (const std::vector<double>& db) const
+display::DisplayFrame EqDisplay::frame() const
 {
-    juce::Path path;
-    const auto range = static_cast<double> (processor.displayRangeDb());
-    for (size_t i = 0; i < db.size(); ++i)
-    {
-        const juce::Point<float> point { static_cast<float> (i) * pixelStep, yOf (juce::jlimit (-range * 1.5, range * 1.5, db[i])) };
-        if (i == 0)
-            path.startNewSubPath (point);
-        else
-            path.lineTo (point);
-    }
-    return path;
+    display::DisplayFrame result { .bands = shown,
+                                   .selected = selected,
+                                   .soloedSlot = soloedSlot,
+                                   .dragging = dragging,
+                                   .marquee = marquee,
+                                   .allInUseMessage = allInUseMessageUntil != 0,
+                                   // Before the host has prepared the plugin, the curves are drawn as at 48 kHz.
+                                   .sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                                   .mono = ! processor.isStereoPlacementAvailable(),
+                                   .hover = hoverFades,
+                                   .globalBypass = globalBypassFade };
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        result.drawnGains[static_cast<size_t> (slot - 1)] = drawnGain (slot, shown.bands[static_cast<size_t> (slot - 1)]);
+    return result;
+}
+
+int EqDisplay::bandAreaAt (juce::Point<float> position) const
+{
+    return display::bandAreaAt (geometry(), frame(), position);
 }
 
 void EqDisplay::paint (juce::Graphics& g)
 {
-    g.fillAll (colour::bg0);
-
-    // Grid: decades and their halves, and Gain lines a quarter of the range apart.
-    g.setFont (staple::font (size::fs2));
-    for (double f : { 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 })
-    {
-        const float x = xOf (f);
-        g.setColour (colour::gridMajor);
-        g.drawVerticalLine (juce::roundToInt (x), 0.0f, static_cast<float> (getHeight()));
-        g.setColour (colour::text3);
-        g.drawText (f >= 1000.0 ? juce::String (juce::roundToInt (f / 1000.0)) + "k" : juce::String (juce::roundToInt (f)),
-                    juce::Rectangle<float> (x + 3.0f, static_cast<float> (getHeight()) - 16.0f, 40.0f, 14.0f), juce::Justification::left);
-    }
-    // The Analyzer behind everything: pre-EQ filled, post-EQ filled and outlined, the Sidechain outlined.
-    const auto spectrumLine = [&] (const AnalyzerSpectrum& spectrum) {
-        juce::Path line;
-        for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
-        {
-            const juce::Point<float> point { x, spectrumYAt (spectrum, x) };
-            if (x == 0.0f)
-                line.startNewSubPath (point);
-            else
-                line.lineTo (point);
-        }
-        return line;
-    };
-    const auto areaUnder = [&] (juce::Path line) {
-        line.lineTo (line.getCurrentPosition().withY (static_cast<float> (getHeight())));
-        line.lineTo (0.0f, static_cast<float> (getHeight()));
-        line.closeSubPath();
-        return line;
-    };
-    // Peak Hold under the spectra, faint, in its spectrum's colour; nothing where it is below the
-    // Analyzer's range, so silence leaves no flat line.
-    if (held != nullptr)
-    {
-        juce::Path line;
-        bool drawing = false;
-        for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
-        {
-            const double level = held->heldLevelDb (frequencyAt (x), analyzer.tiltDbPerOctave);
-            if (level <= -analyzer.rangeDb)
-            {
-                drawing = false;
-                continue;
-            }
-            const juce::Point<float> point { x, static_cast<float> (juce::jlimit (0.0, 1.0, -level / analyzer.rangeDb) * getHeight()) };
-            if (drawing)
-                line.lineTo (point);
-            else
-                line.startNewSubPath (point);
-            drawing = true;
-        }
-        g.setColour (colour::anPeak);
-        g.strokePath (line, juce::PathStrokeType (1.0f));
-    }
-    if (analyzer.showPreEq)
-    {
-        g.setColour (colour::anFillMid);
-        g.fillPath (areaUnder (spectrumLine (preEq)));
-    }
-    if (analyzer.showPostEq)
-    {
-        const auto line = spectrumLine (postEq);
-        g.setColour (colour::anFillTop);
-        g.fillPath (areaUnder (line));
-        g.setColour (colour::anLine);
-        g.strokePath (line, juce::PathStrokeType (1.0f));
-    }
-    if (analyzer.showSidechain)
-    {
-        g.setColour (colour::anScLine);
-        g.strokePath (spectrumLine (sidechain), juce::PathStrokeType (1.0f));
-    }
-
-    const int range = processor.displayRangeDb();
-    for (int step = -2; step <= 2; ++step)
-    {
-        const double db = range * step / 2.0;
-        const float y = yOf (db);
-        g.setColour (step == 0 ? colour::gridZero : colour::gridMajor);
-        g.drawHorizontalLine (juce::roundToInt (y), 0.0f, static_cast<float> (getWidth()));
-        g.setColour (colour::text3);
-        // Above its line, except at the top edge.
-        const float labelY = y - 14.0f < 0.0f ? y + 2.0f : y - 14.0f;
-        g.drawText ((db > 0 ? "+" : "") + juce::String (db, 0), juce::Rectangle<float> (4.0f, labelY, 40.0f, 12.0f),
-                    juce::Justification::left);
-    }
-
-    // Each Band's own curve, then the whole EQ's: the sum of the Bands that are playing. Nothing plays
-    // above Nyquist, so the curves stay level from there. Before the host has prepared the plugin,
-    // they are drawn as at 48 kHz.
-    const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
-    std::vector<double> frequencies;
-    for (float x = 0.0f; x <= static_cast<float> (getWidth()); x += pixelStep)
-        frequencies.push_back (std::min (frequencyAt (x), 0.4999 * sampleRate));
-    // On mono a Side Band has nothing to process (#6): it plays no part in the whole EQ's curve.
-    const bool mono = ! processor.isStereoPlacementAvailable();
-    std::vector<double> total (frequencies.size(), 0.0), bandDb (frequencies.size());
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-    {
-        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-        if (! band.inUse)
-            continue;
-        const bool silent = band.bypass || (mono && band.placement == StereoPlacement::Side);
-        auto live = band;
-        live.gain = drawnGain (slot, band);
-        bandResponseDb (live, frequencies.data(), bandDb.data(), static_cast<int> (bandDb.size()), sampleRate);
-        if (! silent)
-            for (size_t i = 0; i < total.size(); ++i)
-                total[i] += bandDb[i];
-        g.setColour (colourOf (slot).withAlpha (silent ? 0.12f : selected.contains (slot) ? 0.6f : 0.3f));
-        g.strokePath (curve (bandDb), juce::PathStrokeType (1.2f));
-    }
-    g.setColour (colour::curveMain);
-    g.strokePath (curve (total), juce::PathStrokeType (2.0f));
-
-    // Handles, numbered by Band Slot.
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-    {
-        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-        if (! band.inUse)
-            continue;
-        const auto centre = handleOf (band);
-        const auto circle = juce::Rectangle<float> (handleRadius * 2.0f, handleRadius * 2.0f).withCentre (centre);
-        g.setColour (colourOf (slot).withAlpha (band.bypass ? 0.35f : 1.0f));
-        g.fillEllipse (circle);
-        if (selected.contains (slot))
-        {
-            g.setColour (colour::text1);
-            g.drawEllipse (circle.expanded (2.0f), 1.5f);
-        }
-        g.setColour (colour::onLight);
-        g.drawText (juce::String (slot), circle, juce::Justification::centred);
-        if (isDynamic (band))
-        {
-            // The Dynamic Range ring: from the top, clockwise for a boost and anticlockwise for a cut, half
-            // a turn for 30 dB, shortened where Live Gain would go beyond +/-30 dB. Live Gain's movement
-            // is drawn on top of it.
-            const auto angleOf = [] (double db) { return static_cast<float> (db / liveGainLimitDb * juce::MathConstants<double>::pi); };
-            const double reach = juce::jlimit (-liveGainLimitDb, liveGainLimitDb, band.gain + band.dynamicRange) - band.gain;
-            const auto arc = [&] (double db) {
-                juce::Path path;
-                path.addCentredArc (centre.x, centre.y, ringRadius, ringRadius, 0.0f, 0.0f, angleOf (db), true);
-                return path;
-            };
-            g.setColour (colour::dynRange.withAlpha (band.dynamicsBypass ? 0.35f : 0.9f));
-            g.strokePath (arc (reach), juce::PathStrokeType (3.0f));
-            if (! band.dynamicsBypass)
-            {
-                g.setColour (colour::dynLive);
-                g.strokePath (arc (drawnGain (slot, band) - band.gain), juce::PathStrokeType (3.0f));
-            }
-        }
-        if (slot == soloedSlot)
-        {
-            g.setColour (colour::text1);
-            g.drawEllipse (circle.expanded (5.0f), 2.0f);
-            g.drawText ("Solo", circle.withY (circle.getY() - 22.0f).expanded (20.0f, 0.0f), juce::Justification::centred);
-        }
-    }
-
-    // Values beside the Bands being dragged.
-    if (dragging)
-        for (int slot : selected)
-        {
-            const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-            juce::String text = frequencyText (band.frequency);
-            if (hasGain (band.shape))
-                text << "  " << (band.gain > 0.0 ? "+" : "") << juce::String (band.gain, 1) << " dB";
-            text << "  Q " << juce::String (band.q, 2);
-            const auto centre = handleOf (band);
-            auto box = juce::Rectangle<float> (170.0f, 18.0f).withPosition (centre.x + 12.0f, centre.y - 26.0f);
-            box = box.constrainedWithin (getLocalBounds().toFloat());
-            g.setColour (colour::menu);
-            g.fillRoundedRectangle (box, 4.0f);
-            g.setColour (colour::text1);
-            g.drawText (text, box, juce::Justification::centred);
-        }
-
-    if (marquee)
-    {
-        g.setColour (colour::fill2);
-        g.fillRect (*marquee);
-        g.setColour (colour::text3);
-        g.drawRect (*marquee, 1.0f);
-    }
-
-    if (allInUseMessageUntil != 0)
-    {
-        const auto box = getLocalBounds().toFloat().withSizeKeepingCentre (300.0f, 30.0f).withY (12.0f);
-        g.setColour (colour::stateOffBg);
-        g.fillRoundedRectangle (box, 6.0f);
-        g.setColour (colour::text1);
-        g.setFont (staple::font (size::fs4));
-        g.drawText ("All 24 Bands are in use", box, juce::Justification::centred);
-    }
+    const auto shape = geometry();
+    const auto frame = this->frame();
+    g.fillAll (staple::tokens::colour::bg0);
+    display::paintGrid (g, shape);
+    display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
+    display::paintCurves (g, shape, frame);
+    // The handles and labels go over the edge fades, unfaded.
+    display::paintEdgeFades (g, shape);
+    const auto shownGhost = ghostFade > 0.0f ? ghost() : std::nullopt;
+    display::paintLabels (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
+    display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
+    if (shownGhost)
+        display::paintGhost (g, shape, *shownGhost, frame.sampleRate, ghostFade);
+    display::paintHandles (g, shape, frame);
 }
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)
@@ -467,6 +561,17 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
     dragStart = e.position;
     const bool adding = e.mods.isShiftDown() || e.mods.isCommandDown();
     const int slot = slotAt (e.position);
+    if (const int gripped = slot == 0 ? gripAt (e.position) : 0; gripped != 0)
+    {
+        // A grip: never a Band drag, a marquee or a Solo.
+        if (selected != std::set<int> { gripped })
+            select ({ gripped });
+        const auto& band = shown.bands[static_cast<size_t> (gripped - 1)];
+        rangeDragSlot = gripped;
+        rangeDragStartEnd = band.gain + band.dynamicRange;
+        editing.beginDynamicRangeDrag (gripped);
+        return;
+    }
     if (slot == 0 && ! adding)
     {
         // Spectrum Grab: pressing on the spectrum, near its drawn line, grabs the peak there once the
@@ -479,9 +584,8 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
     }
     if (slot == 0)
     {
-        selectedBeforeMarquee = adding ? selected : std::set<int> {};
-        select (selectedBeforeMarquee);
-        marquee = juce::Rectangle<float> (e.position, e.position);
+        pressedOnEmpty = true;
+        pressAdding = adding;
         return;
     }
 
@@ -510,6 +614,15 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
 
 void EqDisplay::mouseDrag (const juce::MouseEvent& e)
 {
+    if (rangeDragSlot != 0)
+    {
+        // The range's end follows the mouse from where it was.
+        editing.dragDynamicRangeTo (rangeDragStartEnd + dbAt (e.position.y) - dbAt (dragStart.y));
+        shown = heardSettings();
+        placeHandles();
+        repaint();
+        return;
+    }
     // Moving before the hold Solos makes it a drag; once Soloed, the Band can be dragged while heard.
     if (heldSlot != 0 && e.getDistanceFromDragStart() > dragThreshold)
         heldSlot = 0;
@@ -525,6 +638,11 @@ void EqDisplay::mouseDrag (const juce::MouseEvent& e)
             allInUseMessageUntil = juce::Time::getMillisecondCounter() + 2500;
         }
         grabFrequency.reset();
+    }
+    if (pressedOnEmpty && ! marquee && e.getDistanceFromDragStart() > dragThreshold)
+    {
+        selectedBeforeMarquee = pressAdding ? selected : std::set<int> {};
+        marquee = juce::Rectangle<float> (dragStart, dragStart);
     }
     if (marquee)
     {
@@ -550,6 +668,18 @@ void EqDisplay::mouseDrag (const juce::MouseEvent& e)
 
 void EqDisplay::mouseUp (const juce::MouseEvent&)
 {
+    if (std::exchange (rangeDragSlot, 0) != 0)
+        editing.endDynamicRangeDrag();
+    if (std::exchange (pressedOnEmpty, false) && ! marquee)
+    {
+        // A click: inside a Band's filled curve selects it (Shift or Cmd toggles it), on empty space
+        // clears the selection.
+        const int slot = bandAreaAt (dragStart);
+        auto toggled = pressAdding ? selected : std::set<int> {};
+        if (slot != 0 && ! toggled.erase (slot))
+            toggled.insert (slot);
+        select (toggled);
+    }
     if (dragging)
     {
         // The drag's Gain offset follows the mouse under the range it began with, so the range zooms
@@ -569,6 +699,14 @@ void EqDisplay::mouseDoubleClick (const juce::MouseEvent& e)
 {
     if (e.mods.isPopupMenu() || slotAt (e.position) != 0)
         return;
+    if (const int gripped = gripAt (e.position); gripped != 0)
+    {
+        editing.setDynamicRange (gripped, 0.0);
+        shown = heardSettings();
+        placeHandles();
+        repaint();
+        return;
+    }
     if (const auto slot = editing.add (frequencyAt (e.position.x), dbAt (e.position.y)))
     {
         shown = heardSettings();
@@ -621,7 +759,7 @@ void EqDisplay::showMenu (const juce::MouseEvent& e)
     // menu is a window of its own: it draws with the editor's look only when given it.
     auto popup = menu.build();
     popup.setLookAndFeel (&getLookAndFeel());
-    popup.showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withMousePosition());
+    popup.showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withTargetComponent (this).withMousePosition());
 }
 
 void EqDisplay::selectAll()
@@ -656,13 +794,85 @@ void EqDisplay::deleteSelection()
     editing.deleteBands ({ selected.begin(), selected.end() });
     select ({});
     shown = heardSettings();
+    placeHandles();
+}
+
+void EqDisplay::nudgeSelection (double semitones, double heardDb)
+{
+    if (! nudging)
+    {
+        processor.editHistory().beginTransaction();
+        nudging = true;
+    }
+    editing.nudge ({ selected.begin(), selected.end() }, semitones, heardDb);
+    shown = heardSettings();
+    placeHandles();
+    repaint();
+}
+
+void EqDisplay::endHeldNudge()
+{
+    if (! std::exchange (nudging, false))
+        return;
+    processor.editHistory().endTransaction();
+    // As after a drag, a Gain moved beyond the Display Range zooms it out.
+    processor.fitDisplayRangeToHeardGains();
+}
+
+bool EqDisplay::keyStateChanged (bool isKeyDown)
+{
+    if (! isKeyDown)
+        endHeldNudge();
+    return false;
+}
+
+void EqDisplay::focusLost (FocusChangeType)
+{
+    endHeldNudge();
 }
 
 bool EqDisplay::keyPressed (const juce::KeyPress& key)
 {
     if ((key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) && ! selected.empty())
     {
+        // A Band with focus hands it to the next Band in Tab's order that is left, else the one before,
+        // else the display.
+        const int focused = focusedSlot();
+        BandHandle* next = nullptr;
+        if (focused != 0)
+        {
+            std::vector<BandHandle*> order;
+            for (auto& handle : handles)
+                if (handle->isVisible() && (handle->slot == focused || ! selected.contains (handle->slot)))
+                    order.push_back (handle.get());
+            std::stable_sort (order.begin(), order.end(), [] (auto* a, auto* b) { return a->getExplicitFocusOrder() < b->getExplicitFocusOrder(); });
+            const auto at = std::find_if (order.begin(), order.end(), [focused] (auto* h) { return h->slot == focused; });
+            if (std::next (at) != order.end())
+                next = *std::next (at);
+            else if (at != order.begin())
+                next = *std::prev (at);
+        }
         deleteSelection();
+        if (next != nullptr)
+            next->grabKeyboardFocus();
+        else if (focused != 0)
+            grabKeyboardFocus();
+        return true;
+    }
+    const auto mods = key.getModifiers();
+    const int code = key.getKeyCode();
+    const bool horizontal = code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey;
+    const bool vertical = code == juce::KeyPress::upKey || code == juce::KeyPress::downKey;
+    if ((horizontal || vertical) && ! selected.empty()
+        && (mods.getRawFlags() & ~juce::ModifierKeys::shiftModifier & juce::ModifierKeys::allKeyboardModifiers) == 0)
+    {
+        staple::LookAndFeel::keyUsed (*this);
+        const double sign = code == juce::KeyPress::rightKey || code == juce::KeyPress::upKey ? 1.0 : -1.0;
+        const bool fine = mods.isShiftDown();
+        if (horizontal)
+            nudgeSelection (sign * (fine ? 0.1 : 1.0), 0.0);
+        else
+            nudgeSelection (0.0, sign * (fine ? 0.05 : 0.5));
         return true;
     }
     if (key == juce::KeyPress ('a', juce::ModifierKeys::commandModifier, 0))

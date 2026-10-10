@@ -34,20 +34,34 @@ if(EQ1_BUILD_PLUGIN)
     # Host-level checks drive the Plugin Shell the way a host does. One source per line, as above.
     add_executable(eq1_plugin_tests
         plugin/ABCompareTest.cpp
+        plugin/AccessibilityTest.cpp
+        plugin/AnalyzerPopoverTest.cpp
         plugin/AnalyzerSpectrumTest.cpp
         plugin/BandClipboardTest.cpp
         plugin/BandEditingTest.cpp
         plugin/BandMenuTest.cpp
         plugin/BandPanelTest.cpp
+        plugin/DisplayGhostTest.cpp
+        plugin/DisplayHandlesTest.cpp
+        plugin/DisplayLayersTest.cpp
         plugin/DisplayRangeTest.cpp
         plugin/EditHistoryTest.cpp
+        plugin/EditorLayoutTest.cpp
+        plugin/EqDisplayTest.cpp
+        plugin/FooterTest.cpp
+        plugin/HeaderTest.cpp
         plugin/HostSessionTest.cpp
+        plugin/KeyboardControlTest.cpp
         plugin/OutputMeterTest.cpp
+        plugin/PaintTimeTest.cpp
         plugin/PluginShellTest.cpp
+        plugin/PresetBrowserTest.cpp
         plugin/PresetLibraryTest.cpp
         plugin/PresetTest.cpp
+        plugin/StapleControlsTest.cpp
         plugin/StapleTest.cpp
         plugin/StateTest.cpp
+        plugin/UiScaleTest.cpp
     )
     target_include_directories(eq1_plugin_tests PRIVATE
         ${PROJECT_SOURCE_DIR}/plugin
