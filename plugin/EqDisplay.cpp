@@ -612,8 +612,11 @@ void EqDisplay::showMenu (const juce::MouseEvent& e)
                           },
                           juce::SystemClipboard::getTextFromClipboard(),
                           [] (const juce::String& text) { juce::SystemClipboard::copyTextToClipboard (text); } };
-    // Closed unchosen if the display goes, so the Band actions never outlive the editing they use.
-    menu.build().showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withMousePosition());
+    // Closed unchosen if the display goes, so the Band actions never outlive the editing they use. A
+    // menu is a window of its own: it draws with the editor's look only when given it.
+    auto popup = menu.build();
+    popup.setLookAndFeel (&getLookAndFeel());
+    popup.showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withMousePosition());
 }
 
 void EqDisplay::selectAll()

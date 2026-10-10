@@ -6,6 +6,7 @@
 #include "OutputMeter.h"
 #include "OutputPanel.h"
 #include "PresetBar.h"
+#include "staple/LookAndFeel.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -23,6 +24,7 @@ class PluginEditor final : public juce::AudioProcessorEditor, private juce::Time
 {
 public:
     explicit PluginEditor (PluginProcessor& processor);
+    ~PluginEditor() override;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -34,6 +36,8 @@ private:
     void timerCallback() override;
 
     PluginProcessor& eqProcessor;
+    // Every component below draws with it, so it outlives them all.
+    staple::LookAndFeel lookAndFeel;
     BandEditing editing;
     EqDisplay display;
     BandPanel panel;

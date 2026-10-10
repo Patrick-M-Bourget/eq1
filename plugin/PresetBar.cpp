@@ -103,6 +103,7 @@ void PresetBar::step (int by)
 void PresetBar::askToSave()
 {
     namePrompt = std::make_unique<juce::AlertWindow> ("Save as User Preset", "Name:", juce::MessageBoxIconType::NoIcon, this);
+    namePrompt->setLookAndFeel (&getLookAndFeel());
     namePrompt->addTextEditor ("name", {});
     namePrompt->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
     namePrompt->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));

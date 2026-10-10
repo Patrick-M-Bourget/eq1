@@ -72,10 +72,19 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
     startTimerHz (4);
 
+    // Once every component is in place: each one that keeps something from its look (a Slider's
+    // text box, a ComboBox's label colours) takes it again from this.
+    setLookAndFeel (&lookAndFeel);
+
     setResizable (true, true);
     // Wide enough for the output controls' row and the toolbar.
     setResizeLimits (1040, 484, 2560, 1600);
     setSize (1100, 664);
+}
+
+PluginEditor::~PluginEditor()
+{
+    setLookAndFeel (nullptr);
 }
 
 void PluginEditor::showAnalyzerSettings()
