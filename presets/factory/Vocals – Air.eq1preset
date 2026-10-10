@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<eq1 version="3">
+  <PARAM id="band1_in_use" value="1.0"/>
+  <PARAM id="band1_shape" value="3.0"/>
+  <PARAM id="band1_frequency" value="12000.0"/>
+  <PARAM id="band1_gain" value="3.0"/>
+  <PARAM id="band1_q" value="0.71"/>
+  <PARAM id="band2_in_use" value="1.0"/>
+  <PARAM id="band2_frequency" value="7000.0"/>
+  <PARAM id="band2_q" value="2.5"/>
+  <PARAM id="band2_dynamic_range" value="-3.0"/>
+</eq1>
