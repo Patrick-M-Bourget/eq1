@@ -56,6 +56,11 @@ namespace colour
     inline const juce::Colour thumbLine { 0xD9F1EEE8 };      // rgba (241, 238, 232, 0.85)
     inline const juce::Colour pillTop { 0xFF5A5D64 }, pillBottom { 0xFF3A3D44 };
     inline const juce::Colour shadow { 0xFF000000 };
+    // The Preset browser's modal: the scrim over the editor, and the dialog's fill and edge.
+    inline const juce::Colour scrim { 0x59000000 };      // black 35 %
+    inline const juce::Colour dialog { 0xF0131519 };     // rgba (19, 21, 25, 0.94)
+    inline const juce::Colour dialogEdge { 0x14FFFFFF }; // white 8 %
+    inline const juce::Colour none { 0x00000000 };       // nothing drawn: a widget's own fill or edge turned off
     // The window's three soft neutral highlights over bg0 (HANDOFF.md §4, "Window").
     inline const juce::Colour windowHighlight1 { 0x14E2E6EE }; // rgba (226, 230, 238, 0.08)
     inline const juce::Colour windowHighlight2 { 0x0DAAB2C0 }; // rgba (170, 178, 192, 0.05)

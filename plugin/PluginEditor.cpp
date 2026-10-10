@@ -181,14 +181,14 @@ void PluginEditor::resized()
     }
     display.setBounds (area);
 
-    // Over the display: Display Range at its top right, the Band panel centred along its bottom, and
-    // the Preset browser.
+    // Over the display: Display Range at its top right and the Band panel centred along its bottom.
     constexpr int displayRangeRight = 6, displayRangeTop = 8, displayRangeHeight = 24;
     const int displayRangeWidth = displayRange.getIdealWidth();
     displayRange.setBounds (area.getRight() - displayRangeRight - displayRangeWidth, area.getY() + displayRangeTop, displayRangeWidth, displayRangeHeight);
     panel.setAnchor ({ area.getCentreX(), area.getBottom() - layout::bandPanelAboveBottom });
     detectionRange.setDisplayBounds (area);
-    header.presets().browserPanel().setBounds (area.reduced (40, 12));
+    // The Preset browser, a modal over everything.
+    header.presets().browserPanel().setBounds (content.getLocalBounds());
 }
 
 } // namespace eq1

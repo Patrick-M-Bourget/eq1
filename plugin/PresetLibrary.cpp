@@ -100,6 +100,27 @@ std::vector<PresetLibrary::Entry> PresetLibrary::listing() const
     return entries;
 }
 
+std::vector<PresetLibrary::Folder> PresetLibrary::folders (const std::vector<Entry>& entries)
+{
+    std::vector<Folder> found { { "Factory", "Factory", 0, 0 }, { "User", "User", 0, 0 } };
+    const auto add = [&found] (const juce::String& path) -> Folder& {
+        const auto at = std::find_if (found.begin(), found.end(), [&path] (const Folder& f) { return f.path == path; });
+        if (at != found.end())
+            return *at;
+        const auto parts = juce::StringArray::fromTokens (path, "/", {});
+        return found.emplace_back (Folder { path, parts[parts.size() - 1], parts.size() - 1, 0 });
+    };
+    for (const auto& entry : entries)
+    {
+        // Its enclosing folders first, so one holding only subfolders is listed above them.
+        for (int slash = entry.folder.indexOfChar ('/'); slash > 0; slash = entry.folder.indexOfChar (slash + 1, '/'))
+            if (const auto enclosing = entry.folder.substring (0, slash); enclosing != "User")
+                add (enclosing);
+        ++add (entry.folder).count;
+    }
+    return found;
+}
+
 std::vector<PresetLibrary::Entry> PresetLibrary::search (const std::vector<Entry>& entries, const juce::String& text)
 {
     std::vector<Entry> found;

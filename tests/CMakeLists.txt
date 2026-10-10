@@ -53,6 +53,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/OutputMeterTest.cpp
         plugin/PaintTimeTest.cpp
         plugin/PluginShellTest.cpp
+        plugin/PresetBrowserTest.cpp
         plugin/PresetLibraryTest.cpp
         plugin/PresetTest.cpp
         plugin/StapleControlsTest.cpp

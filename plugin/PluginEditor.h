@@ -21,10 +21,10 @@ class PluginProcessor;
 // The native editor (ADR 0002), laid out as the Staple window (HANDOFF.md §4, §9B): the header
 // (HeaderBar), the EQ display with the Output Meter's rail at its right, and the footer (FooterBar),
 // over bg0 and three soft highlights. The selected Band's panel floats over the bottom of the display,
-// Display Range sits at its top right, and the Preset browser opens over it. The header and footer keep
-// their height and the rail its width; the display takes the rest. Resizable, and drawn at the
-// instance's UI Scale through one transform; everything is drawn as vectors, so it stays sharp at any
-// UI Scale and display scale.
+// Display Range sits at its top right, and the Preset browser opens as a modal over everything. The
+// header and footer keep their height and the rail its width; the display takes the rest. Resizable,
+// and drawn at the instance's UI Scale through one transform; everything is drawn as vectors, so it
+// stays sharp at any UI Scale and display scale.
 class PluginEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:

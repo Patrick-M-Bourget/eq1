@@ -55,6 +55,17 @@ public:
     // Every Preset, read from the disk now, in browser order: Factory, then User (userPresets()). A
     // User Preset file that doesn't read as a Preset is left out.
     std::vector<Entry> listing() const;
+    // A folder as the browser's folder column shows it.
+    struct Folder
+    {
+        juce::String path; // as Entry::folder
+        juce::String name; // its last part: "Factory", "User", "Acoustic"
+        int depth = 0;     // 0 for Factory and User, 1 for User's subfolders, and so on
+        int count = 0;     // the Presets directly in it
+    };
+    // Factory, User and each User subfolder holding Presets at any depth, in browser order, a
+    // subfolder after the folder it is in.
+    static std::vector<Folder> folders (const std::vector<Entry>& entries);
     // The entries whose Preset names contain text, ignoring case, in their order. All of them for no text.
     static std::vector<Entry> search (const std::vector<Entry>& entries, const juce::String& text);
     // The Loaded Preset's entry: lastLoaded's place (folder and name) when it is listed and still named

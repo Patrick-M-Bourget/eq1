@@ -61,7 +61,7 @@ public:
     int getIdealWidth() const;
     static constexpr int stepButtonSize = 36, gap = 4;
 
-    // The browser, for the editor to place over the EQ display.
+    // The browser, for the editor to place over its whole content.
     juce::Component& browserPanel() { return browser; }
 
     // After anything here changes the settings, so the editor can show what can be undone.
@@ -78,9 +78,8 @@ private:
     void load (const juce::ValueTree& preset, const juce::String& name, std::optional<PresetLibrary::Entry> entry);
     // Loads the Preset by places after (or before, when negative) the Loaded Preset's entry (PresetLibrary::step).
     void step (int by);
-    void askToSave();
     // Saves the settings as a User Preset named name, when it isn't empty, making it the side's Loaded
-    // Preset, and closes the prompt.
+    // Preset (the browser's inline "Save as…" field).
     void saveAs (const juce::String& name);
     const PresetLibrary::Entry* lastLoadedEntry() const { return lastLoaded.has_value() ? &*lastLoaded : nullptr; }
     void chooseFileToLoad();
@@ -95,7 +94,6 @@ private:
     // only, so the Loaded Preset stays a name.
     std::optional<PresetLibrary::Entry> lastLoaded;
     std::unique_ptr<juce::FileChooser> chooser;
-    std::unique_ptr<juce::AlertWindow> namePrompt;
 };
 
 } // namespace eq1

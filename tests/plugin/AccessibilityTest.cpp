@@ -1,5 +1,6 @@
 #include "DetectionRangeBar.h"
 #include "EditorHarness.h"
+#include "PresetLibrary.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/Popover.h"
 
@@ -174,6 +175,10 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                 names.push_back (name);
         host.closeCallOut();
     }
+    // The Preset browser lists the subfolders of this machine's User folder too: not the editor's own names.
+    for (const auto& folder : eq1::PresetLibrary::folders (eq1::PresetLibrary().listing()))
+        if (folder.depth > 0)
+            std::erase (names, folder.name);
     std::sort (names.begin(), names.end());
 
     // Every name, for the reviewer to check against GLOSSARY.md.
@@ -211,8 +216,10 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Band 4 Threshold",
                                          "Clip Light Left",
                                          "Clip Light Right",
+                                         "Close Preset browser",
                                          "Copy A to B",
                                          "Display Range",
+                                         "Factory", // the Preset browser's folders
                                          "Gain Scale",
                                          "Global Bypass",
                                          "Hide Band 4 dynamics",
@@ -233,7 +240,8 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Search Presets",
                                          "Show User Presets Folder",
                                          "UI Scale",
-                                         "Undo" };
+                                         "Undo",
+                                         "User" };
     std::sort (expected.begin(), expected.end());
     CHECK (names == expected);
     for (const auto& name : names)
@@ -385,7 +393,7 @@ TEST_CASE ("The Presets button reads the Loaded Preset, with Modified, or No Pre
     host.openPresetBrowser();
     auto* list = harness::findChild<juce::ListBox> (*host.editor);
     REQUIRE (list != nullptr);
-    list->getListBoxModel()->returnKeyPressed (1); // the first folder's first Preset
+    list->getListBoxModel()->returnKeyPressed (1); // Factory's second Preset
     host.settle();
     const auto name = host.processor.loadedPresetName();
     REQUIRE (name.isNotEmpty());

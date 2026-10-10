@@ -92,10 +92,7 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
         return name.isEmpty() ? juce::String ("No Preset") : name + (processor.isLoadedPresetModified() ? ", Modified" : "");
     };
     browser.onLoad = [this] (const PresetLibrary::Entry& entry) { load (entry.preset, entry.name, entry); };
-    browser.onSave = [this] {
-        browser.close();
-        askToSave();
-    };
+    browser.onSave = [this] (const juce::String& name) { saveAs (name); };
     browser.onLoadFile = [this] {
         browser.close();
         chooseFileToLoad();
@@ -156,25 +153,10 @@ void PresetBar::step (int by)
         load (listing[*i].preset, listing[*i].name, listing[*i]);
 }
 
-// The name prompt and the file chooser call back after the editor may have closed: each callback
-// holds the bar by a SafePointer and does nothing once it is gone.
-void PresetBar::askToSave()
-{
-    namePrompt = std::make_unique<juce::AlertWindow> ("Save as User Preset", "Name:", juce::MessageBoxIconType::NoIcon, this);
-    namePrompt->setLookAndFeel (&getLookAndFeel());
-    namePrompt->addTextEditor ("name", {});
-    namePrompt->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
-    namePrompt->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-    const juce::Component::SafePointer<PresetBar> bar (this);
-    namePrompt->enterModalState (true, juce::ModalCallbackFunction::create ([bar] (int result) {
-        if (bar != nullptr)
-            bar->saveAs (result == 1 ? bar->namePrompt->getTextEditorContents ("name").trim() : juce::String());
-    }));
-}
-
+// The file chooser calls back after the editor may have closed: its callback holds the bar by a
+// SafePointer and does nothing once it is gone.
 void PresetBar::saveAs (const juce::String& name)
 {
-    namePrompt.reset();
     if (name.isEmpty())
         return;
     const auto preset = processor.presetState();
