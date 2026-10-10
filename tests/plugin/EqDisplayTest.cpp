@@ -499,6 +499,8 @@ TEST_CASE ("The ghost Bell follows the mouse over empty space, rests at 1 kHz wi
     CHECK_FALSE (host.display.ghost().has_value());
     juce::PopupMenu::dismissAllActiveMenus();
     host.settle();
+    // Desktop's timer may have moved the pointer to the machine's real mouse meanwhile: back to empty space.
+    move (atDb (host, 100.0, -5.0));
     CHECK (host.display.ghost().has_value());
 
     // With all 24 Band Slots in use, none.
