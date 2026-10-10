@@ -2,7 +2,7 @@
 # Blocks a push whose build or tests fail (.githooks/gate.sh). A rebase rewrites commits without running
 # the pre-commit hook, so the pushed commits get the same gate here. It builds and tests the working
 # tree, so it requires the pushed commit to be the checked-out one, with nothing uncommitted in what the
-# build reads. A push of Markdown changes alone, or of a branch deletion, isn't gated, nor is a tree the
+# build reads. A push of Markdown changes alone, of a branch deletion or of the pr-assets images isn't gated, nor is a tree the
 # gate already passed (the commit hook's, when nothing was rebased since).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -11,6 +11,7 @@ zero=0000000000000000000000000000000000000000
 gate=no
 while read -r local_ref local_sha remote_ref remote_sha; do
     [ "$local_sha" = "$zero" ] && continue # deleting a branch
+    [ "$remote_ref" = refs/heads/pr-assets ] && continue # images for PR comments (scripts/pr-images.sh)
     base=$remote_sha
     [ "$base" = "$zero" ] && base=$(git merge-base "$local_sha" origin/main 2> /dev/null || echo "")
     changed=$(if [ -n "$base" ]; then git diff --name-only "$base" "$local_sha"; else git show --name-only --format= "$local_sha"; fi)

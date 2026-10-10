@@ -33,7 +33,7 @@ Create a GitHub issue.
 ## When a skill says "fetch the relevant ticket"
 
 Read it as in **Read an issue** above.
-A ticket's spec is its latest `## Agent Brief` comment when it has one; the brief supersedes the body. Each acceptance criterion's test must be able to go red (`CODING_STANDARDS.md`, "Red without the change"): for a data race, the criterion names a seam ThreadSanitizer runs (the Engine tests), or says no test can show it, and why. Decisions settled in conversation before implementing (tolerances, scope, what an ambiguous criterion means) are posted as a new Agent Brief first, so the ticket keeps them. `gh issue view <number> --comments` prints the comments without the body, so read with `--json` as above.
+A ticket's spec is its latest `## Agent Brief` comment when it has one; the brief supersedes the body. Each acceptance criterion's test must be able to go red (`CODING_STANDARDS.md`, "Red without the change"): for a data race, the criterion names a seam ThreadSanitizer runs (the Engine tests), or says no test can show it, and why. Decisions settled in conversation before implementing (tolerances, scope, what an ambiguous criterion means) are posted as a new Agent Brief first, so the ticket keeps them. A brief whose work spans many unrelated files (a clean-up list, say) is split into tickets that touch different files, so builders run them in parallel rather than one builder committing through it for an hour. An "Unblocked" update re-checks the current behaviour on main first: the blocker's merge may have done part of the work. `gh issue view <number> --comments` prints the comments without the body, so read with `--json` as above.
 
 ## Wayfinding operations
 
