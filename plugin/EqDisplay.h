@@ -19,27 +19,28 @@ namespace eq1
 
 class PluginProcessor;
 
-// The EQ curve with a handle per Band, over the Analyzer's pre-EQ, post-EQ and Sidechain spectra. Double-click
-// adds a Bell; a ghost Bell follows the mouse over empty space to show where. Click a handle, or inside a
-// Band's filled curve, to select it (a click on empty space clears the selection); drag moves the selected
-// Bands (Shift or Cmd-click to select several, or drag a box around them, or Cmd/Ctrl+A for all); the
-// wheel changes Q; Delete removes the selected Bands; Cmd/Ctrl+X, C and V Cut, Copy and Paste them, as
-// the Band menu does, while the display has keyboard focus (a host may take these keys first). The arrow
-// keys move the selected Bands, a semitone or 0.5 dB as heard per press (0.1 semitone or 0.05 dB with
-// Shift), a held key being one undo step. Tab reaches each Band in use, in Frequency order (the order
-// kept while a Band has focus), which selects it alone, then its Dynamic Range Handle if shown; Delete
-// then moves focus to the next Band. Right-click opens the Band menu (BandMenu.h) for the selection,
-// which a Band outside it becomes first; on empty space it offers Paste and Select All. Holding a handle
-// still Solos its Band until the mouse is released. Pressing on the spectrum, away from the handles,
-// grabs its peak there (Spectrum Grab). The ▲▼ Dynamic Range Handle of the selected Band, and of each
-// Dynamic Band, sets its Dynamic Range: drag it, double-click it to clear it, or ↑/↓ while it has focus. A Dynamic Band's curve
-// follows its Live Gain, and the selected one has a wash between its curves at Gain and Gain + Dynamic
-// Range. Hovering a handle or a curve lights the Band's curve, and Global Bypass fades every curve and
-// handle to its bypassed look (plugin/display/). The curve comes from the Engine's own response maths
-// (eq1/Response.h). A handle beyond the Display Range sits at its edge; a heard Gain changed to beyond
-// it zooms the range out, once any drag has ended. A screen reader reads the display as a group, "EQ
-// display", of the Bands in use, each named "Band 4" with its stored settings as its value (spokenBand),
-// announced again whenever the Band moves, and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle".
+// The EQ curve with a handle per Band, over the Analyzer's pre-EQ, post-EQ and Sidechain spectra.
+// Double-click adds a Bell; a ghost Bell follows the mouse over empty space to show where. Click a
+// handle, or inside a Band's filled curve, to select it (a click on empty space clears the selection);
+// drag moves the selected Bands (Shift or Cmd-click to select several, or drag a box around them, or
+// Cmd/Ctrl+A for all); the wheel changes Q; Delete removes the selected Bands; Cmd/Ctrl+X, C and V Cut,
+// Copy and Paste them, as the Band menu does, while the display has keyboard focus (a host may take
+// these keys first). The arrow keys move the selected Bands, a semitone or 0.5 dB as heard per press
+// (0.1 semitone or 0.05 dB with Shift), a held key being one undo step. Tab reaches each Band in use, in
+// Frequency order (the order kept while a Band has focus), which selects it alone, then its Dynamic
+// Range Handle if shown; Delete then moves focus to the next Band. Right-click opens the Band menu
+// (BandMenu.h) for the selection, which a Band outside it becomes first; on empty space it offers Paste
+// and Select All. Holding a handle still Solos its Band until the mouse is released. Pressing on the
+// spectrum, away from the handles, grabs its peak there (Spectrum Grab). The ▲▼ Dynamic Range Handle of
+// the selected Band, and of each Dynamic Band, sets its Dynamic Range: drag it, double-click it to clear
+// it, or ↑/↓ while it has focus. A Dynamic Band's curve follows its Live Gain, and the selected one has
+// a wash between its curves at Gain and Gain + Dynamic Range. Hovering a handle or a curve lights the
+// Band's curve, and Global Bypass fades every curve and handle to its bypassed look (plugin/display/).
+// The curve comes from the Engine's own response maths (eq1/Response.h). A handle beyond the Display
+// Range sits at its edge; a heard Gain changed to beyond it zooms the range out, once any drag has
+// ended. A screen reader reads the display as a group, "EQ display", of the Bands in use, each named
+// "Band 4" with its stored settings as its value (spokenBand), announced again whenever the Band moves,
+// and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle".
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:
