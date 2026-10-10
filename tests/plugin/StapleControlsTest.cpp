@@ -1,6 +1,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/LookAndFeel.h"
+#include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/KnobTooltip.h"
@@ -331,4 +332,84 @@ TEST_CASE ("An IconButton attached as a toggle is lit while on, or shows Off for
     CHECK (bypass.getToggleState());
     CHECK (bypass.isOff());
     CHECK_FALSE (bypass.isLit());
+}
+
+namespace
+{
+// The Shape Edge selector, its items in the parameter's order, each with its icon.
+void addShapes (staple::EdgeSelector& selector)
+{
+    const staple::Icon icons[] = { staple::Icon::bell,     staple::Icon::lowShelf, staple::Icon::lowCut,    staple::Icon::highShelf,
+                                   staple::Icon::highCut,  staple::Icon::notch,    staple::Icon::bandPass,  staple::Icon::tiltShelf,
+                                   staple::Icon::flatTilt, staple::Icon::allPass };
+    const auto& names = eq1::parameters::shapeNames();
+    for (int i = 0; i < names.size(); ++i)
+        selector.addItem (names[i], i + 1, icons[i]);
+}
+} // namespace
+
+TEST_CASE ("An EdgeSelector attached with ComboBoxAttachment sets its parameter when an item is picked, and steps with up and down")
+{
+    Kit kit;
+    staple::EdgeSelector shape ("Shape", staple::EdgeSelector::Side::left);
+    addShapes (shape);
+    Attachment::ComboBoxAttachment attachment (kit.state(), eq1::parameters::shapeId (1), shape);
+    kit.add (shape, { 0, 10, staple::tokens::layout::edgeSelectorWidth, staple::tokens::layout::edgeSelectorHeight });
+    CHECK (shape.getText() == "Bell");
+
+    shape.setSelectedId (5, juce::sendNotificationSync); // as a pick from its list does
+    CHECK (kit.value (eq1::parameters::shapeId (1)) == 4.0f);
+    CHECK (kit.history.undoSteps() == 1);
+
+    CHECK (shape.keyPressed (juce::KeyPress (juce::KeyPress::downKey)));
+    CHECK (kit.value (eq1::parameters::shapeId (1)) == 5.0f);
+    CHECK (shape.getText() == "Notch");
+    CHECK (shape.keyPressed (juce::KeyPress (juce::KeyPress::upKey)));
+    CHECK (shape.keyPressed (juce::KeyPress (juce::KeyPress::upKey)));
+    CHECK (kit.value (eq1::parameters::shapeId (1)) == 3.0f);
+    CHECK (kit.history.undoSteps() == 4);
+
+    // Its list carries the same icons.
+    CHECK (shape.getRootMenu()->getNumItems() == 10);
+    juce::PopupMenu::MenuItemIterator items (*shape.getRootMenu());
+    REQUIRE (items.next());
+    CHECK (items.getItem().image != nullptr);
+}
+
+TEST_CASE ("Knob and EdgeSelector keep JUCE's accessibility and the arrow-key steps")
+{
+    Kit kit;
+    staple::Knob gain (staple::tokens::knob::gain);
+    Attachment::SliderAttachment gainAttachment (kit.state(), "band2_gain", gain);
+    gain.setTitle ("Band 2 Gain");
+    gain.setTextValueSuffix (" dB");
+    staple::EdgeSelector placement ("Stereo Placement", staple::EdgeSelector::Side::right);
+    const staple::Icon icons[] = { staple::Icon::placementStereo, staple::Icon::placementLeft, staple::Icon::placementRight,
+                                   staple::Icon::placementMid, staple::Icon::placementSide };
+    for (int i = 0; i < eq1::parameters::placementNames().size(); ++i)
+        placement.addItem (eq1::parameters::placementNames()[i], i + 1, icons[i]);
+    Attachment::ComboBoxAttachment placementAttachment (kit.state(), eq1::parameters::placementId (2), placement);
+    placement.setTitle ("Band 2 Stereo Placement");
+    kit.add (gain, { 10, 10, gain.getIdealSize(), gain.getIdealSize() });
+    kit.add (placement, { 200, 10, 104, 34 });
+    gain.setValue (3.0, juce::sendNotificationSync);
+
+    auto* knobHandler = gain.getAccessibilityHandler();
+    REQUIRE (knobHandler != nullptr);
+    CHECK (knobHandler->getTitle() == "Band 2 Gain");
+    REQUIRE (knobHandler->getValueInterface() != nullptr);
+    CHECK (knobHandler->getValueInterface()->getCurrentValueAsString() == "3.00 dB");
+    auto* selectorHandler = placement.getAccessibilityHandler();
+    REQUIRE (selectorHandler != nullptr);
+    CHECK (selectorHandler->getTitle() == "Band 2 Stereo Placement");
+    REQUIRE (selectorHandler->getValueInterface() != nullptr);
+    CHECK (selectorHandler->getValueInterface()->getCurrentValueAsString() == "Stereo");
+
+    CHECK (gain.getWantsKeyboardFocus());
+    const double before = position (gain);
+    CHECK (gain.keyPressed (juce::KeyPress (juce::KeyPress::upKey)));
+    CHECK_THAT (position (gain), WithinAbs (before + 0.01, 1.0e-4));
+    CHECK (placement.getWantsKeyboardFocus());
+    CHECK (placement.keyPressed (juce::KeyPress (juce::KeyPress::downKey)));
+    CHECK (selectorHandler->getValueInterface()->getCurrentValueAsString() == "Left");
 }
