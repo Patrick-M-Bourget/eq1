@@ -89,7 +89,7 @@ void PresetBar::load (const juce::ValueTree& preset, const juce::String& name, s
         edited();
     }
     else
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Load Preset", "That file isn't an eq1 Preset.");
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Load Preset", "That file isn't an eq1 Preset.", {}, this);
 }
 
 void PresetBar::step (int by)
@@ -130,7 +130,9 @@ void PresetBar::saveAs (const juce::String& name)
     else
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
                                                 "Save as User Preset",
-                                                "Couldn't write the Preset to " + library.folder().getFullPathName() + ".");
+                                                "Couldn't write the Preset to " + library.folder().getFullPathName() + ".",
+                                                {},
+                                                this);
 }
 
 void PresetBar::chooseFileToLoad()
