@@ -497,3 +497,70 @@ TEST_CASE ("A TextChip clicks as a Button, and is as wide as its text, padding a
     range.setChevron (true);
     CHECK (range.getIdealWidth() >= withoutChevron + 8);
 }
+
+TEST_CASE ("A Knob's outer ring lane reports presses, drags, double-clicks and hovers to its handler, and doesn't turn the knob")
+{
+    struct Ring final : staple::Knob::RingHandler
+    {
+        int downs = 0, drags = 0, ups = 0, doubleClicks = 0, hoversOn = 0, hoversOff = 0, paints = 0;
+        float inner = 0.0f, outer = 0.0f;
+        void paintRing (juce::Graphics&, staple::Knob&, juce::Point<float>, float in, float out) override
+        {
+            ++paints;
+            inner = in;
+            outer = out;
+        }
+        void ringMouseDown (staple::Knob&, const juce::MouseEvent&) override { ++downs; }
+        void ringMouseDrag (staple::Knob&, const juce::MouseEvent&) override { ++drags; }
+        void ringMouseUp (staple::Knob&, const juce::MouseEvent&) override { ++ups; }
+        void ringDoubleClick (staple::Knob&, const juce::MouseEvent&) override { ++doubleClicks; }
+        void ringHover (staple::Knob&, bool over) override { ++(over ? hoversOn : hoversOff); }
+    } ring;
+
+    Kit kit;
+    staple::Knob gain (staple::tokens::knob::gain);
+    Attachment::SliderAttachment attachment (kit.state(), "band1_gain", gain);
+    gain.setRing (&ring); // the Gain knob's 12 px lane at r + 10
+    kit.add (gain, { 10, 10, gain.getIdealSize(), gain.getIdealSize() });
+    const auto centre = gain.getFaceCentre();
+    const auto onRing = centre.translated (0.0f, -(33.0f + 10.0f));
+    const auto beyond = centre.translated (0.0f, -(33.0f + 17.0f));
+    CHECK (gain.getIdealSize() >= 66 + 2 * 16);
+    CHECK (gain.isOnRing (onRing));
+    CHECK_FALSE (gain.isOnRing (centre));
+    CHECK_FALSE (gain.isOnRing (beyond));
+    CHECK (gain.hitTest (juce::roundToInt (onRing.x), juce::roundToInt (onRing.y)));
+    CHECK_FALSE (gain.hitTest (juce::roundToInt (beyond.x), juce::roundToInt (beyond.y)));
+
+    gain.mouseMove (Kit::event (gain, onRing, {}, onRing));
+    CHECK (ring.hoversOn == 1);
+    gain.mouseMove (Kit::event (gain, centre, {}, centre));
+    CHECK (ring.hoversOff == 1);
+
+    Kit::drag (gain, onRing, -50.0f);
+    CHECK (ring.downs == 1);
+    CHECK (ring.drags == 2);
+    CHECK (ring.ups == 1);
+    Kit::doubleClick (gain, onRing);
+    CHECK (ring.doubleClicks == 1);
+    CHECK_THAT (position (gain), WithinAbs (0.5, 1.0e-6));
+    CHECK (kit.history.undoSteps() == 0);
+
+    juce::Image image (juce::Image::ARGB, gain.getWidth(), gain.getHeight(), true);
+    juce::Graphics g (image);
+    gain.paintEntireComponent (g, false);
+    CHECK (ring.paints == 1);
+    CHECK_THAT (ring.inner, WithinAbs (33.0 + 4.0, 1.0e-4));
+    CHECK_THAT (ring.outer, WithinAbs (33.0 + 16.0, 1.0e-4));
+}
+
+TEST_CASE ("Tab skips a disabled Knob")
+{
+    Kit kit;
+    staple::Knob knob (staple::tokens::knob::q);
+    kit.add (knob, { 10, 10, knob.getIdealSize(), knob.getIdealSize() });
+    const auto focusStops = [&] { return juce::KeyboardFocusTraverser().getAllComponents (&kit.window); };
+    CHECK (focusStops().size() == 1);
+    knob.setEnabled (false);
+    CHECK (focusStops().empty());
+}
