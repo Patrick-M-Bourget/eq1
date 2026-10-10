@@ -152,7 +152,8 @@ cpu() {
             return 3
         fi
     fi
-    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget
+    # `all` calls cpu under ||, where set -e is off: return a failed build rather than time a stale exe.
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget || return
     local exe=$BUILD_DIR/tests/eq1_cpu_budget
     [ "$os" = windows ] && [ ! -f "$exe.exe" ] && exe=$BUILD_DIR/tests/Release/eq1_cpu_budget
     local out status=0
@@ -263,6 +264,7 @@ case "${1:-all}" in
     tsan) tsan ;;
     validate) validate ;;
     docs) docs ;;
-    all) docs; build; run_tests; cpu; tsan; validate ;;
+    # A busy machine skips the CPU budget (exit 3) but not the stages after it.
+    all) docs; build; run_tests; cpu || [ $? -eq 3 ]; tsan; validate ;;
     *) sed -n '2,14p' "$0" >&2; exit 2 ;;
 esac
