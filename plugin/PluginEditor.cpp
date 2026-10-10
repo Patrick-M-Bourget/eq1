@@ -64,7 +64,9 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     analyzerTiltLabel.setText ("Analyzer Tilt", juce::dontSendNotification);
     addAndMakeVisible (analyzerTiltLabel);
     analyzerTilt.setSliderStyle (juce::Slider::LinearHorizontal);
-    analyzerTilt.setRange (0.0, 6.0, 0.5);
+    // Continuous, so the arrow keys step it 1% of its range like every other slider.
+    analyzerTilt.setRange (0.0, 6.0);
+    analyzerTilt.setNumDecimalPlacesToDisplay (1);
     analyzerTilt.setTextValueSuffix (" dB/oct");
     analyzerTilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 20);
     analyzerTilt.onValueChange = [this] { storeAnalyzerSettings(); };

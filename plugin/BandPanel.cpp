@@ -12,6 +12,8 @@ namespace
 {
 // Threshold's slider runs from -60 dB to 0 dB, then one more step at the top for Auto.
 constexpr double thresholdAutoPosition = 3.0;
+// Positions above 0 dB are Auto. The slider's 0.1 dB steps put 0 dB a rounding error away from 0.
+bool isAuto (double position) { return position > 0.05; }
 } // namespace
 
 
@@ -47,6 +49,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
     for (size_t i = 0; i < std::size (controls); ++i)
     {
         auto [slider, label] = controls[i];
+        slider->setName (names[i]);
         slider->setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
         slider->setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 18);
         label->setText (names[i], juce::dontSendNotification);
@@ -57,10 +60,16 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
 
     threshold.setRange (-60.0, thresholdAutoPosition, 0.1);
     threshold.textFromValueFunction = [] (double value) {
-        return value > 0.0 ? juce::String ("Auto") : juce::String (value, 1) + " dB";
+        return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB";
     };
     threshold.valueFromTextFunction = [] (const juce::String& text) {
         return text.trim().equalsIgnoreCase ("Auto") ? thresholdAutoPosition : juce::jmin (0.0, text.getDoubleValue());
+    };
+    // Between 0 dB and Auto there are no values: a step up from 0 dB is Auto, a step down from Auto 0 dB.
+    threshold.landStep = [] (double from, double to) {
+        if (isAuto (from))
+            return to < from ? 0.0 : from;
+        return isAuto (to) ? thresholdAutoPosition : to;
     };
     threshold.onDragStart = [this] {
         thresholdDragging = true;
@@ -179,7 +188,7 @@ void BandPanel::storeThreshold()
     if (slot == 0 || thresholdAttachment == nullptr)
         return;
     const double value = threshold.getValue();
-    const bool automatic = value > 0.0;
+    const bool automatic = isAuto (value);
     // A drag is one gesture on both parameters; a typed value is a gesture of its own.
     if (thresholdDragging)
     {
@@ -196,6 +205,10 @@ void BandPanel::storeThreshold()
             thresholdAttachment->setValueAsCompleteGesture (static_cast<float> (value));
         processor.editHistory().endTransaction();
     }
+    // The attachments don't call back for their own changes: a key step or a typed value shows what
+    // was stored, such as Auto at its top position. A mouse drag carries on from where it is.
+    if (! threshold.isMouseButtonDown())
+        showThreshold();
 }
 
 void BandPanel::updateVisibility()

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "KeyboardSlider.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -30,7 +32,7 @@ private:
     PluginProcessor& processor;
 
     juce::Label gainScaleLabel, outputGainLabel, outputPanLabel;
-    juce::Slider gainScale, outputGain, outputPan;
+    KeyboardSlider gainScale, outputGain, outputPan;
     juce::ComboBox panMode;
     juce::ToggleButton autoGain { "Auto Gain" }, phaseInvert { "Phase Invert" }, globalBypass { "Global Bypass" };
 

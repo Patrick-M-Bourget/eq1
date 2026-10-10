@@ -8,6 +8,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace harness
 {
@@ -108,6 +109,31 @@ struct OpenEditor
         display.mouseDown (mouseEvent (from, mods, from));
         display.mouseDrag (mouseEvent (to, mods, from));
         display.mouseUp (mouseEvent (to, mods.withoutMouseButtons(), from));
+    }
+
+    // A left-click on the display, as on a Band's handle to select it.
+    void click (juce::Point<float> position)
+    {
+        const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+        display.mouseDown (mouseEvent (position, left, position));
+        display.mouseUp (mouseEvent (position, {}, position));
+    }
+
+    // Every child of the editor, at any depth, that is a T and passes test.
+    template <typename T>
+    std::vector<T*> findAll (std::function<bool (T&)> test = [] (T&) { return true; })
+    {
+        std::vector<T*> found;
+        std::function<void (juce::Component&)> visit = [&] (juce::Component& parent) {
+            for (auto* child : parent.getChildren())
+            {
+                if (auto* t = dynamic_cast<T*> (child); t != nullptr && test (*t))
+                    found.push_back (t);
+                visit (*child);
+            }
+        };
+        visit (*editor);
+        return found;
     }
 
     // A key pressed and released in the window, as the user types it.
