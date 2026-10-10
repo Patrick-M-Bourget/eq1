@@ -872,11 +872,16 @@ void EqDisplay::copySelection()
 
 bool EqDisplay::paste()
 {
-    const auto pasted = editing.paste (clipboardBands (juce::SystemClipboard::getTextFromClipboard()));
-    if (pasted.empty())
+    const auto bands = clipboardBands (juce::SystemClipboard::getTextFromClipboard());
+    if (bands.empty())
         return false;
-    select ({ pasted.begin(), pasted.end() });
-    shown = heardSettings();
+    // With no free Band Slot nothing is pasted, but the key is still eq1's, not the host's.
+    const auto pasted = editing.paste (bands);
+    if (! pasted.empty())
+    {
+        select ({ pasted.begin(), pasted.end() });
+        shown = heardSettings();
+    }
     return true;
 }
 
