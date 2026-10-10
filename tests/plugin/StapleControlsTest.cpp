@@ -6,6 +6,7 @@
 #include "staple/controls/Knob.h"
 #include "staple/controls/KnobTooltip.h"
 #include "staple/controls/ParseValue.h"
+#include "staple/controls/Popover.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -412,4 +413,64 @@ TEST_CASE ("Knob and EdgeSelector keep JUCE's accessibility and the arrow-key st
     CHECK (placement.getWantsKeyboardFocus());
     CHECK (placement.keyPressed (juce::KeyPress (juce::KeyPress::downKey)));
     CHECK (selectorHandler->getValueInterface()->getCurrentValueAsString() == "Left");
+}
+
+TEST_CASE ("A Popover closes on an outside click and on Esc, returns focus to its opener, and its contents leave the focus order")
+{
+    Kit kit;
+    juce::TextButton opener ("Analyzer"), elsewhere ("Elsewhere");
+    kit.add (opener, { 20, 20, 80, 24 });
+    kit.add (elsewhere, { 200, 200, 80, 24 });
+    staple::Popover popover;
+    juce::TextButton inside ("Pre + Post");
+    popover.addAndMakeVisible (inside);
+    popover.setCardSize (160, 80);
+    inside.setBounds (popover.getCardBounds().reduced (8).withHeight (24));
+    int closes = 0;
+    popover.onClose = [&] { ++closes; };
+
+    // Tab reaches c: it is showing, and among the focus stops of its focus container.
+    const auto inFocusOrder = [&] (juce::Component& c) {
+        auto* container = c.findKeyboardFocusContainer();
+        const auto all = juce::KeyboardFocusTraverser().getAllComponents (container != nullptr ? container : &kit.window);
+        return c.isShowing() && std::find (all.begin(), all.end(), &c) != all.end();
+    };
+    CHECK_FALSE (inFocusOrder (inside));
+
+    opener.grabKeyboardFocus();
+    popover.open (opener);
+    REQUIRE (popover.isOpen());
+    CHECK (popover.getParentComponent() == &kit.window); // inside the editor, not a window of its own
+    CHECK (popover.getCardBounds().translated (popover.getX(), popover.getY()).getY() >= opener.getBottom()); // below its opener
+    CHECK (inside.hasKeyboardFocus (false));
+    CHECK (inFocusOrder (inside));
+
+    // A click inside, or on its opener, leaves it open; a click anywhere else closes it.
+    popover.mouseDown (Kit::event (inside, centreOf (inside), juce::ModifierKeys::leftButtonModifier, centreOf (inside)));
+    CHECK (popover.isOpen());
+    popover.mouseDown (Kit::event (elsewhere, centreOf (elsewhere), juce::ModifierKeys::leftButtonModifier, centreOf (elsewhere)));
+    CHECK_FALSE (popover.isOpen());
+    CHECK (closes == 1);
+    CHECK (opener.hasKeyboardFocus (false));
+    CHECK_FALSE (inFocusOrder (inside));
+
+    popover.open (opener);
+    REQUIRE (inside.hasKeyboardFocus (false));
+    CHECK (kit.window.getPeer()->handleKeyPress (juce::KeyPress (juce::KeyPress::escapeKey)));
+    CHECK_FALSE (popover.isOpen());
+    CHECK (closes == 2);
+    CHECK (opener.hasKeyboardFocus (false));
+    CHECK_FALSE (inFocusOrder (inside));
+}
+
+TEST_CASE ("A Popover opens above its opener where there is no room below")
+{
+    Kit kit;
+    juce::TextButton opener ("Display Range");
+    kit.add (opener, { 20, 260, 80, 24 });
+    staple::Popover popover;
+    popover.setCardSize (160, 120);
+    popover.open (opener);
+    REQUIRE (popover.isOpen());
+    CHECK (popover.getCardBounds().translated (popover.getX(), popover.getY()).getBottom() <= opener.getY());
 }
