@@ -17,8 +17,8 @@ Files in this folder:
 | `HANDOFF.md` | This brief |
 | `tokens.json` | All design tokens (colour, type, radius, motion, band palette) |
 | `plugin/staple/Tokens.h` (in the build, moved from this folder) | The same tokens as `juce::Colour` / float constants, ready to include |
-| `logo.png` | Current logo (183 × 114 source — request an SVG before release) |
-| `prototype/` | Snapshot of the prototype source (`Main.dc.html`, `DesignSystem.dc.html`, `tokens.css`) for reading exact values, icon paths and behaviour. Reference only — do not port. |
+| `prototype/logo.png` | Current logo (183 × 114 source — request an SVG before release) |
+| `prototype/` | Snapshot of the prototype source (`Main.dc.html`, `DesignSystem.dc.html`, `tokens.css`, `logo.png`) for reading exact values, icon paths and behaviour. Reference only — do not port. |
 
 ---
 
