@@ -229,6 +229,20 @@ std::vector<juce::String> focusOrder (juce::Component& editor)
     return order;
 }
 
+// The editor's focus order while a popover is open: the order without it, with the popover's controls
+// in one run somewhere in it.
+void checkWalkedWith (juce::Component& editor, juce::Component& popover, const std::vector<juce::String>& closed)
+{
+    const auto open = focusOrder (editor), inside = focusOrder (popover);
+    REQUIRE_FALSE (inside.empty());
+    const auto run = std::search (open.begin(), open.end(), inside.begin(), inside.end());
+    CHECK (run != open.end());
+    auto rest = open;
+    if (run != open.end())
+        rest.erase (rest.begin() + (run - open.begin()), rest.begin() + (run - open.begin()) + static_cast<std::ptrdiff_t> (inside.size()));
+    CHECK (rest == closed);
+}
+
 // Two edits, one undone, so Undo and Redo are both enabled.
 void undoAndRedoEnabled (EveryControl& host)
 {
@@ -333,7 +347,7 @@ TEST_CASE ("Tab walks the header, Display Range, the Bands, the Band panel and t
     }
 }
 
-TEST_CASE ("The output popover takes focus to Output Gain as it opens, and Tab walks its controls in order within it")
+TEST_CASE ("The output popover takes focus to Output Gain as it opens from the keyboard, and Tab walks its controls in order")
 {
     EveryControl host;
     const auto closed = focusOrder (*host.editor);
@@ -342,14 +356,31 @@ TEST_CASE ("The output popover takes focus to Output Gain as it opens, and Tab w
     REQUIRE (popover != nullptr);
     CHECK (named<juce::Slider> (host, "Output Gain").hasKeyboardFocus (false));
     CHECK (focusOrder (*popover) == std::vector<juce::String> { "Output Gain", "Pan Mode", "Output Pan", "Phase Invert", "Auto Gain", "Output Meter" });
-    // The rest of the editor is walked as before.
-    CHECK (focusOrder (*host.editor) == closed);
+    // The rest of the editor is walked as before, with the popover's controls among it.
+    checkWalkedWith (*host.editor, *popover, closed);
     host.closeCallOut();
     CHECK_FALSE (popover->isOpen());
     CHECK (named<juce::Button> (host, "Output").hasKeyboardFocus (false));
 }
 
-TEST_CASE ("The Analyzer popover takes focus to Pre as it opens, and Tab walks its controls in order within it")
+TEST_CASE ("Tab from a popover's last control leaves it for the rest of the editor; it doesn't keep Tab inside")
+{
+    EveryControl host;
+    const juce::String opener = GENERATE ("Output", "Analyzer");
+    CAPTURE (opener);
+    host.openCallOut (opener);
+    auto* popover = harness::findChild<staple::Popover> (*host.editor, [] (staple::Popover& p) { return p.isOpen(); });
+    REQUIRE (popover != nullptr);
+    const auto inside = juce::KeyboardFocusTraverser().getAllComponents (popover);
+    REQUIRE_FALSE (inside.empty());
+    inside.back()->grabKeyboardFocus();
+    host.press (juce::KeyPress (juce::KeyPress::tabKey));
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    REQUIRE (focused != nullptr);
+    CHECK_FALSE (popover->isParentOf (focused));
+}
+
+TEST_CASE ("The Analyzer popover takes focus to Pre as it opens from the keyboard, and Tab walks its controls in order")
 {
     EveryControl host;
     const auto closed = focusOrder (*host.editor);
@@ -360,8 +391,8 @@ TEST_CASE ("The Analyzer popover takes focus to Pre as it opens, and Tab walks i
     CHECK (focusOrder (*popover)
            == std::vector<juce::String> { "Analyzer Pre-EQ", "Analyzer Post-EQ", "Analyzer Sidechain", "Analyzer Range", "Analyzer Resolution",
                                           "Analyzer Speed", "Analyzer Tilt", "Peak Hold" });
-    // The rest of the editor is walked as before, without them.
-    CHECK (focusOrder (*host.editor) == closed);
+    // The rest of the editor is walked as before, with the popover's controls among it.
+    checkWalkedWith (*host.editor, *popover, closed);
     for (const juce::String name : { "Analyzer Pre-EQ", "Analyzer Range", "Peak Hold" })
         CHECK (std::find (closed.begin(), closed.end(), name) == closed.end());
     host.closeCallOut();

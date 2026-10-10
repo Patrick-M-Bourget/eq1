@@ -21,8 +21,6 @@ constexpr int frameMs = 16;
 Popover::Popover()
 {
     setVisible (false);
-    // Tab moves among its contents while it is open.
-    setFocusContainerType (FocusContainerType::keyboardFocusContainer);
 }
 
 Popover::~Popover()
