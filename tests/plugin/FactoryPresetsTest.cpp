@@ -9,6 +9,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <cmath>
+#include <random>
 #include <set>
 
 using Catch::Matchers::WithinAbs;
@@ -101,6 +103,111 @@ juce::String formatProblem (const FactoryPreset& preset)
     return {};
 }
 
+// The Factory Presets allowed more Bands than the Band Cap.
+const juce::StringArray& pastBandCap()
+{
+    static const juce::StringArray names { named ("Vocals \xe2\x80\x93 Resonance Control"), named ("Mix Bus \xe2\x80\x93 Drum Bus Sculpt"),
+                                           named ("Master \xe2\x80\x93 Detailed") };
+    return names;
+}
+
+// Rule: at most 6 Bands in use (the Band Cap), unless it is one of pastBandCap().
+juce::String bandCountProblem (const FactoryPreset& preset)
+{
+    constexpr int bandCap = 6;
+    Host host;
+    host.processor.loadPreset (preset.preset, preset.name);
+    int inUse = 0;
+    for (int slot = 1; slot <= eq1::numBandSlots; ++slot)
+        if (host.value (eq1::parameters::inUseId (slot)) >= 0.5f)
+            ++inUse;
+    if (inUse > bandCap && ! pastBandCap().contains (preset.name))
+        return juce::String (inUse) + " Bands in use";
+    return {};
+}
+
+// Rule: Gain Scale, Output Pan, Pan Mode and Phase Invert at their defaults. Auto Gain and Output
+// Gain may be set.
+juce::String outputProblem (const FactoryPreset& preset)
+{
+    Host host;
+    host.processor.loadPreset (preset.preset, preset.name);
+    namespace p = eq1::parameters;
+    for (const auto& id : { p::gainScaleId, p::outputPanId, p::panModeId, p::phaseInvertId })
+    {
+        const auto* parameter = host.processor.parameterState().getParameter (id);
+        if (! juce::exactlyEqual (parameter->getValue(), parameter->getDefaultValue()))
+            return id + " is not at its default";
+    }
+    return {};
+}
+
+// Stereo pink noise at -18 dBFS RMS, each channel its own: white noise through Paul Kellet's pink filter.
+juce::AudioBuffer<float> pinkNoise (int channels, int samples)
+{
+    juce::AudioBuffer<float> noise (channels, samples);
+    for (int ch = 0; ch < channels; ++ch)
+    {
+        std::mt19937 random (static_cast<unsigned> (17 + ch));
+        std::normal_distribution<double> white (0.0, 1.0);
+        double b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, power = 0;
+        for (int i = 0; i < samples; ++i)
+        {
+            const double w = white (random);
+            b0 = 0.99886 * b0 + w * 0.0555179;
+            b1 = 0.99332 * b1 + w * 0.0750759;
+            b2 = 0.96900 * b2 + w * 0.1538520;
+            b3 = 0.86650 * b3 + w * 0.3104856;
+            b4 = 0.55000 * b4 + w * 0.5329522;
+            b5 = -0.7616 * b5 - w * 0.0168980;
+            const double s = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362;
+            b6 = w * 0.115926;
+            noise.setSample (ch, i, static_cast<float> (s));
+            power += s * s;
+        }
+        noise.applyGain (ch, 0, samples, static_cast<float> (juce::Decibels::decibelsToGain (-18.0) / std::sqrt (power / samples)));
+    }
+    return noise;
+}
+
+// Rule: 2 s of stereo pink noise at -18 dBFS, at 48 kHz, comes out finite, its peak no more than 12 dB
+// above the input's.
+juce::String loudnessProblem (const FactoryPreset& preset)
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int blockSize = 512, seconds = 2;
+    Host host;
+    auto& processor = host.processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    processor.loadPreset (preset.preset, preset.name);
+    const int mainChannels = processor.getMainBusNumInputChannels();
+    const auto input = pinkNoise (mainChannels, static_cast<int> (sampleRate) * seconds);
+    juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
+    juce::MidiBuffer midi;
+    float inputPeak = 0.0f, outputPeak = 0.0f;
+    for (int start = 0; start + blockSize <= input.getNumSamples(); start += blockSize)
+    {
+        buffer.clear();
+        for (int ch = 0; ch < mainChannels; ++ch)
+        {
+            buffer.copyFrom (ch, 0, input, ch, start, blockSize);
+            inputPeak = std::max (inputPeak, input.getMagnitude (ch, start, blockSize));
+        }
+        processor.processBlock (buffer, midi);
+        for (int ch = 0; ch < processor.getMainBusNumOutputChannels(); ++ch)
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const auto sample = buffer.getSample (ch, i);
+                if (! std::isfinite (sample))
+                    return "output not finite";
+                outputPeak = std::max (outputPeak, std::abs (sample));
+            }
+    }
+    if (const auto overDb = juce::Decibels::gainToDecibels (outputPeak / inputPeak); overDb > 12.0f)
+        return "peak " + juce::String (overDb, 1) + " dB above the input's";
+    return {};
+}
+
 FactoryPreset preset (const char* nameUtf8, std::initializer_list<std::pair<const char*, float>> settings = {})
 {
     juce::ValueTree tree ("eq1");
@@ -123,6 +230,9 @@ TEST_CASE ("Every Factory Preset passes the gate")
         CHECK (loadingProblem (preset) == "");
         CHECK (namingProblem (preset) == "");
         CHECK (formatProblem (preset) == "");
+        CHECK (bandCountProblem (preset) == "");
+        CHECK (outputProblem (preset) == "");
+        CHECK (loudnessProblem (preset) == "");
     }
 }
 
@@ -185,4 +295,36 @@ TEST_CASE ("The Factory gate rejects a Preset at an older version, or holding a 
     auto older = preset ("Drums \xe2\x80\x93 Kick", { { "band1_in_use", 1.0f } });
     older.preset.setProperty ("version", eq1::PluginProcessor::stateVersion - 1, nullptr);
     CHECK (formatProblem (older).isNotEmpty());
+}
+
+TEST_CASE ("The Factory gate rejects more than 6 Bands, but for the three Presets allowed them")
+{
+    const auto bands = [] (const char* name, int count) {
+        auto made = preset (name);
+        for (int slot = 1; slot <= count; ++slot)
+            made.preset.appendChild (juce::ValueTree ("PARAM").setProperty ("id", eq1::parameters::inUseId (slot), nullptr).setProperty ("value", 1.0f, nullptr),
+                                     nullptr);
+        return made;
+    };
+    CHECK (bandCountProblem (bands ("Drums \xe2\x80\x93 Kick", 6)) == "");
+    CHECK (bandCountProblem (bands ("Drums \xe2\x80\x93 Kick", 7)).isNotEmpty());
+    for (const auto* allowed : { "Vocals \xe2\x80\x93 Resonance Control", "Mix Bus \xe2\x80\x93 Drum Bus Sculpt", "Master \xe2\x80\x93 Detailed" })
+        CHECK (bandCountProblem (bands (allowed, 12)) == "");
+}
+
+TEST_CASE ("The Factory gate rejects Gain Scale, Output Pan, Pan Mode or Phase Invert away from their defaults")
+{
+    CHECK (outputProblem (preset ("Master \xe2\x80\x93 Loud", { { "auto_gain", 1.0f }, { "output_gain", 3.0f } })) == "");
+    CHECK (outputProblem (preset ("Master \xe2\x80\x93 Loud", { { "gain_scale", 50.0f } })).isNotEmpty());
+    CHECK (outputProblem (preset ("Master \xe2\x80\x93 Loud", { { "output_pan", 20.0f } })).isNotEmpty());
+    CHECK (outputProblem (preset ("Master \xe2\x80\x93 Loud", { { "pan_mode", 1.0f } })).isNotEmpty());
+    CHECK (outputProblem (preset ("Master \xe2\x80\x93 Loud", { { "phase_invert", 1.0f } })).isNotEmpty());
+}
+
+TEST_CASE ("The Factory gate rejects a Preset that lifts pink noise's peak by more than 12 dB")
+{
+    CHECK (loudnessProblem (preset ("Master \xe2\x80\x93 Loud", { { "output_gain", 9.0f } })) == "");
+    CHECK (loudnessProblem (preset ("Master \xe2\x80\x93 Loud", { { "output_gain", 15.0f } })).isNotEmpty());
+    CHECK (loudnessProblem (preset ("Bass \xe2\x80\x93 Boom", { { "band1_in_use", 1.0f }, { "band1_frequency", 100.0f }, { "band1_gain", 30.0f }, { "band1_q", 0.3f } }))
+               .isNotEmpty());
 }
