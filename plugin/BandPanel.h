@@ -27,7 +27,7 @@ class BandEditing;
 // (HANDOFF.md §4 "Band panel"). The top row has Bypass, Solo (held: the Band is Soloed while the button
 // is down), the ‹ n › Band selector, which steps through the Bands in use in Frequency order, and Delete.
 // Shape and Stereo Placement are Edge selectors flush with its sides, Slope a text button under Shape
-// that lists the Slopes (BandMenu.h's slopeMenu) on a click, drags continuously and takes a typed value,
+// that opens its list on a click, Space or Return, drags continuously and takes a typed value from the list,
 // and Frequency, Gain and Q knobs sit between them, each attached to its host parameter. Controls a
 // Band's Shape or the track doesn't offer dim and are disabled, so Tab skips them: Gain on Shapes without
 // Gain, Slope on Shapes without one, Q on Flat Tilt and Stereo Placement on mono. A Bypassed Band's
@@ -64,9 +64,9 @@ public:
     // shows it here. Without it, the panel shows that Band itself.
     std::function<void (int)> onSelectBand;
 
-    // The Slope: its value as "12 dB/oct", or "Brickwall" on a Brickwall Cut. A click lists the Slopes;
-    // a vertical drag changes it over 0 to 96 dB/oct (200 px, 800 with Shift) and a double-click types a
-    // value, each one undo step that also turns a Cut's Brickwall off.
+    // The Slope: its value as "12 dB/oct", or "Brickwall" on a Brickwall Cut. A click, Space or Return
+    // lists the Slopes and "Type a value…"; a vertical drag changes it over 0 to 96 dB/oct (200 px, 800
+    // with Shift) and a typed value sets it, each one undo step that also turns a Cut's Brickwall off.
     class SlopeButton;
 
     void paint (juce::Graphics& g) override;
@@ -146,7 +146,9 @@ public:
 
     // What it reads: "12 dB/oct", "37.5 dB/oct", or "Brickwall".
     juce::String text();
-    // The Slope list, as a click opens it.
+    // The Slope list (BandMenu.h's slopeMenu), then "Type a value…", which opens the tooltip's type-in.
+    juce::PopupMenu list();
+    // The list, as a click, Space or Return opens it.
     void openList();
 
     void paint (juce::Graphics& g) override;
@@ -156,7 +158,7 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
-    void mouseDoubleClick (const juce::MouseEvent& e) override;
+    bool keyPressed (const juce::KeyPress& key) override;
     void valueChanged() override;
 
 private:
@@ -170,7 +172,6 @@ private:
     bool dragging = false, fine = false;
     float pressY = 0.0f;
     double startProportion = 0.0;
-    int clicks = 0; // a click's list opens only if no other click came within the double-click time
     std::optional<ScopedDragNotification> gesture;
     juce::RangedAudioParameter* brickwall = nullptr;
 };

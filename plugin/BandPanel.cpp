@@ -167,32 +167,38 @@ void BandPanel::SlopeButton::mouseUp (const juce::MouseEvent& e)
         gesture.reset();
         return;
     }
-    if (! isEnabled() || e.mods.isPopupMenu() || e.getNumberOfClicks() > 1 || e.mouseWasDraggedSinceMouseDown())
-        return;
-    // After the double-click time, so a double-click types a value instead.
-    const int click = ++clicks;
-    juce::Timer::callAfterDelay (juce::MouseEvent::getDoubleClickTimeout(), [safe = juce::Component::SafePointer<SlopeButton> (this), click] {
-        if (safe != nullptr && safe->clicks == click)
-            safe->openList();
-    });
+    // A double-click's second release leaves the list its first one opened.
+    if (isEnabled() && ! e.mods.isPopupMenu() && e.getNumberOfClicks() == 1 && ! e.mouseWasDraggedSinceMouseDown())
+        openList();
 }
 
-void BandPanel::SlopeButton::mouseDoubleClick (const juce::MouseEvent&)
+bool BandPanel::SlopeButton::keyPressed (const juce::KeyPress& key)
 {
-    ++clicks; // the first click's list doesn't open
-    if (! isEnabled())
-        return;
-    showTooltip();
-    if (auto* tooltip = getKnobTooltip())
-        tooltip->startEditing();
+    if (! isEnabled() || (key != juce::KeyPress::spaceKey && key != juce::KeyPress::returnKey))
+        return staple::Knob::keyPressed (key);
+    openList();
+    return true;
+}
+
+juce::PopupMenu BandPanel::SlopeButton::list()
+{
+    auto menu = slopeMenu (panel.editing, { panel.slot });
+    menu.addSeparator();
+    menu.addItem (juce::String::fromUTF8 ("Type a value\xe2\x80\xa6"), isEnabled(), false, [safe = juce::Component::SafePointer<SlopeButton> (this)] {
+        if (safe == nullptr)
+            return;
+        safe->showTooltip();
+        if (auto* tooltip = safe->getKnobTooltip())
+            tooltip->startEditing();
+    });
+    return menu;
 }
 
 void BandPanel::SlopeButton::openList()
 {
-    if (panel.slot == 0 || ! isShowing())
+    if (panel.slot == 0 || ! isShowing() || ! isEnabled())
         return;
-    slopeMenu (panel.editing, { panel.slot })
-        .showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()));
+    list().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()));
 }
 
 void BandPanel::SlopeButton::valueChanged()
