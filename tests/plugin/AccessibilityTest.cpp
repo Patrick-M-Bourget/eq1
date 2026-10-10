@@ -100,8 +100,8 @@ struct Editor : OpenEditor
         settle();
     }
 
-    // Opens what the footer's button titled title shows ("Analyzer" its call-out, "Output" the output
-    // popover), as a click does, and closes it again, as Escape does.
+    // Opens the popover the footer's button titled title shows ("Analyzer" or "Output"), as a click does,
+    // and closes it again, as Escape does.
     void openCallOut (const juce::String& title)
     {
         auto* button = harness::findChild<juce::Button> (*editor, [&title] (juce::Button& b) { return b.getTitle() == title; });
@@ -110,14 +110,9 @@ struct Editor : OpenEditor
     }
     void closeCallOut()
     {
-        if (auto* popover = harness::findChild<staple::Popover> (*editor, [] (staple::Popover& p) { return p.isOpen(); }))
-        {
-            popover->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
-            return;
-        }
-        auto* box = harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); });
-        REQUIRE (box != nullptr);
-        box->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+        auto* popover = harness::findChild<staple::Popover> (*editor, [] (staple::Popover& p) { return p.isOpen(); });
+        REQUIRE (popover != nullptr);
+        popover->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
     }
 
     void openPresetBrowser()
@@ -162,7 +157,7 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
     host.openPresetBrowser();
     checkEveryControlIsNamed (host);
     auto names = host.names();
-    // And what the footer's call-outs show while open.
+    // And what the footer's popovers show while open.
     for (const juce::String title : { "Analyzer", "Output" })
     {
         CAPTURE (title);
@@ -269,7 +264,7 @@ TEST_CASE ("Every control is named on mono, and with no Band selected")
     host.openPresetBrowser();
     checkEveryControlIsNamed (host);
     auto names = host.names();
-    // And what the footer's call-outs show while open.
+    // And what the footer's popovers show while open.
     for (const juce::String title : { "Analyzer", "Output" })
     {
         CAPTURE (title);

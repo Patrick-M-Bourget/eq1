@@ -58,6 +58,7 @@ target_sources(eq1 PRIVATE
     PresetBrowser.cpp
     OutputPopover.cpp
     HeaderBar.cpp
+    AnalyzerPopover.cpp
     FooterBar.cpp
     OutputMeter.cpp
     PluginEditor.cpp
