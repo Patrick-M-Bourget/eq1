@@ -211,14 +211,14 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
 {
     const bool joinedLate = position != 0 && run != startedRun;
     runPosition = position + numSamples;
+    // A Band silent at the run's start still saw it, so it hasn't joined late if it sounds later on.
+    if (position == 0)
+        startedRun = run;
     if (isSilent())
         return;
 
     if (position == 0)
-    {
-        startedRun = run;
         startRun();
-    }
     else if (joinedLate)
     {
         runGliding = false;
