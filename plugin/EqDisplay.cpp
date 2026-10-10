@@ -7,6 +7,7 @@
 #include "PluginProcessor.h"
 #include "display/AnalyzerLayer.h"
 #include "display/CurvesLayer.h"
+#include "display/EdgeFadeLayer.h"
 #include "display/GridLayer.h"
 #include "display/HandlesLayer.h"
 #include "staple/LookAndFeel.h"
@@ -331,10 +332,14 @@ void EqDisplay::paint (juce::Graphics& g)
     for (int slot = 1; slot <= numBandSlots; ++slot)
         frame.drawnGains[static_cast<size_t> (slot - 1)] = drawnGain (slot, shown.bands[static_cast<size_t> (slot - 1)]);
 
-    display::paintGridBehindAnalyzer (g, shape);
+    g.fillAll (staple::tokens::colour::bg0);
+    display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
-    display::paintGridOverAnalyzer (g, shape);
     display::paintCurves (g, shape, frame);
+    // The handles and labels go over the edge fades, unfaded.
+    display::paintEdgeFades (g, shape);
+    display::paintLabels (g, display::gridLabels (shape));
+    display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
     display::paintHandles (g, shape, frame);
 }
 

@@ -99,6 +99,8 @@ namespace layout
     constexpr int minimumWidth = 960, minimumHeight = 600;
     // The display's edges dissolve over these distances (grid, Analyzer and curve fills only).
     constexpr float fadeTop = 18.0f, fadeBottom = 84.0f, fadeLeft = 36.0f, fadeRight = 56.0f;
+    // Below this display width the grid drops its minor lines and every other Frequency label.
+    constexpr int narrowDisplayWidth = 800;
     constexpr int bandPanelAboveBottom = 36, bandPanelBell = 22;
     constexpr int bandPanelPaddingTop = 22, bandPanelPaddingSide = 26, bandPanelPaddingBottom = 10;
     constexpr int detectionRangeBarAbovePanel = 30;
