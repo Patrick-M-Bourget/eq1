@@ -864,10 +864,7 @@ void EqDisplay::selectAll()
 
 void EqDisplay::copySelection()
 {
-    std::vector<BandSettings> bands;
-    for (int slot : selected)
-        bands.push_back (editing.band (slot));
-    juce::SystemClipboard::copyTextToClipboard (captureBands (bands).toXmlString());
+    juce::SystemClipboard::copyTextToClipboard (copiedText (editing, { selected.begin(), selected.end() }));
 }
 
 bool EqDisplay::paste()
