@@ -48,6 +48,9 @@ public:
 
     // Called with the Band Slot to show in the Band panel, or 0 when none is selected.
     std::function<void (int)> onSelectionChanged;
+    // Selects one Band alone, as a click on its handle does (the Band panel's ‹ and ›).
+    void selectBand (int slot) { select ({ slot }); }
+    const std::set<int>& selection() const { return selected; }
 
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
@@ -66,8 +69,6 @@ public:
     // out on Shapes without one, then "Bypassed" and "Dynamic Band" when they apply.
     juce::String spokenBand (int slot) const;
 
-    // The selected Bands' slots.
-    const std::set<int>& selectedBands() const { return selected; }
     // The ghost Bell, while it shows: following the mouse over empty space (no handle, grip or Band's
     // curve under it), or resting at 1 kHz with no Bands; never while the mouse is pressed, a menu is
     // open or every Band Slot is in use.

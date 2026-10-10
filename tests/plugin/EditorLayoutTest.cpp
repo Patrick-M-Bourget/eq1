@@ -67,7 +67,7 @@ TEST_CASE ("The window is a 52 px header, the display with the meter's 40 px rai
     CHECK (areas.display == juce::Rectangle<int> (0, 78, 1186, 612));
 }
 
-TEST_CASE ("The Band panel floats over the display's bottom, centred, 36 px above it, at every size and UI Scale, and takes its own clicks")
+TEST_CASE ("The Band panel floats over the display's bottom, centred, 36 px above it, at every size and UI Scale, and takes clicks on its slab and bell only")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
@@ -79,6 +79,9 @@ TEST_CASE ("The Band panel floats over the display's bottom, centred, 36 px abov
     REQUIRE (panel != nullptr);
     REQUIRE (scaleMenu != nullptr);
     editor->setVisible (true); // as a host shows it, so it takes clicks
+    auto& band = *processor.parameterState().getParameter ("band1_in_use");
+    band.setValueNotifyingHost (1.0f);
+    panel->show (1);
 
     const int percent = GENERATE (75, 100, 200);
     CAPTURE (percent);
@@ -88,20 +91,26 @@ TEST_CASE ("The Band panel floats over the display's bottom, centred, 36 px abov
     {
         CAPTURE (size.x, size.y);
         editor->setSize (scaled (size.x), scaled (size.y));
-        // In the display's own pixels: it and the panel share a parent.
+        // In the display's own pixels: it and the panel share a parent. Its size never changes.
         CHECK (panel->getBottom() == display->getBottom() - 36);
-        CHECK (panel->getX() - display->getX() == display->getRight() - panel->getRight());
-        CHECK (panel->getWidth() == display->getWidth() - 2 * 26);
-        CHECK (panel->getHeight() == 170);
+        CHECK (std::abs ((panel->getX() - display->getX()) - (display->getRight() - panel->getRight())) <= 1);
+        CHECK (panel->getWidth() == 492);
+        CHECK (panel->getHeight() == 137);
 
-        // A click anywhere on it lands on it, never on the display under it.
-        const auto inEditor = editor->getLocalArea (panel->getParentComponent(), panel->getBounds());
-        for (const auto point : { inEditor.getCentre(), inEditor.getTopLeft().translated (2, 2), inEditor.getBottomRight().translated (-2, -2) })
+        // A click on the slab or the bell's peak lands on it, never on the display under it; one beside
+        // the bell, above the slab, reaches the display.
+        const auto inEditor = [&] (int x, int y) { return editor->getLocalPoint (panel, juce::Point<int> (x, y)); };
+        for (const auto point : { inEditor (246, 80), inEditor (246, 3), inEditor (4, 133), inEditor (488, 40) })
         {
             CAPTURE (point.x, point.y);
             auto* hit = editor->getComponentAt (point);
             REQUIRE (hit != nullptr);
             CHECK ((hit == panel || panel->isParentOf (hit)));
+        }
+        for (const auto point : { inEditor (20, 10), inEditor (470, 10) })
+        {
+            CAPTURE (point.x, point.y);
+            CHECK (editor->getComponentAt (point) == display);
         }
     }
 }

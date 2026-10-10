@@ -17,168 +17,11 @@ namespace eq1
 
 namespace
 {
-// A footer panel shown in a call-out while it is open. The call-out hides itself as it closes, and is
-// deleted later: the panel goes back to the footer, hidden, as soon as it hides.
-class Lent final : public juce::Component, private juce::ComponentListener
-{
-public:
-    Lent (juce::Component& p, juce::Component& h) : panel (&p), home (&h)
-    {
-        setSize (p.getWidth(), p.getHeight());
-        p.setTopLeftPosition (0, 0);
-        addAndMakeVisible (p);
-    }
-
-    ~Lent() override
-    {
-        if (callOut != nullptr)
-            callOut->removeComponentListener (this);
-        giveBack();
-    }
-
-    // Once in the call-out, follows it.
-    void parentHierarchyChanged() override
-    {
-        if (callOut == nullptr && getParentComponent() != nullptr)
-        {
-            callOut = getParentComponent();
-            callOut->addComponentListener (this);
-        }
-    }
-
-private:
-    void componentVisibilityChanged (juce::Component& component) override
-    {
-        if (! component.isVisible())
-            giveBack();
-    }
-
-    void giveBack()
-    {
-        if (panel != nullptr && home != nullptr && panel->getParentComponent() == this)
-        {
-            panel->setVisible (false);
-            home->addChildComponent (*panel);
-        }
-    }
-
-    juce::Component::SafePointer<juce::Component> panel, home, callOut;
-};
-} // namespace
-
-// The Analyzer's settings: Pre, Post, Sidechain and Peak Hold, its Range, Speed and Resolution, and
-// Analyzer Tilt. Follows settings restored with the plugin's state.
-class FooterBar::AnalyzerPanel final : public juce::Component, private juce::Timer
-{
-public:
-    explicit AnalyzerPanel (PluginProcessor& p) : processor (p)
-    {
-        for (auto* toggle : { &showPreEq, &showPostEq, &showSidechain, &peakHold })
-        {
-            toggle->onClick = [this] { store(); };
-            addAndMakeVisible (*toggle);
-        }
-        for (int range : { 60, 90, 120 })
-            rangeMenu.addItem (juce::String (range) + " dB", range);
-        speedMenu.addItemList ({ "Very Slow", "Slow", "Medium", "Fast", "Very Fast" }, 1);
-        resolutionMenu.addItemList ({ "Low", "Medium", "High", "Maximum" }, 1);
-        rangeMenu.setName ("Analyzer Range");
-        speedMenu.setName ("Analyzer Speed");
-        resolutionMenu.setName ("Analyzer Resolution");
-        for (auto* combo : { &rangeMenu, &speedMenu, &resolutionMenu })
-        {
-            combo->onChange = [this] { store(); };
-            addAndMakeVisible (*combo);
-        }
-        tiltLabel.setText ("Analyzer Tilt", juce::dontSendNotification);
-        tiltLabel.setAccessible (false); // the slider carries the name
-        addAndMakeVisible (tiltLabel);
-        tilt.setSliderStyle (juce::Slider::LinearHorizontal);
-        // In 0.5 dB/oct steps (the Staple Analyzer popover, #84, cycles Off, 3, 4.5 and 6): an arrow key
-        // moves it one step, as a step smaller than the interval would round back.
-        tilt.setRange (0.0, 6.0, 0.5);
-        tilt.setTextValueSuffix (" dB/oct");
-        tilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 20);
-        tilt.onValueChange = [this] { store(); };
-        addAndMakeVisible (tilt);
-        // What a screen reader calls each control, in the glossary's terms.
-        const std::pair<juce::Component*, const char*> titles[] = {
-            { &showPreEq, "Analyzer Pre-EQ" },     { &showPostEq, "Analyzer Post-EQ" },     { &showSidechain, "Analyzer Sidechain" },
-            { &peakHold, "Analyzer Peak Hold" },   { &rangeMenu, "Analyzer Range" },        { &speedMenu, "Analyzer Speed" },
-            { &resolutionMenu, "Analyzer Resolution" }, { &tilt, "Analyzer Tilt" }
-        };
-        for (auto [control, title] : titles)
-            control->setTitle (title);
-        show();
-        startTimerHz (4);
-        setSize (340, 3 * rowHeight + 2 * gap + 2 * padding);
-    }
-
-    void resized() override
-    {
-        auto area = getLocalBounds().reduced (padding);
-        auto toggles = area.removeFromTop (rowHeight);
-        showPreEq.setBounds (toggles.removeFromLeft (56));
-        showPostEq.setBounds (toggles.removeFromLeft (60));
-        showSidechain.setBounds (toggles.removeFromLeft (90));
-        peakHold.setBounds (toggles.removeFromLeft (84));
-        area.removeFromTop (gap);
-        auto combos = area.removeFromTop (rowHeight);
-        for (auto* combo : { &rangeMenu, &speedMenu, &resolutionMenu })
-        {
-            combo->setBounds (combos.removeFromLeft (100));
-            combos.removeFromLeft (gap);
-        }
-        area.removeFromTop (gap);
-        auto tiltRow = area.removeFromTop (rowHeight);
-        tiltLabel.setBounds (tiltRow.removeFromLeft (80));
-        tilt.setBounds (tiltRow);
-    }
-
-private:
-    static constexpr int rowHeight = 24, gap = 6, padding = 6;
-
-    void timerCallback() override { show(); }
-
-    void show()
-    {
-        const auto settings = processor.analyzerSettings();
-        showPreEq.setToggleState (settings.showPreEq, juce::dontSendNotification);
-        showPostEq.setToggleState (settings.showPostEq, juce::dontSendNotification);
-        showSidechain.setToggleState (settings.showSidechain, juce::dontSendNotification);
-        peakHold.setToggleState (settings.peakHold, juce::dontSendNotification);
-        rangeMenu.setSelectedId (settings.rangeDb, juce::dontSendNotification);
-        speedMenu.setSelectedId (static_cast<int> (settings.speed) + 1, juce::dontSendNotification);
-        resolutionMenu.setSelectedId (static_cast<int> (settings.resolution) + 1, juce::dontSendNotification);
-        tilt.setValue (settings.tiltDbPerOctave, juce::dontSendNotification);
-    }
-
-    void store()
-    {
-        processor.setAnalyzerSettings ({ .showPreEq = showPreEq.getToggleState(),
-                                         .showPostEq = showPostEq.getToggleState(),
-                                         .showSidechain = showSidechain.getToggleState(),
-                                         .rangeDb = rangeMenu.getSelectedId(),
-                                         .speed = static_cast<AnalyzerSpeed> (speedMenu.getSelectedId() - 1),
-                                         .resolution = static_cast<AnalyzerResolution> (resolutionMenu.getSelectedId() - 1),
-                                         .tiltDbPerOctave = tilt.getValue(),
-                                         .peakHold = peakHold.getToggleState() });
-    }
-
-    PluginProcessor& processor;
-    juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" }, showSidechain { "Sidechain" }, peakHold { "Peak Hold" };
-    juce::ComboBox rangeMenu, speedMenu, resolutionMenu;
-    juce::Label tiltLabel;
-    KeyboardSlider tilt { "Analyzer Tilt" };
-};
-
-namespace
-{
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
 
 constexpr int readoutHeight = 28, gainScaleWidth = 54, outputWidth = 70, readoutPadding = 10;
-constexpr int footerGap = 18, bypassedOverlap = 10;
+constexpr int footerGap = 18, bypassedOverlap = 10, analyzerLabelGap = 8;
 const juce::String bypassedText { "Bypassed" };
 
 // Whether Auto Gain's estimate holds for both: the same Bands, exactly, and Gain Scale. (Settings' own ==
@@ -338,7 +181,7 @@ std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHand
 }
 
 FooterBar::FooterBar (PluginProcessor& p)
-    : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerPanel (std::make_unique<AnalyzerPanel> (p)), popover (p)
+    : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerSettings (p), popover (p)
 {
     auto& state = processor.parameterState();
     for (int slot = 1; slot <= numBandSlots; ++slot)
@@ -352,10 +195,24 @@ FooterBar::FooterBar (PluginProcessor& p)
     globalBypass.onStateChange = [this] { showBypass(); };
     addAndMakeVisible (globalBypass);
 
-    analyzer.setTitle ("Analyzer");
-    analyzer.onClick = [this] { openCallOut (*analyzerPanel, analyzer); };
+    analyzerLabel.setText ("Analyzer", juce::dontSendNotification);
+    analyzerLabel.setFont (staple::font (size::fs3));
+    analyzerLabel.setColour (juce::Label::textColourId, colour::text2);
+    analyzerLabel.setBorderSize ({});
+    analyzerLabel.setInterceptsMouseClicks (false, false);
+    analyzerLabel.setAccessible (false); // the button carries the name
+    addAndMakeVisible (analyzerLabel);
+    analyzer.onClick = [this] {
+        if (analyzerSettings.isOpen())
+            analyzerSettings.close();
+        else
+            analyzerSettings.openFrom (analyzer, analyzerLabel);
+    };
     addAndMakeVisible (analyzer);
-    addChildComponent (*analyzerPanel);
+    // Back in the footer, hidden, once closed.
+    analyzerSettings.onClose = [this] { addChildComponent (analyzerSettings); };
+    analyzerSettings.onSettingsChanged = [this] { showAnalyzerSources(); };
+    addChildComponent (analyzerSettings);
 
     gainScaleAttachment = std::make_unique<SliderAttachment> (state, parameters::gainScaleId, gainScale);
     gainScale.describe (*state.getParameter (parameters::gainScaleId));
@@ -395,6 +252,7 @@ FooterBar::FooterBar (PluginProcessor& p)
 
     showBypass();
     showOutputLevel();
+    showAnalyzerSources();
     startTimerHz (30);
 }
 
@@ -402,23 +260,7 @@ FooterBar::~FooterBar()
 {
     stopTimer();
     popover.onClose = nullptr;
-    // An open call-out outlives the footer, deleted by its own callback: close it and take it off the
-    // editor now.
-    if (callOut != nullptr)
-    {
-        callOut->exitModalState (0);
-        callOut->setVisible (false);
-        if (auto* parent = callOut->getParentComponent())
-            parent->removeChildComponent (callOut);
-    }
-}
-
-void FooterBar::openCallOut (juce::Component& panel, juce::Component& from)
-{
-    auto* parent = getParentComponent();
-    if (parent == nullptr || panel.isShowing())
-        return;
-    callOut = &juce::CallOutBox::launchAsynchronously (std::make_unique<Lent> (panel, *this), parent->getLocalArea (this, from.getBounds()), parent);
+    analyzerSettings.onClose = nullptr;
 }
 
 void FooterBar::showUiScale (int percent)
@@ -440,6 +282,7 @@ void FooterBar::timerCallback()
 {
     showBypass();
     showOutputLevel();
+    showAnalyzerSources();
     if (bypassedShown && bypassedAlpha < 1.0f)
         repaint();
 }
@@ -485,6 +328,16 @@ void FooterBar::showOutputLevel()
     }
 }
 
+void FooterBar::showAnalyzerSources()
+{
+    const auto text = analyzerButtonText (processor.analyzerSettings());
+    if (text != analyzer.getButtonText())
+    {
+        analyzer.setButtonText (text);
+        resized();
+    }
+}
+
 void FooterBar::paint (juce::Graphics& g)
 {
     if (! bypassedShown)
@@ -511,7 +364,11 @@ void FooterBar::resized()
         const int width = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (bypassedFont(), bypassedText)));
         row.removeFromLeft (width - bypassedOverlap + footerGap);
     }
-    analyzer.setBounds (row.removeFromLeft (80));
+    // "Analyzer", then its button, 8 apart.
+    const int labelWidth = juce::roundToInt (std::ceil (juce::GlyphArrangement::getStringWidth (analyzerLabel.getFont(), analyzerLabel.getText())));
+    analyzerLabel.setBounds (row.removeFromLeft (labelWidth));
+    row.removeFromLeft (analyzerLabelGap);
+    analyzer.setBounds (row.removeFromLeft (analyzer.getIdealWidth()));
 
     uiScale.setBounds (row.removeFromRight (readoutHeight));
     row.removeFromRight (footerGap);

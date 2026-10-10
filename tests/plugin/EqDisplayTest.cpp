@@ -252,7 +252,7 @@ TEST_CASE ("A click inside a Band's filled curve selects it, the smallest curve 
     host.set (2, "bypass", 1.0f);
     host.addBand (3, 100.0f, -6.0f);
     host.settle();
-    const auto& selected = host.display.selectedBands();
+    const auto& selected = host.display.selection();
 
     // Inside both Bells: Band 2's, the smaller there, wins although it is Bypassed.
     host.click (atDb (host, 1000.0, 1.5));
@@ -283,7 +283,7 @@ TEST_CASE ("A drag from empty space draws a marquee that selects the Bands insid
     host.addBand (3, 10000.0f, 0.0f);
     host.settle();
     host.drag (atDb (host, 50.0, 6.0), atDb (host, 2000.0, -6.0), juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
-    CHECK (host.display.selectedBands() == std::set<int> { 1, 2 });
+    CHECK (host.display.selection() == std::set<int> { 1, 2 });
 }
 
 TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its peak")
@@ -314,7 +314,7 @@ TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its pe
         host.drag ({ x, y }, { x, y + 20.0f }, left);
     REQUIRE (host.value (1, "in_use") == 1.0f);
     CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 0.1f));
-    CHECK (host.display.selectedBands() == std::set<int> { 1 });
+    CHECK (host.display.selection() == std::set<int> { 1 });
 }
 
 TEST_CASE ("Hovering inside a Band's filled curve lights it, as hovering its handle does")
@@ -375,7 +375,7 @@ TEST_CASE ("Dragging a Dynamic Range grip sets the stored Dynamic Range so its h
     }
     CHECK (history.undoSteps() == 1);
     // Pressing the grip selected its Band, and nothing else: no marquee, no Band moved.
-    CHECK (host.display.selectedBands() == std::set<int> { 1 });
+    CHECK (host.display.selection() == std::set<int> { 1 });
     history.undo();
     CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (6.0, 1.0e-4));
 }
