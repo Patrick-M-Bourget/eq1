@@ -2,6 +2,7 @@
 
 #include "Accessibility.h"
 #include "staple/LookAndFeel.h"
+#include "staple/controls/ParseValue.h"
 
 namespace eq1
 {
@@ -18,6 +19,23 @@ KeyboardSlider::~KeyboardSlider()
 {
     mouseDrag.reset();
     endHeldStep();
+}
+
+bool KeyboardSlider::commitTypedText (const juce::String& text)
+{
+    if (! isEnabled() || text.trim().isEmpty())
+        return false;
+    const auto parsed = staple::parseValue (text, getTextValueSuffix().trim());
+    const double value = juce::jlimit (getMinimum(), getMaximum(), parsed.has_value() ? *parsed : getValueFromText (text));
+    const ScopedDragNotification gesture (*this);
+    setValue (value, juce::sendNotificationSync);
+    return true;
+}
+
+juce::String KeyboardSlider::textToType (const juce::String& shown) const
+{
+    const auto suffix = getTextValueSuffix();
+    return suffix.isNotEmpty() && shown.endsWith (suffix) ? shown.dropLastCharacters (suffix.length()) : shown;
 }
 
 bool KeyboardSlider::keyPressed (const juce::KeyPress& key)

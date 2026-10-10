@@ -39,6 +39,13 @@ public:
     // Titled with the parameter's name, and read with its value and unit (accessibility::spokenValue).
     void describe (const juce::RangedAudioParameter& parameter);
 
+    // Text typed for a value: read by staple::parseValue in the value suffix's unit, else by the
+    // slider's own text (a parameter's, once attached), clamped to the range and set as one gesture.
+    // False if it is disabled or the text is blank.
+    bool commitTypedText (const juce::String& text);
+    // What a type-in field starts with for a value shown as shown: shown without the value suffix.
+    juce::String textToType (const juce::String& shown) const;
+
     bool keyPressed (const juce::KeyPress& key) override;
     bool keyStateChanged (bool isKeyDown) override;
     void focusLost (FocusChangeType cause) override;

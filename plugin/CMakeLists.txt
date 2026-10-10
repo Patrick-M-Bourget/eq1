@@ -84,6 +84,7 @@ target_sources(eq1 PRIVATE
     staple/controls/Popover.cpp
     staple/controls/TextChip.cpp
     staple/controls/Tween.cpp
+    staple/controls/TypeIn.cpp
     KeyboardSlider.cpp
     KeyboardControl.cpp
     UserSettings.cpp)
