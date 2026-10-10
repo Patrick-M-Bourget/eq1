@@ -40,6 +40,19 @@ std::function<void()> actionOf (const juce::PopupMenu& menu, const juce::String&
 
 // The pointer comes to rest at position on the display.
 void rest (OpenEditor& host, juce::Point<float> position) { host.display.mouseMove (host.mouseEvent (position, {}, position)); }
+
+// Rests the pointer on a handle until the card shows slot's, and checks it does. JUCE's Desktop timer
+// can send the machine's real mouse to the display meanwhile (CODING_STANDARDS.md, "Editor behaviour"),
+// which ends the rest, so the pointer is sent again until the card is up, for up to 3 s.
+void showCard (OpenEditor& host, juce::Point<float> handle, int slot)
+{
+    for (int tries = 0; tries < 30 && cardOf (host).shownSlot() != slot; ++tries)
+    {
+        rest (host, handle);
+        host.settle (100);
+    }
+    REQUIRE (cardOf (host).shownSlot() == slot);
+}
 } // namespace
 
 TEST_CASE ("Resting 300 ms on a Band's handle shows its Hover Card")
@@ -66,9 +79,7 @@ TEST_CASE ("The Hover Card hides 220 ms after the pointer leaves its handle and 
     host.addBand (2, 200.0f, 0.0f);
     host.settle();
     auto& card = cardOf (host);
-    rest (host, host.at (1000.0, 0.0));
-    host.settle (400);
-    REQUIRE (card.shownSlot() == 4);
+    showCard (host, host.at (1000.0, 0.0), 4);
 
     // Onto another handle: at once.
     rest (host, host.at (200.0, 0.0));
@@ -83,9 +94,7 @@ TEST_CASE ("The Hover Card hides 220 ms after the pointer leaves its handle and 
     CHECK_FALSE (card.isVisible());
 
     // Off the display altogether, too; and back on the handle within the time, it stays.
-    rest (host, host.at (200.0, 0.0));
-    host.settle (400);
-    REQUIRE (card.shownSlot() == 2);
+    showCard (host, host.at (200.0, 0.0), 2);
     host.display.mouseExit (host.mouseEvent ({ 1.0f, 1.0f }, {}, { 1.0f, 1.0f }));
     host.settle (100);
     rest (host, host.at (200.0, 0.0));
@@ -102,9 +111,7 @@ TEST_CASE ("The Hover Card stays up while the pointer is on it, and hides 220 ms
     host.addBand (4, 1000.0f, 0.0f);
     host.settle();
     auto& card = cardOf (host);
-    rest (host, host.at (1000.0, 0.0));
-    host.settle (400);
-    REQUIRE (card.shownSlot() == 4);
+    showCard (host, host.at (1000.0, 0.0), 4);
 
     const auto middle = card.getLocalBounds().getCentre().toFloat();
     host.display.mouseExit (host.mouseEvent ({ 1.0f, 1.0f }, {}, { 1.0f, 1.0f }));
@@ -159,24 +166,18 @@ TEST_CASE ("Pressing a handle or a click elsewhere hides the Hover Card, and the
     host.settle();
     auto& card = cardOf (host);
     const auto handle = host.at (1000.0, 0.0);
-    rest (host, handle);
-    host.settle (400);
-    REQUIRE (card.shownSlot() == 4);
+    showCard (host, handle, 4);
 
     // Over empty space within the hide delay: no ghost Bell while the card is up.
     rest (host, host.at (5000.0, -6.0));
     CHECK_FALSE (host.display.ghost().has_value());
 
-    rest (host, handle);
-    host.settle (400);
-    REQUIRE (card.shownSlot() == 4);
+    showCard (host, handle, 4);
     host.click (host.at (200.0, 0.0));
     CHECK (card.shownSlot() == 0);
     CHECK (host.display.selection() == std::set<int> { 2 });
 
-    rest (host, handle);
-    host.settle (400);
-    REQUIRE (card.shownSlot() == 4);
+    showCard (host, handle, 4);
     host.click (host.at (5000.0, -6.0));
     CHECK (card.shownSlot() == 0);
 }
@@ -191,26 +192,20 @@ TEST_CASE ("The Hover Card is 172 x 70 px, centred 18 px above its handle, below
     auto& card = cardOf (host);
     // The card's body, and the display, in the display's coordinates.
     const auto body = [&] { return host.display.getLocalArea (card.getParentComponent(), card.body()); };
-    const auto showAt = [&] (juce::Point<float> handle) {
-        rest (host, handle);
-        host.settle (400);
-    };
+    const auto showAt = [&] (juce::Point<float> handle, int slot) { showCard (host, handle, slot); };
 
     const auto middle = host.at (1000.0, 0.0);
-    showAt (middle);
-    REQUIRE (card.shownSlot() == 4);
+    showAt (middle, 4);
     CHECK (body().getWidth() == 172);
     CHECK (body().getHeight() == 70);
     CHECK (body().getCentreX() == juce::roundToInt (middle.x));
     CHECK (body().getBottom() == juce::roundToInt (middle.y - 18.0f));
 
     const auto top = host.at (1000.0, 11.5);
-    showAt (top);
-    REQUIRE (card.shownSlot() == 5);
+    showAt (top, 5);
     CHECK (body().getY() == juce::roundToInt (top.y + 18.0f));
 
-    showAt (host.at (10.0, 0.0));
-    REQUIRE (card.shownSlot() == 6);
+    showAt (host.at (10.0, 0.0), 6);
     CHECK (body().getX() == 6);
 }
 
@@ -221,9 +216,7 @@ TEST_CASE ("The Hover Card follows its Band moved by automation, and hides at on
     host.settle();
     auto& card = cardOf (host);
     const auto bodyCentreX = [&] { return host.display.getLocalArea (card.getParentComponent(), card.body()).getCentreX(); };
-    rest (host, host.at (1000.0, 0.0));
-    host.settle (400);
-    REQUIRE (card.shownSlot() == 4);
+    showCard (host, host.at (1000.0, 0.0), 4);
 
     host.set (4, "frequency", 2000.0f);
     host.settle();
@@ -254,10 +247,8 @@ struct CardOnBand4
         host.display.mouseDown (host.mouseEvent (handle, adding, handle));
         host.display.mouseUp (host.mouseEvent (handle, {}, handle));
         REQUIRE (host.display.selection() == std::set<int> { 2, 4 });
-        rest (host, handle);
-        host.settle (400);
+        showCard (host, handle, 4);
         card = &cardOf (host);
-        REQUIRE (card->shownSlot() == 4);
     }
 };
 } // namespace
@@ -343,10 +334,8 @@ TEST_CASE ("The Hover Card's values read \"1.00 kHz\", \"+3.00 dB\" and \"Q 0.70
     host.addBand (4, 1000.0f, 3.0f);
     host.set (4, "q", 0.707f);
     host.settle();
-    rest (host, host.at (1000.0, 3.0));
-    host.settle (400);
+    showCard (host, host.at (1000.0, 3.0), 4);
     auto& card = cardOf (host);
-    REQUIRE (card.shownSlot() == 4);
     CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Frequency").text() == "1.00 kHz");
     CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Gain").text() == "+3.00 dB");
     CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Q").text() == "Q 0.707");
@@ -440,10 +429,8 @@ TEST_CASE ("On a Cut the Hover Card shows its Slope in Gain's place, on other ga
     host.addBand (4, 1000.0f, 0.0f, static_cast<float> (eq1::Shape::LowCut));
     host.set (4, "slope", 24.0f);
     host.settle();
-    rest (host, host.at (1000.0, 0.0));
-    host.settle (400);
+    showCard (host, host.at (1000.0, 0.0), 4);
     auto& card = cardOf (host);
-    REQUIRE (card.shownSlot() == 4);
     auto& gain = control<eq1::HoverCard::Value> (card, "Band 4 Gain");
     CHECK (gain.text() == "24 dB/oct");
     CHECK_FALSE (gain.isEnabled());
@@ -507,10 +494,8 @@ TEST_CASE ("The Hover Card's Shape strip opens above the card when there is no r
     OpenEditor host;
     host.addBand (4, 1000.0f, -12.0f);
     host.settle();
-    rest (host, host.at (1000.0, -12.0));
-    host.settle (400);
+    showCard (host, host.at (1000.0, -12.0), 4);
     auto& card = cardOf (host);
-    REQUIRE (card.shownSlot() == 4);
     control<juce::Button> (card, "Band 4 Shape").onClick();
     REQUIRE (card.shapeStrip() != nullptr);
     CHECK (card.shapeStrip()->getBottom() == card.body().getY() - 6);
@@ -534,19 +519,16 @@ TEST_CASE ("Hover Card screenshots", "[.screens]")
             area = area.getUnion (host.editor->getLocalArea (card.getParentComponent(), strip->getBoundsInParent()).expanded (20));
         harness::writeSnapshot (*host.editor, "hover-card-" + name, area);
     };
-    const auto showOn = [&] (double frequency, double db) {
-        rest (host, host.at (frequency, db));
-        host.settle (400);
-    };
+    const auto showOn = [&] (double frequency, double db, int slot) { showCard (host, host.at (frequency, db), slot); };
 
-    showOn (1000.0, 3.0);
+    showOn (1000.0, 3.0, 4);
     save ("bell");
     control<juce::Button> (card, "Band 4 Shape").onClick();
     save ("shape-strip");
     control<juce::Button> (card, "Band 4 Shape").onClick();
     host.set (4, "bypass", 1.0f);
     save ("bypassed");
-    showOn (8000.0, 0.0);
+    showOn (8000.0, 0.0, 6);
     save ("high-cut");
 }
 
