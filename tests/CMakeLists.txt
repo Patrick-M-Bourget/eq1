@@ -35,6 +35,7 @@ if(EQ1_BUILD_PLUGIN)
     add_executable(eq1_plugin_tests
         plugin/ABCompareTest.cpp
         plugin/AnalyzerSpectrumTest.cpp
+        plugin/BandClipboardTest.cpp
         plugin/BandEditingTest.cpp
         plugin/BandMenuTest.cpp
         plugin/BandPanelTest.cpp

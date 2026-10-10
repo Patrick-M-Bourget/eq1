@@ -46,6 +46,7 @@ target_sources(eq1 PRIVATE
     EditHistory.cpp
     ABCompare.cpp
     PresetSettings.cpp
+    BandClipboard.cpp
     PresetLibrary.cpp
     PresetBar.cpp
     OutputPanel.cpp
