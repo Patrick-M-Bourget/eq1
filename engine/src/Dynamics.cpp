@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <span>
 
 namespace eq1
 {
@@ -59,6 +60,7 @@ void Dynamics::prepare (double newSampleRate)
     active.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     dynamicRangeGlide.reset (0.0);
     active.reset (0.0);
+    runLevelCount = 0;
 }
 
 void Dynamics::setSettings (const BandSettings& settings, bool snap)
@@ -193,24 +195,24 @@ double Dynamics::autoReleaseSeconds() const
     return autoReleaseFastestSeconds + (autoReleaseSustainedSeconds - autoReleaseFastestSeconds) * sustain;
 }
 
-double Dynamics::process (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int numSamples)
+void Dynamics::hear (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int position,
+                     int numSamples)
 {
     loudestLevel = nothingHeardDb;
     const bool moving = running();
     if (! moving && ! metered)
-        return 0.0;
+        return;
 
     const int detectionCount = detectionChannelCount = takeDetectionSignal (input, numChannels, sidechain, sidechainChannels, numSamples);
     if (detectionCount > 0)
     {
-        rangeFilter.process (detectionChannels.data(), detectionCount, numSamples);
-        highLimit.process (detectionChannels.data(), detectionCount, numSamples);
+        rangeFilter.process (detectionChannels.data(), detectionCount, position, numSamples);
+        highLimit.process (detectionChannels.data(), detectionCount, position, numSamples);
     }
     else
         power = {}; // nothing heard: a Sidechain connected again starts afresh
 
     // The level of each sample: the louder detection channel's power, where a full-scale sine reads 0 dB.
-    std::array<double, Band::maxSubBlock> levels;
     double loudest = nothingHeardDb;
     for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
     {
@@ -221,39 +223,49 @@ double Dynamics::process (const float* const* input, int numChannels, const floa
             power[c] += powerCoefficient * (x * x - power[c]);
             peakPower = std::max (peakPower, power[c]);
         }
-        levels[i] = 10.0 * std::log10 (2.0 * peakPower + 1.0e-30);
+        const double level = 10.0 * std::log10 (2.0 * peakPower + 1.0e-30);
+        loudest = std::max (loudest, level);
+        // Metered only: whatever comes next starts afresh, as if never metered.
+        if (! moving)
+            continue;
+        runLevels[static_cast<size_t> (runLevelCount++)] = level;
         // The mean of every level heard, until the time constant's worth has been: then the mean
         // over about the last time constant.
-        if (moving && levels[i] > autoThresholdGateDb)
+        if (level > autoThresholdGateDb)
         {
             samplesHeard = std::min (samplesHeard + 1.0, 1.0 / averageCoefficient);
-            averageLevel += (levels[i] - averageLevel) / samplesHeard;
+            averageLevel += (level - averageLevel) / samplesHeard;
         }
-        loudest = std::max (loudest, levels[i]);
     }
     if (detectionCount > 0)
         loudestLevel = loudest;
-    // Metered only: whatever comes next starts afresh, as if never metered.
-    if (! moving)
+}
+
+double Dynamics::finishRun()
+{
+    const auto levels = std::span (runLevels).first (static_cast<size_t> (runLevelCount));
+    runLevelCount = 0;
+    if (! running())
         return 0.0;
 
     // Until Auto Threshold has heard the region, nothing moves.
     const bool listening = ! thresholdAuto || samplesHeard > 0.0;
     const double thresholdDb = thresholdAuto ? averageLevel + autoThresholdMarginDb : threshold;
     const double span = 2.0 * std::abs (dynamicRange) + 2.0 * kneeDb;
+    const double loudest = levels.empty() ? nothingHeardDb : *std::max_element (levels.begin(), levels.end());
     const double attackCoefficient = coefficientFor (autoAttackSeconds (loudest - thresholdDb) * attackScale, sampleRate);
     const double releaseCoefficient = coefficientFor (autoReleaseSeconds() * releaseScale, sampleRate);
-    for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
+    for (const double level : levels)
     {
         // A soft knee from kneeDb below Threshold, then about 2:1 until the full Dynamic Range.
-        const double x = listening ? std::clamp ((levels[i] - thresholdDb + kneeDb) / span, 0.0, 1.0) : 0.0;
+        const double x = listening ? std::clamp ((level - thresholdDb + kneeDb) / span, 0.0, 1.0) : 0.0;
         const double target = x * x * (3.0 - 2.0 * x);
         movement += (target > movement ? attackCoefficient : releaseCoefficient) * (target - movement);
         sustain += sustainCoefficient * (target - sustain);
     }
 
-    dynamicRangeGlide.skip (numSamples);
-    active.skip (numSamples);
+    dynamicRangeGlide.skip (Band::maxSubBlock);
+    active.skip (Band::maxSubBlock);
     return movement * dynamicRangeGlide.value() * active.value();
 }
 

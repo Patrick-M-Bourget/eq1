@@ -31,6 +31,10 @@ struct Engine::Impl
 
     std::array<Band, numBandSlots> bands;
     std::array<Dynamics, numBandSlots> dynamics;
+    // Where the next sample falls in the grid of runs of Band::maxSubBlock samples that starts at
+    // prepare() and carries across process() calls. A Dynamic Band's filter over a run follows what
+    // its detector heard up to the run's start, so the output doesn't depend on how blocks cut runs.
+    int gridPosition = 0;
     std::array<std::atomic<double>, numBandSlots> liveGains {}; // for the display, after each block
     static_assert (std::atomic<double>::is_always_lock_free, "process() never locks");
     Output output;
@@ -277,6 +281,7 @@ void Engine::prepare (double sampleRate, int, int numChannels)
 {
     impl->numChannels = numChannels;
     impl->sampleRate = sampleRate;
+    impl->gridPosition = 0;
     for (auto& band : impl->bands)
         band.prepare (sampleRate, numChannels);
     for (auto& dynamics : impl->dynamics)
@@ -328,9 +333,11 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
     const int sidechainChannels = sidechainConnected ? std::min (sidechain->numChannels, 2) : 0;
 
     double loudestDetection = Dynamics::nothingHeardDb;
-    for (int start = 0; start < main.numSamples; start += Band::maxSubBlock)
+    for (int start = 0, count = 0; start < main.numSamples; start += count)
     {
-        const int count = std::min (Band::maxSubBlock, main.numSamples - start);
+        // The rest of the grid's run, or of the block where it ends first, leaving the run open.
+        const int position = impl->gridPosition;
+        count = std::min (Band::maxSubBlock - position, main.numSamples - start);
         for (int ch = 0; ch < channels; ++ch)
             impl->subBlock[static_cast<size_t> (ch)] = main.channels[ch] + start;
         for (int ch = 0; ch < sidechainChannels; ++ch)
@@ -346,18 +353,17 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
         const int partChannels = holding && ! impl->playing.audition ? impl->takeSoloPart (impl->subBlock.data(), channels, count) : 0;
 
         // Detection hears the main input before the EQ (or the Sidechain), so every Band's detector runs first.
-        for (size_t band = 0; band < impl->bands.size(); ++band)
-            impl->bands[band].setDynamicOffset (impl->dynamics[band].process (impl->subBlock.data(), channels,
-                                                                              impl->sidechainSubBlock.data(), sidechainChannels, count));
+        for (auto& dynamics : impl->dynamics)
+            dynamics.hear (impl->subBlock.data(), channels, impl->sidechainSubBlock.data(), sidechainChannels, position, count);
         if (impl->meteredSlot != 0)
             loudestDetection = std::max (loudestDetection, impl->dynamics[static_cast<size_t> (impl->meteredSlot - 1)].detectionLevelDb());
         for (auto& band : impl->bands)
-            band.process (impl->subBlock.data(), channels, count);
+            band.process (impl->subBlock.data(), channels, position, count);
 
         if (holding)
         {
             if (partChannels > 0)
-                impl->soloRegion.process (impl->soloPartChannels.data(), partChannels, count);
+                impl->soloRegion.process (impl->soloPartChannels.data(), partChannels, position, count);
             std::array<double, Band::maxSubBlock> mixes;
             for (size_t i = 0; i < static_cast<size_t> (count); ++i)
                 mixes[i] = impl->heldMix.next();
@@ -387,6 +393,15 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
                 for (size_t i = 0; i < static_cast<size_t> (count); ++i)
                     samples[i] = static_cast<float> (samples[i] + mixes[i] * (input[i] - samples[i]));
             }
+        }
+
+        // At the run's end, each detector moves its Band over the next run.
+        impl->gridPosition = position + count;
+        if (impl->gridPosition == Band::maxSubBlock)
+        {
+            for (size_t band = 0; band < impl->bands.size(); ++band)
+                impl->bands[band].setDynamicOffset (impl->dynamics[band].finishRun());
+            impl->gridPosition = 0;
         }
     }
 

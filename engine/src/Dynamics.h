@@ -30,18 +30,23 @@ public:
     // unmetered, and the Band sounds the same metered or not.
     void setMetered (bool metered);
 
-    // Listens to a run of at most Band::maxSubBlock samples of the main input, or of the Sidechain
-    // (sidechainChannels 0 when none is connected). Returns the offset in dB to add to the Band's Gain
-    // at the end of the run.
-    double process (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int numSamples);
+    // Listens to the piece of a run of the Engine's grid (Band::process) from position on, numSamples
+    // long, of the main input, or of the Sidechain (sidechainChannels 0 when none is connected).
+    void hear (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int position,
+               int numSamples);
 
-    // The detection signal of the last process() on output channel ch at sample i: the one detection
+    // At the end of a run: moves the gain computer over the levels the run heard, with its Auto
+    // Attack and Auto Threshold taken over the whole run. Returns the offset in dB to add to the
+    // Band's Gain over the next run.
+    double finishRun();
+
+    // The detection signal of the last hear() on output channel ch at sample i: the one detection
     // channel on every output channel, or each channel's own when there are two; silence when the
     // detector heard nothing.
     // A mono main output (outputChannels 1) hears the mean of two detection channels.
     float auditionSample (int outputChannels, int ch, int i) const;
 
-    // The loudest level the detector compared with Threshold in the last process(), in dB where a
+    // The loudest level the detector compared with Threshold in the last hear(), in dB where a
     // full-scale sine reads 0; nothingHeardDb when it didn't run or had nothing to listen to.
     double detectionLevelDb() const { return loudestLevel; }
     static constexpr double nothingHeardDb = -1000.0;
@@ -73,9 +78,13 @@ private:
     bool auditioned = false;
     bool metered = false;
     double loudestLevel = nothingHeardDb;
-    int detectionChannelCount = 0; // in the last process()
+    int detectionChannelCount = 0; // in the last hear()
     std::vector<std::array<float, Band::maxSubBlock>> detection;
     std::vector<float*> detectionChannels;
+
+    // The levels the run in progress has heard while running, for the gain computer at its end.
+    std::array<double, Band::maxSubBlock> runLevels {};
+    int runLevelCount = 0;
 
     std::array<double, 2> power {}; // per detection channel, smoothed
     double powerCoefficient = 1.0;
