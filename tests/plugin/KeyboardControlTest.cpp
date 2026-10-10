@@ -397,3 +397,131 @@ TEST_CASE ("Clicking Undo, Redo, A, B or Presets leaves keyboard focus where it 
     host.press (juce::KeyPress (juce::KeyPress::deleteKey));
     CHECK (host.value (2, "in_use") == 0.0f);
 }
+
+namespace
+{
+const juce::KeyPress tab (juce::KeyPress::tabKey), space (juce::KeyPress::spaceKey), returnKey (juce::KeyPress::returnKey),
+    escape (juce::KeyPress::escapeKey);
+
+staple::LookAndFeel& stapleOf (OpenEditor& host)
+{
+    return dynamic_cast<staple::LookAndFeel&> (host.editor->getLookAndFeel());
+}
+
+template <typename T>
+T& named (OpenEditor& host, const juce::String& name)
+{
+    return *host.findAll<T> ([&name] (T& c) { return c.getName() == name || c.getTitle() == name; }).front();
+}
+
+juce::Button& buttonWithText (OpenEditor& host, const juce::String& text)
+{
+    return *host.findAll<juce::Button> ([&text] (juce::Button& b) { return b.getButtonText() == text; }).front();
+}
+} // namespace
+
+TEST_CASE ("Every control Tab reaches has a focus ring, which Tab shows")
+{
+    EveryControl host;
+    for (auto* component : juce::KeyboardFocusTraverser().getAllComponents (host.editor.get()))
+    {
+        CAPTURE (describe (*component));
+        CHECK (component->hasFocusOutline());
+    }
+    host.display.grabKeyboardFocus();
+    CHECK_FALSE (stapleOf (host).isFocusRingShown());
+    CHECK (host.press (tab));
+    CHECK (stapleOf (host).isFocusRingShown());
+    CHECK (bandElement (host, 1).hasKeyboardFocus (false));
+    host.press (withShift (tab));
+    CHECK (host.display.hasKeyboardFocus (false));
+}
+
+TEST_CASE ("With nothing focused, Tab focuses the first control and Shift+Tab the last")
+{
+    EveryControl host;
+    juce::Component::unfocusAllComponents();
+    host.press (tab);
+    CHECK (buttonWithText (host, "Presets").hasKeyboardFocus (false));
+    juce::Component::unfocusAllComponents();
+    host.press (withShift (tab));
+    CHECK (buttonWithText (host, "Global Bypass").hasKeyboardFocus (false));
+}
+
+TEST_CASE ("Space or Return toggles a toggle and presses a button, each press one undo step")
+{
+    EveryControl host;
+    auto& history = host.processor.editHistory();
+    const int steps = history.undoSteps();
+    auto& bypass = buttonWithText (host, "Bypass");
+    bypass.grabKeyboardFocus();
+    REQUIRE (bypass.hasKeyboardFocus (false));
+
+    CHECK (host.press (space));
+    CHECK (host.value (1, "bypass") == 1.0f);
+    CHECK (host.press (returnKey));
+    CHECK (host.value (1, "bypass") == 0.0f);
+    CHECK (history.undoSteps() == steps + 2);
+
+    auto& deleteButton = buttonWithText (host, "Delete");
+    deleteButton.grabKeyboardFocus();
+    CHECK (host.press (returnKey));
+    CHECK (host.value (1, "in_use") == 0.0f);
+}
+
+TEST_CASE ("Detection Audition plays while Space is held on it")
+{
+    EveryControl host;
+    auto& audition = buttonWithText (host, "Detection Audition");
+    audition.grabKeyboardFocus();
+    REQUIRE (audition.hasKeyboardFocus (false));
+    host.hold (space);
+    host.hold (space);
+    CHECK (host.processor.detectionAuditionSlot() == 1);
+    host.release();
+    CHECK (host.processor.detectionAuditionSlot() == 0);
+}
+
+TEST_CASE ("Up and down step a ComboBox to the previous or next item; a held key is one undo step")
+{
+    EveryControl host;
+    auto& history = host.processor.editHistory();
+    auto& shape = named<juce::ComboBox> (host, "Shape");
+    shape.grabKeyboardFocus();
+    REQUIRE (shape.hasKeyboardFocus (false));
+    REQUIRE (host.value (1, "shape") == 1.0f); // Low Shelf
+    const int steps = history.undoSteps();
+
+    CHECK (host.press (down));
+    CHECK (host.value (1, "shape") == 2.0f);
+    CHECK (host.press (up));
+    CHECK (host.value (1, "shape") == 1.0f);
+    CHECK (history.undoSteps() == steps + 2);
+    for (int repeat = 0; repeat < 3; ++repeat)
+        host.hold (down);
+    host.release();
+    CHECK (host.value (1, "shape") == 4.0f);
+    CHECK (history.undoSteps() == steps + 3);
+    CHECK (stapleOf (host).isFocusRingShown());
+}
+
+TEST_CASE ("The Preset browser's list takes Tab, moves with the arrow keys, loads with Return and closes with Escape")
+{
+    EveryControl host;
+    auto& presets = buttonWithText (host, "Presets");
+    presets.grabKeyboardFocus();
+    host.press (returnKey);
+    auto& browser = named<juce::Component> (host, "Preset Browser");
+    REQUIRE (browser.isVisible());
+    host.press (tab); // from the search to the list
+    auto& list = named<juce::ListBox> (host, "Presets List");
+    REQUIRE (list.hasKeyboardFocus (true));
+    host.press (down); // the first folder's name
+    host.press (down); // its first Preset
+    CHECK (host.press (returnKey));
+    CHECK (host.processor.loadedPresetName().isNotEmpty());
+    CHECK (browser.isVisible());
+    host.press (escape);
+    CHECK_FALSE (browser.isVisible());
+    CHECK (presets.hasKeyboardFocus (false));
+}

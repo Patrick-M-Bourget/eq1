@@ -14,9 +14,9 @@ namespace eq1
 // The Preset browser, a panel over the EQ display: every Preset in browser order
 // (PresetLibrary::listing) under its folder's name, a search over Preset names whose results show
 // their folder, and saving as a User Preset, loading a Preset file from anywhere and showing the User
-// folder. A click on a Preset loads it and the panel stays open, to audition the next. Each opening
-// reads the disk again and clears the search; Escape or a click outside the panel closes it, giving
-// keyboard focus back to where it was.
+// folder. A click on a Preset, or Return on it in the list, loads it and the panel stays open, to
+// audition the next. Each opening reads the disk again and clears the search; Escape or a click
+// outside the panel closes it, giving keyboard focus back to where it was.
 class PresetBrowser final : public juce::Component, private juce::ListBoxModel
 {
 public:
@@ -49,6 +49,9 @@ private:
     int getNumRows() override { return static_cast<int> (rows.size()); }
     void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected) override;
     void listBoxItemClicked (int row, const juce::MouseEvent& event) override;
+    void returnKeyPressed (int row) override;
+    // Loads the Preset on row; nothing for a folder's name.
+    void loadRow (int row);
 
     // A folder's name over its Presets while browsing (no entry), or a Preset, with its folder while searching.
     struct Row

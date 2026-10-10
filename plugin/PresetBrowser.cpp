@@ -15,8 +15,11 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
     search.onEscapeKey = [this] { close(); };
     addAndMakeVisible (search);
 
+    setName ("Preset Browser");
+    list.setName ("Presets List");
     list.setRowHeight (22);
-    list.setWantsKeyboardFocus (false);
+    // Tab reaches it from the search; the arrow keys move through it and Return loads.
+    list.setWantsKeyboardFocus (true);
     addAndMakeVisible (list);
 
     save.onClick = [this] {
@@ -33,7 +36,7 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
     };
     for (auto* button : { &save, &loadFile, &showFolder })
     {
-        button->setWantsKeyboardFocus (false);
+        button->setMouseClickGrabsKeyboardFocus (false);
         addAndMakeVisible (*button);
     }
     setWantsKeyboardFocus (true);
@@ -148,10 +151,20 @@ void PresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int width, int
 
 void PresetBrowser::listBoxItemClicked (int row, const juce::MouseEvent&)
 {
+    loadRow (row);
+}
+
+void PresetBrowser::loadRow (int row)
+{
     if (row < 0 || row >= getNumRows())
         return;
     if (const auto* entry = rows[static_cast<std::size_t> (row)].entry; entry != nullptr && onLoad != nullptr)
         onLoad (*entry);
+}
+
+void PresetBrowser::returnKeyPressed (int row)
+{
+    loadRow (row);
 }
 
 bool PresetBrowser::keyPressed (const juce::KeyPress& key)

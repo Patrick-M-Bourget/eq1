@@ -9,7 +9,8 @@ namespace eq1
 {
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), output (p), presetBar (p), meter (p)
+    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), output (p), presetBar (p), meter (p),
+      keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
     addAndMakeVisible (display);
@@ -87,6 +88,9 @@ PluginEditor::PluginEditor (PluginProcessor& p)
              &panel, &output })
         child->setExplicitFocusOrder (++order);
 
+    keyboard.adopt (*this);
+    addMouseListener (this, true);
+
     startTimerHz (4);
 
     // Once every component is in place: each one that keeps something from its look (a Slider's
@@ -147,8 +151,22 @@ void PluginEditor::showUndoState()
     redoButton.setEnabled (eqProcessor.editHistory().canRedo());
 }
 
+void PluginEditor::mouseDown (const juce::MouseEvent&)
+{
+    lookAndFeel.showFocusRing (false);
+}
+
 bool PluginEditor::keyPressed (const juce::KeyPress& key)
 {
+    if (key.isKeyCode (juce::KeyPress::tabKey) && ! isParentOf (getCurrentlyFocusedComponent()))
+    {
+        const auto all = createKeyboardFocusTraverser()->getAllComponents (this);
+        if (all.empty())
+            return false;
+        lookAndFeel.showFocusRing (true);
+        (key.getModifiers().isShiftDown() ? all.back() : all.front())->grabKeyboardFocus();
+        return true;
+    }
     const auto command = juce::ModifierKeys::commandModifier;
     if (key == juce::KeyPress ('z', command, 0))
     {

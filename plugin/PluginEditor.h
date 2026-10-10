@@ -3,6 +3,7 @@
 #include "BandEditing.h"
 #include "BandPanel.h"
 #include "EqDisplay.h"
+#include "KeyboardControl.h"
 #include "KeyboardSlider.h"
 #include "OutputMeter.h"
 #include "OutputPanel.h"
@@ -29,8 +30,11 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
-    // Cmd-Z undoes, Shift-Cmd-Z (or Cmd-Y) redoes; Ctrl on Windows.
+    // Cmd-Z undoes, Shift-Cmd-Z (or Cmd-Y) redoes; Ctrl on Windows. With nothing focused, Tab focuses
+    // the first control and Shift+Tab the last.
     bool keyPressed (const juce::KeyPress& key) override;
+    // Any click in the editor hides the focus ring until a key brings it back.
+    void mouseDown (const juce::MouseEvent& e) override;
 
 private:
     // Follows the Display Range, restored with the plugin's state or zoomed out, and what can be undone.
@@ -60,6 +64,9 @@ private:
     KeyboardSlider analyzerTilt { "Analyzer Tilt" };
     void showAnalyzerSettings();
     void storeAnalyzerSettings();
+
+    // Last, so it lets go of every control before they go.
+    KeyboardControl keyboard;
 };
 
 } // namespace eq1
