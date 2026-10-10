@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <vector>
 
 namespace eq1
@@ -35,6 +36,7 @@ struct Engine::Impl
     // prepare() and carries across process() calls. A Dynamic Band's filter over a run follows what
     // its detector heard up to the run's start, so the output doesn't depend on how blocks cut runs.
     int gridPosition = 0;
+    std::uint64_t gridRun = 0; // the run in progress, counted from prepare(), so a Band knows which run it missed
     std::array<std::atomic<double>, numBandSlots> liveGains {}; // for the display, after each block
     static_assert (std::atomic<double>::is_always_lock_free, "process() never locks");
     Output output;
@@ -282,6 +284,7 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     impl->numChannels = numChannels;
     impl->sampleRate = sampleRate;
     impl->gridPosition = 0;
+    impl->gridRun = 0;
     for (auto& band : impl->bands)
         band.prepare (sampleRate, numChannels);
     for (auto& dynamics : impl->dynamics)
@@ -354,16 +357,16 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
 
         // Detection hears the main input before the EQ (or the Sidechain), so every Band's detector runs first.
         for (auto& dynamics : impl->dynamics)
-            dynamics.hear (impl->subBlock.data(), channels, impl->sidechainSubBlock.data(), sidechainChannels, position, count);
+            dynamics.hear (impl->subBlock.data(), channels, impl->sidechainSubBlock.data(), sidechainChannels, impl->gridRun, position, count);
         if (impl->meteredSlot != 0)
             loudestDetection = std::max (loudestDetection, impl->dynamics[static_cast<size_t> (impl->meteredSlot - 1)].detectionLevelDb());
         for (auto& band : impl->bands)
-            band.process (impl->subBlock.data(), channels, position, count);
+            band.process (impl->subBlock.data(), channels, impl->gridRun, position, count);
 
         if (holding)
         {
             if (partChannels > 0)
-                impl->soloRegion.process (impl->soloPartChannels.data(), partChannels, position, count);
+                impl->soloRegion.process (impl->soloPartChannels.data(), partChannels, impl->gridRun, position, count);
             std::array<double, Band::maxSubBlock> mixes;
             for (size_t i = 0; i < static_cast<size_t> (count); ++i)
                 mixes[i] = impl->heldMix.next();
@@ -402,6 +405,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
             for (size_t band = 0; band < impl->bands.size(); ++band)
                 impl->bands[band].setDynamicOffset (impl->dynamics[band].finishRun());
             impl->gridPosition = 0;
+            ++impl->gridRun;
         }
     }
 

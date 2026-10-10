@@ -15,6 +15,7 @@
 #include <functional>
 #include <map>
 #include <numbers>
+#include <stdexcept>
 
 using Catch::Matchers::WithinAbs;
 
@@ -28,12 +29,19 @@ const juce::StringArray shapeNames { "Bell",      "Low Shelf", "Low Cut",    "Hi
 constexpr double sampleRate = 48000.0;
 constexpr int blockSize = 512;
 
-void setParameter (juce::AudioProcessor& processor, const juce::String& id, float value)
+juce::RangedAudioParameter& parameterNamed (juce::AudioProcessor& processor, const juce::String& id)
 {
     for (auto* parameter : processor.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter); ranged != nullptr && ranged->getParameterID() == id)
-            return ranged->setValueNotifyingHost (ranged->convertTo0to1 (value));
+            return *ranged;
     FAIL ("No parameter " << id);
+    throw std::logic_error ("unreachable");
+}
+
+void setParameter (juce::AudioProcessor& processor, const juce::String& id, float value)
+{
+    auto& parameter = parameterNamed (processor, id);
+    parameter.setValueNotifyingHost (parameter.convertTo0to1 (value));
 }
 
 // Which part of a stereo signal the sine is in: the same on both channels, or inverted on the right.
@@ -632,12 +640,59 @@ TEST_CASE ("Output Gain on the host parameters sets the output level, its bottom
     setParameter (processor, "output_gain", -80.0f);
     CHECK (sineGainDb (processor, 1000.0) < -200.0);
 
-    auto* outputGain = processor.getParameters()[0];
-    for (auto* parameter : processor.getParameters())
-        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter); ranged != nullptr && ranged->getParameterID() == "output_gain")
-            outputGain = ranged;
-    CHECK (outputGain->getText (0.0f, 100) == "-inf");
-    CHECK_THAT (outputGain->getValueForText ("-inf"), WithinAbs (0.0, 1.0e-6));
+    auto& outputGain = parameterNamed (processor, "output_gain");
+    CHECK (outputGain.getText (0.0f, 100) == "-inf");
+    CHECK_THAT (outputGain.getValueForText ("-inf"), WithinAbs (0.0, 1.0e-6));
+}
+
+TEST_CASE ("Output Gain at its default, and at the centre of its host range, is exactly 0 dB")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    auto& outputGain = parameterNamed (processor, "output_gain");
+    auto* raw = processor.parameterState().getRawParameterValue ("output_gain");
+
+    CHECK (raw->load() == 0.0f);
+    outputGain.setValueNotifyingHost (0.25f);
+    REQUIRE (raw->load() != 0.0f);
+    outputGain.setValueNotifyingHost (0.5f);
+    CHECK (raw->load() == 0.0f);
+    CHECK (outputGain.getCurrentValueAsText() == "0.00");
+
+    // A host a float step either side of the centre, or a session saved with the rounded-off default
+    // (1.4e-6 dB), also gets 0 dB.
+    outputGain.setValueNotifyingHost (std::nextafter (0.5f, 1.0f));
+    CHECK (raw->load() == 0.0f);
+    outputGain.setValueNotifyingHost (std::nextafter (0.5f, 0.0f));
+    CHECK (raw->load() == 0.0f);
+    setParameter (processor, "output_gain", 1.43051147e-6f);
+    CHECK (raw->load() == 0.0f);
+}
+
+TEST_CASE ("With every parameter at its default, the output is the input bit for bit")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    const auto layout = GENERATE (juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo());
+    useLayout (processor, layout);
+
+    juce::Random random (75);
+    juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
+    juce::MidiBuffer midi;
+    for (int block = 0; block < 16; ++block)
+    {
+        buffer.clear();
+        for (int ch = 0; ch < processor.getMainBusNumInputChannels(); ++ch)
+            for (int i = 0; i < blockSize; ++i)
+                buffer.setSample (ch, i, i % 4 == 0 ? (i % 8 == 0 ? 1.0f : -1.0f) : random.nextFloat() * 2.0f - 1.0f);
+        const juce::AudioBuffer<float> input (buffer);
+        processor.processBlock (buffer, midi);
+        for (int ch = 0; ch < processor.getMainBusNumOutputChannels(); ++ch)
+            for (int i = 0; i < blockSize; ++i)
+                if (buffer.getSample (ch, i) != input.getSample (ch, i))
+                    FAIL ("Block " << block << ", channel " << ch << ", sample " << i << ": " << input.getSample (ch, i) << " in, "
+                                   << buffer.getSample (ch, i) << " out");
+    }
 }
 
 TEST_CASE ("Auto Gain on the host parameters compensates the Bands' level by its estimate")

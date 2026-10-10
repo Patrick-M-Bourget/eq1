@@ -105,7 +105,7 @@ TEST_CASE ("An over lights its channel's Clip Light, which stays lit until clear
     eq1::PluginProcessor processor;
     useLayout (processor, juce::AudioChannelSet::stereo());
 
-    // A sample at full scale is not an over; one a thousandth of a dB beyond it is.
+    // A sample at full scale is not an over; one a float step beyond it is.
     juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
     juce::MidiBuffer midi;
     buffer.clear();
@@ -115,7 +115,7 @@ TEST_CASE ("An over lights its channel's Clip Light, which stays lit until clear
     readAll (processor);
     CHECK_FALSE (processor.isClipLit (0));
     CHECK_FALSE (processor.isClipLit (1));
-    buffer.setSample (0, 10, juce::Decibels::decibelsToGain (0.001f));
+    buffer.setSample (0, 10, std::nextafter (1.0f, 2.0f));
     processor.processBlock (buffer, midi);
     readAll (processor);
     CHECK (processor.isClipLit (0));

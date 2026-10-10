@@ -137,9 +137,8 @@ void PluginProcessor::setAnalyzerSettings (const AnalyzerSettings& settings)
 OutputLevel PluginProcessor::readOutputLevel (int channel)
 {
     const auto level = engine.readOutputLevel (channel);
-    // Above 0 dBFS: a sample beyond full scale. Full scale itself is not an over, nor the few float steps
-    // past it that rounding leaves on a full-scale input (Output Gain's default reads 1.4e-6 dB).
-    if (level.peakDb > clipThresholdDb && channel >= 0 && channel < static_cast<int> (clipLit.size()))
+    // Above 0 dBFS: a sample beyond full scale. Full scale itself is not an over.
+    if (level.peakDb > 0.0 && channel >= 0 && channel < static_cast<int> (clipLit.size()))
         clipLit[static_cast<size_t> (channel)] = true;
     return level;
 }
