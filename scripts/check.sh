@@ -165,11 +165,22 @@ run_tests() {
     ctest --test-dir "$BUILD_DIR" -C Release -j 8 --output-on-failure
 }
 
-# A test filter that matches nothing is an error here, not a silent pass.
+# A test filter that matches nothing is an error here, not a silent pass. Its output goes to a log, as
+# the hooks' does: the summary on success; the compiler's errors, or the failing tests' output, on failure.
 focus() {
     step "Tests matching $1"
-    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_engine_tests eq1_plugin_tests
-    ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure
+    local log=$BUILD_DIR/focus.log
+    if ! cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_engine_tests eq1_plugin_tests > "$log" 2>&1; then
+        grep -E 'error|FAILED:' "$log" >&2
+        echo "Build failed; log in $log" >&2
+        return 1
+    fi
+    if ! ctest --test-dir "$BUILD_DIR" -C Release -R "$1" --no-tests=error -j 8 --output-on-failure >> "$log" 2>&1; then
+        sed -n '/^Test project/,$p' "$log" | grep -vE '^ +Start +[0-9]+:|Test +#[0-9]+: .* Passed' >&2
+        echo "Log in $log" >&2
+        return 1
+    fi
+    grep -E '^[0-9]+% tests passed' "$log"
 }
 
 # Timings taken while the machine is busy (other builds, other agents) measure the machine, not eq1:
