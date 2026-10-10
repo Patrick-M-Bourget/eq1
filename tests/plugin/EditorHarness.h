@@ -207,6 +207,20 @@ struct OpenEditor
         return harness::mouseEvent (display, position, mods, downAt);
     }
 
+    // Rests the pointer at position on the display until done() is true, giving up after 3 s: what waits
+    // on a rest (the Hover Card's 300 ms) goes through this. JUCE's Desktop timer can send the machine's
+    // real mouse to the display meanwhile, which ends the rest, so the pointer is sent again every
+    // 100 ms; resting at the same place doesn't restart a rest. Returns done().
+    bool restUntil (juce::Point<float> position, const std::function<bool()>& done)
+    {
+        for (int tries = 0; tries < 30 && ! done(); ++tries)
+        {
+            display.mouseMove (mouseEvent (position, {}, position));
+            settle (100);
+        }
+        return done();
+    }
+
     // A press at from, a drag to to and a release.
     void drag (juce::Point<float> from, juce::Point<float> to, juce::ModifierKeys mods)
     {

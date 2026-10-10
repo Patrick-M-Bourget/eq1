@@ -41,17 +41,10 @@ std::function<void()> actionOf (const juce::PopupMenu& menu, const juce::String&
 // The pointer comes to rest at position on the display.
 void rest (OpenEditor& host, juce::Point<float> position) { host.display.mouseMove (host.mouseEvent (position, {}, position)); }
 
-// Rests the pointer on a handle until the card shows slot's, and checks it does. JUCE's Desktop timer
-// can send the machine's real mouse to the display meanwhile (CODING_STANDARDS.md, "Editor behaviour"),
-// which ends the rest, so the pointer is sent again until the card is up, for up to 3 s.
+// Rests the pointer on a handle until the card shows slot's (OpenEditor::restUntil), and checks it does.
 void showCard (OpenEditor& host, juce::Point<float> handle, int slot)
 {
-    for (int tries = 0; tries < 30 && cardOf (host).shownSlot() != slot; ++tries)
-    {
-        rest (host, handle);
-        host.settle (100);
-    }
-    REQUIRE (cardOf (host).shownSlot() == slot);
+    REQUIRE (host.restUntil (handle, [&] { return cardOf (host).shownSlot() == slot; }));
 }
 } // namespace
 
