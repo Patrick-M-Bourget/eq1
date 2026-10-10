@@ -72,6 +72,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
         thresholdDragging = false;
     };
     threshold.onValueChange = [this] { storeThreshold(); };
+    addAndMakeVisible (detectionArc);
 
     for (auto* button : { &brickwall, &bypass, &dynamicsBypass })
         addAndMakeVisible (*button);
@@ -209,9 +210,9 @@ void BandPanel::updateVisibility()
     for (auto* c : std::initializer_list<juce::Component*> { &gain, &gainLabel })
         c->setVisible (hasGain (band.shape));
     // Cut, Notch, Band Pass and All Pass keep their dynamics settings but don't offer them.
-    for (auto* c : std::initializer_list<juce::Component*> { &dynamicRange, &dynamicRangeLabel, &threshold, &thresholdLabel, &attack,
-                                                             &attackLabel, &release, &releaseLabel, &dynamicsBypass, &detectionSource,
-                                                             &detectionRange, &audition })
+    for (auto* c : std::initializer_list<juce::Component*> { &dynamicRange, &dynamicRangeLabel, &threshold, &thresholdLabel, &detectionArc,
+                                                             &attack, &attackLabel, &release, &releaseLabel, &dynamicsBypass,
+                                                             &detectionSource, &detectionRange, &audition })
         c->setVisible (hasDynamics (band.shape));
     for (auto* c : std::initializer_list<juce::Component*> { &detectionLow, &detectionLowLabel, &detectionHigh, &detectionHighLabel })
         c->setVisible (hasDynamics (band.shape) && band.detectionRange == DetectionRange::Free);
@@ -270,6 +271,7 @@ void BandPanel::resized()
         label->setBounds (column.removeFromTop (16));
         slider->setBounds (column);
     }
+    detectionArc.setBounds (threshold.getBounds());
 }
 
 } // namespace eq1
