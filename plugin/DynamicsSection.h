@@ -42,10 +42,11 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
-    void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override {}
 
 private:
     void timerCallback() override;
+    double valueDraggedBy (double from, float pixels, bool fine) override;
     juce::Rectangle<float> track() const;
 
     PluginProcessor& processor;
@@ -54,13 +55,6 @@ private:
     double lastRead = 0.0; // seconds, when the Detection Level was last read
     double level = 0.0;    // dB, as last painted
 
-    struct Drag
-    {
-        float startY;
-        double startProportion;
-        ScopedDragNotification gesture;
-    };
-    std::unique_ptr<Drag> drag;
 };
 
 // The Band panel's dynamics section, between Gain and Q (HANDOFF.md §5.3): the Threshold fader at its

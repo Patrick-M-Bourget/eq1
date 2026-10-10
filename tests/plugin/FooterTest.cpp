@@ -173,6 +173,32 @@ TEST_CASE ("The Gain Scale readout drags 1% per pixel, 0.25% with Shift, and a d
     CHECK (host.undoSteps() == steps + 3);
 }
 
+TEST_CASE ("A double-click's second press resets the Gain Scale readout and the Output Pan slider and drags on from there, one undo step")
+{
+    Footer host;
+    host.openPopover();
+    auto& pan = host.titled<juce::Slider> ("Output Pan");
+    const bool onPan = GENERATE (false, true);
+    juce::Component& target = onPan ? static_cast<juce::Component&> (pan) : host.gainScale;
+    const juce::String id = onPan ? "output_pan" : "gain_scale";
+    host.set (id, 50.0f);
+    // On the slider, 10% of its width is 20%; on the readout, a vertical drag is 1% per pixel.
+    const juce::Point<float> at { onPan ? pan.getWidth() * 0.75f : 10.0f, 7.0f };
+    const auto to = onPan ? at.translated (pan.getWidth() * 0.1f, 0.0f) : at.translated (0.0f, -10.0f);
+    const juce::ModifierKeys leftButton (juce::ModifierKeys::leftButtonModifier);
+
+    target.mouseDown (Footer::mouse (target, at, leftButton, at));
+    target.mouseUp (Footer::mouse (target, at, {}, at));
+    const int steps = host.undoSteps();
+    // As JUCE sends them: the double-click comes after the second release.
+    target.mouseDown (Footer::mouse (target, at, leftButton, at, 2));
+    target.mouseDrag (Footer::mouse (target, to, leftButton, at, 2));
+    target.mouseUp (Footer::mouse (target, to, {}, at, 2));
+    target.mouseDoubleClick (Footer::mouse (target, to, {}, at, 2));
+    CHECK_THAT (host.value (id), WithinAbs (onPan ? 20.0 : 110.0, 1.0e-3));
+    CHECK (host.undoSteps() == steps + 1);
+}
+
 TEST_CASE ("The Output readout shows Output Gain, plus Auto Gain's estimate while Auto Gain is on")
 {
     Footer host;

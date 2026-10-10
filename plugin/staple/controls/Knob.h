@@ -14,7 +14,8 @@ class KnobTooltip;
 // Staple's knob (HANDOFF.md §4 "Knobs", §5.3): a rotary Slider of any diameter, drawn as a lit face with
 // a value arc in a caller-set colour and no track. A vertical drag covers the whole range over 200 px, or
 // 800 px with Shift, as one gesture; a double-click resets it to the value its attachment set
-// (setDoubleClickReturnValue: SliderAttachment sets the parameter's default) as one gesture. The arrow
+// (setDoubleClickReturnValue: SliderAttachment sets the parameter's default), and a drag on its second
+// press carries on from there, as one gesture (KeyboardSlider::startMouseDrag). The arrow
 // keys step it as any KeyboardSlider. While the pointer is over it, or it is dragged, a KnobTooltip shows
 // its title and value text; a double-click on the tooltip types a value. Disabled, it dims to 35 % and
 // ignores the mouse and keys.
@@ -47,7 +48,6 @@ public:
         virtual void ringMouseDown (Knob&, const juce::MouseEvent&) {}
         virtual void ringMouseDrag (Knob&, const juce::MouseEvent&) {}
         virtual void ringMouseUp (Knob&, const juce::MouseEvent&) {}
-        virtual void ringDoubleClick (Knob&, const juce::MouseEvent&) {}
         virtual void ringHover (Knob&, bool over) { juce::ignoreUnused (over); }
         // What the tooltip shows while the lane is hovered or dragged ("Band 4 Dynamic Range", "+6.0 dB").
         virtual juce::String ringTitle() { return {}; }
@@ -85,7 +85,7 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
-    void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override {}
     void valueChanged() override;
     void enablementChanged() override;
     void parentHierarchyChanged() override;
@@ -95,6 +95,7 @@ protected:
     void showTooltip();
 
 private:
+    double valueDraggedBy (double from, float pixels, bool fine) override;
     friend class KnobTooltip;
     void hideTooltipUnlessHovered (juce::Point<int> screenPosition);
     void hideTooltip();
@@ -110,19 +111,6 @@ private:
     float ringWidth = 0.0f, ringOffset = 0.0f;
     bool ringHovered = false;
 
-    // A drag on the face: where it started and the proportion there, rebased when Shift changes.
-    struct Drag
-    {
-        Drag (Knob& knob, float y, bool shift)
-            : startY (y), startProportion (knob.valueToProportionOfLength (knob.getValue())), fine (shift), gesture (knob)
-        {
-        }
-        float startY;
-        double startProportion;
-        bool fine;
-        ScopedDragNotification gesture;
-    };
-    std::unique_ptr<Drag> drag;
     bool ringDragging = false;
 
     std::unique_ptr<KnobTooltip> tooltip;

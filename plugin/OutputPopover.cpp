@@ -86,6 +86,7 @@ OutputPanSlider::OutputPanSlider() : KeyboardSlider ("Output Pan")
     setSliderStyle (juce::Slider::LinearHorizontal);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setArrowSteps (5.0, 1.0);
+    setDoubleClickReturnValue (true, 0.0);
     setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
     setTooltip ("Output Pan: drag; double-click to centre");
 }
@@ -111,37 +112,32 @@ void OutputPanSlider::paint (juce::Graphics& g)
     g.fillRoundedRectangle (thumb, 2.0f);
 }
 
-void OutputPanSlider::setFromX (float x)
+double OutputPanSlider::valueAt (float x) const
 {
     const double proportion = juce::jlimit (0.0, 1.0, static_cast<double> (x) / std::max (1, getWidth()));
-    setValue (std::round (getMinimum() + proportion * (getMaximum() - getMinimum())), juce::sendNotificationSync);
+    return std::round (getMinimum() + proportion * (getMaximum() - getMinimum()));
+}
+
+double OutputPanSlider::valueDraggedBy (double from, float pixels, bool)
+{
+    const double moved = pixels / std::max (1, getWidth()) * (getMaximum() - getMinimum());
+    return juce::jlimit (getMinimum(), getMaximum(), std::round (from + moved));
 }
 
 void OutputPanSlider::mouseDown (const juce::MouseEvent& e)
 {
-    if (! isEnabled() || ! e.mods.isLeftButtonDown())
-        return;
-    drag.emplace (*this);
-    setFromX (e.position.x);
+    if (isEnabled() && e.mods.isLeftButtonDown())
+        startMouseDrag (e, DragAxis::horizontal, valueAt (e.position.x));
 }
 
 void OutputPanSlider::mouseDrag (const juce::MouseEvent& e)
 {
-    if (drag)
-        setFromX (e.position.x);
+    continueMouseDrag (e);
 }
 
 void OutputPanSlider::mouseUp (const juce::MouseEvent&)
 {
-    drag.reset();
-}
-
-void OutputPanSlider::mouseDoubleClick (const juce::MouseEvent&)
-{
-    if (! isEnabled())
-        return;
-    const ScopedDragNotification centre (*this);
-    setValue (0.0, juce::sendNotificationSync);
+    endMouseDrag();
 }
 
 OutputToggle::OutputToggle (const juce::String& title, std::optional<staple::Icon> i, const juce::String& letter)

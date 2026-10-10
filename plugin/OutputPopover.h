@@ -33,11 +33,11 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
-    void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override {}
 
 private:
-    void setFromX (float x);
-    std::optional<ScopedDragNotification> drag;
+    double valueAt (float x) const;
+    double valueDraggedBy (double from, float pixels, bool fine) override;
 };
 
 // One of the output popover's three toggles: an icon, or a letter (Auto Gain's "A"), on fill2 in text1

@@ -39,6 +39,7 @@ ThresholdFader::ThresholdFader (PluginProcessor& p) : KeyboardSlider ("Threshold
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setHasFocusOutline (true);
     setRange (-60.0, autoPosition, 0.1);
+    setDoubleClickReturnValue (true, autoPosition);
     textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB"; };
     valueFromTextFunction = [] (const juce::String& text) {
         return text.trim().equalsIgnoreCase ("Auto") ? autoPosition : juce::jmin (thresholdTopDb, text.getDoubleValue());
@@ -134,42 +135,26 @@ void ThresholdFader::paint (juce::Graphics& g)
 
 void ThresholdFader::mouseDown (const juce::MouseEvent& e)
 {
-    if (! isEnabled() || ! e.mods.isLeftButtonDown())
-        return;
-    drag.reset (new Drag { e.position.y, valueToProportionOfLength (getValue()), ScopedDragNotification (*this) });
+    if (isEnabled() && e.mods.isLeftButtonDown())
+        startMouseDrag (e);
 }
 
 void ThresholdFader::mouseDrag (const juce::MouseEvent& e)
 {
-    if (drag == nullptr)
-        return;
-    const auto travel = static_cast<float> (getHeight() - layout::faderThumbHeight);
-    double value = proportionOfLengthToValue (juce::jlimit (0.0, 1.0, drag->startProportion + (drag->startY - e.position.y) / travel));
-    // The top step is Auto, whole.
-    if (isAuto (value))
-        value = autoPosition;
-    setValue (value, juce::sendNotificationSync);
+    continueMouseDrag (e);
 }
 
 void ThresholdFader::mouseUp (const juce::MouseEvent&)
 {
-    drag.reset();
+    endMouseDrag();
 }
 
-void ThresholdFader::mouseDoubleClick (const juce::MouseEvent& e)
+double ThresholdFader::valueDraggedBy (double from, float pixels, bool)
 {
-    if (! isEnabled())
-        return;
-    // Inside the second press's gesture if it is open, so it is one undo step either way.
-    std::optional<ScopedDragNotification> gesture;
-    if (drag == nullptr)
-        gesture.emplace (*this);
-    setValue (autoPosition, juce::sendNotificationSync);
-    if (drag != nullptr)
-    {
-        drag->startY = e.position.y;
-        drag->startProportion = 1.0;
-    }
+    const auto travel = static_cast<float> (getHeight() - layout::faderThumbHeight);
+    const double value = proportionOfLengthToValue (juce::jlimit (0.0, 1.0, valueToProportionOfLength (from) + pixels / travel));
+    // The top step is Auto, whole.
+    return isAuto (value) ? autoPosition : value;
 }
 
 //==============================================================================

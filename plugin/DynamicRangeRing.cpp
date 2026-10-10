@@ -39,20 +39,21 @@ DynamicRangeRing::DynamicRangeRing (PluginProcessor& p, staple::Knob& g) : Keybo
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setInterceptsMouseClicks (false, false);
     setArrowSteps (1.0, 0.5);
+    setDoubleClickReturnValue (true, 0.0);
     gain.setRing (this);
     gain.addKeyListener (this);
 }
 
 DynamicRangeRing::~DynamicRangeRing()
 {
-    drag.reset();
+    endMouseDrag();
     gain.removeKeyListener (this);
     gain.setRing (nullptr);
 }
 
 void DynamicRangeRing::show (int newSlot)
 {
-    drag.reset();
+    endMouseDrag();
     slot = newSlot;
     attachment.reset();
     liveGain.reset();
@@ -73,7 +74,7 @@ void DynamicRangeRing::setAvailable (bool available)
     if (available == isVisible())
         return;
     if (! available)
-        drag.reset();
+        endMouseDrag();
     setVisible (available);
     gain.setRing (available ? this : nullptr);
 }
@@ -143,46 +144,25 @@ void DynamicRangeRing::paintRing (juce::Graphics& g, staple::Knob& knob, juce::P
 
 void DynamicRangeRing::ringMouseDown (staple::Knob&, const juce::MouseEvent& e)
 {
-    if (slot == 0)
-        return;
-    drag.reset (new Drag { e.position.y, getValue(), e.mods.isShiftDown(), ScopedDragNotification (*this) });
+    if (slot != 0)
+        startMouseDrag (e);
 }
 
 void DynamicRangeRing::ringMouseDrag (staple::Knob&, const juce::MouseEvent& e)
 {
-    if (drag == nullptr)
-        return;
-    // Shift pressed or let go mid-drag carries on from where it is, at the new speed.
-    if (e.mods.isShiftDown() != drag->fine)
-    {
-        drag->fine = e.mods.isShiftDown();
-        drag->startY = e.position.y;
-        drag->startValue = getValue();
-    }
-    const float pixels = drag->fine ? tokens::knob::fineDragPixels : tokens::knob::dragPixels;
-    const double value = drag->startValue + (drag->startY - e.position.y) / pixels * tokens::knob::ringDbPerDrag;
-    setValue (juce::jlimit (getMinimum(), getMaximum(), std::round (value * 2.0) / 2.0), juce::sendNotificationSync);
+    continueMouseDrag (e);
 }
 
 void DynamicRangeRing::ringMouseUp (staple::Knob&, const juce::MouseEvent&)
 {
-    drag.reset();
+    endMouseDrag();
 }
 
-void DynamicRangeRing::ringDoubleClick (staple::Knob&, const juce::MouseEvent& e)
+double DynamicRangeRing::valueDraggedBy (double from, float pixels, bool fine)
 {
-    if (slot == 0)
-        return;
-    // Inside the second press's gesture if it is open, so it is one undo step either way.
-    std::optional<ScopedDragNotification> gesture;
-    if (drag == nullptr)
-        gesture.emplace (*this);
-    setValue (0.0, juce::sendNotificationSync);
-    if (drag != nullptr)
-    {
-        drag->startY = e.position.y;
-        drag->startValue = 0.0;
-    }
+    const float travel = fine ? tokens::knob::fineDragPixels : tokens::knob::dragPixels;
+    const double value = from + pixels / travel * tokens::knob::ringDbPerDrag;
+    return juce::jlimit (getMinimum(), getMaximum(), std::round (value * 2.0) / 2.0);
 }
 
 juce::String DynamicRangeRing::ringTitle() { return getTitle(); }

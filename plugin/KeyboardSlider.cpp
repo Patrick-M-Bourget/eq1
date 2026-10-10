@@ -16,6 +16,7 @@ KeyboardSlider::KeyboardSlider (const juce::String& name) : juce::Slider (name)
 
 KeyboardSlider::~KeyboardSlider()
 {
+    mouseDrag.reset();
     endHeldStep();
 }
 
@@ -65,6 +66,48 @@ void KeyboardSlider::focusLost (FocusChangeType cause)
 void KeyboardSlider::endHeldStep()
 {
     held.reset();
+}
+
+void KeyboardSlider::startMouseDrag (const juce::MouseEvent& e, DragAxis axis, std::optional<double> pressed)
+{
+    mouseDrag.reset();
+    mouseDrag = std::make_unique<MouseDrag> (*this);
+    mouseDrag->axis = axis;
+    if (e.getNumberOfClicks() >= 2 && isDoubleClickReturnEnabled())
+        setValue (getDoubleClickReturnValue(), juce::sendNotificationSync);
+    else if (pressed.has_value())
+        setValue (*pressed, juce::sendNotificationSync);
+    mouseDrag->anchor = along (e);
+    mouseDrag->anchorValue = getValue();
+    mouseDrag->fine = e.mods.isShiftDown();
+}
+
+void KeyboardSlider::continueMouseDrag (const juce::MouseEvent& e)
+{
+    if (mouseDrag == nullptr)
+        return;
+    if (e.mods.isShiftDown() != mouseDrag->fine)
+    {
+        mouseDrag->fine = e.mods.isShiftDown();
+        mouseDrag->anchor = along (e);
+        mouseDrag->anchorValue = getValue();
+    }
+    setValue (valueDraggedBy (mouseDrag->anchorValue, along (e) - mouseDrag->anchor, mouseDrag->fine), juce::sendNotificationSync);
+}
+
+void KeyboardSlider::endMouseDrag()
+{
+    mouseDrag.reset();
+}
+
+float KeyboardSlider::along (const juce::MouseEvent& e) const
+{
+    return mouseDrag->axis == DragAxis::vertical ? -e.position.y : e.position.x;
+}
+
+double KeyboardSlider::valueDraggedBy (double from, float, bool)
+{
+    return from;
 }
 
 void KeyboardSlider::setArrowSteps (double step, double fineStep)

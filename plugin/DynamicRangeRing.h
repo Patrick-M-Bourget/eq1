@@ -50,7 +50,6 @@ public:
     void ringMouseDown (staple::Knob&, const juce::MouseEvent& e) override;
     void ringMouseDrag (staple::Knob&, const juce::MouseEvent& e) override;
     void ringMouseUp (staple::Knob&, const juce::MouseEvent& e) override;
-    void ringDoubleClick (staple::Knob&, const juce::MouseEvent& e) override;
     juce::String ringTitle() override;
     juce::String ringValue() override;
 
@@ -59,6 +58,7 @@ private:
     bool keyPressed (const juce::KeyPress& key, juce::Component* origin) override;
     bool keyStateChanged (bool isKeyDown, juce::Component* origin) override;
     void timerCallback() override;
+    double valueDraggedBy (double from, float pixels, bool fine) override;
     bool parameterIsOn (const juce::String& id) const;
 
     PluginProcessor& processor;
@@ -67,15 +67,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     std::optional<double> liveGain;
 
-    // A drag on the lane: where it started, the Dynamic Range there, and its speed.
-    struct Drag
-    {
-        float startY;
-        double startValue;
-        bool fine;
-        ScopedDragNotification gesture;
-    };
-    std::unique_ptr<Drag> drag;
 };
 
 } // namespace eq1

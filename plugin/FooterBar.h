@@ -44,17 +44,10 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
-    void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override {}
 
 private:
-    struct Drag
-    {
-        float startY;
-        double startValue;
-        bool fine;
-    };
-    std::optional<Drag> drag;
-    std::optional<ScopedDragNotification> gesture;
+    double valueDraggedBy (double from, float pixels, bool fine) override;
     bool notApplied = false;
 };
 

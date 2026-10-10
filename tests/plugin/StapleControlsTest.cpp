@@ -498,11 +498,11 @@ TEST_CASE ("A TextChip clicks as a Button, and is as wide as its text, padding a
     CHECK (range.getIdealWidth() >= withoutChevron + 8);
 }
 
-TEST_CASE ("A Knob's outer ring lane reports presses, drags, double-clicks and hovers to its handler, and doesn't turn the knob")
+TEST_CASE ("A Knob's outer ring lane reports presses, drags and hovers to its handler, and doesn't turn the knob")
 {
     struct Ring final : staple::Knob::RingHandler
     {
-        int downs = 0, drags = 0, ups = 0, doubleClicks = 0, hoversOn = 0, hoversOff = 0, paints = 0;
+        int downs = 0, drags = 0, ups = 0, hoversOn = 0, hoversOff = 0, paints = 0;
         float inner = 0.0f, outer = 0.0f;
         void paintRing (juce::Graphics&, staple::Knob&, juce::Point<float>, float in, float out) override
         {
@@ -513,7 +513,6 @@ TEST_CASE ("A Knob's outer ring lane reports presses, drags, double-clicks and h
         void ringMouseDown (staple::Knob&, const juce::MouseEvent&) override { ++downs; }
         void ringMouseDrag (staple::Knob&, const juce::MouseEvent&) override { ++drags; }
         void ringMouseUp (staple::Knob&, const juce::MouseEvent&) override { ++ups; }
-        void ringDoubleClick (staple::Knob&, const juce::MouseEvent&) override { ++doubleClicks; }
         void ringHover (staple::Knob&, bool over) override { ++(over ? hoversOn : hoversOff); }
     } ring;
 
@@ -542,7 +541,7 @@ TEST_CASE ("A Knob's outer ring lane reports presses, drags, double-clicks and h
     CHECK (ring.drags == 2);
     CHECK (ring.ups == 1);
     Kit::doubleClick (gain, onRing);
-    CHECK (ring.doubleClicks == 1);
+    CHECK (ring.downs == 3);
     CHECK_THAT (position (gain), WithinAbs (0.5, 1.0e-6));
     CHECK (kit.history.undoSteps() == 0);
 

@@ -59,6 +59,7 @@ GainScaleReadout::GainScaleReadout() : KeyboardSlider ("Gain Scale")
     setSliderStyle (juce::Slider::LinearBarVertical);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setArrowSteps (5.0, 1.0);
+    setDoubleClickReturnValue (true, 100.0);
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
     setTooltip ("Gain Scale: scales every Band's Gain and Dynamic Range. Drag up or down; double-click for 100%");
 }
@@ -80,35 +81,23 @@ void GainScaleReadout::paint (juce::Graphics& g)
 
 void GainScaleReadout::mouseDown (const juce::MouseEvent& e)
 {
-    if (! isEnabled() || ! e.mods.isLeftButtonDown())
-        return;
-    drag = Drag { e.position.y, getValue(), e.mods.isShiftDown() };
-    gesture.emplace (*this);
+    if (isEnabled() && e.mods.isLeftButtonDown())
+        startMouseDrag (e);
 }
 
 void GainScaleReadout::mouseDrag (const juce::MouseEvent& e)
 {
-    if (! drag)
-        return;
-    // Shift pressed or released mid-drag carries on from where the value is.
-    if (e.mods.isShiftDown() != drag->fine)
-        drag = Drag { e.position.y, getValue(), e.mods.isShiftDown() };
-    const double moved = (drag->startY - e.position.y) * (drag->fine ? 0.25 : 1.0);
-    setValue (juce::jlimit (getMinimum(), getMaximum(), static_cast<double> (juce::roundToInt (drag->startValue + moved))), juce::sendNotificationSync);
+    continueMouseDrag (e);
 }
 
 void GainScaleReadout::mouseUp (const juce::MouseEvent&)
 {
-    drag.reset();
-    gesture.reset();
+    endMouseDrag();
 }
 
-void GainScaleReadout::mouseDoubleClick (const juce::MouseEvent&)
+double GainScaleReadout::valueDraggedBy (double from, float pixels, bool fine)
 {
-    if (! isEnabled())
-        return;
-    const ScopedDragNotification reset (*this);
-    setValue (100.0, juce::sendNotificationSync);
+    return juce::jlimit (getMinimum(), getMaximum(), static_cast<double> (juce::roundToInt (from + pixels * (fine ? 0.25 : 1.0))));
 }
 
 OutputReadout::OutputReadout() : staple::TextChip (outputReadoutText (0.0), Look::plain)

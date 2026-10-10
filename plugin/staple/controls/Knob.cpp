@@ -179,7 +179,7 @@ void Knob::mouseExit (const juce::MouseEvent& e)
         if (ring != nullptr)
             ring->ringHover (*this, false);
     }
-    if (drag == nullptr && ! ringDragging)
+    if (! isMouseDragging() && ! ringDragging)
         hideTooltipUnlessHovered (e.getScreenPosition());
 }
 
@@ -194,7 +194,7 @@ void Knob::mouseDown (const juce::MouseEvent& e)
         showTooltip();
         return;
     }
-    drag = std::make_unique<Drag> (*this, e.position.y, e.mods.isShiftDown());
+    startMouseDrag (e);
     showTooltip();
 }
 
@@ -205,19 +205,13 @@ void Knob::mouseDrag (const juce::MouseEvent& e)
         ring->ringMouseDrag (*this, e);
         return;
     }
-    if (drag == nullptr)
-        return;
-    const double here = valueToProportionOfLength (getValue());
-    // Shift pressed or let go mid-drag carries on from where the knob is, at the new speed.
-    if (e.mods.isShiftDown() != drag->fine)
-    {
-        drag->fine = e.mods.isShiftDown();
-        drag->startY = e.position.y;
-        drag->startProportion = here;
-    }
-    const float pixels = drag->fine ? knobs::fineDragPixels : knobs::dragPixels;
-    const double proportion = juce::jlimit (0.0, 1.0, drag->startProportion + (drag->startY - e.position.y) / pixels);
-    setValue (proportionOfLengthToValue (proportion), juce::sendNotificationSync);
+    continueMouseDrag (e);
+}
+
+double Knob::valueDraggedBy (double from, float pixels, bool fine)
+{
+    const double proportion = valueToProportionOfLength (from) + pixels / (fine ? knobs::fineDragPixels : knobs::dragPixels);
+    return proportionOfLengthToValue (juce::jlimit (0.0, 1.0, proportion));
 }
 
 void Knob::mouseUp (const juce::MouseEvent& e)
@@ -229,32 +223,9 @@ void Knob::mouseUp (const juce::MouseEvent& e)
         if (tooltip != nullptr)
             tooltip->refresh();
     }
-    drag.reset();
+    endMouseDrag();
     if (! isMouseOver (true))
         hideTooltipUnlessHovered (e.getScreenPosition());
-}
-
-void Knob::mouseDoubleClick (const juce::MouseEvent& e)
-{
-    if (! isEnabled())
-        return;
-    if (isOnRing (e.position))
-    {
-        ring->ringDoubleClick (*this, e);
-        return;
-    }
-    if (! isDoubleClickReturnEnabled())
-        return;
-    // Inside the second press's gesture if it is open, so the reset is one undo step either way.
-    std::optional<ScopedDragNotification> gesture;
-    if (drag == nullptr)
-        gesture.emplace (*this);
-    setValue (getDoubleClickReturnValue(), juce::sendNotificationSync);
-    if (drag != nullptr)
-    {
-        drag->startY = e.position.y;
-        drag->startProportion = valueToProportionOfLength (getValue());
-    }
 }
 
 void Knob::valueChanged()
@@ -268,7 +239,7 @@ void Knob::enablementChanged()
 {
     if (! isEnabled())
     {
-        drag.reset();
+        endMouseDrag();
         hideTooltip();
     }
     eq1::KeyboardSlider::enablementChanged();
