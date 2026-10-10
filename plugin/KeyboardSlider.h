@@ -5,13 +5,15 @@
 
 #include <functional>
 #include <optional>
+#include <utility>
 
 namespace eq1
 {
 
 // A Slider that keyboard focus reaches by Tab, once (not again in its text box), though a click
 // leaves focus where it was. The arrow keys step it 1% of its normalised range, 0.2% with Shift (so
-// Frequency and Q step evenly in log), within its range and at least one interval. A key held, with
+// Frequency and Q step evenly in log), within its range and at least one interval, unless it is given
+// steps in its own units (setArrowSteps: Gain Scale's 5%, 1% with Shift). A key held, with
 // its repeats, is one drag: one gesture on a host parameter, so one undo step, ended by the key's
 // release or by losing focus.
 //
@@ -26,6 +28,10 @@ public:
     // Where a step from from towards to lands, for a slider whose positions aren't all values;
     // by default, to.
     std::function<double (double from, double to)> landStep;
+
+    // The arrow keys step it by step, or fineStep with Shift, in its own units, rather than by a
+    // proportion of its range.
+    void setArrowSteps (double step, double fineStep);
 
     // What a screen reader reads as its value; by default, its text.
     std::function<juce::String (double value)> spokenValue;
@@ -42,6 +48,7 @@ private:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     std::optional<ScopedDragNotification> held; // while an arrow key is held
+    std::optional<std::pair<double, double>> arrowSteps;
 };
 
 } // namespace eq1

@@ -4,6 +4,7 @@
 #include "HeaderBar.h"
 #include "OutputMeter.h"
 #include "staple/LookAndFeel.h"
+#include "staple/controls/Popover.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -45,17 +46,24 @@ struct EveryControl : OpenEditor
         return findAll<juce::Slider> ([] (juce::Slider& s) { return s.isShowing() && s.isEnabled(); });
     }
 
-    // Opens the footer's call-out behind the button titled title ("Analyzer" or "Output"), as a click does.
+    // Opens what the footer's button titled title shows, as a click does: the Analyzer call-out, or the
+    // output popover.
     void openCallOut (const juce::String& title)
     {
         auto* button = findAll<juce::Button> ([&title] (juce::Button& b) { return b.getTitle() == title; }).front();
         button->onClick();
-        REQUIRE (harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); }) != nullptr);
+        REQUIRE ((harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); }) != nullptr
+                  || harness::findChild<staple::Popover> (*editor, [] (staple::Popover& p) { return p.isOpen(); }) != nullptr));
     }
 
-    // Closes the open call-out, as Escape does.
+    // Closes the open call-out or popover, as Escape does.
     void closeCallOut()
     {
+        if (auto* popover = harness::findChild<staple::Popover> (*editor, [] (staple::Popover& p) { return p.isOpen(); }))
+        {
+            popover->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+            return;
+        }
         auto* box = harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); });
         REQUIRE (box != nullptr);
         box->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
@@ -70,8 +78,10 @@ void checkArrowSteps (OpenEditor& host, const std::vector<juce::Slider*>& slider
 {
     for (auto* slider : sliders)
     {
-        if (slider->getName() == "Threshold" || slider->getName() == "Analyzer Tilt")
-            continue; // Auto is Threshold's top position, and Analyzer Tilt has steps: each has its own test
+        if (slider->getName() == "Threshold" || slider->getName() == "Analyzer Tilt" || slider->getName() == "Gain Scale"
+            || slider->getName() == "Output Pan")
+            continue; // Auto is Threshold's top position, and Analyzer Tilt has steps; Gain Scale and Output Pan step
+                      // by 5 (FooterTest): each has its own test
         CAPTURE (slider->getName());
         slider->grabKeyboardFocus();
         REQUIRE (slider->hasKeyboardFocus (false));
@@ -112,7 +122,7 @@ TEST_CASE ("Arrow keys step every slider 1% of its range, 0.2% with Shift, withi
     checkArrowSteps (host, dynamics);
     host.closeCallOut();
 
-    // Output Gain and Output Pan, in the Output call-out.
+    // Output Gain and Output Pan, in the output popover.
     host.openCallOut ("Output");
     auto inCallOut = host.sliders();
     std::erase_if (inCallOut, [&sliders] (juce::Slider* s) { return std::find (sliders.begin(), sliders.end(), s) != sliders.end(); });
@@ -287,7 +297,7 @@ int groupOf (juce::Component& component)
 {
     for (auto* c = &component; c != nullptr; c = c->getParentComponent())
     {
-        if (dynamic_cast<juce::CallOutBox*> (c) != nullptr)
+        if (dynamic_cast<juce::CallOutBox*> (c) != nullptr || dynamic_cast<staple::Popover*> (c) != nullptr)
             return 5;
         if (dynamic_cast<eq1::FooterBar*> (c) != nullptr)
             return 4;
@@ -348,8 +358,8 @@ TEST_CASE ("Tab walks the header, Display Range, the Bands, the Band panel and t
     // Display Range, the display and its Bands by Frequency, then the Output Meter's Clip Lights.
     CHECK (slice (order, 8, 6) == std::vector<juce::String> { "Display Range", "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter" });
     // The footer, left to right, last.
-    REQUIRE (order.size() >= 6);
-    CHECK (slice (order, order.size() - 6, 6) == std::vector<juce::String> { "Global Bypass", "Analyzer", "Gain Scale", "Output", "Meter", "UI Scale" });
+    REQUIRE (order.size() >= 5);
+    CHECK (slice (order, order.size() - 5, 5) == std::vector<juce::String> { "Global Bypass", "Analyzer", "Gain Scale", "Output", "UI Scale" });
     CHECK (focusProblems (host).empty());
 
     SECTION ("a control Tab can't reach is a problem")
@@ -359,14 +369,29 @@ TEST_CASE ("Tab walks the header, Display Range, the Bands, the Band panel and t
     }
 }
 
-TEST_CASE ("The Analyzer and Output call-outs' controls are in Tab's order only while open, after the footer")
+TEST_CASE ("The output popover takes focus to Output Gain as it opens, and Tab walks its controls in order within it")
+{
+    EveryControl host;
+    const auto closed = focusOrder (*host.editor);
+    host.openCallOut ("Output");
+    auto* popover = harness::findChild<staple::Popover> (*host.editor, [] (staple::Popover& p) { return p.isOpen(); });
+    REQUIRE (popover != nullptr);
+    CHECK (named<juce::Slider> (host, "Output Gain").hasKeyboardFocus (false));
+    CHECK (focusOrder (*popover) == std::vector<juce::String> { "Output Gain", "Pan Mode", "Output Pan", "Phase Invert", "Auto Gain", "Output Meter" });
+    // The rest of the editor is walked as before.
+    CHECK (focusOrder (*host.editor) == closed);
+    host.closeCallOut();
+    CHECK_FALSE (popover->isOpen());
+    CHECK (named<juce::Button> (host, "Output").hasKeyboardFocus (false));
+}
+
+TEST_CASE ("The Analyzer call-out's controls are in Tab's order only while open, after the footer")
 {
     EveryControl host;
     const auto closed = focusOrder (*host.editor);
     const auto [title, contents] = GENERATE (table<const char*, std::vector<juce::String>> (
         { { "Analyzer",
-            { "Pre", "Post", "Sidechain", "Peak Hold", "Analyzer Range", "Analyzer Speed", "Analyzer Resolution", "Analyzer Tilt" } },
-          { "Output", { "Output Gain", "Output Pan", "Pan Mode", "Auto Gain", "Phase Invert" } } }));
+            { "Pre", "Post", "Sidechain", "Peak Hold", "Analyzer Range", "Analyzer Speed", "Analyzer Resolution", "Analyzer Tilt" } } }));
     CAPTURE (title);
     for (const auto& name : contents)
         CHECK (std::find (closed.begin(), closed.end(), name) == closed.end());
@@ -584,7 +609,7 @@ TEST_CASE ("With nothing focused, Tab focuses the first control and Shift+Tab th
     CHECK (named<juce::Button> (host, "Previous Preset").hasKeyboardFocus (false));
     juce::Component::unfocusAllComponents();
     host.press (withShift (tab));
-    CHECK (named<juce::ComboBox> (host, "UI Scale").hasKeyboardFocus (false));
+    CHECK (named<juce::Button> (host, "UI Scale").hasKeyboardFocus (false));
 }
 
 TEST_CASE ("Space or Return toggles a toggle and presses a button, each press one undo step")

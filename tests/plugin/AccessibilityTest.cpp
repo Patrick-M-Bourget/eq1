@@ -1,5 +1,6 @@
 #include "EditorHarness.h"
 #include "staple/controls/Knob.h"
+#include "staple/controls/Popover.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -99,8 +100,8 @@ struct Editor : OpenEditor
         settle();
     }
 
-    // Opens the footer's call-out behind the button titled title ("Analyzer" or "Output"), as a click
-    // does, and closes it again, as Escape does.
+    // Opens what the footer's button titled title shows ("Analyzer" its call-out, "Output" the output
+    // popover), as a click does, and closes it again, as Escape does.
     void openCallOut (const juce::String& title)
     {
         auto* button = harness::findChild<juce::Button> (*editor, [&title] (juce::Button& b) { return b.getTitle() == title; });
@@ -109,6 +110,11 @@ struct Editor : OpenEditor
     }
     void closeCallOut()
     {
+        if (auto* popover = harness::findChild<staple::Popover> (*editor, [] (staple::Popover& p) { return p.isOpen(); }))
+        {
+            popover->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+            return;
+        }
         auto* box = harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); });
         REQUIRE (box != nullptr);
         box->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));

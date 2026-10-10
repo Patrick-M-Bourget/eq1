@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include "staple/Tokens.h"
+#include "staple/controls/Overlay.h"
 
 #include "eq1/Engine.h"
 
@@ -16,6 +17,8 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
     panel.onSelectBand = [this] (int slot) { display.selectBand (slot); };
+    // Popovers and knob tooltips float in it, scaled with everything else.
+    staple::markOverlayLayer (content);
     content.addAndMakeVisible (display);
     content.addChildComponent (meter);
     // Over the display, so its clicks never reach it.
@@ -104,6 +107,11 @@ bool PluginEditor::keyPressed (const juce::KeyPress& key)
         return true;
     }
     const auto command = juce::ModifierKeys::commandModifier;
+    if (key == juce::KeyPress ('b', command, 0))
+    {
+        footer.toggleGlobalBypass();
+        return true;
+    }
     if (key == juce::KeyPress ('z', command, 0))
     {
         header.undo();

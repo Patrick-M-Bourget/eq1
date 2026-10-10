@@ -4,6 +4,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <optional>
+
 namespace staple
 {
 
@@ -25,6 +27,9 @@ public:
     void setLook (Look newLook);
     void setFontSize (float size);
     void setChevron (bool shown);
+    // Its text in this colour whatever its state (the footer readouts' text1, or text4 while not
+    // applied), rather than text2 lit to text1.
+    void setInk (std::optional<juce::Colour> colour);
     // Its text, padding and chevron.
     int getIdealWidth() const;
 
@@ -36,6 +41,7 @@ private:
     Look look;
     float fontSize;
     bool chevron = false;
+    std::optional<juce::Colour> fixedInk;
 };
 
 } // namespace staple

@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "FooterBar.h"
 #include "PluginProcessor.h"
 #include "SavedState.h"
 #include "UserSettings.h"
@@ -6,23 +7,37 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include <algorithm>
 #include <memory>
+#include <vector>
 
 namespace
 {
 
-juce::ComboBox& uiScaleMenu (juce::AudioProcessorEditor& editor)
+eq1::UiScaleMenu& uiScaleMenu (juce::AudioProcessorEditor& editor)
 {
-    auto* menu = harness::findChild<juce::ComboBox> (editor, [] (juce::ComboBox& c) { return c.getTitle() == "UI Scale"; });
+    auto* menu = harness::findChild<eq1::UiScaleMenu> (editor, [] (eq1::UiScaleMenu& c) { return c.getTitle() == "UI Scale"; });
     REQUIRE (menu != nullptr);
     return *menu;
+}
+
+// The UI Scale menu's items, in order, after its "UI Scale" title.
+std::vector<juce::String> uiScaleItems (eq1::UiScaleMenu& menu)
+{
+    std::vector<juce::String> items;
+    const auto popup = menu.menu();
+    for (juce::PopupMenu::MenuItemIterator it (popup); it.next();)
+        if (! it.getItem().isSectionHeader)
+            items.push_back (it.getItem().text);
+    return items;
 }
 
 void pickUiScale (juce::AudioProcessorEditor& editor, int percent)
 {
     auto& menu = uiScaleMenu (editor);
-    REQUIRE (menu.indexOfItemId (percent) >= 0);
-    menu.setSelectedId (percent, juce::sendNotificationSync);
+    const auto items = uiScaleItems (menu);
+    REQUIRE (std::find (items.begin(), items.end(), juce::String (percent) + "%") != items.end());
+    menu.pick (percent);
 }
 
 std::unique_ptr<juce::AudioProcessorEditor> openEditor (eq1::PluginProcessor& processor)
@@ -47,10 +62,8 @@ TEST_CASE ("A new instance opens at 1200 x 760 and 100%, with a UI Scale menu of
     CHECK (editor->getWidth() == 1200);
     CHECK (editor->getHeight() == 760);
     auto& menu = uiScaleMenu (*editor);
-    CHECK (menu.getSelectedId() == 100);
-    CHECK (menu.getNumItems() == 5);
-    for (int percent : { 75, 100, 125, 150, 200 })
-        CHECK (menu.getItemText (menu.indexOfItemId (percent)) == juce::String (percent) + "%");
+    CHECK (menu.shownPercent() == 100);
+    CHECK (uiScaleItems (menu) == std::vector<juce::String> { "75%", "100%", "125%", "150%", "200%" });
 }
 
 TEST_CASE ("At each UI Scale the editor is its logical size times the scale, and so are its limits and what it draws")
@@ -88,7 +101,7 @@ TEST_CASE ("The window's size and UI Scale survive closing and reopening the edi
         editor->setSize (1800, 1200); // 1200 x 800 logical
     }
     const auto editor = openEditor (processor);
-    CHECK (uiScaleMenu (*editor).getSelectedId() == 150);
+    CHECK (uiScaleMenu (*editor).shownPercent() == 150);
     CHECK (editor->getWidth() == 1800);
     CHECK (editor->getHeight() == 1200);
 }
@@ -114,7 +127,7 @@ TEST_CASE ("The window's size and UI Scale are saved with the session, not in a 
     eq1::PluginProcessor restored;
     reload (restored, saved);
     const auto editor = openEditor (restored);
-    CHECK (uiScaleMenu (*editor).getSelectedId() == 75);
+    CHECK (uiScaleMenu (*editor).shownPercent() == 75);
     CHECK (editor->getWidth() == 900);
     CHECK (editor->getHeight() == 600);
 }
@@ -135,7 +148,7 @@ TEST_CASE ("A session saved before the window's size and UI Scale opens like a n
     processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
 
     const auto editor = openEditor (processor);
-    CHECK (uiScaleMenu (*editor).getSelectedId() == 100);
+    CHECK (uiScaleMenu (*editor).shownPercent() == 100);
     CHECK (editor->getWidth() == 1200);
     CHECK (editor->getHeight() == 760);
     CHECK (eq1::PluginProcessor::stateVersion == 3);
@@ -151,11 +164,11 @@ TEST_CASE ("Picking a UI Scale in one instance makes a new instance open at it; 
         const auto editor = openEditor (first);
         pickUiScale (*editor, 125);
     }
-    CHECK (uiScaleMenu (*openEditorOfOpen).getSelectedId() == 100);
+    CHECK (uiScaleMenu (*openEditorOfOpen).shownPercent() == 100);
 
     eq1::PluginProcessor next (settings.getFile());
     const auto editor = openEditor (next);
-    CHECK (uiScaleMenu (*editor).getSelectedId() == 125);
+    CHECK (uiScaleMenu (*editor).shownPercent() == 125);
     CHECK (editor->getWidth() == 1500);
     CHECK (editor->getHeight() == 950);
 }
@@ -174,7 +187,7 @@ TEST_CASE ("A new instance opens at 100% with no settings file, or one it can't 
         REQUIRE (settings.getFile().replaceWithText (settings.getFile().loadFileAsString().replace ("150", "110")));
     }
     eq1::PluginProcessor processor (settings.getFile());
-    CHECK (uiScaleMenu (*openEditor (processor)).getSelectedId() == 100);
+    CHECK (uiScaleMenu (*openEditor (processor)).shownPercent() == 100);
 }
 
 TEST_CASE ("An instance takes the per-user UI Scale when its editor first opens and keeps its own from then on")
@@ -185,7 +198,7 @@ TEST_CASE ("An instance takes the per-user UI Scale when its editor first opens 
     pickUiScale (*openEditor (other), 150);
     openEditor (processor).reset();
     pickUiScale (*openEditor (other), 75);
-    CHECK (uiScaleMenu (*openEditor (processor)).getSelectedId() == 150);
+    CHECK (uiScaleMenu (*openEditor (processor)).shownPercent() == 150);
 
     SECTION ("and an older session takes the per-user UI Scale")
     {
@@ -194,7 +207,7 @@ TEST_CASE ("An instance takes the per-user UI Scale when its editor first opens 
         juce::MemoryBlock state;
         juce::AudioProcessor::copyXmlToBinary (*older, state);
         processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
-        CHECK (uiScaleMenu (*openEditor (processor)).getSelectedId() == 75);
+        CHECK (uiScaleMenu (*openEditor (processor)).shownPercent() == 75);
     }
 }
 

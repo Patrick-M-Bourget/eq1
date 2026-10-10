@@ -1,5 +1,6 @@
 #include "BandPanel.h"
 #include "EditorHarness.h"
+#include "FooterBar.h"
 #include "OutputMeter.h"
 #include "PluginProcessor.h"
 #include "SavedState.h"
@@ -744,9 +745,9 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     CAPTURE (percent);
     useLayout (processor, layout);
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
-    auto* scaleMenu = harness::findChild<juce::ComboBox> (*editor, [] (juce::ComboBox& c) { return c.getTitle() == "UI Scale"; });
+    auto* scaleMenu = harness::findChild<eq1::UiScaleMenu> (*editor);
     REQUIRE (scaleMenu != nullptr);
-    scaleMenu->setSelectedId (percent, juce::sendNotificationSync);
+    scaleMenu->pick (percent);
     const auto* constrainer = editor->getConstrainer();
     REQUIRE (constrainer != nullptr);
     // 960 x 600 logical.
@@ -781,7 +782,18 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
         }
     };
     visit (*editor);
-    CHECK (found >= 20);
+    // The header's, Display Range, the Clip Lights and the footer's, with no Band selected.
+    CHECK (found >= 16);
+    // And the output popover's, open above the footer.
+    auto* readout = harness::findChild<eq1::OutputReadout> (*editor);
+    REQUIRE (readout != nullptr);
+    readout->onClick();
+    auto& popover = harness::findChild<eq1::FooterBar> (*editor)->outputPopover();
+    REQUIRE (popover.isOpen());
+    found = 0;
+    visit (popover);
+    CHECK (found == 6);
+    popover.close();
 
     auto* display = harness::findChild<eq1::EqDisplay> (*editor);
     auto* panel = harness::findChild<eq1::BandPanel> (*editor);

@@ -56,7 +56,7 @@ target_sources(eq1 PRIVATE
     PresetLibrary.cpp
     PresetBar.cpp
     PresetBrowser.cpp
-    OutputPanel.cpp
+    OutputPopover.cpp
     HeaderBar.cpp
     FooterBar.cpp
     OutputMeter.cpp
