@@ -135,11 +135,11 @@ private:
     // a copy of it when saving.
     std::atomic<int> displayRange { 12 };
     std::atomic<bool> outputMeterShown { true };
-    std::array<std::atomic<bool>, 2> clipLit {}; // per channel; mono and stereo only
-    static constexpr double clipThresholdDb = 1.0e-5;
     std::atomic<int> heldSoloSlot { 0 };
     std::atomic<int> heldAuditionSlot { 0 };
     std::atomic<int> heldMeteredSlot { 0 };
+    std::array<std::atomic<bool>, 2> clipLit {}; // per channel, not saved; mono and stereo only
+    static constexpr double clipThresholdDb = 1.0e-5;
     AnalyzerSettings analyzer;
     mutable juce::SpinLock analyzerLock; // the editor sets it while a host may be saving
 
