@@ -535,6 +535,8 @@ int EqDisplay::bandAreaAt (juce::Point<float> position) const
 const display::EdgeFadeOverlay& EqDisplay::edgeFadeAt (float scale)
 {
     const auto* window = getParentComponent();
+    // The window's background is painted over its content's bounds, which this is a child of.
+    jassert (window == nullptr || (window->getPosition().isOrigin() && dynamic_cast<const juce::AudioProcessorEditor*> (window->getParentComponent()) != nullptr));
     const auto windowBounds = window != nullptr ? window->getLocalBounds() : getLocalBounds();
     const EdgeFadeFor wanted { getBounds(), windowBounds, scale };
     if (edgeFadeFor != wanted)
