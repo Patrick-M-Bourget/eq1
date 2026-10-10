@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "staple/LookAndFeel.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -135,4 +136,22 @@ TEST_CASE ("A held arrow key's undo step ends when the slider loses focus")
     host.hold (down);
     host.display.grabKeyboardFocus();
     CHECK (history.undoSteps() == steps + 1);
+}
+
+TEST_CASE ("The focus ring is hidden until an arrow key steps a slider, and hides again when told to")
+{
+    EveryControl host;
+    auto* staple = dynamic_cast<staple::LookAndFeel*> (&host.editor->getLookAndFeel());
+    REQUIRE (staple != nullptr);
+    CHECK_FALSE (staple->isFocusRingShown());
+
+    auto* slider = host.sliders().front();
+    slider->grabKeyboardFocus();
+    REQUIRE (slider->hasKeyboardFocus (false));
+    CHECK_FALSE (staple->isFocusRingShown()); // focus alone, as after a click, doesn't show it
+    host.press (up);
+    CHECK (staple->isFocusRingShown());
+
+    staple->showFocusRing (false);
+    CHECK_FALSE (staple->isFocusRingShown());
 }

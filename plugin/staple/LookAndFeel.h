@@ -68,10 +68,21 @@ public:
 
     void drawCornerResizer (juce::Graphics& g, int width, int height, bool isMouseOver, bool isMouseDragging) override;
 
-    // A 2 px focus ring, 2 px outside the component.
+    // A 2 px focus ring, 2 px outside the focused component (every control that keyboard focus reaches
+    // has setHasFocusOutline), drawn once the keyboard is in use: after Tab, Shift+Tab or an arrow key,
+    // and not after a mouse click.
     std::unique_ptr<juce::FocusOutline> createFocusOutlineForComponent (juce::Component& component) override;
 
+    bool isFocusRingShown() const { return focusRingShown; }
+    // Shows the ring after a key, hides it after a click.
+    void showFocusRing (bool shown);
+
+    // A key that moves focus or steps a control, pressed in component: shows the ring if component
+    // is drawn with Staple's LookAndFeel.
+    static void keyUsed (juce::Component& component);
+
 private:
+    bool focusRingShown = false;
     // Keeps the typefaces loaded while the editor is open, so staple::font doesn't load them again.
     juce::SharedResourcePointer<Typefaces> typefaces;
 };

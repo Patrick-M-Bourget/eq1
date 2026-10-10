@@ -4,6 +4,7 @@
 #include "Tokens.h"
 
 #include <cmath>
+#include <utility>
 
 namespace staple
 {
@@ -494,6 +495,8 @@ std::unique_ptr<juce::FocusOutline> LookAndFeel::createFocusOutlineForComponent 
 {
     struct Ring final : public juce::FocusOutline::OutlineWindowProperties
     {
+        explicit Ring (const LookAndFeel& owner) : lookAndFeel (owner) {}
+
         juce::Rectangle<int> getOutlineBounds (juce::Component& component) override
         {
             return component.getScreenBounds().expanded (static_cast<int> (size::focusOffset + size::focusWidth));
@@ -501,12 +504,31 @@ std::unique_ptr<juce::FocusOutline> LookAndFeel::createFocusOutlineForComponent 
 
         void drawOutline (juce::Graphics& g, int width, int height) override
         {
+            if (! lookAndFeel.isFocusRingShown())
+                return;
             const auto ring = juce::Rectangle<int> (width, height).toFloat().reduced (size::focusWidth / 2.0f);
             g.setColour (colour::focus);
             g.drawRoundedRectangle (ring, size::r2 + size::focusOffset + size::focusWidth / 2.0f, size::focusWidth);
         }
+
+        const LookAndFeel& lookAndFeel;
     };
-    return std::make_unique<juce::FocusOutline> (std::make_unique<Ring>());
+    return std::make_unique<juce::FocusOutline> (std::make_unique<Ring> (*this));
+}
+
+void LookAndFeel::showFocusRing (bool shown)
+{
+    if (std::exchange (focusRingShown, shown) == shown)
+        return;
+    // The ring is drawn over the focused component's parent, around it.
+    if (auto* focused = juce::Component::getCurrentlyFocusedComponent(); focused != nullptr && focused->getParentComponent() != nullptr)
+        focused->getParentComponent()->repaint (focused->getBounds().expanded (static_cast<int> (size::focusOffset + size::focusWidth)));
+}
+
+void LookAndFeel::keyUsed (juce::Component& component)
+{
+    if (auto* lookAndFeel = dynamic_cast<LookAndFeel*> (&component.getLookAndFeel()))
+        lookAndFeel->showFocusRing (true);
 }
 
 } // namespace staple

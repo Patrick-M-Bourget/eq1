@@ -1,6 +1,6 @@
 #include "KeyboardSlider.h"
 
-#include "EditorLookAndFeel.h"
+#include "staple/LookAndFeel.h"
 
 namespace eq1
 {
@@ -27,7 +27,7 @@ bool KeyboardSlider::keyPressed (const juce::KeyPress& key)
                                                                                                 : 0;
     if (direction == 0 || ! isEnabled())
         return false;
-    EditorLookAndFeel::keyUsed (*this);
+    staple::LookAndFeel::keyUsed (*this);
 
     const double from = getValue();
     const double proportion = valueToProportionOfLength (from) + direction * (mods.isShiftDown() ? 0.002 : 0.01);
