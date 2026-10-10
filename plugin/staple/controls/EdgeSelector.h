@@ -36,8 +36,10 @@ public:
     void setIconColour (juce::Colour colour);
 
     using juce::ComboBox::addItem;
-    // An item with its icon, and optionally a dot in front of its name.
-    void addItem (const juce::String& text, int itemId, Icon icon, std::optional<juce::Colour> dot = std::nullopt);
+    // An item with its icon, and optionally a dot in front of its name and a context icon drawn under
+    // the icon at 30 % (a Stereo Placement's unprocessed side).
+    void addItem (const juce::String& text, int itemId, Icon icon, std::optional<juce::Colour> dot = std::nullopt,
+                  std::optional<Icon> context = std::nullopt);
 
     void paint (juce::Graphics& g) override;
     bool keyPressed (const juce::KeyPress& key) override;
@@ -45,7 +47,7 @@ public:
 private:
     Side side;
     juce::Colour edgeColour = tokens::colour::text1, iconColour = tokens::colour::text1;
-    std::map<int, Icon> icons;
+    std::map<int, Icon> icons, contexts;
     std::map<int, juce::Colour> dots;
 };
 

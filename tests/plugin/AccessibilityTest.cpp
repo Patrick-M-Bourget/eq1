@@ -123,8 +123,8 @@ struct Editor : OpenEditor
     }
 };
 
-// A Dynamic Bell in Band 4 on a Free Detection Range, on stereo and selected, so the Band panel
-// shows every control but Brickwall and Slope.
+// A Dynamic Bell in Band 4 on a Free Detection Range, on stereo and selected, so the Band panel and
+// its Dynamics call-out show every control (Slope dimmed).
 struct EveryControl : Editor
 {
     EveryControl()
@@ -156,8 +156,8 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
     host.openPresetBrowser();
     checkEveryControlIsNamed (host);
     auto names = host.names();
-    // And what the footer's call-outs show while open.
-    for (const juce::String title : { "Analyzer", "Output" })
+    // And what the footer's call-outs and the Band panel's Dynamics show while open.
+    for (const juce::String title : { "Analyzer", "Output", "Band 4 Dynamics" })
     {
         CAPTURE (title);
         host.openCallOut (title);
@@ -192,12 +192,15 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Band 4 Detection Range",
                                          "Band 4 Detection Source",
                                          "Band 4 Dynamic Range",
+                                         "Band 4 Dynamics",
                                          "Band 4 Dynamics Bypass",
                                          "Band 4 Frequency",
                                          "Band 4 Gain",
                                          "Band 4 Q",
                                          "Band 4 Release",
                                          "Band 4 Shape",
+                                         "Band 4 Slope",
+                                         "Band 4 Solo",
                                          "Band 4 Stereo Placement",
                                          "Band 4 Threshold",
                                          "Clip Light Left",
@@ -207,6 +210,7 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Gain Scale",
                                          "Global Bypass",
                                          "Load Preset File...",
+                                         "Next Band",
                                          "Next Preset",
                                          "Output",
                                          "Output Gain",
@@ -215,6 +219,7 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Pan Mode",
                                          "Phase Invert",
                                          "Presets",
+                                         "Previous Band",
                                          "Previous Preset",
                                          "Redo",
                                          "Save as User Preset...",
@@ -243,11 +248,13 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
     CHECK (list->getAccessibilityHandler()->getTitle() == "Presets");
     CHECK (host.element ("EQ display").role == juce::AccessibilityRole::group);
 
-    // None of the glossary's Avoid words.
+    // None of the glossary's Avoid words. Solo is a Band's ("Band 4 Solo"), never detection's.
     for (const auto& name : names)
         for (const char* avoid : { "Channel", "Filter", "Zoom", "Spectrum", "Mute", "Node", "Listen", "Solo", "Freq ", "Type", "Mode " })
         {
             CAPTURE (name, avoid);
+            if (juce::String (avoid) == "Solo" && name == "Band 4 Solo")
+                continue;
             CHECK_FALSE (name.containsIgnoreCase (avoid));
         }
 }
@@ -293,7 +300,10 @@ TEST_CASE ("The Band panel's names carry the Band it shows, and change with it")
     for (const auto& name : host.names())
         CHECK_FALSE (name.startsWith ("Band 2 "));
     CHECK (host.element ("Band 4 Gain").role == juce::AccessibilityRole::slider);
-    CHECK (host.element ("Band 4 Bypass").role == juce::AccessibilityRole::toggleButton);
+    // An icon button that toggles: read with its on or off state.
+    const auto bypass = host.element ("Band 4 Bypass");
+    CHECK (bypass.role == juce::AccessibilityRole::button);
+    CHECK (bypass.component->getAccessibilityHandler()->getCurrentState().isCheckable());
 }
 
 TEST_CASE ("A slider reads its value with its unit, as the control shows it")
@@ -305,10 +315,12 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     CHECK (host.element ("Band 4 Gain").value == "+3.50 dB");
     CHECK (host.element ("Band 4 Frequency").value == "1000.0 Hz");
     CHECK (host.element ("Band 4 Q").value == "0.707");
+    CHECK (host.element ("Band 4 Slope").value == "12.0 dB/oct");
+    CHECK (host.element ("Gain Scale").value == "100.0 %");
+    host.openCallOut ("Band 4 Dynamics");
     CHECK (host.element ("Band 4 Dynamic Range").value == "+6.00 dB");
     CHECK (host.element ("Band 4 Attack").value == "Auto");
     CHECK (host.element ("Band 4 Detection High").value == "20000.0 Hz");
-    CHECK (host.element ("Gain Scale").value == "100.0 %");
     host.openCallOut ("Analyzer");
     CHECK (host.element ("Analyzer Tilt").value.endsWith (" dB/oct"));
     host.closeCallOut();
@@ -318,12 +330,16 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
 
     // Threshold: Auto at its top, else its dB.
     host.set (4, "threshold_auto", 1.0f);
+    host.closeCallOut();
+    host.settle();
+    host.openCallOut ("Band 4 Dynamics");
     host.settle();
     CHECK (host.element ("Band 4 Threshold").value == "Auto");
     host.set (4, "threshold", -20.0f);
     host.set (4, "threshold_auto", 0.0f);
     host.settle();
     CHECK (host.element ("Band 4 Threshold").value == "-20.0 dB");
+    host.closeCallOut();
 
     // Output Gain: -inf dB at its bottom.
     host.parameter ("output_gain").setValueNotifyingHost (0.0f);

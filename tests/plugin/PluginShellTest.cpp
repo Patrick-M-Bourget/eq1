@@ -753,6 +753,9 @@ TEST_CASE ("At its smallest, at every UI Scale and on mono, the editor fits ever
     CHECK (constrainer->getMinimumWidth() == juce::roundToInt (960 * percent / 100.0));
     CHECK (constrainer->getMinimumHeight() == juce::roundToInt (600 * percent / 100.0));
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());
+    // A Band selected, so the Band panel shows.
+    processor.parameterState().getParameter ("band1_in_use")->setValueNotifyingHost (1.0f);
+    harness::findChild<eq1::BandPanel> (*editor)->show (1);
 
     const auto inEditor = [&editor] (juce::Component& c) { return editor->getLocalArea (c.getParentComponent(), c.getBounds()); };
     // Visible, as are all its parents up to the editor (which isn't on screen here).

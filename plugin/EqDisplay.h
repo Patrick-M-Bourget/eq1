@@ -41,6 +41,9 @@ public:
 
     // Called with the Band Slot to show in the Band panel, or 0 when none is selected.
     std::function<void (int)> onSelectionChanged;
+    // Selects one Band alone, as a click on its handle does (the Band panel's ‹ and ›).
+    void selectBand (int slot) { select ({ slot }); }
+    const std::set<int>& selection() const { return selected; }
 
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;

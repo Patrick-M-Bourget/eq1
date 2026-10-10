@@ -15,10 +15,11 @@ PluginEditor::PluginEditor (PluginProcessor& p)
       footer (p), meter (p), keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
+    panel.onSelectBand = [this] (int slot) { display.selectBand (slot); };
     content.addAndMakeVisible (display);
     content.addChildComponent (meter);
     // Over the display, so its clicks never reach it.
-    content.addAndMakeVisible (panel);
+    content.addChildComponent (panel);
     content.addAndMakeVisible (header);
     content.addAndMakeVisible (footer);
 
@@ -186,11 +187,10 @@ void PluginEditor::resized()
 
     // Over the display: Display Range at its top right, the Band panel centred along its bottom, and
     // the Preset browser.
-    constexpr int displayRangeWidth = 110, displayRangeHeight = 24, panelHeight = 170;
+    constexpr int displayRangeWidth = 110, displayRangeHeight = 24;
     displayRange.setBounds (area.getRight() - 6 - displayRangeWidth, area.getY() + 8, displayRangeWidth, displayRangeHeight);
-    panel.setBounds (area.reduced (layout::bandPanelPaddingSide, 0)
-                         .withTrimmedBottom (layout::bandPanelAboveBottom)
-                         .removeFromBottom (panelHeight));
+    panel.setBounds (area.getCentreX() - BandPanel::width / 2, area.getBottom() - layout::bandPanelAboveBottom - BandPanel::height,
+                     BandPanel::width, BandPanel::height);
     header.presets().browserPanel().setBounds (area.reduced (40, 12));
 }
 

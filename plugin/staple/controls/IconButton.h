@@ -26,6 +26,10 @@ public:
     void setIcon (Icon newIcon);
     Icon getIcon() const { return icon; }
     void setLitColour (juce::Colour colour);
+    // The icon's colour at rest, text3 unless set (the Band panel's Bypass rests in text2).
+    void setRestColour (juce::Colour colour);
+    // The icon's size in px; by default 2/3 of the button's side (16 px in 24).
+    void setIconSize (float size);
     // While on, Off rather than lit.
     void setOffLook (bool offLook);
     void setMomentary (bool momentary);
@@ -44,7 +48,8 @@ private:
     void setHeld (bool nowHeld);
 
     Icon icon;
-    juce::Colour litColour = tokens::colour::text1;
+    juce::Colour litColour = tokens::colour::text1, restColour = tokens::colour::text3;
+    float iconSize = 0.0f;
     bool offLook = false, momentary = false, held = false;
 };
 
