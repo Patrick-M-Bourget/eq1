@@ -205,7 +205,7 @@ The Tier that needs no License Key: every feature, up to the Band Cap.
 _Avoid_: Free (unqualified, which is a Detection Range), Lite, demo
 
 **Trial**:
-The Pro Tier for 14 days from when the user starts it, once per machine.
+The Tier that allows what the Pro Tier does, for 14 days from when the user starts it, once per machine; the machine is on the Free Tier again when it ends.
 _Avoid_: Demo, evaluation
 
 **Pro Tier**:
@@ -221,7 +221,7 @@ A signed proof of purchase that names its owner and the major version it unlocks
 _Avoid_: Serial, activation code, license file
 
 **Heartbeat**:
-The anonymous once-a-day report that an eq1 install is in use, which also tells eq1 the latest version.
+The anonymous report, at most once a day, that an eq1 install is in use, with its Tier; the reply tells eq1 the latest version.
 _Avoid_: Ping, analytics, phone-home
 
 **Update Notice**:
