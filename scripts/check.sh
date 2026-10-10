@@ -2,7 +2,8 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script), on macOS or Windows (Git Bash).
 #
 #   scripts/check.sh            docs, build, test, cpu, tsan and validate
-#   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, and GLOSSARY.md is the only glossary
+#   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
+#                               glossary, and no test reads a saved state as raw bytes
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -70,7 +71,15 @@ docs() {
             broken=1
         done < <(git ls-files -- '*GLOSSARY.md' ':!GLOSSARY.md')
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists"
+    # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
+    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h.
+    local raw
+    raw=$(git grep -nE '[A-Za-z_]*[sS]tate\.toString *\(\)' -- tests || true)
+    if [ -n "$raw" ]; then
+        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
+        broken=1
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, and no test reads a saved state as raw bytes"
     return "$broken"
 }
 
