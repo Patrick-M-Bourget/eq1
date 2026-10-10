@@ -22,17 +22,17 @@ public:
     }
 
     // Forgets what is held, so a newly metered Band doesn't report the last one's level.
-    void clear() { level.store (outputLevelFloorDb, std::memory_order_relaxed); }
+    void clear() { level.store (levelFloorDb, std::memory_order_relaxed); }
 
     // At least the floor; the floor too for NaN.
     double read()
     {
-        const double db = level.exchange (outputLevelFloorDb, std::memory_order_relaxed);
-        return db > outputLevelFloorDb ? db : outputLevelFloorDb;
+        const double db = level.exchange (levelFloorDb, std::memory_order_relaxed);
+        return db > levelFloorDb ? db : levelFloorDb;
     }
 
 private:
-    std::atomic<double> level { outputLevelFloorDb };
+    std::atomic<double> level { levelFloorDb };
     static_assert (std::atomic<double>::is_always_lock_free, "reading never locks");
 };
 

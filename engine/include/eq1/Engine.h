@@ -30,13 +30,13 @@ enum class AnalysisTap
 };
 
 // What the Output Level and the Detection Level read for silence, and for anything quieter.
-inline constexpr double outputLevelFloorDb = -150.0;
+inline constexpr double levelFloorDb = -150.0;
 
 // The Output Level of one channel, in dBFS.
 struct OutputLevel
 {
-    double peakDb = outputLevelFloorDb; // sample peak since the last read
-    double rmsDb = outputLevelFloorDb;  // over the last 300 ms
+    double peakDb = levelFloorDb; // sample peak since the last read
+    double rmsDb = levelFloorDb;  // over the last 300 ms
 };
 
 // The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis(), liveGainDb(),

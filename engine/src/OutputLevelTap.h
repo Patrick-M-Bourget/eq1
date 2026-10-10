@@ -72,7 +72,7 @@ private:
     static double toDb (double amplitude)
     {
         const double db = 20.0 * std::log10 (amplitude);
-        return db > outputLevelFloorDb ? db : outputLevelFloorDb;
+        return db > levelFloorDb ? db : levelFloorDb;
     }
 
     std::vector<double> squares; // the window's squared samples, a ring

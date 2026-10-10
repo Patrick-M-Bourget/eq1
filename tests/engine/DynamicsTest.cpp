@@ -695,7 +695,7 @@ TEST_CASE ("A short burst between two reads is reported by the next read, and no
     // Reads every 0.1 s; a 20 ms burst in the second block.
     const auto run = play (1, 0.3, settings, burst (0.12, 0.02, -6.0), {}, 4800);
     REQUIRE (run.detectionLevel.size() == 3);
-    CHECK (run.detectionLevel[0] == outputLevelFloorDb);
+    CHECK (run.detectionLevel[0] == levelFloorDb);
     CHECK_THAT (run.detectionLevel[1], WithinAbs (-6.0, 0.2));
     CHECK (run.detectionLevel[2] < -40.0); // only what's left of its 5 ms smoothing
 }
@@ -731,7 +731,7 @@ TEST_CASE ("The Detection Level follows the Detection Range and Detection Source
         const Sidechain key { 1, tone (1000.0, -12.0) };
         const Sidechain quiet { 1, silence };
         CHECK_THAT (level (silence, &key), WithinAbs (-12.0, 0.1));
-        CHECK (level (tone (1000.0, -6.0), &quiet) == outputLevelFloorDb);
+        CHECK (level (tone (1000.0, -6.0), &quiet) == levelFloorDb);
     }
 }
 
@@ -743,7 +743,7 @@ TEST_CASE ("The Detection Level reads the floor when no Band with dynamics is me
     const auto loud = tone (1000.0, -6.0);
     const auto floorOf = [&] (int numChannels, const Settings& s) {
         for (double level : play (numChannels, 0.25, s, loud).detectionLevel)
-            if (level != outputLevelFloorDb)
+            if (level != levelFloorDb)
                 return false;
         return true;
     };
