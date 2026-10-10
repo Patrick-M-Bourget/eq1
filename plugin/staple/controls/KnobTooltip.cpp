@@ -43,7 +43,6 @@ KnobTooltip::KnobTooltip (Knob& k) : knob (k)
 {
     setWantsKeyboardFocus (false);
     setMouseCursor (juce::MouseCursor::IBeamCursor);
-    setAccessible (false);
 }
 
 KnobTooltip::~KnobTooltip() = default;
