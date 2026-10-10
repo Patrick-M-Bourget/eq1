@@ -12,8 +12,8 @@ namespace staple
 // labels, text fields, scrollbars, tooltips and focus ring. Set once on the editor; PopupMenus, which
 // are windows of their own, take it from the component that shows them.
 //
-// Hover lights a control up (brightness x 1.18, pressed x 1.3) and never adds an outline; disabled
-// controls dim to 35 %.
+// Hover lights a control up (staple::lit in Light.h) and never adds an outline; disabled controls dim
+// to 35 % (staple::enabledAlpha).
 class LookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
@@ -80,10 +80,6 @@ public:
     // A key that moves focus or steps a control, pressed in component: shows the ring if component
     // is drawn with Staple's LookAndFeel.
     static void keyUsed (juce::Component& component);
-
-    // Hover and press light a fill up: an opaque colour brightens, a translucent one (fill1, fill2) grows
-    // more opaque, which is what brightening it over the dark background looks like.
-    static juce::Colour lit (juce::Colour colour, bool highlighted, bool down);
 
 private:
     bool focusRingShown = false;

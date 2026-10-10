@@ -1,6 +1,7 @@
 #include "LookAndFeel.h"
 
 #include "Icons.h"
+#include "Light.h"
 #include "Tokens.h"
 #include "controls/Overlay.h"
 
@@ -22,11 +23,6 @@ constexpr float defaultLabelHeight = 15.0f;
 // The column at the left of a menu item for its tick or icon, and the padding either side.
 constexpr float menuTickColumn = 16.0f, menuItemPadding = 10.0f;
 
-float enabledAlpha (const juce::Component& component)
-{
-    return component.isEnabled() ? 1.0f : motion::disabledAlpha;
-}
-
 Weight weightOf (const juce::Font& font)
 {
     const auto style = font.getTypefaceStyle();
@@ -39,12 +35,6 @@ Weight weightOf (const juce::Font& font)
     return Weight::regular;
 }
 } // namespace
-
-juce::Colour LookAndFeel::lit (juce::Colour colour, bool highlighted, bool down)
-{
-    const float factor = down ? motion::pressedBrightness : highlighted ? motion::hoverBrightness : 1.0f;
-    return colour.isOpaque() ? colour.withMultipliedBrightness (factor) : colour.withMultipliedAlpha (factor);
-}
 
 LookAndFeel::LookAndFeel()
     : juce::LookAndFeel_V4 ({ colour::bg0, colour::fill1, colour::menu, colour::line2, colour::text1, colour::fill3,
