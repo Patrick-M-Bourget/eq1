@@ -27,6 +27,8 @@
 # CMAKE_C_COMPILER_LAUNCHER and CMAKE_CXX_COMPILER_LAUNCHER environment variables (sccache in CI) apply. Validators
 # are downloaded into the dependencies folder with gh, which needs to be authenticated (GH_TOKEN in CI).
 set -euo pipefail
+# Where it was called from, for a path given relative to it (screens <dir>).
+CALLER_DIR=$PWD
 cd "$(dirname "$0")/.."
 
 BUILD_DIR=${BUILD_DIR:-build}
@@ -202,13 +204,18 @@ focus() {
 }
 
 # Every hidden [.screens] test's renders, written into one folder by harness::writeSnapshot.
+# A tag matching no test fails rather than writing nothing.
 screens() {
-    step "Renders into $1"
-    mkdir -p "$1"
-    local dir
-    dir=$(cd "$1" && pwd)
+    local dir=$1
+    case "$dir" in
+        /* | [A-Za-z]:*) ;;
+        *) dir=$CALLER_DIR/$dir ;;
+    esac
+    step "Renders into $dir"
+    mkdir -p "$dir"
+    dir=$(cd "$dir" && pwd)
     cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_plugin_tests
-    EQ1_SCREENS=$dir "$(test_exe eq1_plugin_tests)" "[.screens]"
+    EQ1_SCREENS=$dir "$(test_exe eq1_plugin_tests)" --warn UnmatchedTestSpec "[.screens]"
     ls "$dir"
 }
 
