@@ -15,8 +15,9 @@ namespace eq1
 class PluginProcessor;
 
 // The native editor (ADR 0002): Presets, A/B Compare and undo at the top, the Analyzer's controls
-// under them, the EQ display with the Output Meter at its right, the selected Band's panel below it, and the whole-plugin output
-// controls at the bottom. Resizable; everything is drawn as vectors, so it stays
+// under them, the EQ display with the Output Meter at its right (and the Preset browser opening over
+// the display), the selected Band's panel below it, and the whole-plugin output controls at the
+// bottom. Resizable; everything is drawn as vectors, so it stays
 // sharp at any display scale.
 class PluginEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {

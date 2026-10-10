@@ -50,6 +50,7 @@ target_sources(eq1 PRIVATE
     BandClipboard.cpp
     PresetLibrary.cpp
     PresetBar.cpp
+    PresetBrowser.cpp
     OutputPanel.cpp
     OutputMeter.cpp
     PluginEditor.cpp

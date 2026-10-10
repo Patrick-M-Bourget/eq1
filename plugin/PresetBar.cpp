@@ -7,7 +7,24 @@ namespace eq1
 
 PresetBar::PresetBar (PluginProcessor& p) : processor (p)
 {
-    presets.onClick = [this] { showMenu(); };
+    presets.onClick = [this] {
+        if (browser.isVisible())
+            browser.close();
+        else
+            browser.open (processor.loadedPresetName(), lastLoadedEntry());
+    };
+    browser.opener = &presets;
+    browser.onLoad = [this] (const PresetLibrary::Entry& entry) { load (entry.preset, entry.name, entry); };
+    browser.onSave = [this] {
+        browser.close();
+        askToSave();
+    };
+    browser.onLoadFile = [this] {
+        browser.close();
+        chooseFileToLoad();
+    };
+    previous.onClick = [this] { step (-1); };
+    next.onClick = [this] { step (1); };
     a.onClick = [this] {
         processor.selectCompareSide (CompareSide::A);
         showSide();
@@ -25,7 +42,7 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
     // The side you're on is lit, in the display's blue.
     for (auto* side : { &a, &b })
         side->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff2f8fd0));
-    for (auto* button : { &presets, &a, &b, &copyAToB })
+    for (auto* button : { &presets, &previous, &next, &a, &b, &copyAToB })
     {
         button->setWantsKeyboardFocus (false);
         addAndMakeVisible (*button);
@@ -53,6 +70,7 @@ void PresetBar::showLoadedPreset()
     const auto name = processor.loadedPresetName();
     presets.setButtonText (name.isEmpty() ? "Presets" : name + (processor.isLoadedPresetModified() ? "*" : ""));
     presets.setTooltip (name);
+    browser.showLoaded (name, lastLoadedEntry());
 }
 
 void PresetBar::edited()
@@ -62,51 +80,26 @@ void PresetBar::edited()
         onEdit();
 }
 
-void PresetBar::load (const juce::ValueTree& preset, const juce::String& name)
+void PresetBar::load (const juce::ValueTree& preset, const juce::String& name, std::optional<PresetLibrary::Entry> entry)
 {
     if (processor.loadPreset (preset, name))
+    {
+        lastLoaded = std::move (entry);
         edited();
+    }
     else
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Load Preset", "That file isn't an eq1 Preset.");
 }
 
-// The menu, the name prompt and the file chooser call back after the editor may have closed: each
-// callback holds the bar by a SafePointer and does nothing once it is gone.
-void PresetBar::showMenu()
+void PresetBar::step (int by)
 {
-    const juce::Component::SafePointer<PresetBar> bar (this);
-    const auto loadWhileOpen = [bar] (juce::ValueTree preset, juce::String name) {
-        return [bar, preset, name] {
-            if (bar != nullptr)
-                bar->load (preset, name);
-        };
-    };
-    juce::PopupMenu menu;
-    menu.addSectionHeader ("Factory");
-    for (const auto& factory : PresetLibrary::factoryPresets())
-        menu.addItem (factory.name, loadWhileOpen (factory.preset, factory.name));
-    menu.addSectionHeader ("User");
-    const auto user = library.userPresets();
-    if (user.empty())
-        menu.addItem ("No User Presets yet", false, false, nullptr);
-    for (const auto& file : user)
-        menu.addItem (file.getFileNameWithoutExtension(), loadWhileOpen (PresetLibrary::read (file), file.getFileNameWithoutExtension()));
-    menu.addSeparator();
-    menu.addItem ("Save as User Preset...", [bar] {
-        if (bar != nullptr)
-            bar->askToSave();
-    });
-    menu.addItem ("Load Preset File...", [bar] {
-        if (bar != nullptr)
-            bar->chooseFileToLoad();
-    });
-    menu.addItem ("Show User Presets Folder", [folder = library.folder()] {
-        folder.createDirectory();
-        folder.revealToUser();
-    });
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (presets));
+    const auto listing = library.listing();
+    if (const auto i = PresetLibrary::step (listing, processor.loadedPresetName(), by, lastLoadedEntry()))
+        load (listing[*i].preset, listing[*i].name, listing[*i]);
 }
 
+// The name prompt and the file chooser call back after the editor may have closed: each callback
+// holds the bar by a SafePointer and does nothing once it is gone.
 void PresetBar::askToSave()
 {
     namePrompt = std::make_unique<juce::AlertWindow> ("Save as User Preset", "Name:", juce::MessageBoxIconType::NoIcon, this);
@@ -129,6 +122,7 @@ void PresetBar::saveAs (const juce::String& name)
     if (const auto file = library.save (name, preset))
     {
         processor.presetSaved (preset, file->getFileNameWithoutExtension());
+        lastLoaded = PresetLibrary::Entry { file->getFileNameWithoutExtension(), "User", *file, preset };
         edited();
     }
     else
@@ -143,7 +137,7 @@ void PresetBar::chooseFileToLoad()
     const juce::Component::SafePointer<PresetBar> bar (this);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [bar] (const juce::FileChooser& chosen) {
         if (const auto file = chosen.getResult(); bar != nullptr && file.existsAsFile())
-            bar->load (PresetLibrary::read (file), file.getFileNameWithoutExtension());
+            bar->load (PresetLibrary::read (file), file.getFileNameWithoutExtension(), std::nullopt);
     });
 }
 
@@ -151,6 +145,9 @@ void PresetBar::resized()
 {
     auto row = getLocalBounds();
     presets.setBounds (row.removeFromLeft (200));
+    row.removeFromLeft (2);
+    previous.setBounds (row.removeFromLeft (24));
+    next.setBounds (row.removeFromLeft (24));
     row.removeFromLeft (12);
     a.setBounds (row.removeFromLeft (28));
     row.removeFromLeft (2);
