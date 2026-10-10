@@ -92,9 +92,11 @@ private:
     double movement = 0.0; // 0 = at Gain, 1 = the full Dynamic Range
     double sustain = 0.0;  // how long the detection has kept the Band moving, 0 to 1
     double sustainCoefficient = 1.0;
-    double averageLevel = 0.0; // dB, for Auto Threshold
-    double samplesHeard = 0.0; // above the gate, up to the average's time constant
-    double averageCoefficient = 1.0;
+    // For Auto Threshold: the mean level in dB and its variance in dB squared.
+    double averageLevel = 0.0, levelVariance = 0.0;
+    double samplesHeard = 0.0; // above the gate, up to the rise time's worth
+    double riseCoefficient = 1.0, fallCoefficient = 1.0;
+    double holdSamples = 0.0;
 
     Smoother dynamicRangeGlide; // dB
     Smoother active;     // 1 while the Band's Shape has dynamics and they aren't Bypassed
