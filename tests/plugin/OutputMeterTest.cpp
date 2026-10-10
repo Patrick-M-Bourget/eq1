@@ -1,3 +1,4 @@
+#include "EditorHarness.h"
 #include "EqDisplay.h"
 #include "FooterBar.h"
 #include "OutputMeter.h"
@@ -385,11 +386,7 @@ TEST_CASE ("Output Meter snapshots: a playing signal, and a lit Clip Light", "[.
     std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
     editor->setSize (1200, 760);
     const auto write = [&] (const char* name) {
-        for (int frame = 0; frame < 3; ++frame)
-        {
-            juce::Timer::callPendingTimersSynchronously();
-            juce::Thread::sleep (17);
-        }
+        harness::settle (51); // three frames
         const auto right = editor->getLocalBounds().removeFromRight (160);
         const auto image = editor->createComponentSnapshot (right, true, 2.0f);
         CHECK (image.isValid());

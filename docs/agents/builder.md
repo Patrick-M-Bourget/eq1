@@ -13,4 +13,4 @@ How an agent takes one ready-for-agent ticket to an open PR. The ticket's latest
 
 ## Running several builders
 
-Each builder gets its own worktree and touches different files where the plan allows. On one 8-core Mac, run at most three: past that, builds and tests slow every builder down several times over.
+Each builder gets its own worktree and touches different files where the plan allows. On one 8-core Mac, run at most three: past that, builds and tests slow every builder down several times over. The worktrees share the main checkout's `.deps`, dependencies' build folders included (Catch2, the CLAP extensions): two builds that reach them at once can truncate Ninja's log there (`ninja: warning: premature end of file`), and the next build recompiles those dependencies. That costs time, not correctness.

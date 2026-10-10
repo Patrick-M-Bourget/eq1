@@ -9,6 +9,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 # compile_commands.json in the build folder, which .clangd points editors' language servers at.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Sources and their string literals are UTF-8 on every compiler. Without /utf-8, MSVC reads a literal's
+# "–" or "\u2013" in the machine's code page and writes cp1252 bytes, so a text test fails on Windows only.
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
 
 option(EQ1_BUILD_PLUGIN "Build the Plugin Shell (needs JUCE)" ON)
 option(EQ1_BUILD_TESTS "Build the tests" ON)
