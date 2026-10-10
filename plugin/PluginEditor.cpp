@@ -122,10 +122,7 @@ void PluginEditor::timerCallback()
 {
     header.showUndoState();
     if (meter.isVisible() != eqProcessor.isOutputMeterShown())
-    {
-        footer.getOutputPopover().showMeterShown (eqProcessor.isOutputMeterShown());
         resized();
-    }
     if (eqProcessor.uiScalePercent() != shownScalePercent || eqProcessor.editorSize() != shownSize)
         applyUiScale();
 }

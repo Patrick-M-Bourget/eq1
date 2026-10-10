@@ -181,7 +181,6 @@ OutputPopover::OutputPopover (PluginProcessor& p)
     phaseInvert.setTooltip ("Phase Invert");
     autoGain.setTooltip ("Auto Gain: compensates the output level so EQ changes are heard without a loudness bias");
     showMeter.setTooltip ("Show or hide the Output Meter");
-    showMeter.setToggleState (processor.isOutputMeterShown(), juce::dontSendNotification);
     showMeter.onClick = [this] {
         processor.setOutputMeterShown (showMeter.getToggleState());
         if (onMeterToggled != nullptr)
@@ -199,8 +198,8 @@ OutputPopover::OutputPopover (PluginProcessor& p)
     }
 
     setCardSize (cardWidth, cardHeight);
-    followLayout();
-    layoutCheck.startTimerHz (4);
+    followProcessor();
+    follow.startTimerHz (4);
 }
 
 OutputPopover::~OutputPopover() = default;
@@ -215,18 +214,14 @@ void OutputPopover::openFrom (juce::Component& readout)
     }
 }
 
-void OutputPopover::showMeterShown (bool shown)
-{
-    showMeter.setToggleState (shown, juce::dontSendNotification);
-}
-
 juce::String OutputPopover::panReadout() const
 {
     return outputPanText (outputPan.getValue(), panMode->getToggleState());
 }
 
-void OutputPopover::followLayout()
+void OutputPopover::followProcessor()
 {
+    showMeter.setToggleState (processor.isOutputMeterShown(), juce::dontSendNotification);
     // The track can change between mono and stereo while the editor is open.
     const bool stereo = processor.isOutputPanAvailable();
     if (outputPan.isEnabled() != stereo || panMode->isEnabled() != stereo)
