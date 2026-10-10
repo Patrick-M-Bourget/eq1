@@ -132,7 +132,9 @@ namespace layout
     constexpr int iconButton = 24;
     // The dynamics: the icon row above Gain, the section between Gain and Q, and its Threshold fader.
     constexpr int dynamicsIcon = 22, dynamicsIconsAbove = 42, dynamicsIconGap = 6;
-    constexpr int dynamicsSectionWidth = 134, dynamicsSectionHeight = 108, dynamicsSectionLift = 14;
+    // The section sits on the slab's bottom padding and reaches 8 px below its top: the slab grows by
+    // bandPanelOpenGrowth upwards while it is open.
+    constexpr int dynamicsSectionWidth = 134, dynamicsSectionHeight = 108, bandPanelOpenGrowth = 11;
     constexpr int dynamicsSectionPaddingY = 6, dynamicsSectionPaddingX = 10, dynamicsSectionGap = 10;
     constexpr int faderWidth = 26, faderTrack = 80, faderTrackWidth = 7, faderThumbHeight = 16;
     constexpr int dynamicsColumnWidth = 78, detectionRangeButtonHeight = 24;
