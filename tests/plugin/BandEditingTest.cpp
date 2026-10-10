@@ -1,4 +1,5 @@
 #include "BandEditing.h"
+#include "BandSettingsByName.h"
 #include "PluginProcessor.h"
 #include "eq1/Engine.h"
 
@@ -638,4 +639,63 @@ TEST_CASE ("A split Dynamic Band's halves each move with their own channel only"
     const auto played = play (host.editing.settings(), 1.0, toneOnLeft);
     CHECK_THAT (played.liveGains[0], WithinAbs (-9.0, 0.05));
     CHECK (played.liveGains[1] == 0.0);
+}
+
+TEST_CASE ("Paste adds the Bands in the lowest free Band Slots with every stored setting, as one undo step, returning their slots")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    host.addBand (3, 300.0f, 3.0f);
+    // What slot 2 held before must not come back.
+    host.set (2, "q", 9.0f);
+    host.set (2, "detection_low", 500.0f);
+    host.set (eq1::numBandSlots, "q", 9.0f);
+    eq1::BandSettings band;
+    band.shape = Shape::HighShelf;
+    band.frequency = 2500.0;
+    band.gain = -7.5;
+    band.slope = 36.0;
+    band.placement = eq1::StereoPlacement::Side;
+    band.dynamicRange = 12.5;
+    band.thresholdAuto = false;
+    band.threshold = -42.0;
+    band.detectionRange = eq1::DetectionRange::Free;
+    band.detectionHigh = 6000.0;
+
+    CHECK (host.editing.paste ({ band, eq1::BandSettings {} }) == std::vector<int> { 2, 4 });
+    band.inUse = true;
+    CHECK (near (host.editing.band (2), band));
+    CHECK (near (host.editing.band (4), eq1::BandSettings { .inUse = true }));
+
+    auto& history = host.processor.editHistory();
+    CHECK (history.undoSteps() == 1);
+    history.undo();
+    CHECK (host.value (2, "in_use") == 0.0f);
+    CHECK (host.value (4, "in_use") == 0.0f);
+}
+
+TEST_CASE ("Paste keeps stored Gain and Dynamic Range whatever the Gain Scale")
+{
+    Host host;
+    auto* gainScale = host.processor.parameterState().getParameter (eq1::parameters::gainScaleId);
+    gainScale->setValueNotifyingHost (gainScale->convertTo0to1 (50.0f));
+    const eq1::BandSettings band { .gain = 6.0, .dynamicRange = -4.0 };
+
+    REQUIRE (host.editing.paste ({ band }) == std::vector<int> { 1 });
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (6.0, 1.0e-4));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-4.0, 1.0e-4));
+}
+
+TEST_CASE ("Paste with fewer free Band Slots than Bands pastes the lowest-Frequency ones, earlier first on a tie")
+{
+    Host host;
+    for (int slot = 1; slot <= 22; ++slot)
+        host.addBand (slot, 100.0f, 0.0f);
+    const std::vector<eq1::BandSettings> bands { { .frequency = 5000.0 }, { .frequency = 200.0, .gain = 1.0 }, { .frequency = 200.0, .gain = 2.0 } };
+
+    CHECK (host.editing.paste (bands) == std::vector<int> { 23, 24 });
+    CHECK_THAT (host.value (23, "gain"), WithinAbs (1.0, 1.0e-4));
+    CHECK_THAT (host.value (24, "gain"), WithinAbs (2.0, 1.0e-4));
+    CHECK (host.editing.paste (bands).empty());
+    CHECK (host.processor.editHistory().undoSteps() == 1);
 }
