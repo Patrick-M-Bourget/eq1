@@ -1,10 +1,82 @@
 #include "PresetBar.h"
 
 #include "PluginProcessor.h"
+#include "staple/Fonts.h"
 #include "staple/Tokens.h"
+
+#include <cmath>
 
 namespace eq1
 {
+
+namespace
+{
+namespace colour = staple::tokens::colour;
+namespace size = staple::tokens::size;
+
+constexpr float namePadding = 14.0f, dotSize = 5.0f, dotGap = 6.0f;
+
+juce::Font nameFont() { return staple::font (size::fs4, staple::Weight::medium); }
+} // namespace
+
+PresetNameButton::PresetNameButton() : juce::Button ("Presets")
+{
+    setTitle ("Presets");
+    setHasFocusOutline (true);
+    setButtonText ("No Preset");
+}
+
+void PresetNameButton::show (const juce::String& name, bool isModified)
+{
+    const bool nowModified = isModified && name.isNotEmpty();
+    if (name == loadedName && nowModified == modified)
+        return;
+    loadedName = name;
+    modified = nowModified;
+    setButtonText (name.isEmpty() ? juce::String ("No Preset") : name);
+    setTooltip (name);
+    repaint();
+}
+
+juce::Colour PresetNameButton::nameInk() const { return loadedName.isEmpty() ? colour::text3 : colour::text1; }
+
+int PresetNameButton::getIdealWidth() const
+{
+    const float width = juce::GlyphArrangement::getStringWidth (nameFont(), getButtonText()) + 2.0f * namePadding + dotGap + dotSize;
+    return juce::jmax (minimumWidth, static_cast<int> (std::ceil (width)));
+}
+
+void PresetNameButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+{
+    const auto bounds = getLocalBounds().toFloat();
+    if (highlighted || down)
+    {
+        g.setColour (colour::fill1);
+        g.fillRoundedRectangle (bounds, size::r3);
+    }
+    // The name and the dot, centred together; the name gives way to the dot when it doesn't fit.
+    const auto area = bounds.reduced (namePadding, 0.0f);
+    const float dotSpace = modified ? dotGap + dotSize : 0.0f;
+    const float nameWidth = juce::jmin (juce::GlyphArrangement::getStringWidth (nameFont(), getButtonText()), area.getWidth() - dotSpace);
+    const float left = area.getCentreX() - (nameWidth + dotSpace) / 2.0f;
+    g.setFont (nameFont());
+    g.setColour (nameInk());
+    g.drawText (getButtonText(), juce::Rectangle<float> (left, area.getY(), nameWidth + 1.0f, area.getHeight()), juce::Justification::centredLeft, true);
+    if (modified)
+    {
+        g.setColour (colour::text3);
+        g.fillEllipse (left + nameWidth + dotGap, area.getCentreY() - dotSize / 2.0f, dotSize, dotSize);
+    }
+}
+
+std::unique_ptr<juce::AccessibilityHandler> PresetNameButton::createAccessibilityHandler()
+{
+    return accessibility::handler (
+        *this,
+        juce::AccessibilityRole::button,
+        [this] { return spokenValue != nullptr ? spokenValue() : juce::String(); },
+        [this] { triggerClick(); });
+}
 
 PresetBar::PresetBar (PluginProcessor& p) : processor (p)
 {
@@ -15,6 +87,10 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
             browser.open (processor.loadedPresetName(), lastLoadedEntry());
     };
     browser.opener = &presets;
+    presets.spokenValue = [this] {
+        const auto name = processor.loadedPresetName();
+        return name.isEmpty() ? juce::String ("No Preset") : name + (processor.isLoadedPresetModified() ? ", Modified" : "");
+    };
     browser.onLoad = [this] (const PresetLibrary::Entry& entry) { load (entry.preset, entry.name, entry); };
     browser.onSave = [this] {
         browser.close();
@@ -26,68 +102,33 @@ PresetBar::PresetBar (PluginProcessor& p) : processor (p)
     };
     previous.onClick = [this] { step (-1); };
     next.onClick = [this] { step (1); };
-    a.onClick = [this] {
-        processor.selectCompareSide (CompareSide::A);
-        showSide();
-        edited();
-    };
-    b.onClick = [this] {
-        processor.selectCompareSide (CompareSide::B);
-        showSide();
-        edited();
-    };
-    copyAToB.onClick = [this] {
-        processor.copyToOther();
-        edited();
-    };
-    // The side you're on is lit.
-    for (auto* side : { &a, &b })
-        side->setColour (juce::TextButton::buttonOnColourId, staple::tokens::colour::fill3);
-    previous.setName ("Previous Preset");
-    next.setName ("Next Preset");
-    presets.setTitle ("Presets");
-    presets.spokenValue = [this] {
-        const auto name = processor.loadedPresetName();
-        return name.isEmpty() ? juce::String ("No Preset") : name + (processor.isLoadedPresetModified() ? ", Modified" : "");
-    };
-    const std::pair<juce::Button*, const char*> titles[] = {
-        { &previous, "Previous Preset" }, { &next, "Next Preset" }, { &a, "A/B Compare A" }, { &b, "A/B Compare B" }, { &copyAToB, "Copy A to B" }
-    };
-    for (auto [button, title] : titles)
-        button->setTitle (title);
-    // A screen reader reads which side is on.
-    a.setToggleable (true);
-    b.setToggleable (true);
-    for (juce::TextButton* button : std::initializer_list<juce::TextButton*> { &presets, &previous, &next, &a, &b, &copyAToB })
+    for (auto* button : { &previous, &next })
+    {
+        button->setTitle (button->getName());
+        button->setIconSize (16.0f);
+    }
+    for (juce::Button* button : std::initializer_list<juce::Button*> { &previous, &presets, &next })
     {
         // Tab reaches them, but a click leaves focus where it was, so Delete still reaches the display.
         button->setMouseClickGrabsKeyboardFocus (false);
         addAndMakeVisible (*button);
     }
-    showSide();
     showLoadedPreset();
     startTimerHz (4);
 }
 
-void PresetBar::timerCallback()
-{
-    showSide();
-    showLoadedPreset();
-}
+int PresetBar::getIdealWidth() const { return 2 * (stepButtonSize + gap) + presets.getIdealWidth(); }
 
-void PresetBar::showSide()
-{
-    const bool onA = processor.compareSide() == CompareSide::A;
-    a.setToggleState (onA, juce::dontSendNotification);
-    b.setToggleState (! onA, juce::dontSendNotification);
-}
+void PresetBar::timerCallback() { showLoadedPreset(); }
 
 void PresetBar::showLoadedPreset()
 {
+    const int widthBefore = getIdealWidth();
     const auto name = processor.loadedPresetName();
-    presets.setButtonText (name.isEmpty() ? "Presets" : name + (processor.isLoadedPresetModified() ? "*" : ""));
-    presets.setTooltip (name);
+    presets.show (name, processor.isLoadedPresetModified());
     browser.showLoaded (name, lastLoadedEntry());
+    if (getIdealWidth() != widthBefore && onIdealWidthChange != nullptr)
+        onIdealWidthChange();
 }
 
 void PresetBar::edited()
@@ -161,28 +202,12 @@ void PresetBar::chooseFileToLoad()
     });
 }
 
-void PresetBar::place (juce::Rectangle<int> centre, juce::Rectangle<int> right)
-{
-    centreArea = centre;
-    rightArea = right;
-    resized();
-}
-
 void PresetBar::resized()
 {
-    auto centre = centreArea;
-    previous.setBounds (centre.removeFromLeft (24));
-    centre.removeFromLeft (2);
-    presets.setBounds (centre.removeFromLeft (200));
-    centre.removeFromLeft (2);
-    next.setBounds (centre.removeFromLeft (24));
-
-    auto right = rightArea;
-    copyAToB.setBounds (right.removeFromRight (100));
-    right.removeFromRight (6);
-    b.setBounds (right.removeFromRight (28));
-    right.removeFromRight (2);
-    a.setBounds (right.removeFromRight (28));
+    auto area = getLocalBounds();
+    previous.setBounds (area.removeFromLeft (stepButtonSize).withSizeKeepingCentre (stepButtonSize, stepButtonSize));
+    next.setBounds (area.removeFromRight (stepButtonSize).withSizeKeepingCentre (stepButtonSize, stepButtonSize));
+    presets.setBounds (area.reduced (gap, 0).withSizeKeepingCentre (area.getWidth() - 2 * gap, PresetNameButton::height));
 }
 
 } // namespace eq1

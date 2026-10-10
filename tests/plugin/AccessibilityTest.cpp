@@ -176,8 +176,7 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
     std::sort (names.begin(), names.end());
 
     // Every name, for the reviewer to check against GLOSSARY.md.
-    std::vector<juce::String> expected { "A/B Compare A",
-                                         "A/B Compare B",
+    std::vector<juce::String> expected { "A/B Compare",
                                          "Analyzer",
                                          "Analyzer Peak Hold",
                                          "Analyzer Post-EQ",

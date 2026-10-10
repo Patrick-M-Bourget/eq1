@@ -41,22 +41,6 @@ juce::ValueTree presetWith (const std::initializer_list<std::pair<const char*, f
     return maker.processor.presetState();
 }
 
-// The buttons in an editor showing text.
-std::vector<juce::Button*> buttonsShowing (juce::Component& editor, const juce::String& text)
-{
-    std::vector<juce::Button*> found;
-    std::function<void (juce::Component&)> visit = [&] (juce::Component& component) {
-        for (auto* child : component.getChildren())
-        {
-            if (auto* button = dynamic_cast<juce::Button*> (child); button != nullptr && button->getButtonText() == text)
-                found.push_back (button);
-            visit (*child);
-        }
-    };
-    visit (editor);
-    return found;
-}
-
 std::unique_ptr<juce::XmlElement> fixture (const char* name)
 {
     auto xml = juce::XmlDocument::parse (juce::File (EQ1_TEST_FIXTURES).getChildFile (name));
@@ -322,20 +306,3 @@ TEST_CASE ("Settings saved as a Preset make it the side's Loaded Preset, unmodif
     CHECK (host.processor.isLoadedPresetModified());
 }
 
-TEST_CASE ("The Presets button shows the Loaded Preset's name, followed by * when Modified, or Presets for none")
-{
-    const juce::String name = "Warm Vocal Presence With Air";
-    Host host;
-    const auto presetsButton = [&] (const juce::String& text) {
-        std::unique_ptr<juce::AudioProcessorEditor> editor (host.processor.createEditor());
-        const auto found = buttonsShowing (*editor, text);
-        REQUIRE (found.size() == 1);
-        CHECK (found.front()->getTooltip() == (text == "Presets" ? juce::String() : name));
-    };
-    presetsButton ("Presets");
-
-    host.processor.loadPreset (presetWith ({ { "band2_in_use", 1.0f } }), name);
-    presetsButton (name);
-    host.edit ("band2_gain", 2.0f);
-    presetsButton (name + "*");
-}

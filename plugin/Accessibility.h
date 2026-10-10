@@ -33,16 +33,4 @@ std::unique_ptr<juce::AccessibilityHandler> handler (juce::Component& component,
                                                      std::function<juce::String()> value,
                                                      std::function<void()> press = nullptr);
 
-// A TextButton that a screen reader also reads a value from, such as the Presets button's Loaded
-// Preset.
-class ValuedButton final : public juce::TextButton
-{
-public:
-    using juce::TextButton::TextButton;
-    std::function<juce::String()> spokenValue;
-
-private:
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
-};
-
 } // namespace eq1::accessibility

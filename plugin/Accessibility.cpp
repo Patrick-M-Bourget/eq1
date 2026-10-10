@@ -39,13 +39,4 @@ std::unique_ptr<juce::AccessibilityHandler> handler (juce::Component& component,
     return std::make_unique<Handler> (component, role, std::move (value), std::move (press));
 }
 
-std::unique_ptr<juce::AccessibilityHandler> ValuedButton::createAccessibilityHandler()
-{
-    return handler (
-        *this,
-        juce::AccessibilityRole::button,
-        [this] { return spokenValue != nullptr ? spokenValue() : juce::String(); },
-        [this] { triggerClick(); });
-}
-
 } // namespace eq1::accessibility

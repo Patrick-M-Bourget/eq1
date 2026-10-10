@@ -327,9 +327,9 @@ TEST_CASE ("Tab walks the header, Display Range, the Bands, the Band panel and t
 
     const auto order = focusOrder (*host.editor);
     // The header, left to right.
-    CHECK (slice (order, 0, 8) == std::vector<juce::String> { "Previous Preset", "Presets", "Next Preset", "A", "B", "Copy A to B", "Undo", "Redo" });
+    CHECK (slice (order, 0, 7) == std::vector<juce::String> { "Previous Preset", "Presets", "Next Preset", "Undo", "Redo", "A/B Compare", "Copy" });
     // Display Range, the display and its Bands by Frequency, then the Output Meter's Clip Lights.
-    CHECK (slice (order, 8, 6) == std::vector<juce::String> { "Display Range", "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter" });
+    CHECK (slice (order, 7, 6) == std::vector<juce::String> { "Display Range", "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter" });
     // The footer, left to right, last.
     REQUIRE (order.size() >= 5);
     CHECK (slice (order, order.size() - 5, 5) == std::vector<juce::String> { "Global Bypass", "Analyzer", "Gain Scale", "Output", "UI Scale" });
@@ -513,22 +513,22 @@ TEST_CASE ("Delete on a focused Band removes it and moves focus to the next Band
     CHECK (host.display.hasKeyboardFocus (false));
 }
 
-TEST_CASE ("Clicking Undo, Redo, A, B or Presets leaves keyboard focus where it was, so Delete still deletes")
+TEST_CASE ("Clicking Undo, Redo, A/B Compare, Copy or Presets leaves keyboard focus where it was, so Delete still deletes")
 {
     EveryControl host;
     host.addBand (2, 200.0f, 0.0f);
     undoAndRedoEnabled (host);
     host.display.grabKeyboardFocus();
-    const auto button = [&host] (const juce::String& text) {
-        return host.findAll<juce::Button> ([&text] (juce::Button& b) { return b.getButtonText() == text; }).front();
+    const auto button = [&host] (const juce::String& name) {
+        return host.findAll<juce::Button> ([&name] (juce::Button& b) { return b.getName() == name; }).front();
     };
     // A click runs a button's onClick, and takes keyboard focus only if the button lets it (a real
     // click, through the OS window, can't be made here). Presets opens the browser, whose search takes
     // focus, then closes it, giving focus back.
-    for (const juce::String text : { "Undo", "Redo", "B", "A", "Presets", "Presets" })
+    for (const juce::String name : { "Undo", "Redo", "A/B Compare", "A/B Compare", "Copy", "Presets", "Presets" })
     {
-        CAPTURE (text);
-        auto* clicked = button (text);
+        CAPTURE (name);
+        auto* clicked = button (name);
         CHECK (clicked->getWantsKeyboardFocus());
         CHECK_FALSE (clicked->getMouseClickGrabsKeyboardFocus());
         clicked->onClick();
@@ -645,7 +645,7 @@ TEST_CASE ("Up and down step a ComboBox to the previous or next item; a held key
 TEST_CASE ("The Preset browser's list takes Tab, moves with the arrow keys, loads with Return and closes with Escape")
 {
     EveryControl host;
-    auto& presets = buttonWithText (host, "Presets");
+    auto& presets = named<juce::Button> (host, "Presets");
     presets.grabKeyboardFocus();
     host.press (returnKey);
     auto& browser = named<juce::Component> (host, "Preset Browser");
