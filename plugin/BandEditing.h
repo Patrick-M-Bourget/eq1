@@ -44,6 +44,7 @@ public:
     void deleteBands (const std::vector<int>& slots);
 
     bool isFull() const;
+    int freeSlots() const;
 
     // A drag of the given Bands. dragBy is relative to where the drag began: Frequency times
     // frequencyRatio and Gain plus gainOffset. The Bands move together, so when one reaches the edge
@@ -71,6 +72,11 @@ public:
     // Brickwall on the Cuts; the other Bands keep theirs.
     void setBrickwall (const std::vector<int>& slots);
     void setPlacement (const std::vector<int>& slots, StereoPlacement placement);
+    // Turns each Stereo Band into two, every other setting kept: a Left Band in its slot and a Right
+    // Band in the lowest free Band Slot. The other Bands are ignored. With too few free slots, the
+    // lowest-Frequency Stereo Bands are split, the lower slot first on a tie. Returns both halves of
+    // every split Band, in slot order: the selection after a split.
+    std::vector<int> split (const std::vector<int>& slots);
 
     BandSettings band (int slot) const;
     // Every Band's stored settings, and the whole-plugin ones.

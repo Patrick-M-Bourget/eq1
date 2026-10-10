@@ -597,6 +597,10 @@ void EqDisplay::showMenu (const juce::MouseEvent& e)
                           [display] {
                               if (display != nullptr)
                                   display->selectAll();
+                          },
+                          [display] (std::vector<int> slots) {
+                              if (display != nullptr)
+                                  display->select ({ slots.begin(), slots.end() });
                           } };
     // Closed unchosen if the display goes, so the Band actions never outlive the editing they use.
     menu.build().showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withMousePosition());

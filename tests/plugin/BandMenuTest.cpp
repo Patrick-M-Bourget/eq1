@@ -16,6 +16,7 @@ struct Host
     eq1::PluginProcessor processor;
     eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
     int deletes = 0, selectAlls = 0;
+    std::vector<int> selected;
 
     float value (int slot, const char* control)
     {
@@ -38,7 +39,9 @@ struct Host
 
     juce::PopupMenu menu (std::vector<int> selection, bool stereo = true)
     {
-        return eq1::BandMenu { editing, std::move (selection), stereo, [this] { ++deletes; }, [this] { ++selectAlls; } }.build();
+        return eq1::BandMenu { editing, std::move (selection), stereo, [this] { ++deletes; }, [this] { ++selectAlls; },
+                              [this] (std::vector<int> slots) { selected = std::move (slots); } }
+            .build();
     }
 };
 
@@ -86,7 +89,7 @@ TEST_CASE ("The Band menu lists its actions in groups on a selection, and only S
     host.addBand (1, 100.0f, 3.0f);
 
     const std::vector<juce::String> onBands { "Bypass", "Invert Gain", "Clear Dynamics", "-", "Shape",  "Slope",
-                                              "Stereo Placement", "-", "Delete", "-", "Select All" };
+                                              "Stereo Placement", "-", "Split", "-", "Delete", "-", "Select All" };
     CHECK (textsOf (host.menu ({ 1 })) == onBands);
     CHECK (textsOf (submenu (host.menu ({ 1 }), "Shape")) == std::vector<juce::String> (eq1::parameters::shapeNames().begin(), eq1::parameters::shapeNames().end()));
     CHECK (textsOf (submenu (host.menu ({ 1 }), "Slope"))
@@ -203,4 +206,47 @@ TEST_CASE ("Band menu submenus tick a value only when every selected Band it app
     host.addBand (4, 15000.0f, 0.0f, 4.0f); // High Cut, not Brickwall
     host.set (4, "slope", 24.0f);
     CHECK (ticked (submenu (host.menu ({ 1, 4 }), "Slope")).empty());
+}
+
+TEST_CASE ("Split splits the selected Stereo Bands and selects both halves of each, as one undo step")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    host.addBand (2, 1000.0f, 3.0f);
+    host.set (2, "placement", 1.0f); // Left: ignored
+
+    item (host.menu ({ 1, 2 }), "Split").action();
+    CHECK (host.value (1, "placement") == 1.0f);
+    CHECK (host.value (3, "placement") == 2.0f);
+    CHECK (host.selected == std::vector<int> { 1, 3 });
+    CHECK (host.processor.editHistory().undoSteps() == 1);
+}
+
+TEST_CASE ("Split is unavailable on mono, with no Stereo Band selected, and with no free Band Slot")
+{
+    Host host;
+    for (int slot = 1; slot <= 23; ++slot)
+        host.addBand (slot, 100.0f * static_cast<float> (slot), 3.0f);
+    host.set (2, "placement", 2.0f); // Right
+    host.set (3, "placement", 4.0f); // Side
+
+    CHECK (item (host.menu ({ 1, 2 }), "Split").isEnabled);
+    CHECK_FALSE (item (host.menu ({ 1 }, false), "Split").isEnabled);
+    CHECK_FALSE (item (host.menu ({ 2, 3 }), "Split").isEnabled);
+    host.addBand (24, 5000.0f, 3.0f);
+    CHECK_FALSE (item (host.menu ({ 1 }), "Split").isEnabled);
+}
+
+TEST_CASE ("With fewer free Band Slots than selected Stereo Bands, Split reads how many it splits and splits the lowest-Frequency ones")
+{
+    Host host;
+    for (int slot = 1; slot <= 22; ++slot)
+        host.addBand (slot, 100.0f * static_cast<float> (slot), 3.0f);
+    host.set (4, "placement", 3.0f); // Mid: not counted
+
+    const auto menu = host.menu ({ 1, 2, 3, 4 });
+    CHECK (textsOf (menu)[8] == "Split (2 of 3)");
+    item (menu, "Split (2 of 3)").action();
+    CHECK (host.selected == std::vector<int> { 1, 2, 23, 24 });
+    CHECK (host.value (3, "placement") == 0.0f);
 }

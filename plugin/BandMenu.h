@@ -11,16 +11,18 @@ namespace eq1
 {
 
 // The EQ display's context menu. On a selection of Bands: Bypass (Remove Bypass when every one is
-// Bypassed), Invert Gain, Clear Dynamics; the Shape, Slope and Stereo Placement submenus; Delete;
-// Select All. On empty space, Select All only. Each item applies to every selected Band it can, as
-// one edit, and is unavailable when it applies to none. A submenu item is ticked only when every
-// Band it applies to has that value.
+// Bypassed), Invert Gain, Clear Dynamics; the Shape, Slope and Stereo Placement submenus; Split;
+// Delete; Select All. On empty space, Select All only. Each item applies to every selected Band it
+// can, as one edit, and is unavailable when it applies to none. A submenu item is ticked only when
+// every Band it applies to has that value. Split needs a stereo track and a free Band Slot, and
+// reads "Split (N of M)" when there are free slots for only N of the M selected Stereo Bands.
 struct BandMenu
 {
     BandEditing& editing;
     std::vector<int> selection; // empty on empty space
     bool stereoPlacementAvailable;
     std::function<void()> deleteSelection, selectAll;
+    std::function<void (std::vector<int>)> select; // the slots to select after Split
 
     juce::PopupMenu build() const;
 };
