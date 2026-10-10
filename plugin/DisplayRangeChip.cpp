@@ -1,6 +1,5 @@
 #include "DisplayRangeChip.h"
 
-#include "Accessibility.h"
 #include "PluginProcessor.h"
 
 namespace eq1
@@ -69,11 +68,6 @@ void DisplayRangeChip::timerCallback()
         setBounds (getBounds().withLeft (getRight() - getIdealWidth()));
     if (auto* handler = getAccessibilityHandler())
         handler->notifyAccessibilityEvent (juce::AccessibilityEvent::valueChanged);
-}
-
-std::unique_ptr<juce::AccessibilityHandler> DisplayRangeChip::createAccessibilityHandler()
-{
-    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
 }
 
 } // namespace eq1

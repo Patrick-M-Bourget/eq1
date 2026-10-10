@@ -35,6 +35,10 @@ public:
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
 
+protected:
+    // A button whose value a screen reader reads is its text, and a press clicks it.
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
 private:
     juce::Font textFont() const;
 

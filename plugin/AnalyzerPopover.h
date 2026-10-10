@@ -31,9 +31,6 @@ public:
 
     int getIdealWidth() const;
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
-
-private:
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 };
 
 // One of the Analyzer popover's rows (Range, Resolution, Speed, Analyzer Tilt): a ComboBox drawn as a

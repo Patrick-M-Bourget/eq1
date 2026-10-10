@@ -1,5 +1,6 @@
 #include "TextChip.h"
 
+#include "../Accessibility.h"
 #include "../Fonts.h"
 #include "../Icons.h"
 #include "../Light.h"
@@ -84,6 +85,11 @@ void TextChip::paintButton (juce::Graphics& g, bool highlighted, bool down)
     g.setFont (textFont());
     g.setColour (ink);
     g.drawText (getButtonText(), area, chevron ? juce::Justification::centredLeft : juce::Justification::centred, true);
+}
+
+std::unique_ptr<juce::AccessibilityHandler> TextChip::createAccessibilityHandler()
+{
+    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
 }
 
 } // namespace staple

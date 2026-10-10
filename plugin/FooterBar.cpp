@@ -131,11 +131,6 @@ void OutputReadout::paintButton (juce::Graphics& g, bool highlighted, bool down)
     staple::TextChip::paintButton (g, highlighted && ! open, down && ! open);
 }
 
-std::unique_ptr<juce::AccessibilityHandler> OutputReadout::createAccessibilityHandler()
-{
-    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
-}
-
 UiScaleMenu::UiScaleMenu() : staple::IconButton ("UI Scale", staple::Icon::uiScale)
 {
     setTitle ("UI Scale");

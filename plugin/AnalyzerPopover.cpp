@@ -1,6 +1,5 @@
 #include "AnalyzerPopover.h"
 
-#include "Accessibility.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
@@ -87,11 +86,6 @@ void AnalyzerButton::paintButton (juce::Graphics& g, bool highlighted, bool down
     g.setFont (labelFont());
     g.setColour (ink);
     g.drawText (getButtonText(), area, juce::Justification::centredLeft, true);
-}
-
-std::unique_ptr<juce::AccessibilityHandler> AnalyzerButton::createAccessibilityHandler()
-{
-    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
 }
 
 AnalyzerRow::AnalyzerRow (const juce::String& title, const juce::String& l) : juce::ComboBox (title), label (l)

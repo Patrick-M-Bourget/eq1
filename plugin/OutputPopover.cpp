@@ -1,11 +1,11 @@
 #include "OutputPopover.h"
 
-#include "Accessibility.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
 #include "staple/controls/Overlay.h"
+#include "staple/controls/TextChip.h"
 
 #include <cmath>
 
@@ -35,14 +35,12 @@ juce::String outputPanText (double pan, bool midSide)
 }
 
 // Pan Mode's chip: "L/R" or "M/S"; a click switches.
-class OutputPopover::PanModeChip final : public juce::Button
+class OutputPopover::PanModeChip final : public staple::TextChip
 {
 public:
-    PanModeChip() : juce::Button ("Pan Mode")
+    PanModeChip() : staple::TextChip ("Pan Mode", Look::filled, size::fs1)
     {
         setClickingTogglesState (true);
-        setHasFocusOutline (true);
-        setMouseClickGrabsKeyboardFocus (false);
         setTitle ("Pan Mode");
         buttonStateChanged();
     }
@@ -72,11 +70,6 @@ public:
 
 private:
     static juce::Font font() { return staple::font (size::fs1, staple::Weight::semiBold); }
-
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
-    {
-        return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return getButtonText(); }, [this] { triggerClick(); });
-    }
 };
 
 OutputPanSlider::OutputPanSlider() : KeyboardSlider ("Output Pan")

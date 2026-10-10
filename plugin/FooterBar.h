@@ -65,7 +65,6 @@ public:
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
 
 private:
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     bool notApplied = false, open = false;
 };
 

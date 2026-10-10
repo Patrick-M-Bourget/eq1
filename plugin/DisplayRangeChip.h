@@ -23,7 +23,6 @@ public:
 
 private:
     void timerCallback() override;
-    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     PluginProcessor& processor;
 };

@@ -68,6 +68,7 @@ target_sources(eq1 PRIVATE
     OutputMeter.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp
+    staple/Accessibility.cpp
     staple/Fonts.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
