@@ -424,3 +424,34 @@ TEST_CASE ("Today's dynamics controls work from the Band panel's temporary Dynam
     host.settle (120);
     CHECK_FALSE (dynamics.isEnabled());
 }
+
+// Renders the editor at 1200 x 760 and 2x with the Band panel on a Bell, a Low Cut with Brickwall, a
+// Bypassed Band and on mono, for checking by hand against the prototype. Hidden; run with
+//   EQ1_PANEL_SCREENS=/some/dir/81 build/tests/eq1_plugin_tests "[.screens]"
+TEST_CASE ("Band panel screenshots", "[.screens]")
+{
+    const auto prefix = juce::SystemStats::getEnvironmentVariable ("EQ1_PANEL_SCREENS", {});
+    if (prefix.isEmpty())
+        SKIP ("EQ1_PANEL_SCREENS is not set");
+    const auto save = [&prefix] (PanelEditor& host, const juce::String& name) {
+        host.editor->setSize (1200, 760);
+        host.settle (300);
+        juce::File file (prefix + "-" + name + ".png");
+        file.deleteFile();
+        juce::FileOutputStream stream (file);
+        juce::PNGImageFormat().writeImageToStream (host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, 2.0f), stream);
+    };
+    {
+        PanelEditor host;
+        host.set (1, "gain", 4.0f);
+        save (host, "bell");
+        host.click (host.at (100.0));
+        host.set (2, "brickwall", 1.0f);
+        save (host, "low-cut-brickwall");
+        host.set (2, "bypass", 1.0f);
+        save (host, "bypassed");
+    }
+    PanelEditor mono (true);
+    mono.set (1, "shape", 8.0f); // Flat Tilt: no Slope, no Q
+    save (mono, "mono-flat-tilt");
+}
