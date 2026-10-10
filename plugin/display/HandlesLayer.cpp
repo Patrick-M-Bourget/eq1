@@ -2,23 +2,52 @@
 
 #include "../staple/Fonts.h"
 #include "../staple/Tokens.h"
+#include "../staple/controls/Overlay.h"
 
 namespace eq1::display
 {
 
 namespace
 {
+namespace tokens = staple::tokens;
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
-
-constexpr float handleRadius = DisplayGeometry::handleRadius;
-constexpr float ringRadius = handleRadius + 5.0f;
+namespace handle = staple::tokens::handle;
 
 juce::String frequencyText (double frequency)
 {
     return frequency >= 1000.0 ? juce::String (frequency / 1000.0, 2) + " kHz" : juce::String (juce::roundToInt (frequency)) + " Hz";
 }
+
+// The readout's card, as the knob tooltip's (KnobTooltip.cpp).
+constexpr float readoutPaddingTop = 5.0f, readoutPaddingSide = 10.0f, readoutPaddingBottom = 6.0f;
+constexpr float readoutTitleLine = 14.0f, readoutValueLine = 18.0f, readoutOffset = 12.0f;
 } // namespace
+
+HandleStyle handleStyle (const HandleState& state)
+{
+    const auto index = static_cast<size_t> (state.slot - 1);
+    // How far into the bypassed look: all the way when Bypassed, else as far as Global Bypass has faded.
+    const float t = state.bypassed ? 1.0f : state.globalBypass;
+    HandleStyle style;
+    const float scale = state.dragged || ! state.selected ? juce::jmap (state.dragged ? 1.0f : state.hover, 1.0f, handle::hoverScale) : 1.0f;
+    style.diameter = (state.selected ? handle::selectedDiameter : handle::diameter) * scale;
+    style.fill = tokens::band[index].interpolatedWith (tokens::bandBypassed[index].withAlpha (handle::bypassedAlpha), t);
+    if (state.selected)
+    {
+        style.ring = colour::handleSelectedRing.interpolatedWith (colour::handleSelectedRing.withAlpha (handle::bypassedRingAlpha), t);
+        style.ringWidth = handle::selectedRing;
+        style.glowAlpha = handle::glowAlpha * (1.0f - t);
+        style.shadow = tokens::shadow::selectedHandle;
+    }
+    else
+    {
+        style.ring = colour::handleRing;
+        style.ringWidth = handle::ring;
+        style.shadow = tokens::shadow::handle;
+    }
+    return style;
+}
 
 std::vector<Grip> dynamicRangeGrips (const DisplayGeometry& geometry, const DisplayFrame& frame)
 {
@@ -33,11 +62,11 @@ std::vector<Grip> dynamicRangeGrips (const DisplayGeometry& geometry, const Disp
         const bool shown = alone ? hasGain (band.shape) && ! band.bypass : isDynamic (band) && ! band.dynamicsBypass;
         if (! shown)
             continue;
-        const auto handle = geometry.handleOf (band);
-        const float y = band.dynamicRange != 0.0 ? geometry.yOf (band.gain + band.dynamicRange) : handle.y + grip::belowHandle;
+        const auto centre = geometry.handleOf (band);
+        const float y = band.dynamicRange != 0.0 ? geometry.yOf (band.gain + band.dynamicRange) : centre.y + grip::belowHandle;
         const float hover = frame.hover[static_cast<size_t> (slot - 1)];
         grips.push_back ({ slot,
-                           { handle.x, juce::jlimit (grip::edgeInset, static_cast<float> (geometry.height) - grip::edgeInset, y) },
+                           { centre.x, juce::jlimit (grip::edgeInset, static_cast<float> (geometry.height) - grip::edgeInset, y) },
                            alone ? 1.0f : juce::jmap (hover, grip::restingAlpha, 1.0f) });
     }
     return grips;
@@ -45,90 +74,142 @@ std::vector<Grip> dynamicRangeGrips (const DisplayGeometry& geometry, const Disp
 
 juce::Rectangle<float> gripArea (juce::Point<float> centre)
 {
-    return juce::Rectangle<float> (staple::tokens::grip::width, staple::tokens::grip::height).withCentre (centre);
+    return juce::Rectangle<float> (tokens::grip::width, tokens::grip::height).withCentre (centre);
 }
+
+Readout dragReadout (int slot, const BandSettings& band)
+{
+    juce::String value = frequencyText (band.frequency);
+    if (hasGain (band.shape))
+        value << "  " << (band.gain > 0.0 ? "+" : "") << juce::String (band.gain, 1) << " dB";
+    value << "  Q " << juce::String (band.q, 2);
+    return { "Band " + juce::String (slot), value };
+}
+
+namespace
+{
+void paintGrip (juce::Graphics& g, const Grip& grip, juce::Colour bandColour)
+{
+    namespace size = tokens::grip;
+    const auto c = grip.centre;
+    const float half = size::triangleWidth / 2.0f, offset = size::gap / 2.0f;
+    juce::Path triangles;
+    triangles.addTriangle (c.x, c.y - offset - size::triangleHeight, c.x + half, c.y - offset, c.x - half, c.y - offset);
+    triangles.addTriangle (c.x, c.y + offset + size::triangleHeight, c.x + half, c.y + offset, c.x - half, c.y + offset);
+    g.setColour (bandColour.withMultipliedAlpha (grip.alpha));
+    g.fillPath (triangles);
+}
+
+void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyle& style, juce::Colour bandColour)
+{
+    const float r = style.diameter / 2.0f;
+    const auto circle = juce::Rectangle<float> (style.diameter, style.diameter).withCentre (centre);
+    // The shadow and the glow are stacked translucent circles, with no blur.
+    staple::drawSoftShadow (g, circle, r, style.shadow);
+    if (style.glowAlpha > 0.0f)
+        staple::drawSoftShadow (g, circle.expanded (1.0f), r + 1.0f, { bandColour.withAlpha (style.glowAlpha), static_cast<int> (handle::glow), {} });
+    g.setColour (style.fill);
+    g.fillEllipse (circle);
+    // A centred white sheen, gone at 70 % of the radius.
+    const auto sheen = colour::handleSelectedRing.withAlpha (handle::sheenAlpha);
+    g.setGradientFill (juce::ColourGradient (sheen, centre, sheen.withAlpha (0.0f), centre.translated (r * handle::sheenReach, 0.0f), true));
+    g.fillEllipse (circle);
+    g.setColour (style.ring);
+    g.drawEllipse (circle.reduced (style.ringWidth / 2.0f), style.ringWidth);
+}
+
+void paintReadout (juce::Graphics& g, const DisplayGeometry& geometry, juce::Point<float> handleCentre, const Readout& readout)
+{
+    const auto titleFont = staple::font (size::fs2), valueFont = staple::font (size::fs4);
+    const float textWidth = std::max (juce::GlyphArrangement::getStringWidth (titleFont, readout.title),
+                                      juce::GlyphArrangement::getStringWidth (valueFont, readout.value));
+    const float height = readoutPaddingTop + readoutTitleLine + readoutValueLine + readoutPaddingBottom;
+    auto box = juce::Rectangle<float> (std::ceil (textWidth) + 2.0f * readoutPaddingSide, height)
+                   .withPosition (handleCentre.x + readoutOffset, handleCentre.y - readoutOffset - height)
+                   .constrainedWithin (geometry.bounds());
+    staple::drawSoftShadow (g, box, size::r2, tokens::shadow::shadow1);
+    g.setColour (colour::menu);
+    g.fillRoundedRectangle (box, size::r2);
+    g.setColour (colour::line2);
+    g.drawRoundedRectangle (box.reduced (0.5f), size::r2, 1.0f);
+    auto text = box.withTrimmedTop (readoutPaddingTop).reduced (readoutPaddingSide, 0.0f);
+    g.setFont (titleFont);
+    g.setColour (colour::text3);
+    g.drawText (readout.title, text.removeFromTop (readoutTitleLine), juce::Justification::centred, false);
+    g.setFont (valueFont);
+    g.setColour (colour::text1);
+    g.drawText (readout.value, text.removeFromTop (readoutValueLine), juce::Justification::centred, false);
+}
+
+void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)
+{
+    const float r = diameter / 2.0f + handle::soloRingOffset;
+    g.setColour (colour::text1);
+    g.drawEllipse (juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (centre), handle::soloRing);
+    const auto font = staple::font (size::fs1);
+    const juce::String text ("Solo");
+    const auto pill = juce::Rectangle<float> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)) + 8.0f, 14.0f)
+                          .withCentre ({ centre.x, centre.y - r - 4.0f - 7.0f });
+    g.setColour (colour::menu);
+    g.fillRoundedRectangle (pill, size::r1);
+    g.setColour (colour::text1);
+    g.setFont (font);
+    g.drawText (text, pill, juce::Justification::centred, false);
+}
+} // namespace
 
 void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame)
 {
-    // Handles, numbered by Band Slot.
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-    {
-        const auto& band = frame.bands.bands[static_cast<size_t> (slot - 1)];
-        if (! band.inUse)
-            continue;
-        const auto centre = geometry.handleOf (band);
-        const auto circle = juce::Rectangle<float> (handleRadius * 2.0f, handleRadius * 2.0f).withCentre (centre);
-        g.setColour (bandColour (slot).withAlpha (band.bypass ? 0.35f : 1.0f));
-        g.fillEllipse (circle);
-        if (frame.selected.contains (slot))
-        {
-            g.setColour (colour::text1);
-            g.drawEllipse (circle.expanded (2.0f), 1.5f);
-        }
-        g.setColour (colour::onLight);
-        g.drawText (juce::String (slot), circle, juce::Justification::centred);
-        if (isDynamic (band))
-        {
-            // The Dynamic Range ring: from the top, clockwise for a boost and anticlockwise for a cut, half
-            // a turn for 30 dB, shortened where Live Gain would go beyond +/-30 dB. Live Gain's movement
-            // is drawn on top of it.
-            const auto angleOf = [] (double db) { return static_cast<float> (db / liveGainLimitDb * juce::MathConstants<double>::pi); };
-            const double reach = juce::jlimit (-liveGainLimitDb, liveGainLimitDb, band.gain + band.dynamicRange) - band.gain;
-            const auto arc = [&] (double db) {
-                juce::Path path;
-                path.addCentredArc (centre.x, centre.y, ringRadius, ringRadius, 0.0f, 0.0f, angleOf (db), true);
-                return path;
-            };
-            g.setColour (colour::dynRange.withAlpha (band.dynamicsBypass ? 0.35f : 0.9f));
-            g.strokePath (arc (reach), juce::PathStrokeType (3.0f));
-            if (! band.dynamicsBypass)
-            {
-                g.setColour (colour::dynLive);
-                g.strokePath (arc (frame.drawnGains[static_cast<size_t> (slot - 1)] - band.gain), juce::PathStrokeType (3.0f));
-            }
-        }
-        if (slot == frame.soloedSlot)
-        {
-            g.setColour (colour::text1);
-            g.drawEllipse (circle.expanded (5.0f), 2.0f);
-            g.drawText ("Solo", circle.withY (circle.getY() - 22.0f).expanded (20.0f, 0.0f), juce::Justification::centred);
-        }
-    }
+    for (const auto& grip : dynamicRangeGrips (geometry, frame))
+        paintGrip (g, grip, bandColour (grip.slot));
 
-    // Values beside the Bands being dragged.
+    // The selected handles go on top.
+    const auto draw = [&] (int slot) {
+        const auto& band = frame.bands.bands[static_cast<size_t> (slot - 1)];
+        const bool selected = frame.selected.contains (slot);
+        const auto style = handleStyle ({ .slot = slot,
+                                          .selected = selected || slot == frame.soloedSlot,
+                                          .bypassed = band.bypass || (frame.mono && band.placement == StereoPlacement::Side),
+                                          .hover = frame.hover[static_cast<size_t> (slot - 1)],
+                                          .dragged = frame.dragging && selected,
+                                          .globalBypass = frame.globalBypass });
+        const auto centre = geometry.handleOf (band);
+        paintHandle (g, centre, style, bandColour (slot));
+        if (slot == frame.soloedSlot)
+            paintSoloCue (g, centre, style.diameter);
+    };
+    for (int pass = 0; pass < 2; ++pass)
+        for (int slot = 1; slot <= numBandSlots; ++slot)
+            if (frame.bands.bands[static_cast<size_t> (slot - 1)].inUse && frame.selected.contains (slot) == (pass == 1))
+                draw (slot);
+
     if (frame.dragging)
         for (int slot : frame.selected)
         {
             const auto& band = frame.bands.bands[static_cast<size_t> (slot - 1)];
-            juce::String text = frequencyText (band.frequency);
-            if (hasGain (band.shape))
-                text << "  " << (band.gain > 0.0 ? "+" : "") << juce::String (band.gain, 1) << " dB";
-            text << "  Q " << juce::String (band.q, 2);
-            const auto centre = geometry.handleOf (band);
-            auto box = juce::Rectangle<float> (170.0f, 18.0f).withPosition (centre.x + 12.0f, centre.y - 26.0f);
-            box = box.constrainedWithin (geometry.bounds());
-            g.setColour (colour::menu);
-            g.fillRoundedRectangle (box, 4.0f);
-            g.setColour (colour::text1);
-            g.drawText (text, box, juce::Justification::centred);
+            paintReadout (g, geometry, geometry.handleOf (band), dragReadout (slot, band));
         }
 
     if (frame.marquee)
     {
-        g.setColour (colour::fill2);
+        g.setColour (colour::fill1);
         g.fillRect (*frame.marquee);
-        g.setColour (colour::text3);
+        g.setColour (colour::line3);
         g.drawRect (*frame.marquee, 1.0f);
     }
 
     if (frame.allInUseMessage)
     {
-        const auto box = geometry.bounds().withSizeKeepingCentre (300.0f, 30.0f).withY (12.0f);
-        g.setColour (colour::stateOffBg);
-        g.fillRoundedRectangle (box, 6.0f);
+        const auto font = staple::font (size::fs3);
+        const juce::String text ("All 24 Bands are in use");
+        const auto box = juce::Rectangle<float> (std::ceil (juce::GlyphArrangement::getStringWidth (font, text)) + 28.0f, 30.0f)
+                             .withCentre ({ geometry.bounds().getCentreX(), 12.0f + 15.0f });
+        staple::drawSoftShadow (g, box, size::r3, tokens::shadow::shadow1);
+        g.setColour (colour::menu);
+        g.fillRoundedRectangle (box, size::r3);
         g.setColour (colour::text1);
-        g.setFont (staple::font (size::fs4));
-        g.drawText ("All 24 Bands are in use", box, juce::Justification::centred);
+        g.setFont (font);
+        g.drawText (text, box, juce::Justification::centred, false);
     }
 }
 

@@ -65,6 +65,7 @@ namespace colour
 
     // Band handles and the ghost Bell.
     inline const juce::Colour handleRing { 0x8C0A0B0E }; // rgba (10, 11, 14, 0.55), around an unselected handle
+    inline const juce::Colour handleSelectedRing { 0xFFFFFFFF }; // and a selected one's, white
     inline const juce::Colour ghostGlow { 0xFFFFC482 };  // rgb (255, 196, 130), at the ghost Bell's peak
 } // namespace colour
 
@@ -183,6 +184,7 @@ namespace shadow
     inline const juce::DropShadow knob { colour::shadow.withAlpha (0.4f), 14, { 0, 6 } };
     inline const juce::DropShadow knobSmall { colour::shadow.withAlpha (0.35f), 8, { 0, 3 } }; // 30 px and below
     inline const juce::DropShadow handle { colour::shadow.withAlpha (0.45f), 5, { 0, 0 } };
+    inline const juce::DropShadow selectedHandle { colour::shadow.withAlpha (0.45f), 8, { 0, 0 } };
 } // namespace shadow
 
 namespace motion

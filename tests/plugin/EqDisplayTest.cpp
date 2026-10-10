@@ -442,3 +442,21 @@ TEST_CASE ("A focused Dynamic Range grip steps the range 1 dB per arrow, 0.5 dB 
     CHECK (handler->getTitle() == "Band 1 Dynamic Range");
     CHECK (handler->getValueInterface()->getCurrentValueAsString() == "+3.50 dB");
 }
+
+TEST_CASE ("A handle takes a press within 9 px of its centre, and a Dynamic Band's handle has no Dynamic Range ring around it")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 0.0f);
+    host.set (1, "dynamic_range", 24.0f);
+    host.settle();
+    const auto centre = atDb (host, 1000.0, 0.0);
+    // Where the ring went: 14 px up and to the right of the handle, which the ring reached at +24 dB,
+    // clear of the sum curve along 0 dB.
+    const auto ring = colourAt (snapshot (host), centre.translated (10.0f, -10.0f));
+    CHECK (ring.getFloatRed() < 0.2f);
+
+    // 8.5 px off to the left: a press on the handle, which selects it and drags it.
+    host.drag (centre.translated (-8.5f, 0.0f), host.at (2000.0).translated (-8.5f, 0.0f), juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (2000.0f, 0.01f));
+}

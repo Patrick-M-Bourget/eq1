@@ -443,13 +443,18 @@ double EqDisplay::drawnGain (int slot, const BandSettings& band) const
 
 int EqDisplay::slotAt (juce::Point<float> position) const
 {
-    // The highest slot wins where handles overlap, as it is drawn on top.
-    for (int slot = numBandSlots; slot >= 1; --slot)
-    {
-        const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
-        if (band.inUse && handleOf (band).getDistanceFrom (position) <= handleRadius)
-            return slot;
-    }
+    // A selected handle wins where handles overlap, as it is drawn on top, then the highest slot. Each
+    // reaches as far as it is drawn, and at least 9 px.
+    namespace handle = staple::tokens::handle;
+    for (const bool onTop : { true, false })
+        for (int slot = numBandSlots; slot >= 1; --slot)
+        {
+            const auto& band = shown.bands[static_cast<size_t> (slot - 1)];
+            const bool isSelected = selected.contains (slot);
+            const float reach = std::max (handle::hitRadius, (isSelected ? handle::selectedDiameter : handle::diameter) / 2.0f);
+            if (band.inUse && isSelected == onTop && handleOf (band).getDistanceFrom (position) <= reach)
+                return slot;
+        }
     return 0;
 }
 

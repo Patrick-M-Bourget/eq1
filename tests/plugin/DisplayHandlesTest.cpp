@@ -79,3 +79,56 @@ TEST_CASE ("Grips show for the selected Band with Gain unless Bypassed, and othe
     f.band (1).shape = eq1::Shape::LowCut;
     CHECK_FALSE (gripOf (eq1::display::dynamicRangeGrips (geometry, f.frame), 1));
 }
+
+TEST_CASE ("Band handles: 16 px in the Band's colour with a dark 1 px ring; selected 22 px with a 2 px white ring and a 40 % glow; x1.15 on hover and while dragged")
+{
+    namespace tokens = staple::tokens;
+    using eq1::display::handleStyle;
+    const auto normal = handleStyle ({ .slot = 4 });
+    CHECK (normal.diameter == 16.0f);
+    CHECK (normal.fill == tokens::band[3]);
+    CHECK (normal.ring == tokens::colour::handleRing);
+    CHECK (normal.ringWidth == 1.0f);
+    CHECK (normal.glowAlpha == 0.0f);
+
+    const auto selected = handleStyle ({ .slot = 4, .selected = true });
+    CHECK (selected.diameter == 22.0f);
+    CHECK (selected.ring == juce::Colours::white);
+    CHECK (selected.ringWidth == 2.0f);
+    CHECK_THAT (selected.glowAlpha, WithinAbs (0.4, 1.0e-6));
+
+    CHECK_THAT (handleStyle ({ .slot = 4, .hover = 1.0f }).diameter, WithinAbs (16.0 * 1.15, 1.0e-4));
+    CHECK (handleStyle ({ .slot = 4, .selected = true, .hover = 1.0f }).diameter == 22.0f);
+    CHECK_THAT (handleStyle ({ .slot = 4, .selected = true, .dragged = true }).diameter, WithinAbs (22.0 * 1.15, 1.0e-4));
+}
+
+TEST_CASE ("A Bypassed handle, and every handle under Global Bypass, is in the bypassed colour at 85 % with no glow; selected, its ring is 60 % white")
+{
+    namespace tokens = staple::tokens;
+    using eq1::display::handleStyle;
+    for (const auto state : { eq1::display::HandleState { .slot = 2, .selected = true, .bypassed = true },
+                              eq1::display::HandleState { .slot = 2, .selected = true, .globalBypass = 1.0f } })
+    {
+        const auto style = handleStyle (state);
+        CHECK (style.fill == tokens::bandBypassed[1].withAlpha (0.85f));
+        CHECK (style.ring == juce::Colours::white.withAlpha (0.6f));
+        CHECK (style.diameter == 22.0f);
+        CHECK (style.glowAlpha == 0.0f);
+    }
+    CHECK (handleStyle ({ .slot = 2, .bypassed = true }).ring == tokens::colour::handleRing);
+}
+
+TEST_CASE ("The drag readout reads \"Band n\" over Frequency, Gain and Q, Gain left out on Shapes without it")
+{
+    eq1::BandSettings band;
+    band.frequency = 1000.0;
+    band.gain = 3.0;
+    band.q = 1.0;
+    auto readout = eq1::display::dragReadout (4, band);
+    CHECK (readout.title == "Band 4");
+    CHECK (readout.value == "1.00 kHz  +3.0 dB  Q 1.00");
+    band.shape = eq1::Shape::HighCut;
+    band.frequency = 250.0;
+    band.q = 0.71;
+    CHECK (eq1::display::dragReadout (12, band).value == "250 Hz  Q 0.71");
+}
