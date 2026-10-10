@@ -16,6 +16,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     addAndMakeVisible (output);
     presetBar.onEdit = [this] { showUndoState(); };
     addAndMakeVisible (presetBar);
+    addChildComponent (presetBar.browserPanel());
 
     // The display's Gain range, saved with the plugin.
     for (int range : { 6, 12, 30 })
@@ -166,6 +167,7 @@ void PluginEditor::resized()
     if (meter.isVisible())
         meter.setBounds (area.removeFromRight (40));
     display.setBounds (area);
+    presetBar.browserPanel().setBounds (area.reduced (40, 12));
 
     redoButton.setBounds (header.removeFromRight (52));
     header.removeFromRight (4);
