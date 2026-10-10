@@ -41,6 +41,8 @@ namespace colour
     inline const juce::Colour meter2 { 0xFFA9D66A };
     inline const juce::Colour meter3 { 0xFFE9B44C };
     inline const juce::Colour meterClip { 0xFFE5604F };
+    inline const juce::Colour meterClipOff { 0x14FFFFFF }; // white 8 %, an unlit Clip Light
+    inline const juce::Colour meterTrack { 0x59000000 };   // black 35 %, under the Output Meter's bars
     inline const juce::Colour edgeSelectorBase { 0xFF141519 };
     inline const juce::Colour knobFaceTop { 0xFF35373D }, knobFaceMid { 0xFF27282D }, knobFaceEdge { 0xFF1C1D21 };
     inline const juce::Colour knobRim { 0x38FFFFFF };      // white 22 %
