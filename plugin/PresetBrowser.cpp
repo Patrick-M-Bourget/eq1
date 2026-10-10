@@ -40,10 +40,9 @@ void focusOn (juce::Component& component)
 } // namespace
 
 //==============================================================================
-PresetBrowser::TextAction::TextAction (const juce::String& text, const juce::String& title) : juce::Button (title)
+PresetBrowser::TextAction::TextAction (const juce::String& text) : juce::Button (text)
 {
-    setButtonText (text);
-    setTitle (title);
+    setTitle (text);
 }
 
 void PresetBrowser::TextAction::paintButton (juce::Graphics& g, bool highlighted, bool down)

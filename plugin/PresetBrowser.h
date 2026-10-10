@@ -81,7 +81,7 @@ private:
     // A plain text button: the footer's actions.
     struct TextAction final : juce::Button
     {
-        TextAction (const juce::String& text, const juce::String& title);
+        explicit TextAction (const juce::String& text); // named by its text
         void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
     };
     // A folder in the folder column: its name, a dot when it holds the Loaded Preset, and its count.
@@ -149,9 +149,8 @@ private:
     juce::Component folderColumn;
     std::vector<std::unique_ptr<FolderRow>> folderRows;
     juce::ListBox list { {}, this };
-    TextAction save { juce::String::fromUTF8 ("Save as\xe2\x80\xa6"), "Save as User Preset..." },
-        loadFile { juce::String::fromUTF8 ("Load Preset File\xe2\x80\xa6"), "Load Preset File..." },
-        showFolder { "Show User Presets Folder", "Show User Presets Folder" };
+    TextAction save { juce::String::fromUTF8 ("Save as\xe2\x80\xa6") }, loadFile { juce::String::fromUTF8 ("Load Preset File\xe2\x80\xa6") },
+        showFolder { "Show User Presets Folder" };
     Field nameField;
 };
 

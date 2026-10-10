@@ -13,6 +13,7 @@ using harness::findChild;
 
 namespace
 {
+const auto saveAs = juce::String::fromUTF8 ("Save as\xe2\x80\xa6");
 
 // A click, as on a button: its onClick at once.
 void click (juce::Button& button)
@@ -168,6 +169,22 @@ TEST_CASE ("A single click on a Preset loads it, and the browser stays open")
     CHECK (host.browser.isVisible());
 }
 
+TEST_CASE ("Every button in the Preset browser is named by its text")
+{
+    Browser host;
+    host.browser.open ({}, nullptr);
+    std::vector<juce::Button*> withText;
+    findChild<juce::Button> (host.browser, [&withText] (juce::Button& b) {
+        if (b.getButtonText().isNotEmpty())
+            withText.push_back (&b);
+        return false;
+    });
+    CHECK (withText.size() >= 3u); // Save as…, Load Preset File… and Show User Presets Folder at least
+    for (auto* button : withText)
+        CHECK (button->getTitle() == button->getButtonText());
+    CHECK (host.button (saveAs).getButtonText() == saveAs);
+}
+
 TEST_CASE ("Save as opens an inline name field: Enter saves into the User folder as the Loaded Preset, Esc cancels")
 {
     Browser host;
@@ -178,14 +195,14 @@ TEST_CASE ("Save as opens an inline name field: Enter saves into the User folder
     REQUIRE (field() != nullptr);
     CHECK_FALSE (field()->isVisible());
 
-    click (host.button ("Save as User Preset..."));
+    click (host.button (saveAs));
     REQUIRE (field()->isVisible());
     field()->setText ("Warm");
     field()->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
     CHECK_FALSE (field()->isVisible());
     CHECK (host.saves.empty());
 
-    click (host.button ("Save as User Preset..."));
+    click (host.button (saveAs));
     // The field opens empty.
     CHECK (field()->isEmpty());
     field()->setText ("Warm");
@@ -199,7 +216,7 @@ TEST_CASE ("Save as opens an inline name field: Enter saves into the User folder
     CHECK (host.valueOf (host.button ("User")) == "2");
 
     // No name, no save.
-    click (host.button ("Save as User Preset..."));
+    click (host.button (saveAs));
     field()->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
     CHECK (host.saves.size() == 1u);
 }
