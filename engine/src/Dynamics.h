@@ -5,6 +5,7 @@
 #include "eq1/Settings.h"
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
 namespace eq1
@@ -30,10 +31,10 @@ public:
     // unmetered, and the Band sounds the same metered or not.
     void setMetered (bool metered);
 
-    // Listens to the piece of a run of the Engine's grid (Band::process) from position on, numSamples
-    // long, of the main input, or of the Sidechain (sidechainChannels 0 when none is connected).
-    void hear (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, int position,
-               int numSamples);
+    // Listens to the piece of the Engine's grid's run number run (Band::process) from position on,
+    // numSamples long, of the main input, or of the Sidechain (sidechainChannels 0 when none is connected).
+    void hear (const float* const* input, int numChannels, const float* const* sidechain, int sidechainChannels, std::uint64_t run,
+               int position, int numSamples);
 
     // At the end of a run: moves the gain computer over the levels the run heard, with its Auto
     // Attack and Auto Threshold taken over the whole run. Returns the offset in dB to add to the

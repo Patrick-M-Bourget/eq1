@@ -111,6 +111,7 @@ void Band::prepare (double newSampleRate, int numChannels)
     }
     mix.reset (0.0);
     shapeCrossfade.reset (1.0);
+    startedRun = noRun;
 }
 
 void Band::setSettings (const BandSettings& settings, bool snap)
@@ -206,15 +207,18 @@ void Band::startRun()
     }
 }
 
-void Band::process (float* const* channels, int numChannels, int position, int numSamples)
+void Band::process (float* const* channels, int numChannels, std::uint64_t run, int position, int numSamples)
 {
-    const bool joinedLate = position != 0 && position != runPosition;
+    const bool joinedLate = position != 0 && run != startedRun;
     runPosition = position + numSamples;
     if (isSilent())
         return;
 
     if (position == 0)
+    {
+        startedRun = run;
         startRun();
+    }
     else if (joinedLate)
     {
         runGliding = false;
