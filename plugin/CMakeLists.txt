@@ -65,6 +65,15 @@ target_sources(eq1 PRIVATE
     staple/Fonts.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
+    Accessibility.cpp
+    staple/controls/EdgeSelector.cpp
+    staple/controls/IconButton.cpp
+    staple/controls/Knob.cpp
+    staple/controls/KnobTooltip.cpp
+    staple/controls/Overlay.cpp
+    staple/controls/ParseValue.cpp
+    staple/controls/Popover.cpp
+    staple/controls/TextChip.cpp
     KeyboardSlider.cpp
     KeyboardControl.cpp
     UserSettings.cpp)

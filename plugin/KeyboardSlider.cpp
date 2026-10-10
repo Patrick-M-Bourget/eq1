@@ -1,5 +1,6 @@
 #include "KeyboardSlider.h"
 
+#include "Accessibility.h"
 #include "staple/LookAndFeel.h"
 
 namespace eq1
@@ -61,6 +62,63 @@ void KeyboardSlider::focusLost (FocusChangeType cause)
 void KeyboardSlider::endHeldStep()
 {
     held.reset();
+}
+
+void KeyboardSlider::describe (const juce::RangedAudioParameter& parameter)
+{
+    setTitle (parameter.getName (100));
+    spokenValue = [&parameter] (double value) { return accessibility::spokenValue (parameter, parameter.convertTo0to1 (static_cast<float> (value))); };
+}
+
+void KeyboardSlider::childrenChanged()
+{
+    // The text box shows the value the slider itself is read with.
+    for (auto* child : getChildren())
+        child->setAccessible (false);
+}
+
+namespace
+{
+class SliderHandler final : public juce::AccessibilityHandler
+{
+public:
+    explicit SliderHandler (KeyboardSlider& s)
+        : juce::AccessibilityHandler (s, juce::AccessibilityRole::slider, {}, Interfaces { std::make_unique<Value> (s) })
+    {
+    }
+
+private:
+    class Value final : public juce::AccessibilityValueInterface
+    {
+    public:
+        explicit Value (KeyboardSlider& s) : slider (s) {}
+        bool isReadOnly() const override { return false; }
+        double getCurrentValue() const override { return slider.getValue(); }
+        void setValue (double value) override
+        {
+            juce::Slider::ScopedDragNotification drag (slider);
+            slider.setValue (value, juce::sendNotificationSync);
+        }
+        juce::String getCurrentValueAsString() const override
+        {
+            return slider.spokenValue != nullptr ? slider.spokenValue (slider.getValue()) : slider.getTextFromValue (slider.getValue());
+        }
+        void setValueAsString (const juce::String& text) override { setValue (slider.getValueFromText (text)); }
+        AccessibleValueRange getRange() const override
+        {
+            const double interval = slider.getInterval();
+            return { { slider.getMinimum(), slider.getMaximum() }, interval > 0.0 ? interval : (slider.getMaximum() - slider.getMinimum()) * 0.01 };
+        }
+
+    private:
+        KeyboardSlider& slider;
+    };
+};
+} // namespace
+
+std::unique_ptr<juce::AccessibilityHandler> KeyboardSlider::createAccessibilityHandler()
+{
+    return std::make_unique<SliderHandler> (*this);
 }
 
 } // namespace eq1

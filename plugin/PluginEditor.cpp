@@ -26,6 +26,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     for (int range : { 6, 12, 30 })
         displayRange.addItem ("+/- " + juce::String (range) + " dB", range);
     displayRange.setName ("Display Range");
+    displayRange.setTitle ("Display Range");
     displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
     displayRange.onChange = [this] {
         eqProcessor.setDisplayRangeDb (displayRange.getSelectedId());

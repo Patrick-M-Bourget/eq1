@@ -44,6 +44,7 @@ namespace colour
     inline const juce::Colour edgeSelectorBase { 0xFF141519 };
     inline const juce::Colour knobFaceTop { 0xFF35373D }, knobFaceMid { 0xFF27282D }, knobFaceEdge { 0xFF1C1D21 };
     inline const juce::Colour knobRim { 0x38FFFFFF };      // white 22 %
+    inline const juce::Colour knobRimSmall { 0x33FFFFFF }; // white 20 %, on knobs of 30 px and below
     inline const juce::Colour knobRingLane { 0x0FFFFFFF }; // white 6 %
     inline const juce::Colour dynRangeInner { 0xFF9C3344 }, dynLiveInner { 0xFFC49A34 };
     inline const juce::Colour shadow { 0xFF000000 };
@@ -114,6 +115,9 @@ namespace knob
     constexpr float arc = 3.0f, arcSmall = 2.0f;           // arcSmall below 40 px
     constexpr float arcInset = 4.5f, arcInsetProportion = 0.1f; // the arc's radius is r - max (arcInset, d x arcInsetProportion)
     constexpr float sweepDegrees = 270.0f;
+    constexpr float arcGlow = 1.5f, arcGlowAlpha = 0.3f;   // a wider translucent stroke under the arc
+    constexpr float originStubDegrees = 0.5f;              // what the arc shows at its origin
+    constexpr float dragPixels = 200.0f, fineDragPixels = 800.0f; // the full range, and with Shift
     constexpr float ringLane = 12.0f, ringOffset = 10.0f;
 } // namespace knob
 
@@ -130,6 +134,7 @@ namespace shadow
     inline const juce::DropShadow shadow1 { colour::shadow.withAlpha (0.45f), 24, { 0, 8 } };  // menus, popovers, tooltips
     inline const juce::DropShadow shadow2 { colour::shadow.withAlpha (0.55f), 48, { 0, 18 } }; // the context menu, dialogs
     inline const juce::DropShadow knob { colour::shadow.withAlpha (0.4f), 14, { 0, 6 } };
+    inline const juce::DropShadow knobSmall { colour::shadow.withAlpha (0.35f), 8, { 0, 3 } }; // 30 px and below
     inline const juce::DropShadow handle { colour::shadow.withAlpha (0.45f), 5, { 0, 0 } };
 } // namespace shadow
 

@@ -12,6 +12,8 @@ HeaderBar::HeaderBar (PluginProcessor& p) : processor (p), presetBar (p)
     presetBar.setInterceptsMouseClicks (false, true);
     addAndMakeVisible (presetBar);
 
+    undoButton.setTitle ("Undo");
+    redoButton.setTitle ("Redo");
     undoButton.onClick = [this] { undo(); };
     redoButton.onClick = [this] { redo(); };
     for (auto* button : { &undoButton, &redoButton })

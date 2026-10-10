@@ -83,6 +83,7 @@ public:
             addAndMakeVisible (*combo);
         }
         tiltLabel.setText ("Analyzer Tilt", juce::dontSendNotification);
+        tiltLabel.setAccessible (false); // the slider carries the name
         addAndMakeVisible (tiltLabel);
         tilt.setSliderStyle (juce::Slider::LinearHorizontal);
         // In 0.5 dB/oct steps (the Staple Analyzer popover, #84, cycles Off, 3, 4.5 and 6): an arrow key
@@ -92,6 +93,14 @@ public:
         tilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 20);
         tilt.onValueChange = [this] { store(); };
         addAndMakeVisible (tilt);
+        // What a screen reader calls each control, in the glossary's terms.
+        const std::pair<juce::Component*, const char*> titles[] = {
+            { &showPreEq, "Analyzer Pre-EQ" },     { &showPostEq, "Analyzer Post-EQ" },     { &showSidechain, "Analyzer Sidechain" },
+            { &peakHold, "Analyzer Peak Hold" },   { &rangeMenu, "Analyzer Range" },        { &speedMenu, "Analyzer Speed" },
+            { &resolutionMenu, "Analyzer Resolution" }, { &tilt, "Analyzer Tilt" }
+        };
+        for (auto [control, title] : titles)
+            control->setTitle (title);
         show();
         startTimerHz (4);
         setSize (340, 3 * rowHeight + 2 * gap + 2 * padding);
@@ -159,12 +168,16 @@ FooterBar::FooterBar (PluginProcessor& p) : processor (p), analyzerPanel (std::m
 {
     auto& state = processor.parameterState();
     globalBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::globalBypassId, globalBypass);
+    globalBypass.setTitle (state.getParameter (parameters::globalBypassId)->getName (100));
     addAndMakeVisible (globalBypass);
 
     gainScale.setSliderStyle (juce::Slider::LinearHorizontal);
     gainScale.setTextBoxStyle (juce::Slider::TextBoxRight, false, 56, 20);
     gainScaleAttachment = std::make_unique<SliderAttachment> (state, parameters::gainScaleId, gainScale);
+    gainScale.describe (*state.getParameter (parameters::gainScaleId));
     gainScaleLabel.setText ("Gain Scale", juce::dontSendNotification);
+    // The slider is titled with its parameter's name, so a screen reader doesn't stop at the label too.
+    gainScaleLabel.setAccessible (false);
     gainScaleLabel.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (gainScaleLabel);
     addAndMakeVisible (gainScale);
@@ -178,6 +191,7 @@ FooterBar::FooterBar (PluginProcessor& p) : processor (p), analyzerPanel (std::m
     addChildComponent (*analyzerPanel);
     addChildComponent (outputPanel);
 
+    showMeter.setTitle ("Output Meter");
     showMeter.setTooltip ("Show the Output Meter");
     showMeter.setToggleState (processor.isOutputMeterShown(), juce::dontSendNotification);
     showMeter.onClick = [this] {

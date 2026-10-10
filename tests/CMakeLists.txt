@@ -34,6 +34,7 @@ if(EQ1_BUILD_PLUGIN)
     # Host-level checks drive the Plugin Shell the way a host does. One source per line, as above.
     add_executable(eq1_plugin_tests
         plugin/ABCompareTest.cpp
+        plugin/AccessibilityTest.cpp
         plugin/AnalyzerSpectrumTest.cpp
         plugin/BandClipboardTest.cpp
         plugin/BandEditingTest.cpp
@@ -50,6 +51,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/PluginShellTest.cpp
         plugin/PresetLibraryTest.cpp
         plugin/PresetTest.cpp
+        plugin/StapleControlsTest.cpp
         plugin/StapleTest.cpp
         plugin/StateTest.cpp
         plugin/UiScaleTest.cpp
