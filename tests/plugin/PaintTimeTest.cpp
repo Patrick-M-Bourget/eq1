@@ -10,8 +10,8 @@
 
 // How long the whole editor takes to draw a busy frame at 2x (docs/performance.md, "Paint time"): it
 // prints the median and fails above its ceiling. Hidden from the normal run, whose timings it would
-// flake: run it with `build/tests/eq1_plugin_tests "[paint]"`. EQ1_PAINT_SNAPSHOT=<file.png>
-// also saves the frame.
+// flake: run it with `scripts/check.sh paint`, or `build/tests/eq1_plugin_tests "[paint]"` on a busy
+// machine. EQ1_PAINT_SNAPSHOT=<file.png> also saves the frame.
 TEST_CASE ("Paint time: the editor at 1200 x 760 and 2x with 24 Dynamic Bells, every spectrum and the Output Meter", "[.paint]")
 {
     harness::OpenEditor host;
