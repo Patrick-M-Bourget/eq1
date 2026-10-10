@@ -7,6 +7,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
 using harness::OpenEditor;
 
@@ -329,4 +330,115 @@ TEST_CASE ("Hovering inside a Band's filled curve lights it, as hovering its han
     host.display.mouseMove (host.mouseEvent (inside, {}, inside));
     host.settle (400);
     CHECK (blue() > resting + 0.04f);
+}
+
+namespace
+{
+// The focusable element for Band slot's Dynamic Range grip, if shown.
+juce::Component* gripElement (OpenEditor& host, int slot)
+{
+    const auto name = "Band " + juce::String (slot) + " Dynamic Range";
+    return harness::findChild<juce::Component> (host.display, [&] (juce::Component& c) { return c.getName() == name && c.isVisible(); });
+}
+} // namespace
+
+TEST_CASE ("Dragging a Dynamic Range grip sets the stored Dynamic Range so its heard end follows the mouse, as one undo step, and never Solos or selects")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 3.0f);
+    host.set (1, "dynamic_range", 6.0f);
+    host.addBand (2, 1000.0f, 0.0f, 1.0f); // a Low Shelf, never Dynamic, sharing the Frequency
+    host.settle();
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    auto& history = host.processor.editHistory();
+
+    SECTION ("at Gain Scale 100 %")
+    {
+        const auto grip = atDb (host, 1000.0, 9.0);
+        host.display.mouseDown (host.mouseEvent (grip, left, grip));
+        host.settle (500);
+        CHECK (host.processor.soloSlot() == 0);
+        host.display.mouseDrag (host.mouseEvent (atDb (host, 1000.0, 7.0), left, grip));
+        host.display.mouseDrag (host.mouseEvent (atDb (host, 1000.0, 11.0), left, grip));
+        host.display.mouseUp (host.mouseEvent (atDb (host, 1000.0, 11.0), {}, grip));
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (8.0, 1.0e-4));
+        CHECK_THAT (host.value (1, "gain"), WithinAbs (3.0, 1.0e-4));
+        CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 1.0e-4f));
+    }
+    SECTION ("at Gain Scale 50 %: heard at +1.5 dB with +3 dB of range, dragged to -2 dB heard")
+    {
+        host.set (eq1::parameters::gainScaleId, 50.0f);
+        host.settle();
+        host.drag (atDb (host, 1000.0, 4.5), atDb (host, 1000.0, -2.0), left);
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-7.0, 1.0e-4));
+    }
+    CHECK (history.undoSteps() == 1);
+    // Pressing the grip selected its Band, and nothing else: no marquee, no Band moved.
+    CHECK (host.display.selectedBands() == std::set<int> { 1 });
+    history.undo();
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (6.0, 1.0e-4));
+}
+
+TEST_CASE ("A selected Band with Gain and no Dynamic Range has a grip 26 px below its handle, which drags a range out")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 0.0f);
+    host.settle();
+    CHECK (gripElement (host, 1) == nullptr);
+    host.click (atDb (host, 1000.0, 0.0));
+    host.settle();
+    REQUIRE (gripElement (host, 1) != nullptr);
+    const auto grip = atDb (host, 1000.0, 0.0).translated (0.0f, 26.0f);
+    // Dragged 3 dB down from where it sits.
+    host.drag (grip, grip.translated (0.0f, atDb (host, 1000.0, -3.0).y - atDb (host, 1000.0, 0.0).y), juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-3.0, 1.0e-4));
+}
+
+TEST_CASE ("A double-click on a Dynamic Range grip sets the Dynamic Range to 0, as one undo step")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 3.0f);
+    host.set (1, "dynamic_range", 6.0f);
+    host.settle();
+    const auto grip = atDb (host, 1000.0, 9.0);
+    host.click (grip);
+    host.click (grip);
+    host.display.mouseDoubleClick (host.mouseEvent (grip, {}, grip));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
+    CHECK (host.value (2, "in_use") == 0.0f);
+    CHECK (host.processor.editHistory().undoSteps() == 1);
+}
+
+TEST_CASE ("A focused Dynamic Range grip steps the range 1 dB per arrow, 0.5 dB with Shift, a press or a held key being one undo step")
+{
+    OpenEditor host;
+    host.addBand (1, 1000.0f, 3.0f);
+    host.set (1, "dynamic_range", 6.0f);
+    host.settle();
+    auto* grip = gripElement (host, 1);
+    REQUIRE (grip != nullptr);
+    grip->grabKeyboardFocus();
+    auto& history = host.processor.editHistory();
+
+    host.press (juce::KeyPress (juce::KeyPress::upKey));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (7.0, 1.0e-4));
+    host.press (juce::KeyPress (juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (6.5, 1.0e-4));
+    CHECK (history.undoSteps() == 2);
+    host.hold (juce::KeyPress (juce::KeyPress::downKey));
+    host.hold (juce::KeyPress (juce::KeyPress::downKey));
+    host.hold (juce::KeyPress (juce::KeyPress::downKey));
+    host.release();
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (3.5, 1.0e-4));
+    CHECK (history.undoSteps() == 3);
+    // The Band itself didn't move.
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (3.0, 1.0e-4));
+    // A screen reader reads it as the Band's Dynamic Range.
+    auto* handler = grip->getAccessibilityHandler();
+    REQUIRE (handler != nullptr);
+    CHECK (handler->getTitle() == "Band 1 Dynamic Range");
+    CHECK (handler->getValueInterface()->getCurrentValueAsString() == "+3.50 dB");
 }

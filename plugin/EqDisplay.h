@@ -71,8 +71,16 @@ private:
     // keeps the mouse.
     class BandHandle;
     std::array<std::unique_ptr<BandHandle>, numBandSlots> handles;
-    // Puts each Band in use's element at its handle, and orders them by Frequency unless one has focus.
+    // A Dynamic Range grip's place in Tab's order, after its Band's: an element at the grip, shown while
+    // the grip is, that takes keyboard focus. ↑/↓ step the Band's Dynamic Range.
+    class RangeGrip;
+    std::array<std::unique_ptr<RangeGrip>, numBandSlots> rangeGrips;
+    // Puts each Band in use's element at its handle, and each shown grip's at the grip, and orders them
+    // by Frequency, each grip after its Band, unless one has focus.
     void placeHandles();
+    int gripAt (juce::Point<float> position) const; // the Band whose grip is there, or 0
+    // The grip's arrow keys: Dynamic Range by dB, one undo step until the key is released.
+    void stepDynamicRange (int slot, double db);
     int focusedSlot() const; // the Band whose element has keyboard focus, or 0
     // Moves the selected Bands by the arrow keys; the undo step lasts until the key is released or the
     // display and its Bands lose focus.
@@ -135,6 +143,9 @@ private:
     // double-click on the spectrum doesn't.
     std::optional<double> grabFrequency;
     bool grabbing = false; // the drag sets only the grabbed Band's Gain
+    // A grip's drag: the Band, and its range's heard end when the drag began.
+    int rangeDragSlot = 0;
+    double rangeDragStartEnd = 0.0;
 
     // Solo: a handle held still this long Solos its Band until the mouse is released.
     static constexpr juce::uint32 soloHoldMilliseconds = 350;

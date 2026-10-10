@@ -20,6 +20,34 @@ juce::String frequencyText (double frequency)
 }
 } // namespace
 
+std::vector<Grip> dynamicRangeGrips (const DisplayGeometry& geometry, const DisplayFrame& frame)
+{
+    namespace grip = staple::tokens::grip;
+    std::vector<Grip> grips;
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        const auto& band = frame.bands.bands[static_cast<size_t> (slot - 1)];
+        if (! band.inUse)
+            continue;
+        const bool alone = frame.selected.size() == 1 && frame.selected.contains (slot);
+        const bool shown = alone ? hasGain (band.shape) && ! band.bypass : isDynamic (band) && ! band.dynamicsBypass;
+        if (! shown)
+            continue;
+        const auto handle = geometry.handleOf (band);
+        const float y = band.dynamicRange != 0.0 ? geometry.yOf (band.gain + band.dynamicRange) : handle.y + grip::belowHandle;
+        const float hover = frame.hover[static_cast<size_t> (slot - 1)];
+        grips.push_back ({ slot,
+                           { handle.x, juce::jlimit (grip::edgeInset, static_cast<float> (geometry.height) - grip::edgeInset, y) },
+                           alone ? 1.0f : juce::jmap (hover, grip::restingAlpha, 1.0f) });
+    }
+    return grips;
+}
+
+juce::Rectangle<float> gripArea (juce::Point<float> centre)
+{
+    return juce::Rectangle<float> (staple::tokens::grip::width, staple::tokens::grip::height).withCentre (centre);
+}
+
 void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame)
 {
     // Handles, numbered by Band Slot.

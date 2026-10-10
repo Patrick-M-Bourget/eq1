@@ -197,7 +197,8 @@ TEST_CASE ("Every control in the editor has an accessible name in the glossary's
                                          "Band 4 Detection Low",
                                          "Band 4 Detection Range",
                                          "Band 4 Detection Source",
-                                         "Band 4 Dynamic Range",
+                                         "Band 4 Dynamic Range", // the Band panel's knob
+                                         "Band 4 Dynamic Range", // and the display's grip
                                          "Band 4 Dynamics Bypass",
                                          "Band 4 Frequency",
                                          "Band 4 Gain",

@@ -329,14 +329,17 @@ TEST_CASE ("Tab walks the header, Display Range, the Bands, the Band panel and t
 {
     EveryControl host;
     host.addBand (2, 200.0f, 0.0f);
+    host.set (2, "dynamic_range", -4.0f); // a Dynamic Band, so its grip shows
     host.addBand (3, 1000.0f, -3.0f); // ties with Band 1: the lower Band Slot first
     undoAndRedoEnabled (host);
 
     const auto order = focusOrder (*host.editor);
     // The header, left to right.
     CHECK (slice (order, 0, 8) == std::vector<juce::String> { "Previous Preset", "Presets", "Next Preset", "A", "B", "Copy A to B", "Undo", "Redo" });
-    // Display Range, the display and its Bands by Frequency, then the Output Meter's Clip Lights.
-    CHECK (slice (order, 8, 6) == std::vector<juce::String> { "Display Range", "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter" });
+    // Display Range, the display and its Bands by Frequency, each shown Dynamic Range grip (the Dynamic
+    // Band's, and the selected Band's) after its Band, then the Output Meter's Clip Lights.
+    CHECK (slice (order, 8, 8) == std::vector<juce::String> { "Display Range", "EQ Display", "Band 2", "Band 2 Dynamic Range", "Band 1",
+                                                              "Band 1 Dynamic Range", "Band 3", "Output Meter" });
     // The footer, left to right, last.
     REQUIRE (order.size() >= 5);
     CHECK (slice (order, order.size() - 5, 5) == std::vector<juce::String> { "Global Bypass", "Analyzer", "Gain Scale", "Output", "UI Scale" });
