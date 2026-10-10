@@ -212,6 +212,26 @@ TEST_CASE ("Live Gain never goes beyond +/-30 dB")
     CHECK_THAT (last (run), WithinAbs (gain > 0.0 ? 30.0 : -30.0, 1.0e-9));
 }
 
+TEST_CASE ("A larger Dynamic Range moves a Band further for the same overshoot, not slower")
+{
+    // Detection 6 dB above Threshold.
+    const auto moved = [] (double dynamicRange)
+    { return last (play (1, 1.0, withBand (dynamicBell (0.0, dynamicRange, -30.0)), [] (int, int n) { return sine (1000.0, -24.0, n); })); };
+    const double small = moved (-6.0), large = moved (-12.0);
+    CAPTURE (small, large);
+    CHECK (small < 0.0);
+    CHECK (large <= small);
+}
+
+TEST_CASE ("A Dynamic Band reaches its full Dynamic Range 15 dB above Threshold, whatever its size")
+{
+    // 12 dB of overshoot plus the 3 dB knee (docs/dsp/filter-design.md, Dynamics).
+    const double dynamicRange = GENERATE (-6.0, -12.0, 12.0);
+    CAPTURE (dynamicRange);
+    const auto run = play (1, 1.0, withBand (dynamicBell (0.0, dynamicRange, -30.0)), [] (int, int n) { return sine (1000.0, -15.0, n); });
+    CHECK_THAT (last (run), WithinAbs (dynamicRange, 0.5));
+}
+
 TEST_CASE ("Attack and Release get strictly faster below 50% and slower above it")
 {
     const double settings[] = { 0.0, 25.0, 49.0, 50.0, 51.0, 75.0, 100.0 };
