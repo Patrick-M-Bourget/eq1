@@ -148,19 +148,28 @@ void PresetBar::chooseFileToLoad()
     });
 }
 
+void PresetBar::place (juce::Rectangle<int> centre, juce::Rectangle<int> right)
+{
+    centreArea = centre;
+    rightArea = right;
+    resized();
+}
+
 void PresetBar::resized()
 {
-    auto row = getLocalBounds();
-    presets.setBounds (row.removeFromLeft (200));
-    row.removeFromLeft (2);
-    previous.setBounds (row.removeFromLeft (24));
-    next.setBounds (row.removeFromLeft (24));
-    row.removeFromLeft (12);
-    a.setBounds (row.removeFromLeft (28));
-    row.removeFromLeft (2);
-    b.setBounds (row.removeFromLeft (28));
-    row.removeFromLeft (6);
-    copyAToB.setBounds (row.removeFromLeft (100));
+    auto centre = centreArea;
+    previous.setBounds (centre.removeFromLeft (24));
+    centre.removeFromLeft (2);
+    presets.setBounds (centre.removeFromLeft (200));
+    centre.removeFromLeft (2);
+    next.setBounds (centre.removeFromLeft (24));
+
+    auto right = rightArea;
+    copyAToB.setBounds (right.removeFromRight (100));
+    right.removeFromRight (6);
+    b.setBounds (right.removeFromRight (28));
+    right.removeFromRight (2);
+    a.setBounds (right.removeFromRight (28));
 }
 
 } // namespace eq1

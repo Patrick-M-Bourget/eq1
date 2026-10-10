@@ -69,8 +69,7 @@ TEST_CASE ("At each UI Scale the editor is its logical size times the scale, and
     CHECK (editor->getHeight() == scaled (760));
     const auto* constrainer = editor->getConstrainer();
     REQUIRE (constrainer != nullptr);
-    // The toolbar needs 1120 logical pixels; 960 once the Staple reskin removes it (#77).
-    CHECK (constrainer->getMinimumWidth() == scaled (1120));
+    CHECK (constrainer->getMinimumWidth() == scaled (960));
     CHECK (constrainer->getMinimumHeight() == scaled (600));
     CHECK (constrainer->getMaximumWidth() == scaled (2560));
     CHECK (constrainer->getMaximumHeight() == scaled (1600));

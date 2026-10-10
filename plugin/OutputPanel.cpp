@@ -9,10 +9,8 @@ namespace eq1
 OutputPanel::OutputPanel (PluginProcessor& p) : processor (p)
 {
     auto& state = processor.parameterState();
-    const std::pair<juce::Slider*, juce::Label*> sliders[] = { { &gainScale, &gainScaleLabel },
-                                                               { &outputGain, &outputGainLabel },
-                                                               { &outputPan, &outputPanLabel } };
-    const char* names[] = { "Gain Scale", "Output Gain", "Output Pan" };
+    const std::pair<juce::Slider*, juce::Label*> sliders[] = { { &outputGain, &outputGainLabel }, { &outputPan, &outputPanLabel } };
+    const char* names[] = { "Output Gain", "Output Pan" };
     for (size_t i = 0; i < std::size (sliders); ++i)
     {
         auto [slider, label] = sliders[i];
@@ -27,19 +25,18 @@ OutputPanel::OutputPanel (PluginProcessor& p) : processor (p)
     panMode.setName ("Pan Mode");
     panMode.addItemList (parameters::panModeNames(), 1);
     addAndMakeVisible (panMode);
-    for (auto* button : { &autoGain, &phaseInvert, &globalBypass })
+    for (auto* button : { &autoGain, &phaseInvert })
         addAndMakeVisible (*button);
 
-    gainScaleAttachment = std::make_unique<SliderAttachment> (state, parameters::gainScaleId, gainScale);
     outputGainAttachment = std::make_unique<SliderAttachment> (state, parameters::outputGainId, outputGain);
     outputPanAttachment = std::make_unique<SliderAttachment> (state, parameters::outputPanId, outputPan);
     panModeAttachment = std::make_unique<ComboBoxAttachment> (state, parameters::panModeId, panMode);
     autoGainAttachment = std::make_unique<ButtonAttachment> (state, parameters::autoGainId, autoGain);
     phaseInvertAttachment = std::make_unique<ButtonAttachment> (state, parameters::phaseInvertId, phaseInvert);
-    globalBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::globalBypassId, globalBypass);
 
     timerCallback();
     startTimerHz (4);
+    setSize (360, 3 * 24 + 2 * 6 + 2 * 6);
 }
 
 void OutputPanel::timerCallback()
@@ -52,24 +49,23 @@ void OutputPanel::timerCallback()
 
 void OutputPanel::resized()
 {
-    // The labels, buttons and Pan Mode keep their width; the three sliders share what is left.
-    constexpr int gap = 6, fixedWidth = 70 + 84 + 76 + 70 + 64 + 96 + 104 + 9 * gap;
-    auto row = getLocalBounds().reduced (6, 4);
-    const int sliderWidth = juce::jmax (60, (row.getWidth() - fixedWidth) / 3);
-    const auto place = [&row] (juce::Component& component, int width) {
-        component.setBounds (row.removeFromLeft (width));
+    // Output Gain, then Output Pan, then the toggles and Pan Mode, a row each.
+    constexpr int rowHeight = 24, gap = 6;
+    auto area = getLocalBounds().reduced (gap);
+    for (auto [slider, label] : { std::pair<juce::Slider*, juce::Label*> { &outputGain, &outputGainLabel }, { &outputPan, &outputPanLabel } })
+    {
+        auto row = area.removeFromTop (rowHeight);
+        label->setBounds (row.removeFromLeft (76));
         row.removeFromLeft (gap);
-    };
-    place (gainScaleLabel, 70);
-    place (gainScale, sliderWidth);
-    place (autoGain, 84);
-    place (outputGainLabel, 76);
-    place (outputGain, sliderWidth);
-    place (outputPanLabel, 70);
-    place (outputPan, sliderWidth);
-    place (panMode, 64);
-    place (phaseInvert, 96);
-    place (globalBypass, 104);
+        slider->setBounds (row);
+        area.removeFromTop (gap);
+    }
+    auto row = area.removeFromTop (rowHeight);
+    panMode.setBounds (row.removeFromLeft (64));
+    row.removeFromLeft (gap);
+    autoGain.setBounds (row.removeFromLeft (84));
+    row.removeFromLeft (gap);
+    phaseInvert.setBounds (row.removeFromLeft (96));
 }
 
 } // namespace eq1

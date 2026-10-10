@@ -8,17 +8,19 @@
 namespace eq1
 {
 
+namespace layout = staple::tokens::layout;
+
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), output (p), presetBar (p), meter (p),
-      keyboard (p.editHistory())
+    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), header (p),
+      footer (p), meter (p), keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
     content.addAndMakeVisible (display);
+    content.addChildComponent (meter);
+    // Over the display, so its clicks never reach it.
     content.addAndMakeVisible (panel);
-    content.addAndMakeVisible (output);
-    presetBar.onEdit = [this] { showUndoState(); };
-    content.addAndMakeVisible (presetBar);
-    content.addChildComponent (presetBar.browserPanel());
+    content.addAndMakeVisible (header);
+    content.addAndMakeVisible (footer);
 
     // The display's Gain range, saved with the plugin.
     for (int range : { 6, 12, 30 })
@@ -30,73 +32,19 @@ PluginEditor::PluginEditor (PluginProcessor& p)
         display.repaint();
     };
     content.addAndMakeVisible (displayRange);
+    content.addChildComponent (header.presets().browserPanel());
 
-    uiScale.setTitle ("UI Scale");
-    uiScale.setTooltip ("UI Scale");
-    for (int percent : uiScale::percents)
-        uiScale.addItem (juce::String (percent) + "%", percent);
-    uiScale.onChange = [this] {
-        eqProcessor.pickUiScale (uiScale.getSelectedId());
+    footer.onUiScalePicked = [this] (int percent) {
+        eqProcessor.pickUiScale (percent);
         applyUiScale();
     };
-    uiScale.setName ("UI Scale");
-    content.addAndMakeVisible (uiScale);
+    footer.onMeterToggled = [this] { resized(); };
 
-    content.addChildComponent (meter);
-    showMeter.setToggleState (eqProcessor.isOutputMeterShown(), juce::dontSendNotification);
-    showMeter.setTooltip ("Show the Output Meter");
-    showMeter.onClick = [this] {
-        eqProcessor.setOutputMeterShown (showMeter.getToggleState());
-        resized();
-    };
-    content.addAndMakeVisible (showMeter);
-
-    undoButton.onClick = [this] { undo(); };
-    redoButton.onClick = [this] { redo(); };
-    for (auto* button : { &undoButton, &redoButton })
-    {
-        // Tab reaches them, but a click leaves focus where it was, so Delete still reaches the display.
-        button->setMouseClickGrabsKeyboardFocus (false);
-        content.addAndMakeVisible (*button);
-    }
-    showUndoState();
-
-    for (auto* toggle : { &showPreEq, &showPostEq, &showSidechain, &peakHold })
-    {
-        toggle->onClick = [this] { storeAnalyzerSettings(); };
-        content.addAndMakeVisible (*toggle);
-    }
-    for (int range : { 60, 90, 120 })
-        analyzerRange.addItem (juce::String (range) + " dB", range);
-    analyzerSpeed.addItemList ({ "Very Slow", "Slow", "Medium", "Fast", "Very Fast" }, 1);
-    analyzerResolution.addItemList ({ "Low", "Medium", "High", "Maximum" }, 1);
-    analyzerRange.setName ("Analyzer Range");
-    analyzerSpeed.setName ("Analyzer Speed");
-    analyzerResolution.setName ("Analyzer Resolution");
-    for (auto* combo : { &analyzerRange, &analyzerSpeed, &analyzerResolution })
-    {
-        combo->onChange = [this] { storeAnalyzerSettings(); };
-        content.addAndMakeVisible (*combo);
-    }
-    analyzerTiltLabel.setText ("Analyzer Tilt", juce::dontSendNotification);
-    content.addAndMakeVisible (analyzerTiltLabel);
-    analyzerTilt.setSliderStyle (juce::Slider::LinearHorizontal);
-    // In 0.5 dB/oct steps (the Staple Analyzer popover, #84, cycles Off, 3, 4.5 and 6): an arrow key
-    // moves it one step, as a step smaller than the interval would round back.
-    analyzerTilt.setRange (0.0, 6.0, 0.5);
-    analyzerTilt.setTextValueSuffix (" dB/oct");
-    analyzerTilt.setTextBoxStyle (juce::Slider::TextBoxRight, false, 68, 20);
-    analyzerTilt.onValueChange = [this] { storeAnalyzerSettings(); };
-    content.addAndMakeVisible (analyzerTilt);
-    showAnalyzerSettings();
-
-    // Tab's order: the header, the Analyzer, Display Range and UI Scale, the display and its Bands, the
-    // Output Meter, the Band panel and the output panel. Within a row, left to right.
+    // Tab's order: the header (and the Preset browser while open), Display Range, the display and its
+    // Bands, the Output Meter, the Band panel and the footer.
     int order = 0;
-    for (juce::Component* child : std::initializer_list<juce::Component*> {
-             &presetBar, &presetBar.browserPanel(), &undoButton, &redoButton, &showPreEq, &showPostEq, &showSidechain, &peakHold,
-             &analyzerRange, &analyzerSpeed, &analyzerResolution, &analyzerTilt, &showMeter, &displayRange, &uiScale, &display, &meter,
-             &panel, &output })
+    for (juce::Component* child : std::initializer_list<juce::Component*> { &header, &header.presets().browserPanel(), &displayRange, &display,
+                                                                             &meter, &panel, &footer })
         child->setExplicitFocusOrder (++order);
 
     startTimerHz (4);
@@ -114,12 +62,12 @@ PluginEditor::PluginEditor (PluginProcessor& p)
 
 void PluginEditor::applyUiScale()
 {
-    // In logical pixels: wide enough for the output controls' row and the toolbar.
-    constexpr int minimumWidth = 1120, minimumHeight = 600, maximumWidth = 2560, maximumHeight = 1600;
+    // In logical pixels: below the minimum the Band panel would collide with the frequency labels.
+    constexpr int minimumWidth = layout::minimumWidth, minimumHeight = layout::minimumHeight, maximumWidth = 2560, maximumHeight = 1600;
     const auto stored = eqProcessor.editorSize();
     const juce::Point<int> size { juce::jlimit (minimumWidth, maximumWidth, stored.x), juce::jlimit (minimumHeight, maximumHeight, stored.y) };
     const int percent = eqProcessor.uiScalePercent();
-    uiScale.setSelectedId (percent, juce::dontSendNotification);
+    footer.showUiScale (percent);
     shownScalePercent = percent;
     scale = static_cast<float> (percent) / 100.0f;
     content.setTransform (juce::AffineTransform::scale (scale));
@@ -135,49 +83,6 @@ void PluginEditor::applyUiScale()
 PluginEditor::~PluginEditor()
 {
     setLookAndFeel (nullptr);
-}
-
-void PluginEditor::showAnalyzerSettings()
-{
-    const auto settings = eqProcessor.analyzerSettings();
-    showPreEq.setToggleState (settings.showPreEq, juce::dontSendNotification);
-    showPostEq.setToggleState (settings.showPostEq, juce::dontSendNotification);
-    showSidechain.setToggleState (settings.showSidechain, juce::dontSendNotification);
-    peakHold.setToggleState (settings.peakHold, juce::dontSendNotification);
-    analyzerRange.setSelectedId (settings.rangeDb, juce::dontSendNotification);
-    analyzerSpeed.setSelectedId (static_cast<int> (settings.speed) + 1, juce::dontSendNotification);
-    analyzerResolution.setSelectedId (static_cast<int> (settings.resolution) + 1, juce::dontSendNotification);
-    analyzerTilt.setValue (settings.tiltDbPerOctave, juce::dontSendNotification);
-}
-
-void PluginEditor::storeAnalyzerSettings()
-{
-    eqProcessor.setAnalyzerSettings ({ .showPreEq = showPreEq.getToggleState(),
-                                       .showPostEq = showPostEq.getToggleState(),
-                                       .showSidechain = showSidechain.getToggleState(),
-                                       .rangeDb = analyzerRange.getSelectedId(),
-                                       .speed = static_cast<AnalyzerSpeed> (analyzerSpeed.getSelectedId() - 1),
-                                       .resolution = static_cast<AnalyzerResolution> (analyzerResolution.getSelectedId() - 1),
-                                       .tiltDbPerOctave = analyzerTilt.getValue(),
-                                       .peakHold = peakHold.getToggleState() });
-}
-
-void PluginEditor::undo()
-{
-    eqProcessor.editHistory().undo();
-    showUndoState();
-}
-
-void PluginEditor::redo()
-{
-    eqProcessor.editHistory().redo();
-    showUndoState();
-}
-
-void PluginEditor::showUndoState()
-{
-    undoButton.setEnabled (eqProcessor.editHistory().canUndo());
-    redoButton.setEnabled (eqProcessor.editHistory().canRedo());
 }
 
 void PluginEditor::mouseDown (const juce::MouseEvent&)
@@ -199,12 +104,12 @@ bool PluginEditor::keyPressed (const juce::KeyPress& key)
     const auto command = juce::ModifierKeys::commandModifier;
     if (key == juce::KeyPress ('z', command, 0))
     {
-        undo();
+        header.undo();
         return true;
     }
     if (key == juce::KeyPress ('z', command | juce::ModifierKeys::shiftModifier, 0) || key == juce::KeyPress ('y', command, 0))
     {
-        redo();
+        header.redo();
         return true;
     }
     return false;
@@ -212,24 +117,45 @@ bool PluginEditor::keyPressed (const juce::KeyPress& key)
 
 void PluginEditor::timerCallback()
 {
-    showUndoState();
+    header.showUndoState();
     // Follows settings restored with the plugin's state.
     if (displayRange.getSelectedId() != eqProcessor.displayRangeDb())
         displayRange.setName ("Display Range");
     displayRange.setSelectedId (eqProcessor.displayRangeDb(), juce::dontSendNotification);
-    if (showMeter.getToggleState() != eqProcessor.isOutputMeterShown())
+    if (meter.isVisible() != eqProcessor.isOutputMeterShown())
     {
-        showMeter.setToggleState (eqProcessor.isOutputMeterShown(), juce::dontSendNotification);
+        footer.showMeterShown (eqProcessor.isOutputMeterShown());
         resized();
     }
     if (eqProcessor.uiScalePercent() != shownScalePercent || eqProcessor.editorSize() != shownSize)
         applyUiScale();
-    showAnalyzerSettings();
 }
+
+namespace
+{
+// A soft elliptical highlight over the window: colour at centre (a proportion of the window's size),
+// fading to nothing at fadeOut of the radii, as CSS's radial-gradient (rx ry at x y, colour, transparent fadeOut).
+void paintHighlight (juce::Graphics& g, juce::Rectangle<float> window, juce::Point<float> at, float rx, float ry, juce::Colour colour, float fadeOut)
+{
+    const juce::Point<float> centre { window.getWidth() * at.x, window.getHeight() * at.y };
+    const juce::Graphics::ScopedSaveState saved (g);
+    // A circle of radius rx, squashed to ry vertically.
+    const auto squash = juce::AffineTransform::scale (1.0f, ry / rx, centre.x, centre.y);
+    g.addTransform (squash);
+    g.setGradientFill (juce::ColourGradient (colour, centre, colour.withAlpha (0.0f), centre.translated (rx * fadeOut, 0.0f), true));
+    g.fillRect (window.transformedBy (squash.inverted()));
+}
+} // namespace
 
 void PluginEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (staple::tokens::colour::bg0);
+    namespace colour = staple::tokens::colour;
+    g.fillAll (colour::bg0);
+    g.addTransform (juce::AffineTransform::scale (scale));
+    const auto window = content.getLocalBounds().toFloat();
+    paintHighlight (g, window, { 0.12f, 0.04f }, 700.0f, 480.0f, colour::windowHighlight1, 0.70f);
+    paintHighlight (g, window, { 0.92f, 0.32f }, 800.0f, 560.0f, colour::windowHighlight2, 0.66f);
+    paintHighlight (g, window, { 0.45f, 1.12f }, 720.0f, 480.0f, colour::windowHighlight3, 0.66f);
 }
 
 void PluginEditor::resized()
@@ -241,40 +167,30 @@ void PluginEditor::resized()
         shownSize = eqProcessor.editorSize();
     }
     content.setBounds (0, 0, logical.x, logical.y);
-    auto area = content.getLocalBounds();
-    auto header = area.removeFromTop (32).reduced (6, 4);
-    auto toolbar = area.removeFromTop (32).reduced (6, 4);
-    output.setBounds (area.removeFromBottom (32));
-    panel.setBounds (area.removeFromBottom (170));
+
+    // Padded all round, with a gap between the rows; the display runs flush to the window's left edge.
+    auto area = content.getLocalBounds().reduced (layout::outerPadding);
+    header.setBounds (area.removeFromTop (layout::headerHeight));
+    area.removeFromTop (layout::gap);
+    footer.setBounds (area.removeFromBottom (layout::footerHeight));
+    area.removeFromBottom (layout::gap);
+    area.setLeft (0);
     meter.setVisible (eqProcessor.isOutputMeterShown());
     if (meter.isVisible())
-        meter.setBounds (area.removeFromRight (40));
-    display.setBounds (area);
-    presetBar.browserPanel().setBounds (area.reduced (40, 12));
-
-    redoButton.setBounds (header.removeFromRight (52));
-    header.removeFromRight (4);
-    undoButton.setBounds (header.removeFromRight (52));
-    presetBar.setBounds (header);
-
-    uiScale.setBounds (toolbar.removeFromRight (72));
-    toolbar.removeFromRight (6);
-    displayRange.setBounds (toolbar.removeFromRight (110));
-    toolbar.removeFromRight (6);
-    showMeter.setBounds (toolbar.removeFromRight (64));
-    showPreEq.setBounds (toolbar.removeFromLeft (56));
-    showPostEq.setBounds (toolbar.removeFromLeft (60));
-    showSidechain.setBounds (toolbar.removeFromLeft (90));
-    peakHold.setBounds (toolbar.removeFromLeft (84));
-    for (auto* combo : { &analyzerRange, &analyzerSpeed, &analyzerResolution })
     {
-        toolbar.removeFromLeft (6);
-        combo->setBounds (toolbar.removeFromLeft (88));
+        meter.setBounds (area.removeFromRight (layout::meterWidth));
+        area.removeFromRight (layout::gap);
     }
-    toolbar.removeFromLeft (12);
-    analyzerTiltLabel.setBounds (toolbar.removeFromLeft (80));
-    // What is left, up to 180 wide.
-    analyzerTilt.setBounds (toolbar.removeFromLeft (180));
+    display.setBounds (area);
+
+    // Over the display: Display Range at its top right, the Band panel centred along its bottom, and
+    // the Preset browser.
+    constexpr int displayRangeWidth = 110, displayRangeHeight = 24, panelHeight = 170;
+    displayRange.setBounds (area.getRight() - 6 - displayRangeWidth, area.getY() + 8, displayRangeWidth, displayRangeHeight);
+    panel.setBounds (area.reduced (layout::bandPanelPaddingSide, 0)
+                         .withTrimmedBottom (layout::bandPanelAboveBottom)
+                         .removeFromBottom (panelHeight));
+    header.presets().browserPanel().setBounds (area.reduced (40, 12));
 }
 
 } // namespace eq1

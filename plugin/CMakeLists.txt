@@ -52,6 +52,8 @@ target_sources(eq1 PRIVATE
     PresetBar.cpp
     PresetBrowser.cpp
     OutputPanel.cpp
+    HeaderBar.cpp
+    FooterBar.cpp
     OutputMeter.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp

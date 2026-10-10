@@ -229,7 +229,7 @@ TEST_CASE ("The Output Meter's scale runs linearly in dB from -60 dBFS at the bo
     CHECK_THAT (eq1::OutputMeter::position (12.0), WithinAbs (1.0, 1.0e-9));
 }
 
-TEST_CASE ("The toolbar's Meter button hides the Output Meter, widening the EQ display, and a reopened editor follows the choice")
+TEST_CASE ("The footer's Meter button hides the Output Meter, the EQ display taking its rail, and a reopened editor follows the choice")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
@@ -246,9 +246,9 @@ TEST_CASE ("The toolbar's Meter button hides the Output Meter, widening the EQ d
     REQUIRE (button != nullptr);
     CHECK (button->getToggleState());
     CHECK (editor->getLocalBounds().contains (editor->getLocalArea (button->getParentComponent(), button->getBounds())));
-    // Beside the EQ display, its full height.
+    // Beside the EQ display, 12 px from it, its full height.
     CHECK (meter->isVisible());
-    CHECK (meter->getX() == display->getRight());
+    CHECK (meter->getX() == display->getRight() + 12);
     CHECK (meter->getY() == display->getY());
     CHECK (meter->getHeight() == display->getHeight());
     CHECK (meter->getWidth() == 40);
@@ -257,7 +257,7 @@ TEST_CASE ("The toolbar's Meter button hides the Output Meter, widening the EQ d
     button->setToggleState (false, juce::sendNotificationSync);
     CHECK_FALSE (processor.isOutputMeterShown());
     CHECK_FALSE (meter->isVisible());
-    CHECK (display->getWidth() == shownWidth + 40);
+    CHECK (display->getWidth() == shownWidth + 52);
 
     editor.reset (processor.createEditor());
     editor->setSize (constrainer->getMinimumWidth(), constrainer->getMinimumHeight());

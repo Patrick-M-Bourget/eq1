@@ -14,9 +14,9 @@ namespace eq1
 
 class PluginProcessor;
 
-// Presets and A/B Compare, in one row: the Presets button, which opens and closes the Preset browser
-// (PresetBrowser), ‹ › stepping to the previous and next Preset in browser order over the whole
-// library, the A and B sides and Copy A to B. Each load, save, switch and copy is one undo step; a
+// Presets and A/B Compare, in the header (HeaderBar): ‹, the Presets button, which opens and closes the
+// Preset browser (PresetBrowser), and › stepping to the previous and next Preset in browser order over
+// the whole library; then the A and B sides and Copy A to B. Each load, save, switch and copy is one undo step; a
 // load replaces a Modified side's settings without asking, as undo brings them back. The Presets
 // button shows the side's Loaded Preset, followed by * when Modified, with its full name in a tooltip.
 class PresetBar final : public juce::Component, private juce::Timer
@@ -25,6 +25,11 @@ public:
     explicit PresetBar (PluginProcessor& processor);
 
     void resized() override;
+
+    // The width of ‹, Presets and ›.
+    static constexpr int centreWidth = 24 + 2 + 200 + 2 + 24;
+    // Lays ‹, Presets and › out in centre, and A, B and Copy A to B at the right of right.
+    void place (juce::Rectangle<int> centre, juce::Rectangle<int> right);
 
     // The browser, for the editor to place over the EQ display.
     juce::Component& browserPanel() { return browser; }
@@ -60,6 +65,7 @@ private:
     std::optional<PresetLibrary::Entry> lastLoaded;
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<juce::AlertWindow> namePrompt;
+    juce::Rectangle<int> centreArea, rightArea;
 };
 
 } // namespace eq1

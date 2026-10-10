@@ -47,6 +47,10 @@ namespace colour
     inline const juce::Colour knobRingLane { 0x0FFFFFFF }; // white 6 %
     inline const juce::Colour dynRangeInner { 0xFF9C3344 }, dynLiveInner { 0xFFC49A34 };
     inline const juce::Colour shadow { 0xFF000000 };
+    // The window's three soft neutral highlights over bg0 (HANDOFF.md §4, "Window").
+    inline const juce::Colour windowHighlight1 { 0x14E2E6EE }; // rgba (226, 230, 238, 0.08)
+    inline const juce::Colour windowHighlight2 { 0x0DAAB2C0 }; // rgba (170, 178, 192, 0.05)
+    inline const juce::Colour windowHighlight3 { 0x0F787E8A }; // rgba (120, 126, 138, 0.06)
 
     // The display: grid lines, and the Analyzer's spectra.
     inline const juce::Colour gridMinor { 0x06FFFFFF }; // white 2.5 %
@@ -88,8 +92,8 @@ namespace size
 // The window and its areas at 100 % UI scale (HANDOFF.md §2, §4, §9).
 namespace layout
 {
-    constexpr int outerPadding = 14;
-    constexpr int headerHeight = 52, footerHeight = 44;
+    constexpr int outerPadding = 14, gap = 12;
+    constexpr int headerHeight = 52, footerHeight = 44, meterWidth = 40;
     constexpr int displayWidth = 1134, displayWidthWithoutMeter = 1186, displayHeight = 612;
     constexpr int minimumWidth = 960, minimumHeight = 600;
     // The display's edges dissolve over these distances (grid, Analyzer and curve fills only).

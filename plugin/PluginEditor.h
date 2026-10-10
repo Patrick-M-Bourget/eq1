@@ -3,12 +3,10 @@
 #include "BandEditing.h"
 #include "BandPanel.h"
 #include "EqDisplay.h"
+#include "FooterBar.h"
+#include "HeaderBar.h"
 #include "KeyboardControl.h"
-#include "KeyboardSlider.h"
 #include "OutputMeter.h"
-#include "OutputPanel.h"
-#include "PresetBar.h"
-#include "UiScale.h"
 #include "staple/LookAndFeel.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -18,11 +16,13 @@ namespace eq1
 
 class PluginProcessor;
 
-// The native editor (ADR 0002): Presets, A/B Compare and undo at the top, the Analyzer's controls
-// under them, the EQ display with the Output Meter at its right (and the Preset browser opening over
-// the display), the selected Band's panel below it, and the whole-plugin output controls at the
-// bottom. Resizable, and drawn at the instance's UI Scale through one transform; everything is drawn
-// as vectors, so it stays sharp at any UI Scale and display scale.
+// The native editor (ADR 0002), laid out as the Staple window (HANDOFF.md §4, §9B): the header
+// (HeaderBar), the EQ display with the Output Meter's rail at its right, and the footer (FooterBar),
+// over bg0 and three soft highlights. The selected Band's panel floats over the bottom of the display,
+// Display Range sits at its top right, and the Preset browser opens over it. The header and footer keep
+// their height and the rail its width; the display takes the rest. Resizable, and drawn at the
+// instance's UI Scale through one transform; everything is drawn as vectors, so it stays sharp at any
+// UI Scale and display scale.
 class PluginEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -51,11 +51,11 @@ private:
     BandEditing editing;
     EqDisplay display;
     BandPanel panel;
-    OutputPanel output;
-    PresetBar presetBar;
+    HeaderBar header;
+    FooterBar footer;
     juce::TooltipWindow tooltips { &content };
     juce::ComboBox displayRange;
-    juce::ComboBox uiScale;
+    OutputMeter meter;
     // Sizes the window to the processor's logical size and UI Scale, kept within limits.
     void applyUiScale();
     float scale = 1.0f;
@@ -63,20 +63,6 @@ private:
     int shownScalePercent = 0;
     juce::Point<int> shownSize;
     bool applyingScale = true; // until the window first takes its size
-    OutputMeter meter;
-    juce::ToggleButton showMeter { "Meter" }; // shows or hides the Output Meter, saved with the plugin
-    juce::TextButton undoButton { "Undo" }, redoButton { "Redo" };
-    void undo();
-    void redo();
-    void showUndoState();
-
-    // The Analyzer's controls, above the display.
-    juce::ToggleButton showPreEq { "Pre" }, showPostEq { "Post" }, showSidechain { "Sidechain" }, peakHold { "Peak Hold" };
-    juce::ComboBox analyzerRange, analyzerSpeed, analyzerResolution;
-    juce::Label analyzerTiltLabel;
-    KeyboardSlider analyzerTilt { "Analyzer Tilt" };
-    void showAnalyzerSettings();
-    void storeAnalyzerSettings();
 
     // Last, so it lets go of every control before they go.
     KeyboardControl keyboard;

@@ -1,8 +1,15 @@
+#include "BandPanel.h"
 #include "EditorHarness.h"
+#include "FooterBar.h"
+#include "HeaderBar.h"
+#include "OutputMeter.h"
 #include "staple/LookAndFeel.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+#include <algorithm>
 
 using Catch::Matchers::WithinAbs;
 using harness::OpenEditor;
@@ -37,16 +44,30 @@ struct EveryControl : OpenEditor
     {
         return findAll<juce::Slider> ([] (juce::Slider& s) { return s.isShowing() && s.isEnabled(); });
     }
+
+    // Opens the footer's call-out behind the button titled title ("Analyzer" or "Output"), as a click does.
+    void openCallOut (const juce::String& title)
+    {
+        auto* button = findAll<juce::Button> ([&title] (juce::Button& b) { return b.getTitle() == title; }).front();
+        button->onClick();
+        REQUIRE (harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); }) != nullptr);
+    }
+
+    // Closes the open call-out, as Escape does.
+    void closeCallOut()
+    {
+        auto* box = harness::findChild<juce::CallOutBox> (*editor, [] (juce::CallOutBox& b) { return b.isVisible(); });
+        REQUIRE (box != nullptr);
+        box->keyPressed (juce::KeyPress (juce::KeyPress::escapeKey));
+    }
 };
 
 } // namespace
 
-TEST_CASE ("Arrow keys step every slider 1% of its range, 0.2% with Shift, within its range")
+namespace
 {
-    EveryControl host;
-    const auto sliders = host.sliders();
-    // The Band panel's ten knobs, Gain Scale, Output Gain, Output Pan and Analyzer Tilt.
-    CHECK (sliders.size() == 14);
+void checkArrowSteps (OpenEditor& host, const std::vector<juce::Slider*>& sliders)
+{
     for (auto* slider : sliders)
     {
         if (slider->getName() == "Threshold" || slider->getName() == "Analyzer Tilt")
@@ -73,10 +94,28 @@ TEST_CASE ("Arrow keys step every slider 1% of its range, 0.2% with Shift, withi
         CHECK_THAT (position(), WithinAbs (1.0, 1.0e-4));
     }
 }
+} // namespace
+
+TEST_CASE ("Arrow keys step every slider 1% of its range, 0.2% with Shift, within its range")
+{
+    EveryControl host;
+    // The Band panel's ten knobs and Gain Scale.
+    const auto sliders = host.sliders();
+    CHECK (sliders.size() == 11);
+    checkArrowSteps (host, sliders);
+
+    // Output Gain and Output Pan, in the Output call-out.
+    host.openCallOut ("Output");
+    auto inCallOut = host.sliders();
+    std::erase_if (inCallOut, [&sliders] (juce::Slider* s) { return std::find (sliders.begin(), sliders.end(), s) != sliders.end(); });
+    CHECK (inCallOut.size() == 2);
+    checkArrowSteps (host, inCallOut);
+}
 
 TEST_CASE ("Arrow keys step Analyzer Tilt by its 0.5 dB/oct steps, with or without Shift, within 0 to 6")
 {
     EveryControl host;
+    host.openCallOut ("Analyzer");
     auto* tilt = host.findAll<juce::Slider> ([] (juce::Slider& s) { return s.getName() == "Analyzer Tilt"; }).front();
     tilt->setValue (3.0, juce::sendNotificationSync);
     tilt->grabKeyboardFocus();
@@ -214,29 +253,115 @@ void undoAndRedoEnabled (EveryControl& host)
 }
 } // namespace
 
-TEST_CASE ("Tab reaches every visible, enabled control and every Band in use, in on-screen order")
+namespace
+{
+template <typename T>
+T& named (OpenEditor& host, const juce::String& name)
+{
+    return *host.findAll<T> ([&name] (T& c) { return c.getName() == name || c.getTitle() == name; }).front();
+}
+
+// The groups Tab walks through, in order: the header, Display Range, the display with its Bands and
+// the Output Meter, the Band panel, the footer, and an open call-out.
+int groupOf (juce::Component& component)
+{
+    for (auto* c = &component; c != nullptr; c = c->getParentComponent())
+    {
+        if (dynamic_cast<juce::CallOutBox*> (c) != nullptr)
+            return 5;
+        if (dynamic_cast<eq1::FooterBar*> (c) != nullptr)
+            return 4;
+        if (dynamic_cast<eq1::BandPanel*> (c) != nullptr)
+            return 3;
+        if (dynamic_cast<eq1::EqDisplay*> (c) != nullptr || dynamic_cast<eq1::OutputMeter*> (c) != nullptr)
+            return 2;
+        if (c->getName() == "Display Range")
+            return 1;
+        if (dynamic_cast<eq1::HeaderBar*> (c) != nullptr)
+            return 0;
+    }
+    return -1;
+}
+
+// What is wrong with Tab's order: a visible, enabled control (a button, slider or menu, the display, a
+// Band in use or the Output Meter) not reached exactly once, or a control reached out of its group's order.
+std::vector<juce::String> focusProblems (OpenEditor& host)
+{
+    std::vector<juce::String> problems;
+    const auto order = juce::KeyboardFocusTraverser().getAllComponents (host.editor.get());
+    const auto interactive = host.findAll<juce::Component> ([] (juce::Component& c) {
+        const bool control = dynamic_cast<juce::Button*> (&c) != nullptr || dynamic_cast<juce::Slider*> (&c) != nullptr
+                             || dynamic_cast<juce::ComboBox*> (&c) != nullptr || dynamic_cast<eq1::EqDisplay*> (&c) != nullptr
+                             || dynamic_cast<eq1::OutputMeter*> (&c) != nullptr || c.getName().startsWith ("Band ");
+        return control && c.isShowing() && c.isEnabled();
+    });
+    for (auto* control : interactive)
+        if (const auto times = std::count (order.begin(), order.end(), control); times != 1)
+            problems.push_back (describe (*control) + " reached " + juce::String (times) + " times");
+    int group = -1;
+    for (auto* component : order)
+    {
+        if (groupOf (*component) < group)
+            problems.push_back (describe (*component) + " out of its group's order");
+        group = std::max (group, groupOf (*component));
+    }
+    return problems;
+}
+
+std::vector<juce::String> slice (const std::vector<juce::String>& order, size_t from, size_t count)
+{
+    return { order.begin() + static_cast<std::ptrdiff_t> (std::min (from, order.size())),
+             order.begin() + static_cast<std::ptrdiff_t> (std::min (from + count, order.size())) };
+}
+} // namespace
+
+TEST_CASE ("Tab walks the header, Display Range, the Bands, the Band panel and the footer, reaching every control once")
 {
     EveryControl host;
     host.addBand (2, 200.0f, 0.0f);
     host.addBand (3, 1000.0f, -3.0f); // ties with Band 1: the lower Band Slot first
     undoAndRedoEnabled (host);
 
-    const std::vector<juce::String> expected {
-        // The header.
-        "Presets", "Previous Preset", "Next Preset", "A", "B", "Copy A to B", "Undo", "Redo",
-        // The Analyzer, Display Range and UI Scale.
-        "Pre", "Post", "Sidechain", "Peak Hold", "Analyzer Range", "Analyzer Speed", "Analyzer Resolution", "Analyzer Tilt",
-        "Meter", "Display Range", "UI Scale",
-        // The EQ display and its Bands, by Frequency, then the Output Meter's Clip Lights.
-        "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter",
-        // The Band panel: its top row, its left column, then its knobs.
-        "Dynamics Bypass", "Bypass", "Detection Audition", "Delete", "Shape", "Stereo Placement", "Detection Source",
-        "Detection Range", "Frequency", "Gain", "Q", "Slope", "Dynamic Range", "Threshold", "Attack", "Release",
-        "Detection Low", "Detection High",
-        // The output panel.
-        "Gain Scale", "Auto Gain", "Output Gain", "Output Pan", "Pan Mode", "Phase Invert", "Global Bypass"
-    };
-    CHECK (focusOrder (*host.editor) == expected);
+    const auto order = focusOrder (*host.editor);
+    // The header, left to right.
+    CHECK (slice (order, 0, 8) == std::vector<juce::String> { "Previous Preset", "Presets", "Next Preset", "A", "B", "Copy A to B", "Undo", "Redo" });
+    // Display Range, the display and its Bands by Frequency, then the Output Meter's Clip Lights.
+    CHECK (slice (order, 8, 6) == std::vector<juce::String> { "Display Range", "EQ Display", "Band 2", "Band 1", "Band 3", "Output Meter" });
+    // The footer, left to right, last.
+    REQUIRE (order.size() >= 6);
+    CHECK (slice (order, order.size() - 6, 6) == std::vector<juce::String> { "Global Bypass", "Analyzer", "Gain Scale", "Output", "Meter", "UI Scale" });
+    CHECK (focusProblems (host).empty());
+
+    SECTION ("a control Tab can't reach is a problem")
+    {
+        named<juce::Slider> (host, "Gain Scale").setWantsKeyboardFocus (false);
+        CHECK (focusProblems (host) == std::vector<juce::String> { "Gain Scale reached 0 times" });
+    }
+}
+
+TEST_CASE ("The Analyzer and Output call-outs' controls are in Tab's order only while open, after the footer")
+{
+    EveryControl host;
+    const auto closed = focusOrder (*host.editor);
+    const auto [title, contents] = GENERATE (table<const char*, std::vector<juce::String>> (
+        { { "Analyzer",
+            { "Pre", "Post", "Sidechain", "Peak Hold", "Analyzer Range", "Analyzer Speed", "Analyzer Resolution", "Analyzer Tilt" } },
+          { "Output", { "Output Gain", "Output Pan", "Pan Mode", "Auto Gain", "Phase Invert" } } }));
+    CAPTURE (title);
+    for (const auto& name : contents)
+        CHECK (std::find (closed.begin(), closed.end(), name) == closed.end());
+
+    host.openCallOut (title);
+    const auto open = focusOrder (*host.editor);
+    CHECK (slice (open, 0, closed.size()) == closed);
+    CHECK (slice (open, closed.size(), contents.size() + 1) == contents);
+    CHECK (focusProblems (host).empty());
+
+    host.closeCallOut();
+    CHECK (focusOrder (*host.editor) == closed);
+    // And it opens again.
+    host.openCallOut (title);
+    CHECK (focusOrder (*host.editor) == open);
 }
 
 namespace
@@ -408,11 +533,6 @@ staple::LookAndFeel& stapleOf (OpenEditor& host)
     return dynamic_cast<staple::LookAndFeel&> (host.editor->getLookAndFeel());
 }
 
-template <typename T>
-T& named (OpenEditor& host, const juce::String& name)
-{
-    return *host.findAll<T> ([&name] (T& c) { return c.getName() == name || c.getTitle() == name; }).front();
-}
 
 juce::Button& buttonWithText (OpenEditor& host, const juce::String& text)
 {
@@ -442,10 +562,10 @@ TEST_CASE ("With nothing focused, Tab focuses the first control and Shift+Tab th
     EveryControl host;
     juce::Component::unfocusAllComponents();
     host.press (tab);
-    CHECK (buttonWithText (host, "Presets").hasKeyboardFocus (false));
+    CHECK (named<juce::Button> (host, "Previous Preset").hasKeyboardFocus (false));
     juce::Component::unfocusAllComponents();
     host.press (withShift (tab));
-    CHECK (buttonWithText (host, "Global Bypass").hasKeyboardFocus (false));
+    CHECK (named<juce::ComboBox> (host, "UI Scale").hasKeyboardFocus (false));
 }
 
 TEST_CASE ("Space or Return toggles a toggle and presses a button, each press one undo step")
