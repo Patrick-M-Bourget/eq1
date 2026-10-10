@@ -81,7 +81,7 @@ struct Engine::Impl
 
     bool heldAudible() const { return heldMix.value() > 0.0 || heldMix.isMoving(); }
 
-    // The part of the sub-block the Soloed Band processes, into soloPart. Returns how many channels
+    // The part of the piece of a run the Soloed Band processes, into soloPart. Returns how many channels
     // it has: all of them for Stereo, one for Left, Right, Mid and Side, none for Side on mono.
     int takeSoloPart (float* const* channels, int channelCount, int count)
     {
