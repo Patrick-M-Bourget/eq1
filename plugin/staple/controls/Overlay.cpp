@@ -15,14 +15,17 @@ constexpr int shadowLayers = 8;
 
 juce::Component& overlayLayerFor (juce::Component& component)
 {
-    auto* top = &component;
+    juce::Component* top = &component;
+    juce::Component* transformed = nullptr;
     for (auto* c = component.getParentComponent(); c != nullptr; c = c->getParentComponent())
     {
         if (c->getProperties().contains (overlayLayerProperty))
             return *c;
+        if (c->isTransformed())
+            transformed = c;
         top = c;
     }
-    return *top;
+    return transformed != nullptr ? *transformed : *top;
 }
 
 void markOverlayLayer (juce::Component& layer) { layer.getProperties().set (overlayLayerProperty, true); }

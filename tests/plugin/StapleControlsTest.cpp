@@ -756,3 +756,25 @@ TEST_CASE ("The Staple controls kit's gallery", "[.gallery]")
     REQUIRE (out.openedOk());
     CHECK (juce::PNGImageFormat().writeImageToStream (image, out));
 }
+
+TEST_CASE ("A Knob's tooltip and a Popover open inside the editor's scaled content, so they scale with it")
+{
+    Kit kit;
+    juce::Component content; // as the editor's, drawn at the UI Scale through one transform
+    kit.add (content, { 0, 0, 300, 200 });
+    content.setTransform (juce::AffineTransform::scale (1.5f));
+    staple::Knob knob (staple::tokens::knob::frequency);
+    content.addAndMakeVisible (knob);
+    knob.setBounds (100, 100, knob.getIdealSize(), knob.getIdealSize());
+    knob.mouseEnter (Kit::event (knob, centreOf (knob), {}, centreOf (knob)));
+    REQUIRE (knob.isTooltipShown());
+    CHECK (knob.getKnobTooltip()->getParentComponent() == &content);
+
+    juce::TextButton opener ("Analyzer");
+    content.addAndMakeVisible (opener);
+    opener.setBounds (10, 10, 80, 24);
+    staple::Popover popover;
+    popover.setCardSize (100, 40);
+    popover.open (opener);
+    CHECK (popover.getParentComponent() == &content);
+}
