@@ -215,7 +215,7 @@ TEST_CASE ("A Knob's tooltip shows its title and its value text with the unit wh
     Kit kit;
     staple::Knob knob (staple::tokens::knob::gain);
     Attachment::SliderAttachment attachment (kit.state(), "band4_gain", knob);
-    knob.setTitle ("Band 4 Gain"); // as #48 names it
+    knob.setTitle ("Band 4 Gain"); // its accessible name
     knob.setTextValueSuffix (" dB");
     kit.add (knob, { 150, 150, knob.getIdealSize(), knob.getIdealSize() });
     knob.setValue (-11.42, juce::sendNotificationSync);

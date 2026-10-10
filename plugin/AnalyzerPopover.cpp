@@ -153,7 +153,7 @@ void AnalyzerRow::paint (juce::Graphics& g)
 }
 
 // Analyzer Tilt's row: its items run from 6 dB/oct down to Off in 0.5 dB/oct steps, so the up key raises
-// it as the slider it replaces did, and a click goes to the next listed value above.
+// it, as on every row, and a click goes to the next listed value above.
 class AnalyzerPopover::TiltRow final : public AnalyzerRow
 {
 public:

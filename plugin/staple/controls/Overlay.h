@@ -7,7 +7,7 @@ namespace staple
 
 // Where the kit puts what floats over the editor (the knob tooltip, popovers): a child of the overlay
 // layer, so it scales with the editor's content rather than being a desktop window. The layer is the
-// nearest ancestor marked with markOverlayLayer (the editor's scaled content component, #49), else the
+// nearest ancestor marked with markOverlayLayer (the editor's scaled content component), else the
 // top-level component.
 juce::Component& overlayLayerFor (juce::Component& component);
 void markOverlayLayer (juce::Component& layer);

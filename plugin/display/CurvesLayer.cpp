@@ -163,7 +163,7 @@ void paintCurves (juce::Graphics& g, const DisplayGeometry& geometry, const Disp
     std::vector<int> selectedInUse;
     const auto drawBand = [&] (int slot) {
         const auto& band = frame.bands.bands[static_cast<size_t> (slot - 1)];
-        // On mono a Side Band has nothing to process (#6): it plays no part in the whole EQ's curve.
+        // On mono a Side Band has nothing to process: it plays no part in the whole EQ's curve.
         const bool silent = band.bypass || (frame.mono && band.placement == StereoPlacement::Side);
         auto live = band;
         live.gain = frame.drawnGains[static_cast<size_t> (slot - 1)];
