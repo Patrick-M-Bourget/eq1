@@ -28,7 +28,9 @@ class PluginProcessor;
 // selection, which a Band outside it becomes first; on empty space it offers Paste and Select All.
 // Holding a handle still Solos its Band until the mouse is released. Pressing on the spectrum, away
 // from the handles, grabs its peak there (Spectrum Grab). A Dynamic Band has a ring around its handle for its Dynamic Range,
-// with its Live Gain's movement inside it, and its curve follows its Live Gain. The curve comes from
+// with its Live Gain's movement inside it, and its curve follows its Live Gain; the selected one has a
+// wash between its curves at Gain and Gain + Dynamic Range. Hovering a handle lights its Band's curve,
+// and Global Bypass fades every curve to its bypassed look (plugin/display/). The curve comes from
 // the Engine's own response maths (eq1/Response.h). A handle beyond the Display Range sits at its
 // edge; a heard Gain changed to beyond it zooms the range out, once any drag has ended. A screen reader
 // reads the display as a group, "EQ display", of the Bands in use, each named "Band 4" with its
