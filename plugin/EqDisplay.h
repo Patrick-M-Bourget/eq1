@@ -39,7 +39,7 @@ class PluginProcessor;
 // (eq1/Response.h). A handle beyond the Display Range sits at its edge; a heard Gain changed to beyond
 // it zooms the range out, once any drag has ended. A screen reader reads the display as a group, "EQ
 // display", of the Bands in use, each named "Band 4" with its stored settings as its value (spokenBand),
-// announced again whenever the Band moves, and each shown grip, "Band 4 Dynamic Range".
+// announced again whenever the Band moves, and each shown grip, "Band 4 Dynamic Range Handle".
 class EqDisplay final : public juce::Component, private juce::Timer
 {
 public:

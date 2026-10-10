@@ -87,7 +87,7 @@ class EqDisplay::RangeGrip final : public juce::Component
 public:
     RangeGrip (EqDisplay& d, int s) : display (d), slot (s)
     {
-        setName ("Band " + juce::String (slot) + " Dynamic Range");
+        setName ("Band " + juce::String (slot) + " Dynamic Range Handle");
         setTitle (getName());
         setInterceptsMouseClicks (false, false);
         setWantsKeyboardFocus (true);

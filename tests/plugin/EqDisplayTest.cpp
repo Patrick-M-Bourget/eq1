@@ -337,7 +337,7 @@ namespace
 // The focusable element for Band slot's Dynamic Range grip, if shown.
 juce::Component* gripElement (OpenEditor& host, int slot)
 {
-    const auto name = "Band " + juce::String (slot) + " Dynamic Range";
+    const auto name = "Band " + juce::String (slot) + " Dynamic Range Handle";
     return harness::findChild<juce::Component> (host.display, [&] (juce::Component& c) { return c.getName() == name && c.isVisible(); });
 }
 } // namespace
@@ -436,10 +436,10 @@ TEST_CASE ("A focused Dynamic Range grip steps the range 1 dB per arrow, 0.5 dB 
     CHECK (history.undoSteps() == 3);
     // The Band itself didn't move.
     CHECK_THAT (host.value (1, "gain"), WithinAbs (3.0, 1.0e-4));
-    // A screen reader reads it as the Band's Dynamic Range.
+    // A screen reader reads it as the Band's Dynamic Range Handle.
     auto* handler = grip->getAccessibilityHandler();
     REQUIRE (handler != nullptr);
-    CHECK (handler->getTitle() == "Band 1 Dynamic Range");
+    CHECK (handler->getTitle() == "Band 1 Dynamic Range Handle");
     CHECK (handler->getValueInterface()->getCurrentValueAsString() == "+3.50 dB");
 }
 
