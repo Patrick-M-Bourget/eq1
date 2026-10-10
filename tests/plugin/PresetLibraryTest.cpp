@@ -280,7 +280,7 @@ TEST_CASE ("Stepping moves to the next or previous Preset in browser order, wrap
     CHECK (PresetLibrary::step (listing, "Dark", 1) == 0u);
     CHECK (PresetLibrary::step (listing, "Bright", -1) == 3u);
 
-    // A name listed more than once steps from its first occurrence.
+    // A name listed more than once, with no entry last loaded, steps from its first occurrence.
     CHECK (PresetLibrary::step (listing, "Bright", 1) == 1u);
 
     // No Loaded Preset, or one not in the library: forward to the first, back to the last.
@@ -291,4 +291,40 @@ TEST_CASE ("Stepping moves to the next or previous Preset in browser order, wrap
         CHECK (PresetLibrary::step (listing, loaded, -1) == 3u);
     }
     CHECK_FALSE (PresetLibrary::step ({}, "Warm", 1).has_value());
+}
+
+TEST_CASE ("Stepping from the entry last loaded walks the whole library, though Preset names repeat")
+{
+    const std::vector<PresetLibrary::Entry> listing {
+        { "Bright", "Factory", {}, {} },
+        { "Warm", "Factory", {}, {} },
+        { "Bright", "User", {}, {} },
+        { "Kick", "User/Drums", {}, {} },
+        { "Kick", "User/Mix", {}, {} },
+        { "Dark", "User/Mix", {}, {} },
+    };
+    for (const int by : { 1, -1 })
+    {
+        CAPTURE (by);
+        std::set<std::size_t> visited;
+        std::size_t at = 0;
+        for (std::size_t press = 0; press < listing.size(); ++press)
+        {
+            const auto& lastLoaded = listing[at];
+            const auto next = PresetLibrary::step (listing, lastLoaded.name, by, &lastLoaded);
+            REQUIRE (next.has_value());
+            at = *next;
+            visited.insert (at);
+        }
+        CHECK (visited.size() == listing.size());
+        CHECK (at == 0u);
+    }
+
+    // The entry last loaded no longer named as the Loaded Preset (after an undo, an A/B switch or a
+    // file load): from the Loaded Preset's first entry.
+    CHECK (PresetLibrary::step (listing, "Bright", 1, &listing[3]) == 1u);
+    CHECK (PresetLibrary::find (listing, "Kick", &listing[4]) == 4u);
+    CHECK (PresetLibrary::find (listing, "Kick", &listing[0]) == 3u);
+    CHECK (PresetLibrary::find (listing, "Kick") == 3u);
+    CHECK_FALSE (PresetLibrary::find (listing, "Elsewhere").has_value());
 }

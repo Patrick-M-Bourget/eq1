@@ -57,9 +57,14 @@ public:
     std::vector<Entry> listing() const;
     // The entries whose Preset names contain text, ignoring case, in their order. All of them for no text.
     static std::vector<Entry> search (const std::vector<Entry>& entries, const juce::String& text);
-    // The entry by places after (or before, when negative) the first one named loadedPreset, wrapping at
-    // the ends. With no such entry, forward is the first and back the last. Nothing when there are none.
-    static std::optional<std::size_t> step (const std::vector<Entry>& entries, const juce::String& loadedPreset, int by);
+    // The Loaded Preset's entry: lastLoaded's place (folder and name) when it is listed and still named
+    // loadedPreset, as a name can be listed more than once; otherwise the first entry named loadedPreset.
+    // Nothing when none is.
+    static std::optional<std::size_t> find (const std::vector<Entry>& entries, const juce::String& loadedPreset, const Entry* lastLoaded = nullptr);
+    // The entry by places after (or before, when negative) the Loaded Preset's (find), wrapping at the
+    // ends. With no such entry, forward is the first and back the last. Nothing when there are none.
+    static std::optional<std::size_t>
+        step (const std::vector<Entry>& entries, const juce::String& loadedPreset, int by, const Entry* lastLoaded = nullptr);
 
 private:
     juce::File userFolder;

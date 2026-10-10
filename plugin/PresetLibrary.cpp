@@ -107,14 +107,28 @@ std::vector<PresetLibrary::Entry> PresetLibrary::search (const std::vector<Entry
     return found;
 }
 
-std::optional<std::size_t> PresetLibrary::step (const std::vector<Entry>& entries, const juce::String& loadedPreset, int by)
+std::optional<std::size_t> PresetLibrary::find (const std::vector<Entry>& entries, const juce::String& loadedPreset, const Entry* lastLoaded)
+{
+    const auto index = [&] (auto matches) -> std::optional<std::size_t> {
+        const auto found = std::find_if (entries.begin(), entries.end(), matches);
+        if (found == entries.end())
+            return std::nullopt;
+        return static_cast<std::size_t> (found - entries.begin());
+    };
+    if (lastLoaded != nullptr && lastLoaded->name == loadedPreset)
+        if (const auto i = index ([&] (const Entry& entry) { return entry.folder == lastLoaded->folder && entry.name == lastLoaded->name; }))
+            return i;
+    return index ([&] (const Entry& entry) { return entry.name == loadedPreset; });
+}
+
+std::optional<std::size_t> PresetLibrary::step (const std::vector<Entry>& entries, const juce::String& loadedPreset, int by, const Entry* lastLoaded)
 {
     if (entries.empty())
         return std::nullopt;
     const auto size = static_cast<int> (entries.size());
-    const auto loaded = std::find_if (entries.begin(), entries.end(), [&] (const Entry& entry) { return entry.name == loadedPreset; });
+    const auto loaded = find (entries, loadedPreset, lastLoaded);
     // Not in the library: as if just before the first, for forward, or just after the last, for back.
-    const auto from = loaded != entries.end() ? static_cast<int> (loaded - entries.begin()) : (by > 0 ? -1 : size);
+    const auto from = loaded.has_value() ? static_cast<int> (*loaded) : (by > 0 ? -1 : size);
     return static_cast<std::size_t> (((from + by) % size + size) % size);
 }
 
