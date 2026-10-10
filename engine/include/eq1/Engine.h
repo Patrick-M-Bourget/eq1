@@ -29,13 +29,25 @@ enum class AnalysisTap
     Sidechain,
 };
 
-// The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis() and
-// liveGainDb() never allocate, lock or do I/O. process() flushes subnormal numbers to zero, whatever
-// the caller's floating-point mode, and leaves that mode as it found it.
+// What the Output Level reads for silence, and for anything quieter.
+inline constexpr double outputLevelFloorDb = -150.0;
+
+// The Output Level of one channel, in dBFS.
+struct OutputLevel
+{
+    double peakDb = outputLevelFloorDb; // sample peak since the last read
+    double rmsDb = outputLevelFloorDb;  // over the last 300 ms
+};
+
+// The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis(), liveGainDb(),
+// outputLevelChannels() and readOutputLevel() never allocate, lock or do I/O. process() flushes
+// subnormal numbers to zero, whatever the caller's floating-point mode, and leaves that mode as it
+// found it.
 //
 // Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
 // one thread at a time may call it; the newest settings are taken at the start of each process().
-// readAnalysis() may run on one reader thread.
+// readAnalysis() may run on one reader thread, and readOutputLevel() on one reader thread, but not
+// while prepare() changes the channel count.
 class Engine
 {
 public:
@@ -58,6 +70,15 @@ public:
     // The Live Gain in dB a Band Slot (1 to 24) applied at the end of the last process(): its Gain,
     // moved by its dynamics, held to +/-30 dB. Safe to call from any thread, for the display.
     double liveGainDb (int slot) const;
+
+    // How many channels the Output Level has: one per channel the Engine was prepared with.
+    int outputLevelChannels() const;
+
+    // The Output Level of a channel (0 to outputLevelChannels() - 1): what process() left there, after
+    // everything, so the input during Global Bypass. Reading resets the peak, so a peak between two
+    // reads is reported once, by the next. Called from one reader thread while process() runs on the
+    // audio thread.
+    OutputLevel readOutputLevel (int channel);
 
 private:
     struct Impl;

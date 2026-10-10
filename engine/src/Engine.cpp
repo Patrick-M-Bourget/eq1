@@ -5,6 +5,7 @@
 #include "Band.h"
 #include "Dynamics.h"
 #include "LatestValue.h"
+#include "LevelMeter.h"
 #include "NoSubnormals.h"
 #include "Output.h"
 #include "Smoother.h"
@@ -130,6 +131,10 @@ struct Engine::Impl
     // About 1.4 s at 48 kHz: enough for the Analyzer to read at display rate.
     static constexpr int analysisCapacity = 1 << 16;
     AnalysisFifo preEq, postEq, sidechain;
+
+    // The Output Level, per channel prepared.
+    std::unique_ptr<LevelMeter[]> outputLevels;
+    int outputLevelChannels = 0;
 
     static void pushMonoMix (AnalysisFifo& fifo, const float* const* channels, int numChannels, int numSamples)
     {
@@ -281,6 +286,13 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     impl->preEq.allocate (Impl::analysisCapacity);
     impl->postEq.allocate (Impl::analysisCapacity);
     impl->sidechain.allocate (Impl::analysisCapacity);
+    if (numChannels != impl->outputLevelChannels)
+    {
+        impl->outputLevels = std::make_unique<LevelMeter[]> (static_cast<size_t> (std::max (numChannels, 0)));
+        impl->outputLevelChannels = std::max (numChannels, 0);
+    }
+    for (int ch = 0; ch < impl->outputLevelChannels; ++ch)
+        impl->outputLevels[static_cast<size_t> (ch)].prepare (sampleRate);
 }
 
 void Engine::setSettings (const Settings& settings)
@@ -364,6 +376,8 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
     }
 
     Impl::pushMonoMix (impl->postEq, main.channels, channels, main.numSamples);
+    for (int ch = 0; ch < channels; ++ch)
+        impl->outputLevels[static_cast<size_t> (ch)].process (main.channels[ch], main.numSamples);
     for (size_t band = 0; band < impl->bands.size(); ++band)
         impl->liveGains[band].store (impl->bands[band].liveGainDb(), std::memory_order_relaxed);
 }
@@ -371,6 +385,16 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
 double Engine::liveGainDb (int slot) const
 {
     return slot >= 1 && slot <= numBandSlots ? impl->liveGains[static_cast<size_t> (slot - 1)].load (std::memory_order_relaxed) : 0.0;
+}
+
+int Engine::outputLevelChannels() const
+{
+    return impl->outputLevelChannels;
+}
+
+OutputLevel Engine::readOutputLevel (int channel)
+{
+    return channel >= 0 && channel < impl->outputLevelChannels ? impl->outputLevels[static_cast<size_t> (channel)].read() : OutputLevel {};
 }
 
 int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples)

@@ -10,7 +10,7 @@
 
 using namespace eq1;
 
-TEST_CASE ("Engine does not allocate while processing or taking new settings, with all 24 Bands in use")
+TEST_CASE ("Engine does not allocate while processing, taking new settings or being read, with all 24 Bands in use")
 {
     constexpr int blockSize = 512;
     Engine engine;
@@ -58,6 +58,8 @@ TEST_CASE ("Engine does not allocate while processing or taking new settings, wi
         engine.setSettings (settings);
         engine.process ({ main, 2, blockSize }, block % 2 == 0 ? &sidechainBlock : nullptr);
         engine.readAnalysis (AnalysisTap::PostEq, analysis.data(), blockSize);
+        for (int ch = 0; ch < engine.outputLevelChannels(); ++ch)
+            engine.readOutputLevel (ch);
     }
 
     REQUIRE (guard.allocations() == 0);
