@@ -71,7 +71,7 @@ The ▲▼ marker on the EQ display at a Band's Gain plus Dynamic Range, dragged
 _Avoid_: Range handle, Dynamic Range (when meaning the marker)
 
 **Live Gain**:
-The Gain a Dynamic Band is applying at this moment, between its Gain and its Gain plus Dynamic Range.
+The Gain a Dynamic Band is applying at this moment, between its Gain and its Gain plus Dynamic Range. The Engine reports it as heard, with Gain Scale applied, so compare it with the Heard Gain, not the Gain.
 _Avoid_: Current gain, dynamic gain, Gain (when meaning the moving value)
 
 **Threshold**:
@@ -189,6 +189,10 @@ _Avoid_: Polarity flip, phase flip, invert
 **Gain Scale**:
 A single control that scales every Band's Gain and Dynamic Range at once.
 _Avoid_: Depth, master gain, amount
+
+**Heard Gain**:
+A Band's Gain as it reaches the audio: its Gain scaled by Gain Scale. At 100% Gain Scale it equals the Gain.
+_Avoid_: Scaled gain, effective gain, Gain (when Gain Scale has been applied)
 
 **Host Automation**:
 Parameter changes recorded and played back by the DAW hosting the plugin.
