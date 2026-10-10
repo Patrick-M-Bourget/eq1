@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "Parameters.h"
 #include "staple/Tokens.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -91,4 +92,109 @@ TEST_CASE ("The display's edges fade, but not a handle or a label there")
     CHECK (brightest (image, { x20k - 40.0f, height - 24.0f, 30.0f, 14.0f }) > 0.5f);
     // The 0 dB line is faded at the very right edge, but not inside it.
     CHECK (brightest (image, { width - 2.0f, height / 2.0f - 1.0f, 2.0f, 2.0f }) < brightest (image, { width / 2.0f + 3.0f, height / 2.0f - 1.0f, 2.0f, 2.0f }));
+}
+
+namespace
+{
+// Where the display draws db at frequency, at a Display Range of +/-12 dB.
+juce::Point<float> atDb (OpenEditor& host, double frequency, double db)
+{
+    const auto half = static_cast<float> (host.display.getHeight()) * 0.5f;
+    return { host.at (frequency).x, half - static_cast<float> (db) / 12.0f * (half - 9.0f) };
+}
+
+// The display's colour at a point, averaged over a 2 x 2 px square at 2x.
+juce::Colour colourAt (const juce::Image& image, juce::Point<float> point)
+{
+    const auto p = (point * 2.0f).toInt();
+    float r = 0, g = 0, b = 0;
+    for (int dy = 0; dy < 2; ++dy)
+        for (int dx = 0; dx < 2; ++dx)
+        {
+            const auto c = image.getPixelAt (p.x + dx, p.y + dy);
+            r += c.getFloatRed();
+            g += c.getFloatGreen();
+            b += c.getFloatBlue();
+        }
+    return juce::Colour::fromFloatRGBA (r / 4, g / 4, b / 4, 1.0f);
+}
+
+void analyzerOff (OpenEditor& host)
+{
+    host.processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = false });
+}
+} // namespace
+
+TEST_CASE ("A selected Dynamic Band shows a red wash between its curves at Gain and Gain + Dynamic Range, none under Dynamics Bypass")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    // Band 1 is blue; its curve at Gain is flat, at Gain + Dynamic Range a +12 dB bell.
+    host.addBand (1, 1000.0f, 0.0f);
+    host.set (1, "dynamic_range", 12.0f);
+    host.settle();
+    const auto inside = atDb (host, 1000.0, 6.0);
+    const auto unselected = colourAt (snapshot (host), inside);
+    CHECK (unselected.getFloatRed() < 0.1f);
+
+    host.click (host.at (1000.0));
+    host.settle();
+    const auto washed = colourAt (snapshot (host), inside);
+    CHECK (washed.getFloatRed() > washed.getFloatBlue() + 0.05f);
+    CHECK (washed.getFloatRed() > unselected.getFloatRed() + 0.1f);
+
+    host.set (1, "dynamics_bypass", 1.0f);
+    host.settle();
+    CHECK (colourAt (snapshot (host), inside).getFloatRed() < 0.1f);
+}
+
+TEST_CASE ("Global Bypass fades the curves to their bypassed style and the sum to 30 %, and back when it is turned off")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 6.0f);
+    host.settle();
+    // The sum curve on the Bell's skirt, an octave above it, away from the handle; the Band's fill under
+    // the peak.
+    const auto skirt = atDb (host, 2000.0, 5.5);
+    const auto peak = juce::Rectangle<float> (skirt, atDb (host, 2000.0, 0.5)).expanded (1.0f, 0.0f);
+    const auto fill = atDb (host, 1000.0, 3.0);
+    const auto before = snapshot (host);
+    const float sum = brightest (before, peak);
+    const auto blueness = [] (juce::Colour c) { return c.getFloatBlue() - c.getFloatRed(); };
+    const float fillBlue = blueness (colourAt (before, fill));
+    REQUIRE (fillBlue > 0.03f);
+
+    host.set (eq1::parameters::globalBypassId, 1.0f);
+    host.settle (400);
+    const auto bypassed = snapshot (host);
+    CHECK (brightest (bypassed, peak) < sum * 0.5f);
+    CHECK (blueness (colourAt (bypassed, fill)) < fillBlue * 0.5f);
+
+    host.set (eq1::parameters::globalBypassId, 0.0f);
+    host.settle (400);
+    const auto back = snapshot (host);
+    CHECK (brightest (back, peak) > sum * 0.95f);
+    CHECK (blueness (colourAt (back, fill)) > fillBlue * 0.95f);
+}
+
+TEST_CASE ("Hovering a Band's handle lights its curve and fill, and they fade back when the mouse leaves")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.addBand (1, 1000.0f, 6.0f);
+    host.settle();
+    const auto fill = atDb (host, 1000.0, 3.0);
+    const auto blue = [&] { return colourAt (snapshot (host), fill).getFloatBlue(); };
+    const float resting = blue();
+
+    const auto handle = atDb (host, 1000.0, 6.0);
+    host.display.mouseMove (host.mouseEvent (handle, {}, handle));
+    host.settle (400);
+    const float lit = blue();
+    CHECK (lit > resting + 0.04f);
+
+    host.display.mouseExit (host.mouseEvent ({ 1.0f, 1.0f }, {}, { 1.0f, 1.0f }));
+    host.settle (400);
+    CHECK_THAT (blue(), Catch::Matchers::WithinAbs (resting, 0.01));
 }

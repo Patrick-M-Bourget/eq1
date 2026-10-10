@@ -1,3 +1,4 @@
+#include "display/CurvesLayer.h"
 #include "display/EdgeFadeLayer.h"
 #include "display/GridLayer.h"
 #include "staple/Tokens.h"
@@ -171,4 +172,73 @@ TEST_CASE ("The display's edges fade to bg0 over 18 px at the top, 84 at the bot
     CHECK (whiteLeft (599, cy) < 0.03f);
     CHECK_THAT (whiteLeft (600 - 28, cy), WithinAbs (0.5, 0.05));
     CHECK (whiteLeft (600 - 57, cy) > 0.97f);
+}
+
+TEST_CASE ("A Band's curve takes its colour from the 24-slot palette by Band Slot, the bypassed palette when Bypassed")
+{
+    using eq1::display::bandCurveStyle;
+    const int slot = GENERATE (1, 7, 13, 24);
+    CHECK (bandCurveStyle ({ .slot = slot }).colour == staple::tokens::band[slot - 1]);
+    CHECK (bandCurveStyle ({ .slot = slot, .bypassed = true }).colour == staple::tokens::bandBypassed[slot - 1]);
+    CHECK (bandCurveStyle ({ .slot = slot, .selected = true, .bypassed = true }).colour == staple::tokens::bandBypassed[slot - 1]);
+}
+
+TEST_CASE ("Band curves: others 1 px at 50 % with a 10 % fill, lit on hover; the selected one 1.5 px, full, a 30 % fill and a glow")
+{
+    using eq1::display::bandCurveStyle;
+    const auto other = bandCurveStyle ({ .slot = 3 });
+    CHECK_THAT (other.lineWidth, WithinAbs (1.0, 1e-6));
+    CHECK_THAT (other.lineAlpha, WithinAbs (0.5, 1e-6));
+    CHECK_THAT (other.fillAlpha, WithinAbs (0.1, 1e-6));
+    CHECK_THAT (other.glowAlpha, WithinAbs (0.0, 1e-6));
+
+    const auto hovered = bandCurveStyle ({ .slot = 3, .hover = 1.0f });
+    CHECK_THAT (hovered.lineWidth, WithinAbs (1.5, 1e-6));
+    CHECK_THAT (hovered.lineAlpha, WithinAbs (0.95, 1e-6));
+    CHECK_THAT (hovered.fillAlpha, WithinAbs (0.26, 1e-6));
+    // Part-way through its fade.
+    CHECK_THAT (bandCurveStyle ({ .slot = 3, .hover = 0.5f }).fillAlpha, WithinAbs (0.18, 1e-6));
+
+    const auto selected = bandCurveStyle ({ .slot = 3, .selected = true });
+    CHECK_THAT (selected.lineWidth, WithinAbs (1.5, 1e-6));
+    CHECK_THAT (selected.lineAlpha, WithinAbs (1.0, 1e-6));
+    CHECK_THAT (selected.fillAlpha, WithinAbs (0.3, 1e-6));
+    CHECK_THAT (selected.glowAlpha, WithinAbs (0.3, 1e-6));
+}
+
+TEST_CASE ("A Bypassed Band's curve: selected, a 50 % line, a 14 % fill and no glow; others at 60 % of their alphas")
+{
+    using eq1::display::bandCurveStyle;
+    const auto selected = bandCurveStyle ({ .slot = 2, .selected = true, .bypassed = true });
+    CHECK_THAT (selected.lineAlpha, WithinAbs (0.5, 1e-6));
+    CHECK_THAT (selected.fillAlpha, WithinAbs (0.14, 1e-6));
+    CHECK_THAT (selected.glowAlpha, WithinAbs (0.0, 1e-6));
+    const auto other = bandCurveStyle ({ .slot = 2, .bypassed = true });
+    CHECK_THAT (other.lineAlpha, WithinAbs (0.3, 1e-6));
+    CHECK_THAT (other.fillAlpha, WithinAbs (0.06, 1e-6));
+    CHECK_THAT (eq1::display::dynamicRangeWashAlpha (false, 0.0f), WithinAbs (0.2, 1e-6));
+    CHECK_THAT (eq1::display::dynamicRangeWashAlpha (true, 0.0f), WithinAbs (0.1, 1e-6));
+}
+
+TEST_CASE ("Under Global Bypass every curve is in its bypassed style at 45 % of its alphas, and the sum at 30 %")
+{
+    using eq1::display::bandCurveStyle;
+    const auto other = bandCurveStyle ({ .slot = 5, .globalBypass = 1.0f });
+    CHECK (other.colour == staple::tokens::bandBypassed[4]);
+    CHECK_THAT (other.lineAlpha, WithinAbs (0.5 * 0.45, 1e-6));
+    CHECK_THAT (other.fillAlpha, WithinAbs (0.1 * 0.45, 1e-6));
+    const auto selected = bandCurveStyle ({ .slot = 5, .selected = true, .globalBypass = 1.0f });
+    CHECK (selected.colour == staple::tokens::bandBypassed[4]);
+    CHECK_THAT (selected.lineAlpha, WithinAbs (0.45, 1e-6));
+    CHECK_THAT (selected.fillAlpha, WithinAbs (0.3 * 0.45, 1e-6));
+    CHECK_THAT (selected.glowAlpha, WithinAbs (0.0, 1e-6));
+    CHECK_THAT (eq1::display::dynamicRangeWashAlpha (false, 1.0f), WithinAbs (0.2 * 0.45, 1e-6));
+    CHECK_THAT (eq1::display::sumCurveAlpha (1.0f), WithinAbs (0.3, 1e-6));
+    CHECK_THAT (eq1::display::sumCurveAlpha (0.0f), WithinAbs (1.0, 1e-6));
+
+    SECTION ("half-way through its fade, half-way between")
+    {
+        CHECK_THAT (bandCurveStyle ({ .slot = 5, .globalBypass = 0.5f }).lineAlpha, WithinAbs ((0.5 + 0.225) / 2.0, 1e-6));
+        CHECK_THAT (eq1::display::sumCurveAlpha (0.5f), WithinAbs (0.65, 1e-6));
+    }
 }

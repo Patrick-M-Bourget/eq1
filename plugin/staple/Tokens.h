@@ -130,6 +130,21 @@ namespace handle
     constexpr float selectedRing = 2.0f, glow = 10.0f, glowAlpha = 0.4f, sheenAlpha = 0.16f;
 } // namespace handle
 
+// Curves on the display (HANDOFF.md §4 "Display", §5.12): widths in px, alphas 0 to 1.
+namespace curve
+{
+    constexpr float line = 1.0f, lineAlpha = 0.5f, fillAlpha = 0.1f;                  // other Bands
+    constexpr float hoverLine = 1.5f, hoverLineAlpha = 0.95f, hoverFillAlpha = 0.26f; // other Bands on hover
+    constexpr float selectedLine = 1.5f, selectedFillAlpha = 0.3f;
+    constexpr float glow = 2.0f, glowAlpha = 0.3f; // around the selected Band's line, as stacked strokes
+    constexpr float bypassedSelectedLineAlpha = 0.5f, bypassedSelectedFillAlpha = 0.14f;
+    constexpr float bypassedScale = 0.6f; // other Bypassed Bands, of their usual alphas
+    constexpr float washAlpha = 0.2f, bypassedWashAlpha = 0.1f; // the Dynamic Range wash, in dynRange
+    constexpr float globalBypassScale = 0.45f, globalBypassSumAlpha = 0.3f;
+    // The sum: a line over its halo, and a wider, fainter halo in place of a blur.
+    constexpr float sum = 2.0f, sumHalo = 4.0f, sumOuterHalo = 8.0f, sumOuterHaloAlpha = 0.5f;
+} // namespace curve
+
 // Shadows: CSS blur radius and offset, as juce::DropShadow takes them.
 namespace shadow
 {
@@ -144,6 +159,7 @@ namespace motion
 {
     constexpr int dur1Ms = 120, dur2Ms = 180, dur3Ms = 240; // hover/press, menus/cards, panels
     constexpr int hoverFadeMs = 220;                        // a Band curve's hover fade, and the hover card's hide delay
+    constexpr int globalBypassFadeMs = 150;                 // the display's curves fading into and out of Global Bypass
     // The one easing curve: cubic-bezier (0.2, 0.7, 0.2, 1).
     constexpr float easeX1 = 0.2f, easeY1 = 0.7f, easeX2 = 0.2f, easeY2 = 1.0f;
     // Menus, popovers and cards pop in from 3 px lower at 98.5 % scale.

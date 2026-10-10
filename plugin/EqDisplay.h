@@ -46,6 +46,8 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
+    void mouseMove (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
     void mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed (const juce::KeyPress& key) override;
@@ -137,6 +139,16 @@ private:
     juce::Point<float> dragStart;
     int shownRangeDb = 0;
     juce::uint32 allInUseMessageUntil = 0; // shows "All 24 Bands are in use" until this time
+
+    // The curves' fades, all run from the display's one timer: each Band's hover (the handle under the
+    // mouse) and Global Bypass's, read from its parameter each frame. Each runs from 0 to 1.
+    int hoveredSlot = 0;
+    std::array<float, numBandSlots> hoverFades {};
+    float globalBypassFade = 0.0f;
+    juce::uint32 lastFadeStep = 0;
+    bool isGlobalBypassOn() const;
+    // Moves every fade on by the time since the last step; true while any of them moved.
+    bool stepFades();
 };
 
 } // namespace eq1
