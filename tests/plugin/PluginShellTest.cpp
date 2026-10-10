@@ -16,6 +16,7 @@
 #include <map>
 #include <numbers>
 #include <stdexcept>
+#include <thread>
 
 using Catch::Matchers::WithinAbs;
 
@@ -566,6 +567,24 @@ TEST_CASE ("Solo is not a host parameter and is not saved with the session")
     restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
     // Restoring a session lets go of any Solo.
     CHECK (restored.soloSlot() == 0);
+}
+
+TEST_CASE ("Restoring a session from another thread lets go of the Band panel's Solo")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor saved;
+    juce::MemoryBlock state;
+    saved.getStateInformation (state);
+
+    eq1::PluginProcessor restored;
+    using Holder = eq1::PluginProcessor::SoloHolder;
+    restored.holdSolo (4, Holder::panel);
+    // Hosts may restore off the message thread.
+    std::thread host ([&] { restored.setStateInformation (state.getData(), static_cast<int> (state.getSize())); });
+    host.join();
+    CHECK (restored.soloSlot() == 0);
+    CHECK_FALSE (restored.holdsSolo (Holder::panel));
+    CHECK_FALSE (restored.holdsSolo (Holder::display));
 }
 
 TEST_CASE ("A Dynamic Band on the host parameters moves its Live Gain, which the editor can read")
