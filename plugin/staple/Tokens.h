@@ -132,7 +132,9 @@ namespace layout
     constexpr int iconButton = 24;
     // The dynamics: the icon row above Gain, the section between Gain and Q, and its Threshold fader.
     constexpr int dynamicsIcon = 22, dynamicsIconsAbove = 42, dynamicsIconGap = 6;
-    constexpr int dynamicsSectionWidth = 134, dynamicsSectionHeight = 108, dynamicsSectionLift = 14;
+    // The section sits on the slab's bottom padding and reaches 8 px below its top: the slab grows by
+    // bandPanelOpenGrowth upwards while it is open.
+    constexpr int dynamicsSectionWidth = 134, dynamicsSectionHeight = 108, bandPanelOpenGrowth = 11;
     constexpr int dynamicsSectionPaddingY = 6, dynamicsSectionPaddingX = 10, dynamicsSectionGap = 10;
     constexpr int faderWidth = 26, faderTrack = 80, faderTrackWidth = 7, faderThumbHeight = 16;
     constexpr int dynamicsColumnWidth = 78, detectionRangeButtonHeight = 24;
@@ -199,6 +201,15 @@ namespace ghost
     constexpr float readoutAboveBottom = 10.0f, labelClearance = 46.0f, fadedLabelAlpha = 0.12f;
     constexpr int fadeInMs = 600;
 } // namespace ghost
+
+// The header (HANDOFF.md §5.6), in px: the padding either side of its text buttons' text (A/B Compare,
+// Copy), and the gap between the Preset name and its Modified dot (the button's 8 px gap and the dot's
+// 6 px margin).
+namespace header
+{
+    constexpr int chipPadding = 10;
+    constexpr float modifiedDotGap = 14.0f;
+} // namespace header
 
 // The Hover Card over a Band's handle (HANDOFF.md §2 "HoverCard", §5.2), in px.
 namespace hoverCard

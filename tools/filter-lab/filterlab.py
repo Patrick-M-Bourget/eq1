@@ -11,6 +11,7 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py band-pass --orders 1 4 16 --q 0.1 2 40
     python3 tools/filter-lab/filterlab.py all-pass --orders 1 2 8 --q 0.71
     python3 tools/filter-lab/filterlab.py gain-computer --overshoots 9 12 15
+    python3 tools/filter-lab/filterlab.py auto-threshold --spreads 0.1 0.2 0.3 --falls 1 1.25 2
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report().
@@ -544,13 +545,89 @@ def report_gain_computer(full_range_overshoots, ranges=(6, 12, 18, 30), overshoo
         print()
 
 
+# --- Auto Threshold (engine/src/Dynamics.cpp) -----------------------------------------------------
+# A model of a Dynamic Bell's detector (1 kHz, Q 1, its region band-pass, 5 ms power) and gain computer
+# with Auto Attack and Release, over the DynamicsTest material. Mirrors the Engine within a few hundredths.
+
+DETECTOR_FS, RUN_LENGTH = 48000.0, 16
+
+
+def _coefficient(seconds):
+    return 1 - math.exp(-1 / (seconds * DETECTOR_FS))
+
+
+def detection_levels(seconds, level_db, envelope_db, seed=7):
+    """Detection levels in dB of white noise at level_db shaped by envelope_db(t), in a 1 kHz Q 1 region."""
+    import random
+    rnd = random.Random(seed)
+    (s,), _ = band_pass(DETECTOR_FS, 1000.0, q=1.0, order=1)
+    x1 = x2 = y1 = y2 = power = 0.0
+    c = _coefficient(0.005)
+    levels = []
+    for n in range(int(seconds * DETECTOR_FS)):
+        x = 10 ** ((level_db + envelope_db(n / DETECTOR_FS)) / 20) * rnd.gauss(0, 1)
+        y = s.b0 * x + s.b1 * x1 + s.b2 * x2 - s.a1 * y1 - s.a2 * y2
+        x2, x1, y2, y1 = x1, x, y1, y
+        power += c * (y * y - power)
+        levels.append(10 * math.log10(2 * power + 1e-30))
+    return levels
+
+
+def auto_threshold_movement(levels, spreads, rise, fall, hold=0.25, full=12.0, gate=-80.0):
+    """Movement (0 to 1) after each run of a Band in Auto Threshold: mean + spreads x std of the gated
+    levels, each rising over rise and falling over fall seconds (a plain mean until rise is heard)."""
+    cr, cf, cs = _coefficient(rise), _coefficient(fall), _coefficient(0.5)
+    mean = variance = heard = moved = sustain = 0.0
+    out = []
+    for r in range(0, len(levels) - RUN_LENGTH + 1, RUN_LENGTH):
+        run = levels[r:r + RUN_LENGTH]
+        for level in run:
+            if level > gate:
+                heard = min(heard + 1, 1 / cr)
+                mean += max(cr if level > mean else cf, 1 / heard) * (level - mean)
+                d2 = (level - mean) ** 2
+                variance += max(cr if d2 > variance else cf, 1 / heard) * (d2 - variance)
+        threshold = mean + spreads * math.sqrt(variance)
+        attack = _coefficient(0.020 * KNEE_DB / (KNEE_DB + max(max(run) - threshold, 0)))
+        release = _coefficient(0.040 + 0.460 * sustain)
+        for level in run:
+            target = movement(level - threshold, full) if heard >= hold * DETECTOR_FS else 0.0
+            moved += (attack if target > moved else release) * (target - moved)
+            sustain += cs * (target - sustain)
+        out.append(moved)
+    return out
+
+
+def report_auto_threshold(spreads, falls, rise=4.5):
+    """The DynamicsTest criteria (#152): on noise swinging +/-6 dB at 4 Hz, the least movement at a loud
+    half-cycle's most and the most at a quiet half-cycle's least, over 2-5 s; after 1 s of +6 dB on
+    steady noise, the movement reached. The trough is release-limited: lowering it lowers the peak."""
+    swing = detection_levels(5.0, -36, lambda t: 6 * math.sin(2 * PI * 4 * t))
+    swell = detection_levels(4.0, -24, lambda t: 6.0 if t >= 3.0 else 0.0)
+    at = lambda t: int(t * DETECTOR_FS / RUN_LENGTH)
+    print(f"{'k':>5} {'fall':>5}  {'peak':>5} {'trough':>6} {'swell':>5}")
+    for k in spreads:
+        for fall in falls:
+            m = auto_threshold_movement(swing, k, rise, fall)
+            starts = [2 + i / 4 for i in range(12)]
+            peak = min(max(m[at(t):at(t + 0.125)]) for t in starts)
+            trough = max(min(m[at(t + 0.125):at(t + 0.25)]) for t in starts)
+            swelled = auto_threshold_movement(swell, k, rise, fall)[at(4.0) - 1]
+            print(f"{k:5g} {fall:5g}  {peak:5.2f} {trough:6.2f} {swelled:5.2f}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("shape", choices=[*SHAPES, "gain-computer"])
+    parser.add_argument("shape", choices=[*SHAPES, "gain-computer", "auto-threshold"])
     parser.add_argument("--q", type=float, nargs="+", default=[0.71])
     parser.add_argument("--orders", type=int, nargs="+", default=[2])
     parser.add_argument("--overshoots", type=float, nargs="+", default=[12])
+    parser.add_argument("--spreads", type=float, nargs="+", default=[0.2])
+    parser.add_argument("--falls", type=float, nargs="+", default=[1.25])
     args = parser.parse_args()
+    if args.shape == "auto-threshold":
+        report_auto_threshold(args.spreads, args.falls)
+        raise SystemExit
     if args.shape == "gain-computer":
         report_gain_computer(args.overshoots)
         raise SystemExit

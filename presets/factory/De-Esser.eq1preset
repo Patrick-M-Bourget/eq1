@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-
-<eq1 version="2">
-  <PARAM id="band1_in_use" value="1.0"/>
-  <PARAM id="band1_frequency" value="6500.0"/>
-  <PARAM id="band1_q" value="2.0"/>
-  <PARAM id="band1_dynamic_range" value="-8.0"/>
-</eq1>

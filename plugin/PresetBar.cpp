@@ -14,7 +14,7 @@ namespace
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
 
-constexpr float namePadding = 14.0f, dotSize = 5.0f, dotGap = 6.0f;
+constexpr float namePadding = 14.0f, dotSize = 5.0f, dotGap = staple::tokens::header::modifiedDotGap;
 
 juce::Font nameFont() { return staple::font (size::fs4, staple::Weight::medium); }
 } // namespace

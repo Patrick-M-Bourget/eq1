@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<eq1 version="3">
+  <PARAM id="band1_in_use" value="1.0"/>
+  <PARAM id="band1_frequency" value="60.0"/>
+  <PARAM id="band1_dynamic_range" value="-6.0"/>
+  <PARAM id="band1_attack" value="20.0"/>
+  <PARAM id="band1_detection_source" value="1.0"/>
+  <PARAM id="band1_detection_range" value="1.0"/>
+  <PARAM id="band1_detection_low" value="40.0"/>
+  <PARAM id="band1_detection_high" value="100.0"/>
+</eq1>

@@ -17,10 +17,13 @@ constexpr double levelTimeConstantSeconds = 0.005;
 constexpr double kneeDb = 3.0;
 // The full Dynamic Range arrives this far above Threshold (plus the knee), whatever its size.
 constexpr double fullRangeOvershootDb = 12.0;
-// Auto Threshold sits this far above the average level of the region, which it follows over about
-// this long. Levels below the gate (silence) don't pull it down.
-constexpr double autoThresholdMarginDb = 4.0;
-constexpr double autoThresholdTimeConstantSeconds = 2.0;
+// Auto Threshold is the region's mean level plus this many standard deviations of it, both in dB.
+// They rise over about autoThresholdRiseSeconds, so a swell moves the Band before it is learned, and
+// fall over about autoThresholdFallSeconds, so a quieter passage is followed promptly. Levels below
+// the gate (silence) don't count, and nothing moves until the region has been heard for the hold.
+constexpr double autoThresholdSpreads = 0.2;
+constexpr double autoThresholdRiseSeconds = 4.5, autoThresholdFallSeconds = 1.25;
+constexpr double autoThresholdHoldSeconds = 0.25;
 constexpr double autoThresholdGateDb = -80.0;
 // Auto Attack: this slow just above Threshold, faster the further above it the detection goes.
 constexpr double autoAttackSlowestSeconds = 0.020;
@@ -57,7 +60,9 @@ void Dynamics::prepare (double newSampleRate)
         detectionChannels.push_back (channel.data());
     powerCoefficient = coefficientFor (levelTimeConstantSeconds, sampleRate);
     sustainCoefficient = coefficientFor (sustainTimeConstantSeconds, sampleRate);
-    averageCoefficient = coefficientFor (autoThresholdTimeConstantSeconds, sampleRate);
+    riseCoefficient = coefficientFor (autoThresholdRiseSeconds, sampleRate);
+    fallCoefficient = coefficientFor (autoThresholdFallSeconds, sampleRate);
+    holdSamples = autoThresholdHoldSeconds * sampleRate;
     dynamicRangeGlide.configure (glideTimeConstantSeconds * sampleRate, 1.0e-4);
     active.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     dynamicRangeGlide.reset (0.0);
@@ -231,12 +236,15 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         if (! moving)
             continue;
         runLevels[static_cast<size_t> (runLevelCount++)] = level;
-        // The mean of every level heard, until the time constant's worth has been: then the mean
-        // over about the last time constant.
+        // The mean and variance of every level heard, until a rise time's worth has been: then
+        // rising over about the rise time and falling over about the fall time.
         if (level > autoThresholdGateDb)
         {
-            samplesHeard = std::min (samplesHeard + 1.0, 1.0 / averageCoefficient);
-            averageLevel += (level - averageLevel) / samplesHeard;
+            samplesHeard = std::min (samplesHeard + 1.0, 1.0 / riseCoefficient);
+            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, 1.0 / samplesHeard); };
+            averageLevel += weight (level > averageLevel) * (level - averageLevel);
+            const double deviation = (level - averageLevel) * (level - averageLevel);
+            levelVariance += weight (deviation > levelVariance) * (deviation - levelVariance);
         }
     }
     if (detectionCount > 0)
@@ -250,9 +258,9 @@ double Dynamics::finishRun()
     if (! running())
         return 0.0;
 
-    // Until Auto Threshold has heard the region, nothing moves.
-    const bool listening = ! thresholdAuto || samplesHeard > 0.0;
-    const double thresholdDb = thresholdAuto ? averageLevel + autoThresholdMarginDb : threshold;
+    // Until Auto Threshold has heard the region for the hold, nothing moves.
+    const bool listening = ! thresholdAuto || samplesHeard >= holdSamples;
+    const double thresholdDb = thresholdAuto ? averageLevel + autoThresholdSpreads * std::sqrt (levelVariance) : threshold;
     const double span = fullRangeOvershootDb + 2.0 * kneeDb;
     const double loudest = levels.empty() ? nothingHeardDb : *std::max_element (levels.begin(), levels.end());
     const double attackCoefficient = coefficientFor (autoAttackSeconds (loudest - thresholdDb) * attackScale, sampleRate);

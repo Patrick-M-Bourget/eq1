@@ -2,3 +2,4 @@
 /.deps/
 /validators/
 .DS_Store
+__pycache__/

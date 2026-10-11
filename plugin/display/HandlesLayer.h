@@ -40,7 +40,7 @@ struct DynamicRangeHandle
 };
 // The Dynamic Range Handles to show: the selected Band's (one selected alone) while its Shape has Gain
 // and it isn't Bypassed, so a range can be made by dragging, and every other Dynamic Band's not under
-// Dynamics Bypass, at 55 % until hovered. Each sits at its Band's Frequency and heard Gain + Dynamic
+// Dynamics Bypass, at 55 % until hovered. Each sits at its Band's Frequency and Heard Gain + Dynamic
 // Range, or 26 px below its handle with none, and 14 px inside the top and bottom.
 std::vector<DynamicRangeHandle> dynamicRangeHandles (const DisplayGeometry& geometry, const DisplayFrame& frame);
 // A Dynamic Range Handle's 18 x 26 px hit area.

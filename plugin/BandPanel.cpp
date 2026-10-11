@@ -36,6 +36,8 @@ static_assert (BandPanel::height == contentTop + contentHeight + layout::bandPan
 static_assert (BandPanel::width
                == 2 * layout::edgeSelectorWidth + 4 * columnGap + 2 + frequencyColumn + gainColumn + qColumn + 2 * knobGap);
 static_assert (BandPanel::openWidth == BandPanel::width + layout::dynamicsSectionWidth + knobGap);
+// The open section sits on the bottom padding and stays inside the slab.
+static_assert (BandPanel::openHeight - layout::bandPanelPaddingBottom - layout::dynamicsSectionHeight > bell);
 
 // The bell's spread, as a proportion of the width, and the panel's Bypassed opacity.
 constexpr float bellSigma = 0.14f;
@@ -311,7 +313,7 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
     };
 
     slide.apply = [this] (float) {
-        placeAtWidth();
+        placeAtSize();
         if (slide.value() <= 0.0f && slide.target() <= 0.0f)
             section.setVisible (false);
     };
@@ -501,19 +503,22 @@ void BandPanel::showDynamics (bool animate)
 
 bool BandPanel::isDynamicsOpen() const { return slide.target() > 0.0f; }
 
+juce::Rectangle<int> BandPanel::slabBounds() const { return getBounds().withTrimmedTop (bell); }
+
 void BandPanel::setAnchor (juce::Point<int> bottomCentre)
 {
     anchor = bottomCentre;
-    placeAtWidth();
+    placeAtSize();
 }
 
-void BandPanel::placeAtWidth()
+void BandPanel::placeAtSize()
 {
     const int w = width + juce::roundToInt (slide.value() * static_cast<float> (openWidth - width));
+    const int h = height + juce::roundToInt (slide.value() * static_cast<float> (openHeight - height));
     if (anchor.has_value())
-        setBounds (anchor->x - w / 2, anchor->y - height, w, height);
+        setBounds (anchor->x - w / 2, anchor->y - h, w, h);
     else
-        setSize (w, height);
+        setSize (w, h);
 }
 
 void BandPanel::timerCallback()
@@ -560,8 +565,11 @@ void BandPanel::resized()
     next.setBounds (selector.removeFromRight (rowHeight));
     numberArea = selector;
 
-    // The columns, centred down the content beside the knobs.
-    const int columnTop = contentTop + (contentHeight - columnHeight) / 2;
+    // The content between the slab's padding: taller while the dynamics section opens. The columns are
+    // centred down it, and the knobs stay on its bottom, where they are while it is closed.
+    const int contentNow = getHeight() - contentTop - layout::bandPanelPaddingBottom;
+    const int knobsTop = contentTop + contentNow - contentHeight;
+    const int columnTop = contentTop + (contentNow - columnHeight) / 2;
     shape.setBounds (0, columnTop, layout::edgeSelectorWidth, layout::edgeSelectorHeight);
     slope->setBounds (layout::edgeSelectorWidth - layout::slopeButtonWidth, columnTop + layout::edgeSelectorHeight + 8, layout::slopeButtonWidth, rowHeight);
     placement.setBounds (getWidth() - layout::edgeSelectorWidth, columnTop, layout::edgeSelectorWidth, layout::edgeSelectorHeight);
@@ -570,8 +578,8 @@ void BandPanel::resized()
 
     // The knobs, centred on Gain's centre, with their labels on one baseline under them.
     int x = dividers[0] + 1 + columnGap;
-    const int labelTop = contentTop + contentHeight - labelHeight;
-    const float centreY = static_cast<float> (contentTop) + tokens::knob::gain / 2.0f;
+    const int labelTop = knobsTop + contentHeight - labelHeight;
+    const float centreY = static_cast<float> (knobsTop) + tokens::knob::gain / 2.0f;
     const std::tuple<staple::Knob*, juce::Label*, int> columns[] = { { &frequency, &frequencyLabel, frequencyColumn },
                                                                       { &gain, &gainLabel, gainColumn },
                                                                       { &q, &qLabel, qColumn } };
@@ -587,17 +595,17 @@ void BandPanel::resized()
             // The dynamics icons in a row above Gain, inside the bell.
             constexpr int icon = layout::dynamicsIcon, iconGap = layout::dynamicsIconGap;
             const int rowWidth = 3 * icon + 2 * iconGap;
-            dynamicsIcons.setBounds (x + (columnWidth - rowWidth) / 2, contentTop - layout::dynamicsIconsAbove, rowWidth, icon);
+            dynamicsIcons.setBounds (x + (columnWidth - rowWidth) / 2, knobsTop - layout::dynamicsIconsAbove, rowWidth, icon);
             int iconX = 0;
             for (auto* iconButton : { &clearDynamics, &dynamicsBypass, &dynamicsOpen })
             {
                 iconButton->setBounds (iconX, 0, icon, icon);
                 iconX += icon + iconGap;
             }
-            // The dynamics section after it, as wide as the panel has opened, centred down the content
-            // and lifted; Q and what follows move right by as much.
+            // The dynamics section after it, as wide as the panel has opened, on the bottom padding; Q and
+            // what follows move right by as much.
             const int opened = getWidth() - width;
-            const int sectionTop = contentTop + (contentHeight - layout::dynamicsSectionHeight) / 2 - layout::dynamicsSectionLift;
+            const int sectionTop = getHeight() - layout::bandPanelPaddingBottom - layout::dynamicsSectionHeight;
             section.setBounds (x + columnWidth + knobGap, sectionTop, std::max (0, opened - knobGap), layout::dynamicsSectionHeight);
             x += opened;
         }
@@ -649,7 +657,7 @@ void BandPanel::paint (juce::Graphics& g)
     const float alpha = fade.value();
     g.setColour (colour::fill2.withMultipliedAlpha (alpha));
     for (int x : dividers)
-        g.fillRect (x, contentTop, 1, contentHeight);
+        g.fillRect (x, contentTop, 1, getHeight() - contentTop - layout::bandPanelPaddingBottom);
     g.setFont (staple::font (tokens::size::fs4, staple::Weight::semiBold));
     g.setColour (band.withMultipliedAlpha (alpha));
     g.drawText (juce::String (slot), numberArea, juce::Justification::centred, false);

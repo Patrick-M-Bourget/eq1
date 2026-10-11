@@ -22,7 +22,7 @@ void click (juce::Button& button)
     button.onClick();
 }
 
-// The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Room,
+// The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Booth,
 // and an empty Drums/Brushes.
 struct Browser
 {
@@ -37,7 +37,7 @@ struct Browser
     Browser()
     {
         REQUIRE (library.save ("A", processor.presetState()).has_value());
-        for (const auto* path : { "Drums/Kick", "Drums/Acoustic/Room" })
+        for (const auto* path : { "Drums/Kick", "Drums/Acoustic/Booth" })
         {
             const auto file = folder.getChildFile (juce::String (path) + PresetLibrary::fileExtension);
             REQUIRE (file.getParentDirectory().createDirectory());
@@ -124,20 +124,20 @@ TEST_CASE ("The Preset browser opens on the Loaded Preset's folder, marking it")
 {
     Browser host;
     const auto listing = host.library.listing();
-    const auto& room = listing.back();
-    REQUIRE (room.name == "Room");
-    host.browser.open ("Room", &room);
+    const auto& booth = listing.back();
+    REQUIRE (booth.name == "Booth");
+    host.browser.open ("Booth", &booth);
     CHECK (host.browser.getSelectedFolder() == "User/Drums/Acoustic");
-    CHECK (host.rows() == juce::StringArray ({ "Room, Loaded Preset" }));
+    CHECK (host.rows() == juce::StringArray ({ "Booth, Loaded Preset" }));
 }
 
 TEST_CASE ("Searching lists matching Presets across every folder, with their folders; with no match, the empty message")
 {
     Browser host;
     host.browser.open ({}, nullptr);
-    host.type ("ROO");
-    CHECK (host.rows() == juce::StringArray ({ "Room, User/Drums/Acoustic" }));
-    CHECK (host.browser.getListTitle() == juce::String::fromUTF8 ("1 result for \xe2\x80\x9cROO\xe2\x80\x9d"));
+    host.type ("BOOTH");
+    CHECK (host.rows() == juce::StringArray ({ "Booth, User/Drums/Acoustic" }));
+    CHECK (host.browser.getListTitle() == juce::String::fromUTF8 ("1 result for \xe2\x80\x9c" "BOOTH\xe2\x80\x9d"));
     CHECK (host.browser.getSelectedFolder().isEmpty());
     CHECK (host.button ("Clear search").isVisible());
 

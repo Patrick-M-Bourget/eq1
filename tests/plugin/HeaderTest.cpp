@@ -28,6 +28,38 @@ struct Header : harness::OpenEditor
     eq1::CompareButton& compare() { return titled<eq1::CompareButton> ("A/B Compare"); }
     juce::Button& copy() { return *findAll<juce::Button> ([] (juce::Button& b) { return b.getName() == "Copy"; }).front(); }
 
+    // Where c paints, as runs of columns [start, end) in its own px, from a render at 4x.
+    static std::vector<juce::Range<float>> inkRuns (juce::Component& c)
+    {
+        constexpr float scale = 4.0f;
+        const auto image = c.createComponentSnapshot (c.getLocalBounds(), true, scale);
+        const juce::Image::BitmapData pixels (image, juce::Image::BitmapData::readOnly);
+        std::vector<juce::Range<float>> runs;
+        int start = -1;
+        for (int x = 0; x <= image.getWidth(); ++x)
+        {
+            bool ink = false;
+            for (int y = 0; x < image.getWidth() && y < image.getHeight() && ! ink; ++y)
+                ink = pixels.getPixelColour (x, y).getFloatAlpha() > 0.25f;
+            if (ink && start < 0)
+                start = x;
+            else if (! ink && start >= 0)
+            {
+                runs.push_back ({ static_cast<float> (start) / scale, static_cast<float> (x) / scale });
+                start = -1;
+            }
+        }
+        return runs;
+    }
+
+    // Where c's painting ends, in the editor's px.
+    float inkRight (juce::Component& c)
+    {
+        const auto runs = inkRuns (c);
+        REQUIRE_FALSE (runs.empty());
+        return static_cast<float> (editor->getLocalPoint (&c, juce::Point<int>()).x) + runs.back().getEnd();
+    }
+
     // Settings saved as a Preset, as the Presets bar would load them.
     void loadPreset (const juce::String& name)
     {
@@ -90,6 +122,36 @@ TEST_CASE ("With no Loaded Preset the name reads No Preset in text3; a Modified 
     host.set (2, "gain", 0.0f);
     host.settle (300);
     CHECK_FALSE (host.presets().showsModified());
+}
+
+TEST_CASE ("The Modified dot sits 14 px after the Preset name")
+{
+    Header host;
+    host.loadPreset ("Warm Vocal");
+    host.set (2, "gain", 4.0f);
+    host.settle (300);
+    REQUIRE (host.presets().showsModified());
+    const auto runs = Header::inkRuns (host.presets());
+    REQUIRE (runs.size() >= 2);
+    // The dot is the last run; the name's last glyph the one before it.
+    const auto dot = runs.back(), name = runs[runs.size() - 2];
+    CHECK_THAT (dot.getLength(), Catch::Matchers::WithinAbs (5.0, 1.0));
+    CHECK_THAT (dot.getStart() - name.getEnd(), Catch::Matchers::WithinAbs (14.0, 1.0));
+}
+
+TEST_CASE ("Copy and Copied both end at the prototype's x, and nothing in the header moves between them")
+{
+    Header host;
+    host.settle (300);
+    const auto copyBounds = host.copy().getBounds(), compareBounds = host.compare().getBounds();
+    CHECK_THAT (host.inkRight (host.copy()), Catch::Matchers::WithinAbs (1170.0, 1.0));
+
+    host.copy().onClick();
+    host.settle (100);
+    REQUIRE (host.copy().getButtonText() == "Copied");
+    CHECK_THAT (host.inkRight (host.copy()), Catch::Matchers::WithinAbs (1170.0, 1.0));
+    CHECK (host.copy().getBounds() == copyBounds);
+    CHECK (host.compare().getBounds() == compareBounds);
 }
 
 TEST_CASE ("Copy's tooltip names the direction, and it reads Copied for 1 s after a click")
