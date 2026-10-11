@@ -1,6 +1,6 @@
 # Fractional Slopes morph the cascade between neighbouring whole orders
 
-**Status:** Proposed (#18). The maintainer picks the target; the Engine work follows.
+**Status:** Accepted (#18): the partial cascade; beyond about an octave the stopband falls at the next whole order. Jumps between nearby Slopes and the Shelf tolerance gaps are explored in #161 before the Engine work.
 
 `band<n>_slope` is already continuous (ADR 0003), but the Engine rounds it to the nearest whole order. Pro-Q 4's Slope is continuous (for example 3.5 dB/oct). This ADR proposes the analog target for a Slope between whole orders. Bell's Slope is #19.
 
