@@ -74,41 +74,44 @@ bool BandEditing::isFull() const
 
 int BandEditing::freeSlots() const
 {
-    int free = 0;
+    return static_cast<int> (lowestFreeSlots().size());
+}
+
+std::vector<int> BandEditing::lowestFreeSlots() const
+{
+    std::vector<int> free;
     for (int slot = 1; slot <= numBandSlots; ++slot)
         if (! band (slot).inUse)
-            ++free;
+            free.push_back (slot);
     return free;
 }
 
 std::optional<int> BandEditing::add (double frequency, double gain)
 {
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-    {
-        if (band (slot).inUse)
-            continue;
-        // The slot's settings first, so the audio never plays the Band with what the slot held before.
-        const BandSettings defaults;
-        history.beginTransaction();
-        set (parameters::shapeId (slot), static_cast<double> (defaults.shape));
-        set (parameters::frequencyId (slot), frequency);
-        set (parameters::gainId (slot), storedGain (gain));
-        set (parameters::qId (slot), defaults.q);
-        set (parameters::slopeId (slot), defaults.slope);
-        set (parameters::brickwallId (slot), static_cast<double> (defaults.brickwall));
-        set (parameters::placementId (slot), static_cast<double> (defaults.placement));
-        set (parameters::dynamicRangeId (slot), defaults.dynamicRange);
-        set (parameters::thresholdId (slot), defaults.threshold);
-        set (parameters::thresholdAutoId (slot), static_cast<double> (defaults.thresholdAuto));
-        set (parameters::attackId (slot), defaults.attack);
-        set (parameters::releaseId (slot), defaults.release);
-        set (parameters::dynamicsBypassId (slot), static_cast<double> (defaults.dynamicsBypass));
-        set (parameters::bypassId (slot), 0.0);
-        set (parameters::inUseId (slot), 1.0);
-        history.endTransaction();
-        return slot;
-    }
-    return std::nullopt;
+    const auto free = lowestFreeSlots();
+    if (free.empty())
+        return std::nullopt;
+    const int slot = free.front();
+    // The slot's settings first, so the audio never plays the Band with what the slot held before.
+    const BandSettings defaults;
+    history.beginTransaction();
+    set (parameters::shapeId (slot), static_cast<double> (defaults.shape));
+    set (parameters::frequencyId (slot), frequency);
+    set (parameters::gainId (slot), storedGain (gain));
+    set (parameters::qId (slot), defaults.q);
+    set (parameters::slopeId (slot), defaults.slope);
+    set (parameters::brickwallId (slot), static_cast<double> (defaults.brickwall));
+    set (parameters::placementId (slot), static_cast<double> (defaults.placement));
+    set (parameters::dynamicRangeId (slot), defaults.dynamicRange);
+    set (parameters::thresholdId (slot), defaults.threshold);
+    set (parameters::thresholdAutoId (slot), static_cast<double> (defaults.thresholdAuto));
+    set (parameters::attackId (slot), defaults.attack);
+    set (parameters::releaseId (slot), defaults.release);
+    set (parameters::dynamicsBypassId (slot), static_cast<double> (defaults.dynamicsBypass));
+    set (parameters::bypassId (slot), 0.0);
+    set (parameters::inUseId (slot), 1.0);
+    history.endTransaction();
+    return slot;
 }
 
 std::optional<int> BandEditing::grab (double frequency)
@@ -333,15 +336,14 @@ std::vector<int> BandEditing::split (const std::vector<int>& slotsToSplit)
         parameters::dynamicsBypassId,  parameters::detectionSourceId, parameters::detectionRangeId, parameters::detectionLowId,
         parameters::detectionHighId,
     };
+    // Each Right half takes the next free slot, lowest first.
+    const auto free = lowestFreeSlots();
+    stereo.resize (std::min (stereo.size(), free.size()));
     std::vector<int> halves;
     history.beginTransaction();
-    for (int slot : stereo)
+    for (size_t i = 0; i < stereo.size(); ++i)
     {
-        int right = 1;
-        while (right <= numBandSlots && band (right).inUse)
-            ++right;
-        if (right > numBandSlots)
-            break;
+        const int slot = stereo[i], right = free[i];
         // The new Band's settings first, so the audio never plays it with what the slot held before.
         for (auto idOf : copied)
         {
@@ -362,10 +364,7 @@ std::vector<int> BandEditing::split (const std::vector<int>& slotsToSplit)
 
 std::vector<int> BandEditing::paste (const std::vector<BandSettings>& bands)
 {
-    std::vector<int> free;
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-        if (! band (slot).inUse)
-            free.push_back (slot);
+    const auto free = lowestFreeSlots();
     // The lowest-Frequency Bands that fit, then back in the order given.
     std::vector<size_t> chosen (bands.size());
     std::iota (chosen.begin(), chosen.end(), size_t { 0 });

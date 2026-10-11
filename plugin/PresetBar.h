@@ -53,7 +53,8 @@ private:
 class PresetBar final : public juce::Component, private juce::Timer
 {
 public:
-    explicit PresetBar (PluginProcessor& processor);
+    // Its User Presets kept in userFolder (PresetLibrary).
+    explicit PresetBar (PluginProcessor& processor, juce::File userFolder = PresetLibrary::defaultUserFolder());
 
     void resized() override;
 
@@ -74,14 +75,17 @@ private:
     void timerCallback() override;
     void showLoadedPreset();
     void edited();
-    // Loads a Preset, remembering the listing entry it came from (none for a file from anywhere).
-    void load (const juce::ValueTree& preset, const juce::String& name, std::optional<PresetLibrary::Entry> entry);
+    // Loads a Preset, the side remembering the folder it is listed in (none for a file from anywhere).
+    void load (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder);
     // Loads the Preset by places after (or before, when negative) the Loaded Preset's entry (PresetLibrary::step).
     void step (int by);
     // Saves the settings as a User Preset named name, when it isn't empty, making it the side's Loaded
     // Preset (the browser's inline "Save as…" field).
     void saveAs (const juce::String& name);
-    const PresetLibrary::Entry* lastLoadedEntry() const { return lastLoaded.has_value() ? &*lastLoaded : nullptr; }
+    // The listing entry the side last loaded or saved, through the browser, ‹ › or saving, which ‹ ›
+    // step from while its name is still the Loaded Preset's: a name can be listed more than once.
+    // Each side keeps its own (PluginProcessor::loadedPresetFolder), so the Loaded Preset stays a name.
+    std::optional<PresetLibrary::Entry> lastLoadedEntry() const;
     void chooseFileToLoad();
 
     PluginProcessor& processor;
@@ -89,10 +93,6 @@ private:
     PresetBrowser browser { library };
     PresetNameButton presets;
     staple::IconButton previous { "Previous Preset", staple::Icon::previous }, next { "Next Preset", staple::Icon::next };
-    // The listing entry last loaded or saved, through the browser, ‹ › or saving, which ‹ › step from
-    // while its name is still the Loaded Preset's: a name can be listed more than once. Kept in memory
-    // only, so the Loaded Preset stays a name.
-    std::optional<PresetLibrary::Entry> lastLoaded;
     std::unique_ptr<juce::FileChooser> chooser;
 };
 

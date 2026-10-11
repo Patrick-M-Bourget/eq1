@@ -1,9 +1,11 @@
 #include "EditorHarness.h"
 #include "PluginProcessor.h"
+#include "PresetBar.h"
 #include "PresetBrowser.h"
 #include "PresetLibrary.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <memory>
 
@@ -22,14 +24,20 @@ void click (juce::Button& button)
     button.onClick();
 }
 
-// The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Room,
-// and an empty Drums/Brushes.
-struct Browser
+// A User folder of a test's own, deleted afterwards.
+struct UserFolder
+{
+    juce::TemporaryFile temporary;
+    juce::File folder = temporary.getFile();
+    ~UserFolder() { folder.deleteRecursively(); }
+};
+
+// The browser over a User folder of its own: A, Drums/Kick and Drums/Acoustic/Booth, and an empty
+// Drums/Brushes.
+struct Browser : UserFolder
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    juce::TemporaryFile temporary;
-    juce::File folder = temporary.getFile();
     PresetLibrary library { folder };
     PresetBrowser browser { library };
     std::vector<juce::String> loads, saves;
@@ -37,7 +45,7 @@ struct Browser
     Browser()
     {
         REQUIRE (library.save ("A", processor.presetState()).has_value());
-        for (const auto* path : { "Drums/Kick", "Drums/Acoustic/Room" })
+        for (const auto* path : { "Drums/Kick", "Drums/Acoustic/Booth" })
         {
             const auto file = folder.getChildFile (juce::String (path) + PresetLibrary::fileExtension);
             REQUIRE (file.getParentDirectory().createDirectory());
@@ -56,7 +64,6 @@ struct Browser
             browser.showLoaded (name, &entry);
         };
     }
-    ~Browser() { folder.deleteRecursively(); }
 
     juce::Button& button (const juce::String& title)
     {
@@ -124,20 +131,20 @@ TEST_CASE ("The Preset browser opens on the Loaded Preset's folder, marking it")
 {
     Browser host;
     const auto listing = host.library.listing();
-    const auto& room = listing.back();
-    REQUIRE (room.name == "Room");
-    host.browser.open ("Room", &room);
+    const auto& booth = listing.back();
+    REQUIRE (booth.name == "Booth");
+    host.browser.open ("Booth", &booth);
     CHECK (host.browser.getSelectedFolder() == "User/Drums/Acoustic");
-    CHECK (host.rows() == juce::StringArray ({ "Room, Loaded Preset" }));
+    CHECK (host.rows() == juce::StringArray ({ "Booth, Loaded Preset" }));
 }
 
 TEST_CASE ("Searching lists matching Presets across every folder, with their folders; with no match, the empty message")
 {
     Browser host;
     host.browser.open ({}, nullptr);
-    host.type ("ROO");
-    CHECK (host.rows() == juce::StringArray ({ "Room, User/Drums/Acoustic" }));
-    CHECK (host.browser.getListTitle() == juce::String::fromUTF8 ("1 result for \xe2\x80\x9cROO\xe2\x80\x9d"));
+    host.type ("BOOTH");
+    CHECK (host.rows() == juce::StringArray ({ "Booth, User/Drums/Acoustic" }));
+    CHECK (host.browser.getListTitle() == juce::String::fromUTF8 ("1 result for \xe2\x80\x9c" "BOOTH\xe2\x80\x9d"));
     CHECK (host.browser.getSelectedFolder().isEmpty());
     CHECK (host.button ("Clear search").isVisible());
 
@@ -338,4 +345,55 @@ TEST_CASE ("Preset browser snapshots: a folder, and a search", "[.screens]")
         search->keyPressed (juce::KeyPress (static_cast<int> (character), {}, character));
     host.settle (100);
     write ("search");
+}
+
+TEST_CASE ("Each A/B side's browser mark and Previous and Next Preset follow the entry it loaded, when two folders list the same name")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    const UserFolder user;
+    const auto folder = user.folder;
+    const auto factory = PresetLibrary::factoryPresets();
+    REQUIRE (factory.size() >= 2u);
+    // User holds a Preset named as the first Factory one, and one listed after it.
+    const auto x = factory.front().name;
+    {
+        PresetLibrary library { folder };
+        REQUIRE (library.save (x, processor.presetState()).has_value());
+        REQUIRE (library.save ("zzz", processor.presetState()).has_value());
+    }
+    eq1::PresetBar bar { processor, folder };
+    auto& browser = dynamic_cast<PresetBrowser&> (bar.browserPanel());
+    const auto button = [&bar] (const juce::String& title) -> juce::Button& {
+        auto* found = findChild<juce::Button> (bar, [&title] (juce::Button& b) { return b.getTitle() == title; });
+        REQUIRE (found != nullptr);
+        return *found;
+    };
+    auto* list = findChild<juce::ListBox> (browser);
+    REQUIRE (list != nullptr);
+    const auto loadFirstIn = [&] (const juce::String& path) {
+        browser.selectFolder (path);
+        list->getListBoxModel()->listBoxItemClicked (0, harness::mouseEvent (*list, {}, juce::ModifierKeys::leftButtonModifier));
+    };
+    const auto reopen = [&] {
+        browser.close();
+        click (button ("Presets"));
+        REQUIRE (browser.isVisible());
+    };
+
+    click (button ("Presets"));
+    loadFirstIn ("Factory");
+    processor.selectCompareSide (eq1::CompareSide::B);
+    loadFirstIn ("User");
+    REQUIRE (processor.loadedPresetName() == x);
+
+    const auto side = GENERATE (eq1::CompareSide::A, eq1::CompareSide::B);
+    CAPTURE (side == eq1::CompareSide::A ? "A" : "B");
+    processor.selectCompareSide (side);
+    reopen();
+    CHECK (browser.getSelectedFolder() == (side == eq1::CompareSide::A ? "Factory" : "User"));
+    CHECK (list->getListBoxModel()->getNameForRow (0) == x + ", Loaded Preset");
+
+    click (button ("Next Preset"));
+    CHECK (processor.loadedPresetName() == (side == eq1::CompareSide::A ? factory[1].name : juce::String ("zzz")));
 }

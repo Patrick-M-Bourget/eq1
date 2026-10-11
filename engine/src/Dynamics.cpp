@@ -1,8 +1,10 @@
 #include "Dynamics.h"
 
+#include "Smoothstep.h"
 #include "Solo.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <span>
 
@@ -15,10 +17,15 @@ namespace
 constexpr double levelTimeConstantSeconds = 0.005;
 // The gain computer's soft knee: movement starts this far below Threshold.
 constexpr double kneeDb = 3.0;
-// Auto Threshold sits this far above the average level of the region, which it follows over about
-// this long. Levels below the gate (silence) don't pull it down.
-constexpr double autoThresholdMarginDb = 4.0;
-constexpr double autoThresholdTimeConstantSeconds = 2.0;
+// The full Dynamic Range arrives this far above Threshold (plus the knee), whatever its size.
+constexpr double fullRangeOvershootDb = 12.0;
+// Auto Threshold is the region's mean level plus this many standard deviations of it, both in dB.
+// They rise over about autoThresholdRiseSeconds, so a swell moves the Band before it is learned, and
+// fall over about autoThresholdFallSeconds, so a quieter passage is followed promptly. Levels below
+// the gate (silence) don't count, and nothing moves until the region has been heard for the hold.
+constexpr double autoThresholdSpreads = 0.2;
+constexpr double autoThresholdRiseSeconds = 4.5, autoThresholdFallSeconds = 1.25;
+constexpr double autoThresholdHoldSeconds = 0.25;
 constexpr double autoThresholdGateDb = -80.0;
 // Auto Attack: this slow just above Threshold, faster the further above it the detection goes.
 constexpr double autoAttackSlowestSeconds = 0.020;
@@ -55,7 +62,9 @@ void Dynamics::prepare (double newSampleRate)
         detectionChannels.push_back (channel.data());
     powerCoefficient = coefficientFor (levelTimeConstantSeconds, sampleRate);
     sustainCoefficient = coefficientFor (sustainTimeConstantSeconds, sampleRate);
-    averageCoefficient = coefficientFor (autoThresholdTimeConstantSeconds, sampleRate);
+    riseCoefficient = coefficientFor (autoThresholdRiseSeconds, sampleRate);
+    fallCoefficient = coefficientFor (autoThresholdFallSeconds, sampleRate);
+    holdSamples = autoThresholdHoldSeconds * sampleRate;
     dynamicRangeGlide.configure (glideTimeConstantSeconds * sampleRate, 1.0e-4);
     active.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     dynamicRangeGlide.reset (0.0);
@@ -111,6 +120,7 @@ void Dynamics::startAfresh()
     rangeFilter.setSettings (rangeFilterSettings, true);
     highLimit.setSettings (highLimitSettings, true);
     power = {};
+    runLevelCount = 0;
     movement = sustain = 0.0;
     samplesHeard = 0.0; // Auto Threshold learns the material playing now
 }
@@ -228,13 +238,19 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         // Metered only: whatever comes next starts afresh, as if never metered.
         if (! moving)
             continue;
-        runLevels[static_cast<size_t> (runLevelCount++)] = level;
-        // The mean of every level heard, until the time constant's worth has been: then the mean
-        // over about the last time constant.
+        // A run is at most maxSubBlock samples, and finishRun() empties the levels at its end.
+        assert (runLevelCount < Band::maxSubBlock);
+        if (runLevelCount < Band::maxSubBlock)
+            runLevels[static_cast<size_t> (runLevelCount++)] = level;
+        // The mean and variance of every level heard, until a rise time's worth has been: then
+        // rising over about the rise time and falling over about the fall time.
         if (level > autoThresholdGateDb)
         {
-            samplesHeard = std::min (samplesHeard + 1.0, 1.0 / averageCoefficient);
-            averageLevel += (level - averageLevel) / samplesHeard;
+            samplesHeard = std::min (samplesHeard + 1.0, 1.0 / riseCoefficient);
+            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, 1.0 / samplesHeard); };
+            averageLevel += weight (level > averageLevel) * (level - averageLevel);
+            const double deviation = (level - averageLevel) * (level - averageLevel);
+            levelVariance += weight (deviation > levelVariance) * (deviation - levelVariance);
         }
     }
     if (detectionCount > 0)
@@ -248,18 +264,18 @@ double Dynamics::finishRun()
     if (! running())
         return 0.0;
 
-    // Until Auto Threshold has heard the region, nothing moves.
-    const bool listening = ! thresholdAuto || samplesHeard > 0.0;
-    const double thresholdDb = thresholdAuto ? averageLevel + autoThresholdMarginDb : threshold;
-    const double span = 2.0 * std::abs (dynamicRange) + 2.0 * kneeDb;
+    // Until Auto Threshold has heard the region for the hold, nothing moves.
+    const bool listening = ! thresholdAuto || samplesHeard >= holdSamples;
+    const double thresholdDb = thresholdAuto ? averageLevel + autoThresholdSpreads * std::sqrt (levelVariance) : threshold;
+    const double span = fullRangeOvershootDb + 2.0 * kneeDb;
     const double loudest = levels.empty() ? nothingHeardDb : *std::max_element (levels.begin(), levels.end());
     const double attackCoefficient = coefficientFor (autoAttackSeconds (loudest - thresholdDb) * attackScale, sampleRate);
     const double releaseCoefficient = coefficientFor (autoReleaseSeconds() * releaseScale, sampleRate);
     for (const double level : levels)
     {
-        // A soft knee from kneeDb below Threshold, then about 2:1 until the full Dynamic Range.
-        const double x = listening ? std::clamp ((level - thresholdDb + kneeDb) / span, 0.0, 1.0) : 0.0;
-        const double target = x * x * (3.0 - 2.0 * x);
+        // A soft knee from kneeDb below Threshold, then smoothly to the full Dynamic Range at
+        // fullRangeOvershootDb + kneeDb above it.
+        const double target = listening ? smoothstep ((level - thresholdDb + kneeDb) / span) : 0.0;
         movement += (target > movement ? attackCoefficient : releaseCoefficient) * (target - movement);
         sustain += sustainCoefficient * (target - sustain);
     }

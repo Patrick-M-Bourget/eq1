@@ -195,7 +195,7 @@ A single control that scales every Band's Gain and Dynamic Range at once.
 _Avoid_: Depth, master gain, amount
 
 **Heard Gain**:
-A Band's Gain as it reaches the audio: its Gain scaled by Gain Scale. At 100% Gain Scale it equals the Gain.
+A Band's Gain as it reaches the audio: its Gain scaled by Gain Scale, before any dynamic movement. At 100% Gain Scale it equals the Gain; a Dynamic Band's Live Gain moves away from it.
 _Avoid_: Scaled gain, effective gain, Gain (when Gain Scale has been applied)
 
 **Host Automation**:

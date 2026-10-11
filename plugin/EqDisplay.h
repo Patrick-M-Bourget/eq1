@@ -44,7 +44,7 @@ class PluginProcessor;
 // a press elsewhere or when its Band goes. Global Bypass fades every curve and handle to its bypassed
 // look (plugin/display/).
 // The curve comes from the Engine's own response maths (eq1/Response.h). A handle beyond the Display
-// Range sits at its edge; a heard Gain changed to beyond it zooms the range out, once any drag has
+// Range sits at its edge; a Heard Gain changed to beyond it zooms the range out, once any drag has
 // ended. A screen reader reads the display as a group, "EQ display", of the Bands in use, each named
 // "Band 4" with its stored settings as its value (spokenBand), announced again whenever the Band moves,
 // and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle". It paints no background: the
@@ -143,7 +143,8 @@ private:
     void selectAll();
     void deleteSelection();
     // The selected Bands onto the system clipboard, and the clipboard's Bands into the free Band
-    // Slots, selected; false when there was nothing to paste or no free slot.
+    // Slots, selected; false when the clipboard holds no eq1 Bands (true with them, even when no free
+    // slot leaves nothing to paste).
     void copySelection();
     bool paste();
     void showMenu (const juce::MouseEvent& e);

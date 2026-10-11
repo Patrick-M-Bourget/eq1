@@ -74,6 +74,7 @@ void ABCompare::select (CompareSide side)
     {
         // B, still a copy of A, is selected for the first time: it takes A's Loaded Preset too.
         next.loadedOn (CompareSide::B) = next.loadedOn (CompareSide::A);
+        loadedFrom[indexOf (CompareSide::B)] = loadedFrom[indexOf (CompareSide::A)];
         set (std::move (next));
     }
     history.endTransaction();
@@ -85,13 +86,15 @@ void ABCompare::copyToOther()
     auto next = current();
     const auto to = next.active == CompareSide::A ? CompareSide::B : CompareSide::A;
     next.loadedOn (to) = next.loadedOn (next.active);
+    loadedFrom[indexOf (to)] = loadedFrom[indexOf (next.active)];
     next.other = capturePresetSettings (parameters, sideType);
     set (std::move (next));
     history.endTransaction();
 }
 
-void ABCompare::loadPreset (const juce::ValueTree& preset, const juce::String& name)
+void ABCompare::loadPreset (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder)
 {
+    loadedFrom[indexOf (side())] = { name, folder };
     const auto loaded = loadedPresetOf (preset, name);
     history.beginTransaction();
     auto next = current();
@@ -100,8 +103,9 @@ void ABCompare::loadPreset (const juce::ValueTree& preset, const juce::String& n
     history.endTransaction();
 }
 
-void ABCompare::presetSaved (const juce::ValueTree& preset, const juce::String& name)
+void ABCompare::presetSaved (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder)
 {
+    loadedFrom[indexOf (side())] = { name, folder };
     history.beginTransaction();
     auto next = current();
     next.loadedOn (next.active) = loadedPresetOf (preset, name);
@@ -118,6 +122,12 @@ juce::String ABCompare::loadedPresetName() const
 {
     const juce::SpinLock::ScopedLockType hold (lock);
     return state.loadedOn (state.active).getProperty (nameProperty).toString();
+}
+
+juce::String ABCompare::loadedPresetFolder() const
+{
+    const auto& from = loadedFrom[indexOf (side())];
+    return from.name == loadedPresetName() ? from.folder : juce::String();
 }
 
 bool ABCompare::isModified() const

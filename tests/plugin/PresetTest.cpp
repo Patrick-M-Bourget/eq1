@@ -306,3 +306,42 @@ TEST_CASE ("Settings saved as a Preset make it the side's Loaded Preset, unmodif
     CHECK (host.processor.isLoadedPresetModified());
 }
 
+
+TEST_CASE ("Each side remembers the folder its Loaded Preset came from, while it keeps that name, without saving it")
+{
+    const auto x = presetWith ({ { "band2_in_use", 1.0f } });
+    Host host;
+    host.processor.loadPreset (x, "X", "Factory");
+    host.processor.selectCompareSide (CompareSide::B);
+    // B, selected first, takes A's Loaded Preset and where it came from.
+    CHECK (host.processor.loadedPresetFolder() == "Factory");
+    host.processor.loadPreset (x, "X", "User");
+    CHECK (host.processor.loadedPresetFolder() == "User");
+    host.processor.selectCompareSide (CompareSide::A);
+    CHECK (host.processor.loadedPresetFolder() == "Factory");
+
+    // Copy gives the other side where it came from too.
+    host.processor.copyToOther();
+    host.processor.selectCompareSide (CompareSide::B);
+    CHECK (host.processor.loadedPresetFolder() == "Factory");
+
+    // Saving names the folder saved to; a load from a file, none.
+    host.processor.presetSaved (host.processor.presetState(), "Y", "User/Drums");
+    CHECK (host.processor.loadedPresetFolder() == "User/Drums");
+    host.processor.loadPreset (x, "Z");
+    CHECK (host.processor.loadedPresetFolder().isEmpty());
+
+    // An undo to another name leaves none; nothing of it is in the saved state.
+    host.processor.editHistory().undo();
+    CHECK (host.processor.loadedPresetName() == "Y");
+    CHECK (host.processor.loadedPresetFolder().isEmpty());
+
+    Host plain;
+    plain.processor.loadPreset (x, "X");
+    Host remembering;
+    remembering.processor.loadPreset (x, "X", "Factory");
+    juce::MemoryBlock withFolder, without;
+    remembering.processor.getStateInformation (withFolder);
+    plain.processor.getStateInformation (without);
+    CHECK (withFolder == without);
+}

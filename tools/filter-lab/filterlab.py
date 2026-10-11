@@ -10,6 +10,8 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py high-cut --orders 1 2 16 32 --q 0.71 10
     python3 tools/filter-lab/filterlab.py band-pass --orders 1 4 16 --q 0.1 2 40
     python3 tools/filter-lab/filterlab.py all-pass --orders 1 2 8 --q 0.71
+    python3 tools/filter-lab/filterlab.py gain-computer --overshoots 9 12 15
+    python3 tools/filter-lab/filterlab.py auto-threshold --spreads 0.1 0.2 0.3 --falls 1 1.25 2
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report().
@@ -188,22 +190,69 @@ def _analog_db(sections, f, frequency):
     return 10 * math.log10(math.prod(s.squared(f / frequency) for s in sections))
 
 
+RESONANT_SHELF_Q = 2.0  # above this Q, a shelf section's extra resonance goes into a second biquad
+SPLIT_IN = 2.5  # the split eases in from Q 2 to this Q
+SPLIT_FULL, SPLIT_NONE = 0.8, 1.1  # zeros' natural frequency, as a share of Nyquist, where the split fades out
+
+
+def _smoothstep(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def _resonant_split(a: Analog, frequency, fs, q, pairs):
+    """A second-order shelf section (designed with its sharp poles at or below Frequency) as two biquads,
+    [poles, zeros]: the section's poles over zeros at the Q the section has at Q 2, and the zeros' extra
+    resonance, (zeros at their Q) / (zeros at that Q), designed as its inverse and inverted back. The
+    split eases in from Q 2 to SPLIT_IN and fades out, geometrically in the zeros' Q, as the zeros'
+    natural frequency goes from SPLIT_FULL to SPLIT_NONE x Nyquist, where the inverse's poles would be
+    held; both fades are smoothsteps, so the coefficients' path has no corner. Unsplit, the second is its
+    matched poles over equal zeros: exactly the identity, and the limit of the split."""
+    natural = math.sqrt(a.n0 / a.n2)
+    zeros_q = math.sqrt(a.n0 * a.n2) / a.n1
+    x = natural * frequency / (fs / 2)
+    t = math.log(SPLIT_NONE / x) / math.log(SPLIT_NONE / SPLIT_FULL)
+    t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
+    split_q = zeros_q * (RESONANT_SHELF_Q / q) ** (t / pairs)
+    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs)
+    if split_q >= zeros_q:
+        resonance.b0, resonance.b1, resonance.b2 = 1, resonance.a1, resonance.a2
+        return [match_section(a, frequency, fs), resonance]
+    poles = match_section(Analog(a.n2, math.sqrt(a.n0 * a.n2) / split_q, a.n0, a.d2, a.d1, a.d0), frequency, fs)
+    return [poles, inverse(resonance)]
+
+
+def _shelf_sections(sections, frequency, fs, q, order, invert):
+    """Each analog section matched, second-order ones split by _resonant_split into two biquads: the one
+    with the sharp zeros first, then the one with the sharp poles, so what a moving resonance stirs up
+    near Nyquist isn't amplified by the other. Inverted, the two swap roles and places, so at 0 dB, where
+    the two directions meet, so do the biquads in each place."""
+    out = []
+    for s in sections:
+        if s.d2 == 0:
+            out.append(inverse(match_section(s, frequency, fs)) if invert else match_section(s, frequency, fs))
+            continue
+        poles, zeros = _resonant_split(s, frequency, fs, q, order // 2)
+        out += [inverse(poles), inverse(zeros)] if invert else [zeros, poles]
+    return out
+
+
 def low_shelf(fs, frequency, gain, q, order=2):
-    sections = []
-    for s in _low_shelf_sections(order, 10 ** (abs(gain) / 20), q):
-        boost = match_section(s, frequency, fs)
-        sections.append(boost if gain >= 0 else inverse(boost))
+    sections = _shelf_sections(_low_shelf_sections(order, 10 ** (abs(gain) / 20), q), frequency, fs, q, order, gain < 0)
     target_sections = list(_low_shelf_sections(order, 10 ** (gain / 20), q))
     return sections, lambda f: _analog_db(target_sections, f, frequency)
 
 
+def _mirrored_cut(low: Analog):
+    """The High Shelf cut section for a Low Shelf boost section: mirrored (s -> 1/s) and inverted."""
+    boost = (Analog(0, low.n0, low.n1, 0, low.d0, low.d1) if low.d2 == 0
+             else Analog(low.n0, low.n1, low.n2, low.d0, low.d1, low.d2))
+    return Analog(boost.d2, boost.d1, boost.d0, boost.n2, boost.n1, boost.n0)
+
+
 def high_shelf(fs, frequency, gain, q, order=2):
-    sections = []
-    for low in _low_shelf_sections(order, 10 ** (abs(gain) / 20), q):
-        boost = (Analog(0, low.n0, low.n1, 0, low.d0, low.d1) if low.d2 == 0
-                 else Analog(low.n0, low.n1, low.n2, low.d0, low.d1, low.d2))
-        cut = match_section(Analog(boost.d2, boost.d1, boost.d0, boost.n2, boost.n1, boost.n0), frequency, fs)
-        sections.append(inverse(cut) if gain >= 0 else cut)
+    sections = _shelf_sections(map(_mirrored_cut, _low_shelf_sections(order, 10 ** (abs(gain) / 20), q)),
+                               frequency, fs, q, order, gain >= 0)
     low_sections = list(_low_shelf_sections(order, 10 ** (-gain / 20), q))
     return sections, lambda f: gain + _analog_db(low_sections, f, frequency)
 
@@ -386,9 +435,10 @@ def position_band(frequency, fs):
 
 
 def report(shape, sample_rates=(44100, 48000, 96000),
-           frequencies=(20, 200, 1000, 5000, 10000, 15000, 18000, 20000),
-           gains=(-30, -12, -3, 3, 12, 30), qs=(0.71,), orders=(2,), points=200):
-    """Worst error per (position band, Q), as dB and as a share of the target's span in dB."""
+           frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
+           gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), qs=(0.71,), orders=(2,), points=200):
+    """Worst error per (position band, Q), as dB and as a share of the target's span in dB: how far it
+    strays from its value at 10 Hz, and at least |Gain|, as in the Engine tests."""
     worst = {}
     for fs in sample_rates:
         for frequency in frequencies:
@@ -398,13 +448,13 @@ def report(shape, sample_rates=(44100, 48000, 96000),
                 for q in qs:
                     for order in orders:
                         sections, target = shape(fs, frequency, gain, q, order)
-                        error = span = 0.0
+                        error, span, lowest = 0.0, abs(gain), target(10)
                         for i in range(points + 1):
                             f = 10 * (fs / 2 / 10) ** (i / points)
                             t = target(f)
-                            span = max(span, abs(t))
+                            span = max(span, abs(t - lowest))
                             error = max(error, abs(cascade_db(sections, f, fs) - t))
-                        share = error / max(span, abs(gain), 1e-9)
+                        share = error / max(span, 1e-9)
                         key = (position_band(frequency, fs), q)
                         if share > worst.get(key, (0,))[0]:
                             worst[key] = (share, error, fs, frequency, gain, order)
@@ -470,11 +520,117 @@ def report_phase(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {order:>5}  {error:7.2f}")
 
 
+# --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------
+
+KNEE_DB = 3.0
+
+
+def movement(overshoot_db, full_range_overshoot_db, knee_db=KNEE_DB):
+    """A Dynamic Band's movement, 0 to 1 of its Dynamic Range, for a steady level overshoot_db above
+    Threshold: a smoothstep from knee_db below Threshold to full_range_overshoot_db + knee_db above it."""
+    x = min(max((overshoot_db + knee_db) / (full_range_overshoot_db + 2 * knee_db), 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def report_gain_computer(full_range_overshoots, ranges=(6, 12, 18, 30), overshoots=(0, 3, 6, 9, 12, 15)):
+    """Movement in dB at each overshoot above Threshold, per Dynamic Range, and the steepest slope
+    (dB of movement per dB of level, at the curve's middle); a slope above 1 means a cut Band's
+    output falls as its detection rises there."""
+    for full in full_range_overshoots:
+        print(f"full range at {full:g} dB + {KNEE_DB:g} dB knee above Threshold")
+        print(f"{'range':>6}  " + " ".join(f"{o:>6g}" for o in overshoots) + f"  {'slope':>6}")
+        for r in ranges:
+            moved = " ".join(f"{r * movement(o, full):6.2f}" for o in overshoots)
+            print(f"{r:>6g}  {moved}  {1.5 * r / (full + 2 * KNEE_DB):6.2f}")
+        print()
+
+
+# --- Auto Threshold (engine/src/Dynamics.cpp) -----------------------------------------------------
+# A model of a Dynamic Bell's detector (1 kHz, Q 1, its region band-pass, 5 ms power) and gain computer
+# with Auto Attack and Release, over the DynamicsTest material. Mirrors the Engine within a few hundredths.
+
+DETECTOR_FS, RUN_LENGTH = 48000.0, 16
+
+
+def _coefficient(seconds):
+    return 1 - math.exp(-1 / (seconds * DETECTOR_FS))
+
+
+def detection_levels(seconds, level_db, envelope_db, seed=7):
+    """Detection levels in dB of white noise at level_db shaped by envelope_db(t), in a 1 kHz Q 1 region."""
+    import random
+    rnd = random.Random(seed)
+    (s,), _ = band_pass(DETECTOR_FS, 1000.0, q=1.0, order=1)
+    x1 = x2 = y1 = y2 = power = 0.0
+    c = _coefficient(0.005)
+    levels = []
+    for n in range(int(seconds * DETECTOR_FS)):
+        x = 10 ** ((level_db + envelope_db(n / DETECTOR_FS)) / 20) * rnd.gauss(0, 1)
+        y = s.b0 * x + s.b1 * x1 + s.b2 * x2 - s.a1 * y1 - s.a2 * y2
+        x2, x1, y2, y1 = x1, x, y1, y
+        power += c * (y * y - power)
+        levels.append(10 * math.log10(2 * power + 1e-30))
+    return levels
+
+
+def auto_threshold_movement(levels, spreads, rise, fall, hold=0.25, full=12.0, gate=-80.0):
+    """Movement (0 to 1) after each run of a Band in Auto Threshold: mean + spreads x std of the gated
+    levels, each rising over rise and falling over fall seconds (a plain mean until rise is heard)."""
+    cr, cf, cs = _coefficient(rise), _coefficient(fall), _coefficient(0.5)
+    mean = variance = heard = moved = sustain = 0.0
+    out = []
+    for r in range(0, len(levels) - RUN_LENGTH + 1, RUN_LENGTH):
+        run = levels[r:r + RUN_LENGTH]
+        for level in run:
+            if level > gate:
+                heard = min(heard + 1, 1 / cr)
+                mean += max(cr if level > mean else cf, 1 / heard) * (level - mean)
+                d2 = (level - mean) ** 2
+                variance += max(cr if d2 > variance else cf, 1 / heard) * (d2 - variance)
+        threshold = mean + spreads * math.sqrt(variance)
+        attack = _coefficient(0.020 * KNEE_DB / (KNEE_DB + max(max(run) - threshold, 0)))
+        release = _coefficient(0.040 + 0.460 * sustain)
+        for level in run:
+            target = movement(level - threshold, full) if heard >= hold * DETECTOR_FS else 0.0
+            moved += (attack if target > moved else release) * (target - moved)
+            sustain += cs * (target - sustain)
+        out.append(moved)
+    return out
+
+
+def report_auto_threshold(spreads, falls, rise=4.5):
+    """The Auto Threshold criteria in tests/engine/DynamicsTest.cpp: on noise swinging +/-6 dB at 4 Hz,
+    the least movement at a loud half-cycle's most and the most at a quiet half-cycle's least, over
+    2-5 s; after 1 s of +6 dB on steady noise, the movement reached. The trough is release-limited:
+    lowering it lowers the peak."""
+    swing = detection_levels(5.0, -36, lambda t: 6 * math.sin(2 * PI * 4 * t))
+    swell = detection_levels(4.0, -24, lambda t: 6.0 if t >= 3.0 else 0.0)
+    at = lambda t: int(t * DETECTOR_FS / RUN_LENGTH)
+    print(f"{'k':>5} {'fall':>5}  {'peak':>5} {'trough':>6} {'swell':>5}")
+    for k in spreads:
+        for fall in falls:
+            m = auto_threshold_movement(swing, k, rise, fall)
+            starts = [2 + i / 4 for i in range(12)]
+            peak = min(max(m[at(t):at(t + 0.125)]) for t in starts)
+            trough = max(min(m[at(t + 0.125):at(t + 0.25)]) for t in starts)
+            swelled = auto_threshold_movement(swell, k, rise, fall)[at(4.0) - 1]
+            print(f"{k:5g} {fall:5g}  {peak:5.2f} {trough:6.2f} {swelled:5.2f}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("shape", choices=SHAPES)
+    parser.add_argument("shape", choices=[*SHAPES, "gain-computer", "auto-threshold"])
     parser.add_argument("--q", type=float, nargs="+", default=[0.71])
     parser.add_argument("--orders", type=int, nargs="+", default=[2])
+    parser.add_argument("--overshoots", type=float, nargs="+", default=[12])
+    parser.add_argument("--spreads", type=float, nargs="+", default=[0.2])
+    parser.add_argument("--falls", type=float, nargs="+", default=[1.25])
     args = parser.parse_args()
+    if args.shape == "auto-threshold":
+        report_auto_threshold(args.spreads, args.falls)
+        raise SystemExit
+    if args.shape == "gain-computer":
+        report_gain_computer(args.overshoots)
+        raise SystemExit
     reporter = report_phase if args.shape == "all-pass" else report_cut if args.shape in CUTS else report
     reporter(SHAPES[args.shape], qs=args.q, orders=args.orders)

@@ -165,12 +165,16 @@ Settings shape (Shape s, double frequency, double gain, double q, double slope)
     return settings;
 }
 
-// Allowed shelf error as a share of the curve's own span in dB: shelves near Nyquist and
-// resonant shelves (Q above 2) are the limits of a cascade of decramped biquads (ADR 0001).
+// Allowed shelf error as a share of the curve's own span in dB (docs/dsp/filter-design.md, "Test
+// tolerances"): resonant shelves (Q above 2) split each section in two biquads, and come within 12% up
+// to 0.45 x Nyquist as gentle ones do. Nearer Nyquist shelves are the limits of a cascade of
+// decramped biquads (ADR 0001): resonant ones a little more up to 0.73 x Nyquist, and as gentle ones
+// do above it.
 double shelfToleranceDb (double sampleRate, double frequency, double q, double spanDb)
 {
     const double position = frequency / (sampleRate / 2.0);
-    const double share = q > 2.0 ? 0.75 : position <= 0.73 ? 0.12 : 0.45;
+    const bool resonant = q > 2.0;
+    const double share = position <= 0.45 ? 0.12 : position <= 0.73 ? (resonant ? 0.15 : 0.12) : 0.45;
     return 0.6 * (position > 0.73 ? 1.0 : 0.1) + share * spanDb;
 }
 
@@ -190,7 +194,7 @@ TEST_CASE ("Low Shelf, High Shelf and Tilt Shelf match their analog targets up t
     const double frequency = GENERATE (20.0, 200.0, 2000.0, 9000.0, 15000.0, 20000.0);
     const double gain = GENERATE (-30.0, -6.0, 3.0, 18.0);
     const int order = GENERATE (1, 2, 5, 16);
-    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0, 40.0);
+    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0, 10.0, 40.0);
     const Shape s = GENERATE (Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf);
     if (frequency > 0.91 * sampleRate / 2.0)
         return;
@@ -235,6 +239,31 @@ TEST_CASE ("Butterworth shelves reach half their Gain at Frequency and their ful
     CHECK (std::abs (test::magnitudeDb (low, 0.0, sampleRate) - gain) < 0.01);
     CHECK (std::abs (test::magnitudeDb (high, 0.0, sampleRate)) < 0.01);
     CHECK (std::abs (test::magnitudeDb (high, 10000.0, sampleRate) - highShelfDb (10000.0, 1000.0, gain, order, std::sqrt (0.5))) < 0.05);
+}
+
+TEST_CASE ("Shelves with Q up to 2 are not split")
+{
+    // A second-order shelf section splits in two biquads only above Q 2 (docs/dsp/filter-design.md,
+    // "Resonant shelves"); at Q 2 and below its second biquad is exactly the identity. These are the
+    // responses of the one-biquad-per-section design, at 9 kHz and 48 kHz, where splitting would move them.
+    struct Case
+    {
+        Shape shape;
+        double gain, q, slope;
+        std::array<double, 4> db; // at 1, 8, 18 and 23 kHz
+    };
+    const auto c = GENERATE (Case { Shape::LowShelf, 9.0, 2.0, 12.0, { 9.0994679337321944, 8.4852111455845485, -1.7745513217091082, -1.2806725360796831 } },
+                             Case { Shape::HighShelf, -18.0, 2.0, 30.0, { 0.082341297325950066, -2.1773083835241107, -19.508722410628859, -19.123085188912516 } },
+                             Case { Shape::TiltShelf, -18.0, 2.0, 96.0, { 9.0490250697074242, 9.341024692623094, -9.5165753055864819, -9.4831426936126277 } },
+                             Case { Shape::TiltShelf, 9.0, 1.3, 96.0, { -4.5155470563740021, -4.4573842734796001, 4.6349089990587036, 4.6438701606414403 } },
+                             Case { Shape::LowShelf, -18.0, std::sqrt (0.5), 30.0, { -17.996857067935061, -12.626592818257674, -0.13720529112251345, -0.0050163627390651232 } });
+    const BandSettings band = shape (c.shape, 9000.0, c.gain, c.q, c.slope).bands[0];
+    constexpr std::array<double, 4> at { 1000.0, 8000.0, 18000.0, 23000.0 };
+    for (size_t i = 0; i < at.size(); ++i)
+    {
+        CAPTURE (static_cast<int> (c.shape), c.gain, c.q, c.slope, at[i]);
+        CHECK (std::abs (bandResponseDb (band, at[i], 48000.0) - c.db[i]) < 1.0e-6);
+    }
 }
 
 TEST_CASE ("Flat Tilt is a straight line in dB per octave through Frequency", "[response]")

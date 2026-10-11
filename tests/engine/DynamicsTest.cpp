@@ -212,6 +212,26 @@ TEST_CASE ("Live Gain never goes beyond +/-30 dB")
     CHECK_THAT (last (run), WithinAbs (gain > 0.0 ? 30.0 : -30.0, 1.0e-9));
 }
 
+TEST_CASE ("A larger Dynamic Range moves a Band further for the same overshoot, not slower")
+{
+    // Detection 6 dB above Threshold.
+    const auto moved = [] (double dynamicRange)
+    { return last (play (1, 1.0, withBand (dynamicBell (0.0, dynamicRange, -30.0)), [] (int, int n) { return sine (1000.0, -24.0, n); })); };
+    const double small = moved (-6.0), large = moved (-12.0);
+    CAPTURE (small, large);
+    CHECK (small < 0.0);
+    CHECK (large <= small);
+}
+
+TEST_CASE ("A Dynamic Band reaches its full Dynamic Range 15 dB above Threshold, whatever its size")
+{
+    // 12 dB of overshoot plus the 3 dB knee (docs/dsp/filter-design.md, Dynamics).
+    const double dynamicRange = GENERATE (-6.0, -12.0, 12.0);
+    CAPTURE (dynamicRange);
+    const auto run = play (1, 1.0, withBand (dynamicBell (0.0, dynamicRange, -30.0)), [] (int, int n) { return sine (1000.0, -15.0, n); });
+    CHECK_THAT (last (run), WithinAbs (dynamicRange, 0.5));
+}
+
 TEST_CASE ("Attack and Release get strictly faster below 50% and slower above it")
 {
     const double settings[] = { 0.0, 25.0, 49.0, 50.0, 51.0, 75.0, 100.0 };
@@ -284,6 +304,88 @@ TEST_CASE ("Auto Threshold starts afresh when a Band becomes active again, so it
                            [] (double seconds, Settings& s) { s.bands[0].dynamicsBypass = seconds >= 1.0 && seconds < 2.0; });
     for (size_t b = blockAt (2.0) / 4; b < run.liveGain.size(); ++b)
         REQUIRE (run.liveGain[b] > -1.0);
+}
+
+namespace
+{
+// White noise at levelDb, its level shaped by envelopeDb (seconds), drawn once so it can be replayed.
+std::vector<double> shapedNoise (double seconds, double levelDb, const std::function<double (double)>& envelopeDb)
+{
+    std::mt19937 random (7);
+    std::normal_distribution<double> gaussian;
+    std::vector<double> material (static_cast<size_t> (seconds * sampleRate));
+    for (size_t n = 0; n < material.size(); ++n)
+        material[n] = amplitudeOf (levelDb + envelopeDb (n / sampleRate)) * gaussian (random);
+    return material;
+}
+
+// A Dynamic Bell at 1 kHz, Q 1, Gain 0, in Auto Threshold, played over material in Engine runs.
+Run playAuto (const std::vector<double>& material, double dynamicRange, const std::function<void (double, Settings&)>& change = {})
+{
+    auto band = test::bellBand (1000.0, 0.0, 1.0);
+    band.dynamicRange = dynamicRange;
+    REQUIRE (band.thresholdAuto);
+    return play (1, material.size() / sampleRate, withBand (band), [&] (int, int n) { return material[static_cast<size_t> (n)]; },
+                 change, timingBlock);
+}
+
+// The Live Gain furthest from Gain (0 dB), and the one nearest it, between from and to seconds.
+double mostMoved (const Run& run, double from, double to)
+{
+    double most = 0.0;
+    for (size_t b = blockAt (from); b < blockAt (to); ++b)
+        most = std::max (most, std::abs (run.liveGain[b]));
+    return most;
+}
+
+double leastMoved (const Run& run, double from, double to)
+{
+    double least = 1000.0;
+    for (size_t b = blockAt (from); b < blockAt (to); ++b)
+        least = std::min (least, std::abs (run.liveGain[b]));
+    return least;
+}
+} // namespace
+
+TEST_CASE ("Auto Threshold follows the material's spread, so a Band moves on ordinary swings at any level")
+{
+    // Noise whose level swings +/-6 dB at 4 Hz: loud around each quarter-period's peak, quiet around
+    // each trough. Spec #1 "Dynamics response" (ADR 0005).
+    const double levelDb = GENERATE (-36.0, -12.0);
+    const double dynamicRange = GENERATE (-6.0, -12.0);
+    CAPTURE (levelDb, dynamicRange);
+    constexpr double seconds = 5.0, rate = 4.0, period = 1.0 / rate;
+    const auto material = shapedNoise (seconds, levelDb, [] (double t) { return 6.0 * std::sin (2.0 * std::numbers::pi * rate * t); });
+    const auto run = playAuto (material, dynamicRange);
+
+    // After the first two seconds, each loud half-cycle moves at least 0.4 of the Dynamic Range, and
+    // each quiet one comes back within a quarter of it: Auto Release limits how far it gets back.
+    const double nearGain = 0.25 * std::abs (dynamicRange);
+    for (double start = 2.0; start + period <= seconds; start += period)
+    {
+        CAPTURE (start);
+        CHECK (mostMoved (run, start, start + 0.5 * period) >= 0.4 * std::abs (dynamicRange));
+        CHECK (leastMoved (run, start + 0.5 * period, start + period) <= nearGain);
+    }
+}
+
+TEST_CASE ("Auto Threshold learns a swell slowly, so a sustained swell moves the Band")
+{
+    // Steady noise for three seconds, then 6 dB louder for one.
+    const auto material = shapedNoise (4.0, -24.0, [] (double t) { return t >= 3.0 ? 6.0 : 0.0; });
+    const auto run = playAuto (material, -6.0);
+    CHECK (std::abs (run.liveGain[blockAt (4.0) - 1]) >= 0.35 * 6.0);
+}
+
+TEST_CASE ("Auto Threshold holds the Band at Gain until it has heard the region for a moment")
+{
+    // Quiet noise, Dynamics Bypassed until 0.5 s; from 0.55 s a tone 20 dB louder stands out of it,
+    // which would move the Band at once if Auto Threshold had already learned the noise.
+    auto material = shapedNoise (1.5, -36.0, [] (double) { return 0.0; });
+    for (size_t n = static_cast<size_t> (0.55 * sampleRate); n < material.size(); ++n)
+        material[n] += sine (1000.0, -16.0, static_cast<int> (n));
+    const auto run = playAuto (material, -6.0, [] (double seconds, Settings& s) { s.bands[0].dynamicsBypass = seconds < 0.5; });
+    CHECK (mostMoved (run, 0.0, 0.7) == 0.0);
 }
 
 TEST_CASE ("A Mid or Side Dynamic Band reacts only to Mid or Side content")
@@ -858,4 +960,28 @@ TEST_CASE ("Metering another Band forgets the last one's level, even before it i
     settings.meteredSlot = 2; // a Bell at 8 kHz hears little of a 1 kHz tone
     playTone (1);
     CHECK (engine.readDetectionLevel() < -20.0);
+}
+
+TEST_CASE ("A Dynamic Band re-prepared mid-movement starts at its Gain, not where it was")
+{
+    const auto settings = withBand (dynamicBell (3.0, -9.0, -30.0));
+    Engine engine;
+    engine.prepare (sampleRate, 512, 1);
+    engine.setSettings (settings);
+    std::vector<float> block (512);
+    float* channels[] = { block.data() };
+    for (int b = 0, n = 0; b < 40; ++b)
+    {
+        for (int i = 0; i < 512; ++i, ++n)
+            block[static_cast<size_t> (i)] = static_cast<float> (sine (1000.0, -3.0, n));
+        engine.process ({ channels, 1, 512 });
+    }
+    REQUIRE (engine.liveGainDb (1) < 0.0); // moving well below its Gain of 3 dB
+
+    // Re-prepared, its first run plays at Gain: the previous session's movement is gone.
+    engine.prepare (sampleRate, 512, 1);
+    engine.setSettings (settings);
+    std::fill (block.begin(), block.end(), 0.0f);
+    engine.process ({ channels, 1, timingBlock }); // one run of the grid
+    CHECK_THAT (engine.liveGainDb (1), WithinAbs (3.0, 1.0e-9));
 }

@@ -466,7 +466,7 @@ void PresetBrowser::stopSaving (bool commit)
     // Listed in User now, as the Loaded Preset: show it there.
     listing = library.listing();
     const auto i = loadedIndex();
-    selectedFolder = i.has_value() ? listing[*i].folder : juce::String ("User");
+    selectedFolder = i.has_value() ? listing[*i].folder : PresetLibrary::userFolderName;
     search.clear();
     showFolders();
     showRows();

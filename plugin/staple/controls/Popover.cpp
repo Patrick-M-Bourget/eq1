@@ -14,7 +14,6 @@ namespace motion = tokens::motion;
 
 // Room around the card for shadow1 (24 px blur, 8 px down) to show in.
 const juce::BorderSize<int> shadowMargin { 4, 12, 20, 12 };
-constexpr int gapToOpener = 6;
 } // namespace
 
 Popover::Popover() : opening (motion::dur2Ms, 1.0f)
@@ -49,8 +48,8 @@ void Popover::open (juce::Component& newOpener, Placement preferred)
 
     const auto anchor = layer.getLocalArea (&newOpener, newOpener.getLocalBounds());
     const auto card = getCardBounds();
-    const int belowY = anchor.getBottom() + gapToOpener;
-    const int aboveY = anchor.getY() - gapToOpener - card.getHeight();
+    const int belowY = anchor.getBottom() + tokens::popover::gapBelow;
+    const int aboveY = anchor.getY() - tokens::popover::gapAbove - card.getHeight();
     const bool roomBelow = belowY + card.getHeight() <= layer.getHeight();
     const bool roomAbove = aboveY >= 0;
     const bool below = preferred == Placement::below ? (roomBelow || ! roomAbove) : ! roomAbove && roomBelow;
@@ -120,7 +119,8 @@ void Popover::paint (juce::Graphics& g)
     g.setColour (colour::menu);
     g.fillRoundedRectangle (card, r);
     g.setColour (colour::line2);
-    g.drawRoundedRectangle (card.reduced (0.5f), r, 1.0f);
+    const auto edge = static_cast<float> (tokens::popover::edge);
+    g.drawRoundedRectangle (card.reduced (edge * 0.5f), r, edge);
 }
 
 bool Popover::hitTest (int x, int y) { return getCardBounds().contains (x, y); }

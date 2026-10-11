@@ -25,8 +25,11 @@ Ghost restingGhost (const DisplayGeometry& geometry);
 // The labels with every Frequency label within 46 px of the ghost's readout faded to 12 %.
 std::vector<Label> fadedForGhost (std::vector<Label> labels, const DisplayGeometry& geometry, const Ghost& ghost);
 
-// A 1 px line at its Frequency, a soft glow at its peak, the Bell (Q 1) 190 px either side in a stroke
-// whose white fades in and out across its width, and its readout 10 px above the bottom, all at alpha.
-void paintGhost (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost& ghost, double sampleRate, float alpha);
+// The Bell (Q 1) 190 px either side, in a stroke whose white fades in and out across its width, at
+// alpha. Painted under the display's edge fades, so it dissolves into them as the other curves do.
+void paintGhostCurve (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost& ghost, double sampleRate, float alpha);
+// A 1 px line at its Frequency, a soft glow at its peak, and its readout 10 px above the bottom, all at
+// alpha. Painted over the edge fades, unfaded.
+void paintGhostMarker (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost& ghost, float alpha);
 
 } // namespace eq1::display

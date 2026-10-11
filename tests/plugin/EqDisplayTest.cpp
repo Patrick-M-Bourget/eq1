@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "BandClipboard.h"
 #include "DisplayRangeChip.h"
 #include "Parameters.h"
 #include "staple/Tokens.h"
@@ -11,7 +12,7 @@ using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
 using harness::OpenEditor;
 
-TEST_CASE ("A right-click on the display never Solos, drags or starts a marquee")
+TEST_CASE ("A right-click on the display never Solos, drags or starts a marquee", "[clipboard]")
 {
     OpenEditor host;
     host.addBand (1, 100.0f, 0.0f);
@@ -55,6 +56,58 @@ TEST_CASE ("Cmd/Ctrl+A on the display selects every Band in use")
     host.press (juce::KeyPress (juce::KeyPress::deleteKey));
     for (int slot : { 2, 5, 9 })
         CHECK (host.value (slot, "in_use") == 0.0f);
+}
+
+namespace
+{
+// The system clipboard holding text for a test's length, and what it held before afterwards.
+struct ClipboardHolding
+{
+    juce::String before = juce::SystemClipboard::getTextFromClipboard();
+    explicit ClipboardHolding (const juce::String& text) { juce::SystemClipboard::copyTextToClipboard (text); }
+    ~ClipboardHolding() { juce::SystemClipboard::copyTextToClipboard (before); }
+};
+} // namespace
+
+TEST_CASE ("Cmd/Ctrl+V on the display keeps the key from the host with eq1's Bands on the clipboard, even with no free Band Slot", "[clipboard]")
+{
+    OpenEditor host;
+    // Every Band Slot in use, a third of an octave apart from 25 Hz.
+    for (int slot = 1; slot <= eq1::numBandSlots; ++slot)
+        host.addBand (slot, 25.0f * std::pow (2.0f, static_cast<float> (slot - 1) / 3.0f), 0.0f);
+    host.settle();
+    host.click (host.at (host.value (5, "frequency")));
+    const auto steps = host.processor.editHistory().undoSteps();
+    const auto paste = juce::KeyPress ('v', juce::ModifierKeys::commandModifier, 0);
+    const auto parameterValues = [&host] {
+        std::vector<float> values;
+        for (const auto* parameter : host.processor.getParameters())
+            values.push_back (parameter->getValue());
+        return values;
+    };
+    const auto before = parameterValues();
+
+    SECTION ("eq1's Bands: used, and nothing changes")
+    {
+        const auto bands = eq1::captureBands ({ eq1::BandSettings {} }).toXmlString();
+        REQUIRE (eq1::clipboardBands (bands).size() == 1);
+        const ClipboardHolding clipboard (bands);
+        host.display.grabKeyboardFocus();
+        CHECK (host.press (paste));
+        CHECK (host.processor.editHistory().undoSteps() == steps);
+        CHECK (parameterValues() == before);
+    }
+    SECTION ("Other text: passed on")
+    {
+        const ClipboardHolding clipboard ("some text");
+        host.display.grabKeyboardFocus();
+        CHECK_FALSE (host.press (paste));
+    }
+
+    // Band 5 is still the selection, alone.
+    host.press (juce::KeyPress (juce::KeyPress::deleteKey));
+    for (int slot = 1; slot <= eq1::numBandSlots; ++slot)
+        CHECK (host.value (slot, "in_use") == (slot == 5 ? 0.0f : 1.0f));
 }
 
 namespace
@@ -567,4 +620,66 @@ TEST_CASE ("The ghost Bell follows the mouse over empty space, rests at 1 kHz wi
     host.settle();
     move (atDb (host, 100.0, -5.0));
     CHECK_FALSE (host.display.ghost().has_value());
+}
+
+namespace
+{
+// The mouse moving over the display at to for 800 ms, so the ghost Bell there has faded fully in.
+void hoverUntilGhostShown (OpenEditor& host, juce::Point<float> to)
+{
+    for (int step = 0; step < 8; ++step)
+    {
+        host.display.mouseMove (host.mouseEvent (to, {}, to));
+        host.settle (100);
+    }
+    host.display.mouseMove (host.mouseEvent (to, {}, to));
+}
+} // namespace
+
+TEST_CASE ("The ghost Bell's curve fades into the display's left edge, but its line does not")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.settle();
+    const auto height = static_cast<float> (host.display.getHeight());
+    // The ghost with its peak near the top, at x, faded fully in.
+    const auto ghostAt = [&] (float x) {
+        hoverUntilGhostShown (host, { x, 1.0f });
+        REQUIRE (host.display.ghost().has_value());
+        REQUIRE (host.display.ghost()->x == x);
+        return snapshot (host);
+    };
+    // Its line inside the left edge's fade; and away from it, clear of x = 0 to 220.
+    const float nearEdge = 30.0f, away = 420.0f;
+    REQUIRE (nearEdge < staple::tokens::layout::fadeLeft);
+    const auto withGhost = ghostAt (nearEdge), without = ghostAt (away);
+
+    // How much the ghost near the edge adds to a column of the display, at its strongest between the
+    // top and bottom fades.
+    const auto added = [&] (const juce::Image& image, const juce::Image& under, float x, float fromY, float toY) {
+        float most = 0.0f;
+        for (float y = fromY; y < toY; y += 0.5f)
+            most = std::max (most, std::abs (colourAt (image, { x, y }).getBrightness() - colourAt (under, { x, y }).getBrightness()));
+        return most;
+    };
+    const float top = staple::tokens::layout::fadeTop, bottom = height - staple::tokens::layout::fadeBottom;
+    // The curve, around its peak 60 px from the top: nearly gone 2 px from the left edge, plain 60 px in.
+    const auto inFade = added (withGhost, without, 2.0f, top, height / 2.0f);
+    const auto clear = added (withGhost, without, nearEdge + 60.0f, top, height / 2.0f);
+    CHECK (clear > 0.1f);
+    CHECK (inFade < 0.35f * clear);
+    // Its line, half-way down inside the fade, as strong as the other ghost's away from the edge.
+    const auto lineInFade = added (withGhost, without, nearEdge, height / 2.0f, bottom);
+    const auto lineAway = added (without, withGhost, away, height / 2.0f, bottom);
+    CHECK (lineAway > 0.05f);
+    CHECK (lineInFade > 0.8f * lineAway);
+}
+
+TEST_CASE ("Ghost Bell screenshot: the empty display with the ghost near its left edge", "[.screens]")
+{
+    OpenEditor host;
+    host.editor->setSize (1200, 760);
+    analyzerOff (host);
+    hoverUntilGhostShown (host, { 30.0f, 120.0f });
+    harness::writeSnapshot (*host.editor, "ghost-near-left-edge");
 }

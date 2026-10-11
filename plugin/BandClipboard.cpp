@@ -1,5 +1,6 @@
 #include "BandClipboard.h"
 
+#include "BandEditing.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 
@@ -89,6 +90,14 @@ juce::ValueTree captureBands (const std::vector<BandSettings>& bands)
         tree.appendChild (child, nullptr);
     }
     return tree;
+}
+
+juce::String copiedText (const BandEditing& editing, const std::vector<int>& slots)
+{
+    std::vector<BandSettings> bands;
+    for (int slot : slots)
+        bands.push_back (editing.band (slot));
+    return captureBands (bands).toXmlString();
 }
 
 std::vector<BandSettings> readBands (const juce::ValueTree& tree)

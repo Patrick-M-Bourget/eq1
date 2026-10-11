@@ -1,6 +1,7 @@
 #include "ShapeDesign.h"
 
 #include "MatchedDesign.h"
+#include "Smoothstep.h"
 
 #include <algorithm>
 #include <array>
@@ -22,19 +23,21 @@ static_assert (tiltSections <= maxSections);
 constexpr int maxSlopeOrder = 16;    // 96 dB/oct
 constexpr int brickwallOrder = 32; // about 192 dB/oct: the most the section limit allows
 static_assert (maxSlopeOrder / 2 + maxSlopeOrder % 2 <= maxSections);
+static_assert (2 * (maxSlopeOrder / 2) + maxSlopeOrder % 2 <= maxSections); // shelves: two biquads per second-order section
 static_assert (brickwallOrder / 2 <= maxSections);
 
 double decibelsToGain (double db) { return std::pow (10.0, db / 20.0); }
 
 void add (Cascade& cascade, const BiquadCoefficients& section) { cascade.sections[static_cast<size_t> (cascade.count++)] = section; }
 
-void scale (Cascade& cascade, double factor)
+void scale (BiquadCoefficients& section, double factor)
 {
-    auto& first = cascade.sections[0];
-    first.b0 *= factor;
-    first.b1 *= factor;
-    first.b2 *= factor;
+    section.b0 *= factor;
+    section.b1 *= factor;
+    section.b2 *= factor;
 }
+
+void scale (Cascade& cascade, double factor) { scale (cascade.sections[0], factor); }
 
 // Bell: (s^2 + s A/Q + 1) / (s^2 + s/(A Q) + 1) with A = 10^(Gain/40). A cut is the inverse of
 // the boost of the same size, whose high-Q poles the matched z-transform follows well.
@@ -65,15 +68,66 @@ void lowShelfSections (int order, double dcGain, double q, Use use)
         use (AnalogSection { 0.0, 1.0, rz, 0.0, 1.0, rp });
 }
 
+// A resonant shelf section has sharp zeros and sharp poles, more than one matched biquad can fit.
+// Above Q 2 each second-order section is split in two biquads (docs/dsp/filter-design.md, "Resonant
+// shelves"): its poles over zeros at the Q the section has at Q 2, and the zeros' extra resonance,
+// (zeros at their own Q) / (zeros at that Q), designed as its inverse, whose sharp poles the matched
+// z-transform follows, and swapped back. The split eases in from Q 2 to Q 2.5, and fades out as the
+// zeros' natural frequency goes from 0.8 to 1.1 x Nyquist, where the inverse's poles would be held.
+// Every second-order section takes two biquads whatever the Q, so the section count stays fixed.
+// Unsplit, the second is its matched poles cancelled by equal zeros: exactly the identity, and the
+// limit of the split, so coefficients glide in and out of the split without a jump.
+constexpr double resonantShelfQ = 2.0, fullySplitQ = 2.5;
+constexpr double splitFull = 0.8, splitNone = 1.1; // the zeros' natural frequency over Nyquist
+// Both fades are smoothsteps, so the split eases in and out without a corner in the coefficients'
+// path: a corner sounds as one in a section with large coefficients.
+
+// Adds a shelf section, designed with its poles at or below Frequency, as matched biquads, inverted
+// when invert is set. Of a split's two biquads, the one with the sharp zeros comes first and the one
+// with the sharp poles second, so what a moving resonance stirs up near Nyquist isn't amplified by
+// the other. Inverted, the two swap roles and so places: at 0 dB, where a boost and a cut meet, so do
+// the biquads in each place, and Gain glides through 0 dB without a jump.
+void addShelfSection (Cascade& cascade, const AnalogSection& a, const ShapeParameters& p, double sampleRate, bool invert)
+{
+    if (a.d2 == 0.0)
+    {
+        const auto section = matchSection (a, p.frequency, sampleRate);
+        add (cascade, invert ? inverse (section) : section);
+        return;
+    }
+
+    const double natural = std::sqrt (a.n0 / a.n2), zerosQ = std::sqrt (a.n0 * a.n2) / a.n1;
+    const double atNyquist = natural * p.frequency / (sampleRate / 2.0);
+    const double split = p.q > resonantShelfQ ? smoothstep (std::log (splitNone / atNyquist) / std::log (splitNone / splitFull))
+                                                    * smoothstep (std::log (p.q / resonantShelfQ) / std::log (fullySplitQ / resonantShelfQ))
+                                              : 0.0;
+    const int sections = p.structure.order / 2;
+    const double splitQ = zerosQ * std::pow (resonantShelfQ / p.q, split / sections);
+
+    // The zeros' extra resonance, designed as its inverse: sharp poles over the zeros at splitQ.
+    auto resonance = matchSection ({ 1.0, 1.0 / splitQ, 1.0, 1.0, 1.0 / zerosQ, 1.0 }, p.frequency * natural, sampleRate);
+    BiquadCoefficients poles; // the section's own poles
+    if (splitQ < zerosQ)
+    {
+        poles = matchSection ({ a.n2, std::sqrt (a.n0 * a.n2) / splitQ, a.n0, a.d2, a.d1, a.d0 }, p.frequency, sampleRate);
+    }
+    else
+    {
+        poles = matchSection (a, p.frequency, sampleRate);
+        resonance = { 1.0, resonance.a1, resonance.a2, resonance.a1, resonance.a2 };
+    }
+    add (cascade, invert ? inverse (poles) : inverse (resonance));
+    add (cascade, invert ? resonance : poles);
+}
+
 // Each shelf is designed in the direction whose poles sit at or below Frequency, where the
 // matched z-transform is accurate, and inverted for the other direction: Low Shelves as boosts,
 // High Shelves as cuts.
 Cascade designLowShelf (const ShapeParameters& p, double sampleRate)
 {
     Cascade cascade;
-    lowShelfSections (p.structure.order, decibelsToGain (std::abs (p.gain)), p.q, [&] (const AnalogSection& section) {
-        const auto boost = matchSection (section, p.frequency, sampleRate);
-        add (cascade, p.gain >= 0.0 ? boost : inverse (boost));
+    lowShelfSections (p.structure.order, decibelsToGain (std::abs (p.gain)), p.q, [&] (const AnalogSection& boost) {
+        addShelfSection (cascade, boost, p, sampleRate, p.gain < 0.0);
     });
     return cascade;
 }
@@ -87,8 +141,7 @@ Cascade designHighShelf (const ShapeParameters& p, double sampleRate)
         const AnalogSection boost = low.d2 == 0.0 ? AnalogSection { 0.0, low.n0, low.n1, 0.0, low.d0, low.d1 }
                                                   : AnalogSection { low.n0, low.n1, low.n2, low.d0, low.d1, low.d2 };
         const AnalogSection cut { boost.d2, boost.d1, boost.d0, boost.n2, boost.n1, boost.n0 };
-        const auto designed = matchSection (cut, p.frequency, sampleRate);
-        add (cascade, p.gain >= 0.0 ? inverse (designed) : designed);
+        addShelfSection (cascade, cut, p, sampleRate, p.gain >= 0.0);
     });
     return cascade;
 }
@@ -310,7 +363,10 @@ Cascade designAllPass (const ShapeParameters& p, double sampleRate)
 Cascade designTiltShelf (const ShapeParameters& p, double sampleRate)
 {
     auto cascade = designHighShelf (p, sampleRate);
-    scale (cascade, decibelsToGain (-p.gain / 2.0));
+    // A section that is never an unsplit identity (addShelfSection), which stays exact: a boost's
+    // first, a cut's last. At 0 dB, where the choice changes, the scale is 1.
+    const int exactSection = p.gain >= 0.0 ? 0 : cascade.count - 1;
+    scale (cascade.sections[static_cast<size_t> (exactSection)], decibelsToGain (-p.gain / 2.0));
     return cascade;
 }
 

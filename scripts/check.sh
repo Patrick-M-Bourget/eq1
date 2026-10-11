@@ -7,7 +7,10 @@
 #                               glossary, no test reads a saved state as raw bytes, runs timers itself, has a non-ASCII
 #                               title, reads an EQ1_ environment variable or opens a Graphics on an image outside
 #                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
-#   scripts/check.sh hooks      the Claude Code worktree hook's tests (not run by git hooks, which run docs)
+#   scripts/check.sh colours    only that last check: no colour is hard-coded in plugin/ outside plugin/staple/
+#   scripts/check.sh hooks      the Claude Code worktree hook's, merge-on-green.sh's, the git pre-push hook's and the
+#                               colours check's tests, against fakes and scratch repos (not run by git hooks, which run
+#                               docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -82,9 +85,15 @@ docs() {
         done < <(git ls-files -- '*GLOSSARY.md' ':!GLOSSARY.md')
     fi
     # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
-    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h.
-    local raw
-    raw=$(git grep -nE '[A-Za-z_]*[sS]tate\.toString *\(\)' -- tests || true)
+    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h. Flagged:
+    # toString on any block a file fills with getStateInformation, whatever the block is called.
+    local raw file block
+    raw=$(git grep -lE 'get(CurrentProgram)?StateInformation *\(' -- tests | while IFS= read -r file; do
+        grep -oE 'get(CurrentProgram)?StateInformation *\( *[A-Za-z_][A-Za-z0-9_]*' "$file" | sed -E 's/.*\( *//' | sort -u |
+            while IFS= read -r block; do
+                grep -nE "(^|[^A-Za-z0-9_.])$block *\. *toString *\(" "$file" | sed "s|^|$file:|" || true
+            done
+    done || true)
     if [ -n "$raw" ]; then
         printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
         broken=1
@@ -125,19 +134,28 @@ docs() {
     return "$broken"
 }
 
-# The worktree hook (.claude/hooks/one-branch-per-worktree.sh) against its cases.
+# The worktree hook (.claude/hooks/one-branch-per-worktree.sh), scripts/merge-on-green.sh and the pre-push
+# hook (.githooks/pre-push) against their cases.
 hooks() {
     step "Worktree hook"
     .claude/hooks/one-branch-per-worktree.test.sh
+    step "Merge on green"
+    scripts/merge-on-green.test.sh
+    step "Pre-push hook"
+    scripts/pre-push.test.sh
+    step "Colours check"
+    scripts/colours.test.sh
 }
 
 # Every colour in the editor comes from Staple's tokens (plugin/staple/Tokens.h): a colour written as a
-# number, or a named juce::Colours one, belongs in plugin/staple/ only.
+# number (Colour (0xff..), Colour (255, ..), Colour (0.5f, ..), any case of 0x), made by a Colour:: factory
+# (fromRGB, fromFloatRGBA, fromString, greyLevel, ..), or a named juce::Colours one, belongs in plugin/staple/
+# only. The spellings caught are in scripts/colours.test.sh.
 colours() {
     step "Colours from tokens"
     local found
     found=$(git ls-files -z -- plugin ':!plugin/staple/' |
-        xargs -0 grep -nE 'Colour *[({] *0x|Colour::from(RGB|RGBA|HSV|HSL|FloatRGBA) *\(|Colours::' || true)
+        xargs -0 grep -HnE '(^|[^A-Za-z0-9_])Colour *[({] *[0-9.]|Colour::(from[A-Za-z]+|greyLevel) *\(|Colours::' || true)
     if [ -n "$found" ]; then
         printf '%s\n' "$found" | sed 's/$/  <- hard-coded colour: use a token from plugin\/staple\/Tokens.h/' >&2
         return 1
@@ -373,8 +391,9 @@ case "${1:-all}" in
     tsan) tsan ;;
     validate) validate ;;
     docs) docs; colours ;;
+    colours) colours ;;
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,23p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,26p' "$0" >&2; exit 2 ;;
 esac

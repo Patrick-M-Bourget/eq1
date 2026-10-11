@@ -47,7 +47,7 @@ void eachFolder (const juce::File& root, const std::function<void (const juce::F
 // A folder in the User folder as Entry::folder names it: "User", or "User/Drums" with / on every OS.
 juce::String folderPath (const juce::File& folder, const juce::File& userFolder)
 {
-    return folder == userFolder ? juce::String ("User") : "User/" + folder.getRelativePathFrom (userFolder).replaceCharacter ('\\', '/');
+    return folder == userFolder ? PresetLibrary::userFolderName : PresetLibrary::userFolderName + "/" + folder.getRelativePathFrom (userFolder).replaceCharacter ('\\', '/');
 }
 } // namespace
 
@@ -100,7 +100,8 @@ std::vector<PresetLibrary::FactoryPreset> PresetLibrary::factoryPresets()
     {
         int size = 0;
         const auto* data = FactoryPresets::getNamedResource (FactoryPresets::namedResourceList[i], size);
-        const auto name = juce::String (FactoryPresets::originalFilenames[i]).upToLastOccurrenceOf (fileExtension, false, false);
+        // Filenames are UTF-8: Factory names hold an en dash ("Drums \u2013 Kick In Punch").
+        const auto name = juce::String::fromUTF8 (FactoryPresets::originalFilenames[i]).upToLastOccurrenceOf (fileExtension, false, false);
         presets.push_back ({ name, fromXml (juce::XmlDocument::parse (juce::String::fromUTF8 (data, size))) });
     }
     std::sort (presets.begin(), presets.end(), [] (const FactoryPreset& a, const FactoryPreset& b) { return byName (a.name, b.name); });
@@ -120,7 +121,7 @@ std::vector<PresetLibrary::Entry> PresetLibrary::listing() const
 
 std::vector<PresetLibrary::Folder> PresetLibrary::folders (const std::vector<Entry>& entries, const std::vector<juce::String>& subfolders)
 {
-    std::vector<Folder> found { { "Factory", "Factory", 0, 0 }, { "User", "User", 0, 0 } };
+    std::vector<Folder> found { { "Factory", "Factory", 0, 0 }, { userFolderName, userFolderName, 0, 0 } };
     const auto add = [&found] (const juce::String& path) -> Folder& {
         const auto at = std::find_if (found.begin(), found.end(), [&path] (const Folder& f) { return f.path == path; });
         if (at != found.end())
@@ -134,7 +135,7 @@ std::vector<PresetLibrary::Folder> PresetLibrary::folders (const std::vector<Ent
     {
         // Its enclosing folders first, so one holding only subfolders is listed above them.
         for (int slash = entry.folder.indexOfChar ('/'); slash > 0; slash = entry.folder.indexOfChar (slash + 1, '/'))
-            if (const auto enclosing = entry.folder.substring (0, slash); enclosing != "User")
+            if (const auto enclosing = entry.folder.substring (0, slash); enclosing != userFolderName)
                 add (enclosing);
         ++add (entry.folder).count;
     }

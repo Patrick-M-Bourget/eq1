@@ -353,7 +353,7 @@ void EqDisplay::timerCallback()
     // Solo held here or on the Band panel draws its cue.
     showSolo();
     updateCard();
-    // A heard Gain changed beyond the Display Range, from anywhere, zooms it out.
+    // A Heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
     const bool fading = stepFades();
 
@@ -625,13 +625,15 @@ void EqDisplay::paint (juce::Graphics& g)
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
     display::paintCurves (g, shape, frame);
-    // The handles and labels go over the edge fades, unfaded.
-    display::paintEdgeFades (g, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
     const auto shownGhost = ghostFade > 0.0f ? ghost() : std::nullopt;
+    if (shownGhost)
+        display::paintGhostCurve (g, shape, *shownGhost, frame.sampleRate, ghostFade);
+    // The handles, the labels and the ghost's line, glow and readout go over the edge fades, unfaded.
+    display::paintEdgeFades (g, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
     display::paintLabels (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
     display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
     if (shownGhost)
-        display::paintGhost (g, shape, *shownGhost, frame.sampleRate, ghostFade);
+        display::paintGhostMarker (g, shape, *shownGhost, ghostFade);
     display::paintHandles (g, shape, frame);
 }
 
@@ -864,19 +866,21 @@ void EqDisplay::selectAll()
 
 void EqDisplay::copySelection()
 {
-    std::vector<BandSettings> bands;
-    for (int slot : selected)
-        bands.push_back (editing.band (slot));
-    juce::SystemClipboard::copyTextToClipboard (captureBands (bands).toXmlString());
+    juce::SystemClipboard::copyTextToClipboard (copiedText (editing, { selected.begin(), selected.end() }));
 }
 
 bool EqDisplay::paste()
 {
-    const auto pasted = editing.paste (clipboardBands (juce::SystemClipboard::getTextFromClipboard()));
-    if (pasted.empty())
+    const auto bands = clipboardBands (juce::SystemClipboard::getTextFromClipboard());
+    if (bands.empty())
         return false;
-    select ({ pasted.begin(), pasted.end() });
-    shown = heardSettings();
+    // With no free Band Slot nothing is pasted, but the key is still eq1's, not the host's.
+    const auto pasted = editing.paste (bands);
+    if (! pasted.empty())
+    {
+        select ({ pasted.begin(), pasted.end() });
+        shown = heardSettings();
+    }
     return true;
 }
 
