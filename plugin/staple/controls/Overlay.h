@@ -20,7 +20,8 @@ void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float corn
 float ease (float time);
 
 // Where a popping-in card is drawn at progress 0 to 1 (a Tween over dur2): from 3 px lower at 98.5 %
-// scale about its centre, to where it is, with no transform at all once in.
+// scale about its centre, to where it is, with no transform at all once in. The card is in the pixels
+// of the transformed component's parent, where juce::Component::setTransform applies.
 juce::AffineTransform popInTransform (juce::Rectangle<float> card, float progress);
 
 } // namespace staple
