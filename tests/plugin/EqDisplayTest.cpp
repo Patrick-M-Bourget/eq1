@@ -658,3 +658,18 @@ TEST_CASE ("The ghost Bell's curve fades into the display's left edge, but its l
     CHECK (lineAway > 0.05f);
     CHECK (lineInFade > 0.8f * lineAway);
 }
+
+TEST_CASE ("Ghost Bell screenshot: the empty display with the ghost near its left edge", "[.screens]")
+{
+    OpenEditor host;
+    host.editor->setSize (1200, 760);
+    analyzerOff (host);
+    const juce::Point<float> to { 30.0f, 120.0f };
+    for (int step = 0; step < 8; ++step)
+    {
+        host.display.mouseMove (host.mouseEvent (to, {}, to));
+        host.settle (100);
+    }
+    host.display.mouseMove (host.mouseEvent (to, {}, to));
+    harness::writeSnapshot (*host.editor, "ghost-near-left-edge");
+}
