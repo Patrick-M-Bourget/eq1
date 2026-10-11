@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<eq1 version="3">
+  <PARAM id="band1_in_use" value="1.0"/>
+  <PARAM id="band1_shape" value="2.0"/>
+  <PARAM id="band1_frequency" value="20.0"/>
+  <PARAM id="band1_q" value="0.71"/>
+  <PARAM id="band1_slope" value="24.0"/>
+  <PARAM id="band2_in_use" value="1.0"/>
+  <PARAM id="band2_shape" value="1.0"/>
+  <PARAM id="band2_frequency" value="60.0"/>
+  <PARAM id="band2_gain" value="1.0"/>
+  <PARAM id="band2_q" value="0.71"/>
+  <PARAM id="band3_in_use" value="1.0"/>
+  <PARAM id="band3_frequency" value="220.0"/>
+  <PARAM id="band3_gain" value="-1.0"/>
+  <PARAM id="band4_in_use" value="1.0"/>
+  <PARAM id="band4_frequency" value="900.0"/>
+  <PARAM id="band4_gain" value="-0.5"/>
+  <PARAM id="band4_q" value="0.8"/>
+  <PARAM id="band5_in_use" value="1.0"/>
+  <PARAM id="band5_frequency" value="3500.0"/>
+  <PARAM id="band5_q" value="1.4"/>
+  <PARAM id="band5_dynamic_range" value="-2.0"/>
+  <PARAM id="band6_in_use" value="1.0"/>
+  <PARAM id="band6_shape" value="3.0"/>
+  <PARAM id="band6_frequency" value="10000.0"/>
+  <PARAM id="band6_gain" value="1.5"/>
+  <PARAM id="band6_q" value="0.71"/>
+  <PARAM id="band7_in_use" value="1.0"/>
+  <PARAM id="band7_frequency" value="6500.0"/>
+  <PARAM id="band7_q" value="3.0"/>
+  <PARAM id="band7_placement" value="3.0"/>
+  <PARAM id="band7_dynamic_range" value="-2.5"/>
+  <PARAM id="band8_in_use" value="1.0"/>
+  <PARAM id="band8_shape" value="2.0"/>
+  <PARAM id="band8_frequency" value="90.0"/>
+  <PARAM id="band8_q" value="0.71"/>
+  <PARAM id="band8_placement" value="4.0"/>
+  <PARAM id="band9_in_use" value="1.0"/>
+  <PARAM id="band9_shape" value="3.0"/>
+  <PARAM id="band9_frequency" value="14000.0"/>
+  <PARAM id="band9_gain" value="1.0"/>
+  <PARAM id="band9_q" value="0.71"/>
+  <PARAM id="band9_placement" value="4.0"/>
+</eq1>

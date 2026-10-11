@@ -274,6 +274,17 @@ TEST_CASE ("The Factory library has the Utility and Drums Presets")
         CHECK (names.contains (named (name)));
 }
 
+TEST_CASE ("The Factory library has the Mix Bus, Master and Sends Presets")
+{
+    juce::StringArray names;
+    for (const auto& preset : PresetLibrary::factoryPresets())
+        names.add (preset.name);
+    for (const auto* name : { "Mix Bus \xe2\x80\x93 Smile", "Mix Bus \xe2\x80\x93 Gentle Tilt", "Mix Bus \xe2\x80\x93 Drum Bus Sculpt",
+                              "Master \xe2\x80\x93 Polish", "Master \xe2\x80\x93 Dynamic Low End", "Master \xe2\x80\x93 Mid-Side Width",
+                              "Master \xe2\x80\x93 Detailed", "Sends \xe2\x80\x93 Reverb Return Clean", "Sends \xe2\x80\x93 Delay Return Dark" })
+        CHECK (names.contains (named (name)));
+}
+
 TEST_CASE ("The Factory gate rejects a name outside the scheme")
 {
     CHECK (namingProblem (preset ("Default")) == "");
