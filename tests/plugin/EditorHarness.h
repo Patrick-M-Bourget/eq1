@@ -169,7 +169,9 @@ inline bool settleUntil (const std::function<bool()>& done)
 inline void settleAnimations (int milliseconds = 60)
 {
     settle (milliseconds);
-    REQUIRE (settleUntil ([] { return ! staple::Tween::anyEasing(); }));
+    if (! settleUntil ([] { return ! staple::Tween::anyEasing(); }))
+        FAIL ("settleAnimations gave up after 10 s with " << staple::Tween::numberEasing()
+                                                         << " animation(s) still easing");
 }
 
 // Checks that component, just opened, is drawn at the start of its pop-in (staple::popInTransform):

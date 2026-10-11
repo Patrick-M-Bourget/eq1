@@ -29,11 +29,15 @@ public:
     // Whether any Tween is easing now, on the message thread: what a test waits on before it checks
     // where an animation ends.
     static bool anyEasing() { return easingCount > 0; }
+    // How many Tweens are easing now, on the message thread: what a test reports when it gives up waiting.
+    static int numberEasing() { return easingCount; }
 
 private:
     void timerCallback() override;
     // Starts or stops the frames, keeping count of the Tweens easing.
     void setEasing (bool on);
+    // The Tweens easing now. Only the message thread touches it (Tweens start, stop and tick there),
+    // so it needs no lock or atomic.
     inline static int easingCount = 0;
 
     int durationMs;
