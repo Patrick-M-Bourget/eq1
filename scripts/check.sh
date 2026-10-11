@@ -8,8 +8,9 @@
 #                               title, reads an EQ1_ environment variable or opens a Graphics on an image outside
 #                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh colours    only that last check: no colour is hard-coded in plugin/ outside plugin/staple/
-#   scripts/check.sh hooks      the Claude Code worktree hook's, merge-on-green.sh's and the colours check's tests,
-#                               against fakes (not run by git hooks, which run docs)
+#   scripts/check.sh hooks      the Claude Code worktree hook's, merge-on-green.sh's, the git pre-push hook's and the
+#                               colours check's tests, against fakes and scratch repos (not run by git hooks, which run
+#                               docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -127,12 +128,15 @@ docs() {
     return "$broken"
 }
 
-# The worktree hook (.claude/hooks/one-branch-per-worktree.sh) against its cases.
+# The worktree hook (.claude/hooks/one-branch-per-worktree.sh), scripts/merge-on-green.sh and the pre-push
+# hook (.githooks/pre-push) against their cases.
 hooks() {
     step "Worktree hook"
     .claude/hooks/one-branch-per-worktree.test.sh
     step "Merge on green"
     scripts/merge-on-green.test.sh
+    step "Pre-push hook"
+    scripts/pre-push.test.sh
     step "Colours check"
     scripts/colours.test.sh
 }
@@ -385,5 +389,5 @@ case "${1:-all}" in
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,24p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,26p' "$0" >&2; exit 2 ;;
 esac
