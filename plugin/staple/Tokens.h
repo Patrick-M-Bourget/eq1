@@ -211,6 +211,15 @@ namespace popover
     constexpr int edge = 1;
 } // namespace popover
 
+// The header (HANDOFF.md §5.6), in px: the padding either side of its text buttons' text (A/B Compare,
+// Copy), and the gap between the Preset name and its Modified dot (the button's 8 px gap and the dot's
+// 6 px margin).
+namespace header
+{
+    constexpr int chipPadding = 10;
+    constexpr float modifiedDotGap = 14.0f;
+} // namespace header
+
 // The Hover Card over a Band's handle (HANDOFF.md §2 "HoverCard", §5.2), in px.
 namespace hoverCard
 {

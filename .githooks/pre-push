@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
 # Blocks a push whose build or tests fail (.githooks/gate.sh). A rebase rewrites commits without running
 # the pre-commit hook, so the pushed commits get the same gate here. It builds and tests the working
-# tree, so it requires the pushed commit to be the checked-out one, with nothing uncommitted in what the
-# build reads. A push of Markdown changes alone, of a branch deletion or of the pr-assets images isn't gated, nor is a tree the
+# tree, so every pushed branch with more than Markdown changes must be the checked-out commit, with
+# nothing uncommitted in what the build reads; a push of several branches is gated once, on that commit.
+# Not gated: a push of Markdown changes alone, a deletion, a tag, the pr-assets images, or a tree the
 # gate already passed (the commit hook's, when nothing was rebased since).
+# Tests: scripts/pre-push.test.sh.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
+source .githooks/build-inputs.sh
 
 zero=0000000000000000000000000000000000000000
+head=$(git rev-parse HEAD)
 gate=no
 while read -r local_ref local_sha remote_ref remote_sha; do
-    [ "$local_sha" = "$zero" ] && continue # deleting a branch
-    [ "$remote_ref" = refs/heads/pr-assets ] && continue # images for PR comments (scripts/pr-images.sh)
+    [ "$local_sha" = "$zero" ] && continue # deleting a branch or tag
+    case $remote_ref in
+    refs/tags/*) continue ;;          # a tag names a commit; it brings no new build to test
+    refs/heads/pr-assets) continue ;; # images for PR comments (scripts/pr-images.sh)
+    esac
+    # A new branch, or a remote tip this repository hasn't fetched (pushed from elsewhere), is compared
+    # with where it left main.
     base=$remote_sha
-    [ "$base" = "$zero" ] && base=$(git merge-base "$local_sha" origin/main 2> /dev/null || echo "")
+    if [ "$base" = "$zero" ] || ! git cat-file -e "$base^{commit}" 2> /dev/null; then
+        base=$(git merge-base "$local_sha" origin/main 2> /dev/null || echo "")
+    fi
     changed=$(if [ -n "$base" ]; then git diff --name-only "$base" "$local_sha"; else git show --name-only --format= "$local_sha"; fi)
     printf '%s\n' "$changed" | grep -qv '\.md$' || continue
-    if [ "$local_sha" != "$(git rev-parse HEAD)" ]; then
+    if [ "$local_sha" != "$head" ]; then
         echo "pre-push: $local_ref isn't checked out here, so its build can't be tested; check it out and push from it" >&2
         exit 1
     fi
@@ -24,7 +35,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 done
 [ "$gate" = yes ] || exit 0
 
-dirty=$(git status --porcelain=v1 --untracked-files=all -- engine plugin tests scripts cmake presets assets .githooks '*CMakeLists.txt')
+dirty=$(git status --porcelain=v1 --untracked-files=all -- "${build_inputs[@]}")
 if [ -n "$dirty" ]; then
     echo "pre-push: these differ from the pushed commit; commit them or set them aside first:" >&2
     printf '%s\n' "$dirty" >&2
