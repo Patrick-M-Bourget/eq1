@@ -135,9 +135,9 @@ TEST_CASE ("Searching lists matching Presets across every folder, with their fol
 {
     Browser host;
     host.browser.open ({}, nullptr);
-    host.type ("OOTH");
+    host.type ("BOOTH");
     CHECK (host.rows() == juce::StringArray ({ "Booth, User/Drums/Acoustic" }));
-    CHECK (host.browser.getListTitle() == juce::String::fromUTF8 ("1 result for \xe2\x80\x9cOOTH\xe2\x80\x9d"));
+    CHECK (host.browser.getListTitle() == juce::String::fromUTF8 ("1 result for \xe2\x80\x9c" "BOOTH\xe2\x80\x9d"));
     CHECK (host.browser.getSelectedFolder().isEmpty());
     CHECK (host.button ("Clear search").isVisible());
 
