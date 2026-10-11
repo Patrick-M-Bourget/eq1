@@ -1,6 +1,6 @@
 # Fractional Slopes morph the cascade between neighbouring whole orders
 
-**Status:** Accepted (#18): the partial cascade; beyond about an octave the stopband falls at the next whole order. The design the Engine builds has no jumps between nearby Slopes except one seam on Band Pass and Notch, which the Engine crossfades, and keeps Shelves within their tolerances: see "The design the Engine builds".
+**Status:** Accepted (#18): the partial cascade; beyond about an octave the stopband falls at the next whole order. At Q 0.71 to 40 the design the Engine builds has no jumps between nearby Slopes except one seam on Band Pass and Notch, which the Engine crossfades, and keeps Shelves within their tolerances. At Q 0.1 and below, High Cut and the Shelves still jump: see "The design the Engine builds".
 
 `band<n>_slope` is already continuous (ADR 0003), but the Engine rounds it to the nearest whole order. Pro-Q 4's Slope is continuous (for example 3.5 dB/oct). This ADR proposes the analog target for a Slope between whole orders. Bell's Slope is #19.
 
@@ -52,7 +52,7 @@ All three candidates are realised by the same morphing cascade, so they cost the
 
 ## The design the Engine builds
 
-The lab's `continuous_design` is the design the Engine builds, and the lab's fractional reports use it. Whole orders keep today's designs exactly (within 10⁻¹³ dB). `python3 tools/filter-lab/filterlab.py slope-gaps --jobs 6` reproduces every number below, before (the lab's first design, `fractional_design`) and after (`continuous_design`).
+The lab's `continuous_design` is the design the Engine builds, and the lab's fractional reports use it. Whole orders keep today's designs exactly (within 10⁻¹³ dB). `python3 tools/filter-lab/filterlab.py slope-gaps --jobs 6` reproduces every number below, before (the lab's first design, `fractional_design`) and after (`continuous_design`) (about 40 minutes; `slope-gaps rescale` alone takes seconds).
 
 - **High Cut's partial section:** one matched biquad with exact poles, whether they are real or a pair. It is matched at its damped natural frequency like the other High Cut sections, and at 0.1 × its natural frequency while its poles are real. While they are real, the match point aims at the analog magnitude times the error two first-order sections would have there, weighted by 1 − c. Here c = 1 − (1 − near/far)²: c is 0 as the pole comes in from infinity and 1 where the poles meet, and it moves smoothly there. `fractional_design` uses two first-order sections, then switches to one biquad where the poles meet.
 - **Shelves' resonant split:** each section's zeros' Q is reduced to the Q the same section has at Q 2. For whole orders, this is exactly the existing (2/Q)^(1/sections). The partial section's split is weighted by t³, and by c while its roots are real. While they are real, it is matched like the High Cut's partial section, at Frequency.
@@ -63,22 +63,30 @@ The lab's `continuous_design` is the design the Engine builds, and the lab's fra
   - The cost is stepping: a sweep from 0 to 96 dB/oct crossfades 8 times on Band Pass and 4 times on Notch, against 16 and 8 times today. Each time, Slope waits for one crossfade, about 50 ms.
   - Moving from 0 dB/oct to above it is a structure change too, from no sections to one. Every other Slope change can glide. Just above a whole order, the cascade can have more biquads than at the whole order, and the extra ones start as the identity.
 
-Outcome per gap. The worst case covers 44.1, 48 and 96 kHz and Frequency up to 0.91 × Nyquist. Seams are the jump over 0.01 dB/oct beyond the analog target's own change, at Q 0.71, 3 and 10 (Band Pass and Notch: Q 0.1 to 40) and Gain ±3 and ±18. A seam stays as the step shrinks; elsewhere the jump shrinks with the step.
+Outcome per gap. The worst case covers 44.1, 48 and 96 kHz and Frequency up to 0.91 × Nyquist. Seams are the jump over 0.01 dB/oct beyond the analog target's own change, at Q 0.025, 0.1, 0.71, 2, 3, 10 and 40 (the Q parameter's whole range) and Gain ±3 and ±18. They are looked for at each whole order, where each partial section's poles meet and at Band Pass's 24 and 30 dB/oct, and everywhere else by a scan of every Slope 0.1 dB/oct apart from the Shape's lowest to 96 dB/oct, whose most outstanding step is halved down to 10⁻⁵ dB/oct. A seam stays as the step shrinks; elsewhere the jump shrinks with the step.
 
 | Gap | Before | After | Verdict |
 |---|---|---|---|
-| High Cut seam where the poles meet | 1.21 dB | 0.02 dB, shrinking with the step | closed |
-| Low Shelf seams (at odd whole orders, where the pairs count changes) | 4.93 dB | 0.06 dB, shrinking | closed |
-| High and Tilt Shelf seams (at whole orders) | 5.94 dB | 0.11 dB, shrinking | closed |
+| High Cut seam where the poles meet (Q 0.71 to 40) | 1.21 dB | 0.02 dB, shrinking with the step | closed |
+| Low Shelf seams (Q 0.71 to 40, at odd whole orders, where the pairs count changes) | 10.1 dB | 0.15 dB, shrinking | closed |
+| High and Tilt Shelf seams (Q 0.71 to 40, at whole orders) | 10.4 dB | 0.11 dB, shrinking | closed |
+| High Cut, Q 0.1 and 0.025 | not on the earlier grid | 1.17 dB at 24.5 dB/oct (Q 0.1, 9 kHz at 96 kHz); 0.40 dB at 96 dB/oct (Q 0.1, 20 kHz at 96 kHz) | open |
+| Shelves, Q 0.1 and 0.025, at whole orders | not on the earlier grid | 1.15 dB at 24 dB/oct (Q 0.1, ±18 dB, 20 kHz at 44.1 kHz) | open |
 | Band Pass at 24 dB/oct (steep design) | 7.51 dB | 0.01 dB, shrinking | closed |
 | Band Pass where the poles meet | 18.1 dB | 18.1 dB | crossfade covers it |
 | Notch where the poles meet | 1.60 dB | 1.60 dB | crossfade covers it |
-| Low Cut | 0.03 dB, shrinking | unchanged | no seam |
+| Low Cut | 0.10 dB, shrinking | unchanged | no seam |
 | Resonant Low Shelf (Q above 2), up to 0.45 / 0.73 / 0.91 × Nyquist | 35.1% / 39.8% / 81.4% | 10.9% / 14.6% / 43.9% | closed (limits 12 / 15 / 45%) |
 | Resonant High Shelf (Q above 2) | 20.6% / 40.5% / 141.9% | 11.2% / 16.1% / 43.9% | open at 0.73 × Nyquist, Q 40 only: the whole-order design itself |
 | Low Shelf, Q up to 2 | 10.3% / 10.8% / 43.8% | 10.3% / 11.1% / 43.8% | inside (limits 12 / 12 / 45%) |
 | High Shelf, Q up to 2 | 10.5% / 14.0% / 55.9% | 10.5% / 11.1% / 46.1% | inside the test tolerance (share 46.1%) |
 | Corner rescale | bisection (unbounded) | 3 Newton steps, 10⁻⁴ cents | closed |
+
+The seams at low Q:
+
+- **High Cut:** at low Q every section's poles are real. `_fractional_cut` designs a section with real poles as two first-order sections and one with a pair as one matched biquad, so the design jumps where a section's poles turn from real to a pair as Slope moves (1.17 dB at 24.5 dB/oct). Whole orders match every section as one biquad, so the design also jumps at a whole order (0.40 dB at 96 dB/oct). `fractional_design` has the same seams.
+- **Shelves:** at low Q the partial section's roots stay real up to the next whole order, so its weighting by c never reaches 1 and the design jumps onto the whole order's (1.15 dB at 24 dB/oct).
+- **Not a seam:** at Q 40, Frequency 20 Hz and 96 kHz, the lab's High Cut response at 10 Hz changes by up to 1.3 dB between Slopes 10⁻⁹ dB/oct apart, in no order with the step: rounding in a section that sharp that far below its sample rate. Whole orders there move by 10⁻⁶ dB.
 
 Two Shelf figures stay just over the share limit, and neither is caused by the fractional design:
 

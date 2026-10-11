@@ -1168,12 +1168,20 @@ ShelfError = namedtuple("ShelfError", "share error slope fs frequency gain")
 SEAM_STEPS = (0.01, 0.001, 0.0001, 0.00001)  # dB/oct: the Slope changes the seams report looks at
 
 
+SEAM_SCAN = 0.1  # dB/oct: the step of the scan that looks for seams away from the places _seam_slopes names
+SEAM_QS = (0.025, 0.1, 0.71, 2, 3, 10, 40)  # the Q parameter's whole range, 0.025 to 40
+
+
+def _lowest_slope(shape):
+    return 0 if shape in ("low-cut", "high-cut", "band-pass") else (12 if shape == "notch" else 6)
+
+
 def _seam_slopes(shape, q):
     """(kind, Slope, side): a pair of Slopes a step apart, starting side steps from Slope, at each place a
     seam can be: each whole order (either side), each place a partial section's poles meet (straddled),
-    24 and 30 dB/oct (Band Pass's steep design) and every 1.5 dB/oct in between."""
+    and 24 and 30 dB/oct (Band Pass's steep design)."""
     unit = 12 if shape == "notch" else 6
-    lowest = 0 if shape in ("low-cut", "high-cut", "band-pass") else unit
+    lowest = _lowest_slope(shape)
     out = []
     for n in range(lowest // unit, 96 // unit + 1):
         whole = unit * n
@@ -1185,37 +1193,69 @@ def _seam_slopes(shape, q):
             out.append(("poles meet", unit * (n + _critical_share(pair.d1)), -0.5))
     if shape == "band-pass":
         out += [("24, 30", s, side) for s in (24, 30) for side in (-1, 0)]
-    out += [("between", lowest + 0.75 + 1.5 * i, 0) for i in range(int((96 - lowest) / 1.5))]
     return out
 
 
 def _seam_grid(shape):
-    qs = (0.1, 0.71, 2, 10, 40) if shape in ("band-pass", "notch") else (0.71, 3, 10)
     gains = (-18, -3, 3, 18) if shape in SHELVES else (0,)
     return [(fs, frequency, gain, q) for fs in (44100, 48000, 96000) for frequency in (20, 200, 2000, 9000, 15000, 20000)
-            if frequency <= 0.91 * fs / 2 for gain in gains for q in qs]
+            if frequency <= 0.91 * fs / 2 for gain in gains for q in SEAM_QS]
 
 
 def _seam_job(job):
-    """The worst seams for one (design, shape, fs, Frequency, Gain, Q): per kind, (excess at each of
-    SEAM_STEPS, Slope, fs, Frequency, Gain, Q), the excess being how far the response's change over the
-    step strays from the analog target's own change, in dB, where either response is above -60 dB. A
-    seam's excess stays as the step shrinks; a continuous design's shrinks with it."""
+    """The worst seams for one (design, shape, fs, Frequency, Gain, Q): per kind, a Seam, the excess being
+    how far the response's change over the step strays from the analog target's own change, in dB, where
+    either response is above -60 dB. A seam's excess stays as the step shrinks; a continuous design's
+    shrinks with it.
+
+    Besides the places _seam_slopes names, the kind "elsewhere" scans every Slope from the Shape's lowest
+    to 96 dB/oct, SEAM_SCAN apart, leaving out the scan steps that touch a named place. The step whose
+    excess stands out most from its neighbours' (a jump adds to one step, a steep curve to all of them)
+    is halved, keeping the half with the larger excess, down to the smallest of SEAM_STEPS; that place
+    is then measured over each of SEAM_STEPS, as the named places are."""
     design, shape, fs, frequency, gain, q, points = job
-    worst = {}
     grid = [10 * (fs / 2 / 10) ** (i / points) for i in range(points + 1)]
-    for kind, slope, side in _seam_slopes(shape, q):
-        excesses = []
-        for step in SEAM_STEPS:
-            start = max(slope + side * step, 0)
-            (a, ta), (b, tb) = (GAP_DESIGNS[design](shape, fs, frequency, gain, q, s) for s in (start, start + step))
-            excess = 0.0
-            for f in grid:
-                da, db = cascade_db(a, f, fs), cascade_db(b, f, fs)
-                if max(da, db) >= -60:
-                    excess = max(excess, abs(db - da - (tb(f) - ta(f))))
-            excesses.append(excess)
-        _keep_worst(worst, kind, Seam(tuple(excesses), slope, fs, frequency, gain, q))
+    responses = {}
+
+    def response(slope):
+        if slope not in responses:
+            sections, target = GAP_DESIGNS[design](shape, fs, frequency, gain, q, slope)
+            responses[slope] = [(cascade_db(sections, f, fs), target(f)) for f in grid]
+        return responses[slope]
+
+    def excess(a, b):
+        worst = 0.0
+        for (da, ta), (db, tb) in zip(response(a), response(b)):
+            if max(da, db) >= -60:
+                worst = max(worst, abs(db - da - (tb - ta)))
+        return worst
+
+    def over_steps(slope, side):
+        starts = [max(slope + side * step, 0) for step in SEAM_STEPS]
+        return tuple(excess(start, start + step) for start, step in zip(starts, SEAM_STEPS))
+
+    worst = {}
+    places = _seam_slopes(shape, q)
+    for kind, slope, side in places:
+        _keep_worst(worst, kind, Seam(over_steps(slope, side), slope, fs, frequency, gain, q))
+
+    lowest = _lowest_slope(shape)
+    scan = [lowest + i * SEAM_SCAN for i in range(round((96 - lowest) / SEAM_SCAN) + 1)]
+    steps = [excess(a, b) for a, b in zip(scan, scan[1:])]
+    named = [slope for _, slope, _ in places]
+    standing_out = []
+    for i, e in enumerate(steps):
+        if any(scan[i] - 1e-9 <= slope <= scan[i + 1] + 1e-9 for slope in named):
+            continue
+        neighbours = [steps[k] for k in (i - 1, i + 1) if 0 <= k < len(steps)]
+        standing_out.append((e - max(neighbours), i))
+    _, i = max(standing_out)
+    lo, hi = scan[i], scan[i + 1]
+    while hi - lo > SEAM_STEPS[-1]:
+        mid = 0.5 * (lo + hi)
+        lo, hi = (lo, mid) if excess(lo, mid) >= excess(mid, hi) else (mid, hi)
+    place = 0.5 * (lo + hi)
+    _keep_worst(worst, "elsewhere", Seam(over_steps(place, -0.5), place, fs, frequency, gain, q))
     return shape, design, worst
 
 
