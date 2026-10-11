@@ -365,8 +365,8 @@ Cascade designTiltShelf (const ShapeParameters& p, double sampleRate)
     auto cascade = designHighShelf (p, sampleRate);
     // A section that is never an unsplit identity (addShelfSection), which stays exact: a boost's
     // first, a cut's last. At 0 dB, where the choice changes, the scale is 1.
-    const int real = p.gain >= 0.0 ? 0 : cascade.count - 1;
-    scale (cascade.sections[static_cast<size_t> (real)], decibelsToGain (-p.gain / 2.0));
+    const int exactSection = p.gain >= 0.0 ? 0 : cascade.count - 1;
+    scale (cascade.sections[static_cast<size_t> (exactSection)], decibelsToGain (-p.gain / 2.0));
     return cascade;
 }
 
