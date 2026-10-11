@@ -802,7 +802,7 @@ def _order(shape, slope):
 def fractional_design(shape, fs, frequency, gain, q, slope):
     """The morphing cascade for shape at slope in dB/oct: (digital sections, its analog response in dB,
     which is the partial target). A Cut or Band Pass below 6 dB/oct grows in from passing unchanged.
-    #161 measured three gaps in it and closed them in continuous_design, which the reports below use."""
+    slope-gaps' "before"; the fractional reports design with continuous_design."""
     nu = _order(shape, slope)
     if nu == 0:
         return [], lambda f: 0.0
@@ -856,7 +856,7 @@ def fractional_target(target, shape, fs, frequency, gain, q, slope):
 
 def fractional_shape(shape, target):
     """A shape for report() and report_cut(): its order argument is the Slope in dB/oct, its design the
-    morphing cascade (continuous_design, #161), and its target the candidate."""
+    morphing cascade (continuous_design), and its target the candidate."""
     def design(fs, frequency, gain, q, slope):
         sections, _ = continuous_design(shape, fs, frequency, gain, q, slope)
         return sections, fractional_target(target, shape, fs, frequency, gain, q, slope)
@@ -949,7 +949,7 @@ def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqr
             print(f"{shape:>10} {target:>8}  {whole:7.0e} {steeper:7.3f} {bump:6.3f} {vs:10.2f}")
 
 
-# --- Fractional Slope gaps (#161): seams, resonant and High Shelf tolerances, the corner rescale ------
+# --- Fractional Slope gaps (ADR 0006): seams, resonant and High Shelf tolerances, the corner rescale -
 # The continuous design: fractional_design with these changes. Each touches only the partial section, a
 # Shelf's resonant split or Band Pass, and whole orders stay exactly as they are (within 1e-13 dB).
 #   - High Cut: the partial section, real poles or a pair, is one matched biquad with exact poles. While
@@ -959,7 +959,7 @@ def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqr
 #   - Shelves: a section's resonant split reduces its zeros' Q to what the same section has at Q 2 (for
 #     whole orders, exactly the existing (2 / Q)^(1 / pairs)); the partial section's split is weighted by
 #     t^PARTIAL_SPLIT_POWER, and while its roots are real it is matched as the High Cut's is.
-#   - Band Pass: a pair's upper section gets the transform's gain, |p|^2 / Q^2 (a fix to the target); the
+#   - Band Pass: a pair's upper section gets the transform's gain, |p|^2 / Q^2, in the target too; the
 #     steep design comes in over 24 to 30 dB/oct instead of switching on above 24.
 # Low Cut and Notch keep fractional_design's design. Band Pass and Notch keep one seam each where the
 # partial section's poles meet: the prototype's real poles and its pair are grouped into different
@@ -1145,7 +1145,7 @@ def _continuous_band_pass(fs, frequency, q, nu):
 
 
 def continuous_design(shape, fs, frequency, gain, q, slope):
-    """fractional_design with the #161 changes above: the same analog target, the same section count."""
+    """fractional_design with the changes above, and its section count."""
     nu = _order(shape, slope)
     if nu == 0:
         return [], lambda f: 0.0
@@ -1362,7 +1362,7 @@ def gap_options(parser):
 
 @command("slope-gaps", options=gap_options)
 def run_slope_gaps(args):
-    """ADR 0006's three gaps (#161), before (fractional_design) and after (continuous_design)."""
+    """ADR 0006's gaps, before (fractional_design) and after (continuous_design)."""
     gaps = args.gaps or GAPS
     if "seams" in gaps:
         report_seams(args.shapes or FRACTIONAL_SHAPES, args.jobs)
