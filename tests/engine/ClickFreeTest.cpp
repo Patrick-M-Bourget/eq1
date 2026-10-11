@@ -231,6 +231,27 @@ TEST_CASE ("A Cut swept block by block does not zipper")
     CHECK (discontinuity (output, host.sampleRate) < threshold);
 }
 
+TEST_CASE ("A resonant shelf swept across its split does not zipper")
+{
+    // Q crosses 2, where a shelf section starts to split in two biquads, Gain crosses 0 dB, where the
+    // two biquads swap roles, and Frequency carries the sections' zeros through 0.8 to 1.1 x Nyquist,
+    // where the split fades out (docs/dsp/filter-design.md, "Resonant shelves"). A resonance of Q up
+    // to 40 swept up to Nyquist as fast as the Bell sweep stirs up more than a sine's turn there, split
+    // or not, so Frequency moves a third as fast.
+    const auto host = anyHost();
+    const Shape shelf = GENERATE (Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf);
+    const double slope = GENERATE (12.0, 30.0, 96.0);
+    CAPTURE (host.sampleRate, host.blockSize, static_cast<int> (shelf), slope);
+    const auto output = playTone (host, [&] (double time, Settings& s) {
+        const auto sweep = [time] (double speed) { return 0.5 + 0.5 * std::sin (time * speed); };
+        const double highest = std::min (0.9 * host.sampleRate / 2.0, 30000.0); // Frequency's range ends at 30 kHz
+        s.bands[0] = bellBand (highest / 4.5 * std::pow (4.5, sweep (5.0)), -24.0 + 48.0 * sweep (7.0), 0.5 * std::pow (80.0, sweep (11.0)));
+        s.bands[0].shape = shelf;
+        s.bands[0].slope = slope;
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
+
 TEST_CASE ("Switching a Cut's Brickwall does not click")
 {
     const auto host = anyHost();

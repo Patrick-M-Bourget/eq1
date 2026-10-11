@@ -11,6 +11,12 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
   - A first-order section matches at DC and Nyquist only.
   - Above 0.98 × Nyquist, the pole frequency and the match point are held just below Nyquist.
 - **Design direction:** each section is designed in the direction whose poles sit at or below Frequency, where the matched z-transform is accurate, and inverted for the other direction. Bells and Low Shelves are designed as boosts; High Shelves as cuts.
+- **Resonant shelves:** with Q above 2, a shelf section has sharp zeros and sharp poles, and one matched biquad fits only one of them: the error reached 40–75% of the span. So each second-order shelf section is split in two biquads:
+  - its poles over zeros at the Q the section has at Q 2, matched directly;
+  - the zeros' extra resonance, (zeros at their own Q) / (zeros at the Q-2 Q), designed as its inverse, whose sharp poles the matched z-transform follows, and inverted back.
+  - **Fades:** the split eases in from Q 2 to Q 2.5, and fades out as the zeros' natural frequency goes from 0.8 to 1.1 × Nyquist: beyond it the inverse's poles would be held below Nyquist, where they nearly cancel their own zeros and stir up noise near Nyquist as they move. Fading out by 1.2 × Nyquist was a little more accurate and clicked when swept. Both fades are smooth (a smoothstep), so the coefficients' path has no corner: a corner sounds in a section with large coefficients.
+  - **Layout:** every second-order section takes two biquads whatever the Q, so the section count never changes in a glide. Unsplit, the second is its matched poles over equal zeros: exactly the identity, and the limit of the split. The biquad with the sharp zeros comes first, so the other doesn't amplify what a moving resonance stirs up near Nyquist; a cut (the inverse) swaps the two, so at 0 dB, where boost and cut meet, so do the biquads in each place.
+  - Critically damped companion zeros (Q 0.5) instead, as the #4 prototype tried, reached 10% of the span up to 0.45 × Nyquist without a fade, but over 100% above it.
 - **Low Cut sections:** the three-point match can't place a double zero exactly at DC, which leaves the stopband tens of dB too loud. So a Low Cut section keeps the matched poles, fixes its zeros at DC, (1 − z⁻¹)² or (1 − z⁻¹), and is scaled to the analog magnitude at Frequency.
 - **High Cut sections:** each is matched at its damped natural frequency, Frequency × √(1 − 1/(4Q²)) (at least 0.1 × Frequency, for sections with Q below 0.5), held at or below half Nyquist. Matching at Frequency instead bulges the passband by up to 35 dB near Nyquist at Brickwall; this way a High Cut rolls off early there instead of boosting.
 - **Band Pass sections:** each Butterworth pole pair becomes a lower and an upper pole pair. The lower one is designed as a Low Cut section (zeros at DC), with its gain the geometric mean of the gains matching at its own natural frequency and at Nyquist. The upper one is designed as a High Cut section, matched at no more than 0.9 of its natural frequency: matched right at the peak of a very sharp section, the poles' tiny error shows up as tens of dB of gain. Plain band-pass sections fail wide Band Passes, whose two pole pairs sit far apart. Every section is designed around its own natural frequency, so poles above Nyquist are held just below it.
@@ -63,6 +69,16 @@ How far the Engine's response may stray from the analog target in `tests/engine/
 | up to 0.91 | 5.0 / 2.0 | 5.0 / 9.0 | 3.1 / 6.0 |
 
 The measured column is the worst case in the filter lab over the test's grid (Frequency 20 Hz to 20 kHz, Q 0.1, 0.71, 2, 10 and 40, at 44.1, 48 and 96 kHz), at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py band-pass --orders 5 6 7 8 9 10 11 12 13 14 15 16 --q 0.1 0.71 2 10 40`.
+
+**Low Shelf, High Shelf, Tilt Shelf** (share of the curve's span: how far the target strays from its value at 10 Hz, and at least |Gain|; plus 0.06 dB, or 0.6 dB above 0.73):
+
+| Frequency / Nyquist | Q up to 2 | Q above 2 | Q above 2, measured |
+|---|---|---|---|
+| up to 0.45 | 12% | 12% | 11.1% |
+| up to 0.73 | 12% | 15% | 13.9% |
+| up to 0.91 | 45% | 75% | 41.2% |
+
+Before resonant shelves were split (#17), Q above 2 reached 40–75% of the span everywhere. The measured column is the worst case in the filter lab, as a share of the span alone, over Frequency 20 Hz to 20 kHz, Gain ±3 to ±30 dB, every Slope from 6 to 96 dB/oct, Q 2.25, 2.5, 3, 4, 10, 20 and 40, at 44.1, 48 and 96 kHz, at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py low-shelf --orders 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 --q 2.25 2.5 3 4 10 20 40` (`high-shelf` and `tilt-shelf` measure the same).
 
 The other Shapes' limits are in the test, beside each Shape's check.
 
