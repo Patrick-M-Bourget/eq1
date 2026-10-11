@@ -599,9 +599,10 @@ def auto_threshold_movement(levels, spreads, rise, fall, hold=0.25, full=12.0, g
 
 
 def report_auto_threshold(spreads, falls, rise=4.5):
-    """The DynamicsTest criteria (#152): on noise swinging +/-6 dB at 4 Hz, the least movement at a loud
-    half-cycle's most and the most at a quiet half-cycle's least, over 2-5 s; after 1 s of +6 dB on
-    steady noise, the movement reached. The trough is release-limited: lowering it lowers the peak."""
+    """The Auto Threshold criteria in tests/engine/DynamicsTest.cpp: on noise swinging +/-6 dB at 4 Hz,
+    the least movement at a loud half-cycle's most and the most at a quiet half-cycle's least, over
+    2-5 s; after 1 s of +6 dB on steady noise, the movement reached. The trough is release-limited:
+    lowering it lowers the peak."""
     swing = detection_levels(5.0, -36, lambda t: 6 * math.sin(2 * PI * 4 * t))
     swell = detection_levels(4.0, -24, lambda t: 6.0 if t >= 3.0 else 0.0)
     at = lambda t: int(t * DETECTOR_FS / RUN_LENGTH)

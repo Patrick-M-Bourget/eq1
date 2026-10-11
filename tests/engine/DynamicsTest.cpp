@@ -350,7 +350,7 @@ double leastMoved (const Run& run, double from, double to)
 TEST_CASE ("Auto Threshold follows the material's spread, so a Band moves on ordinary swings at any level")
 {
     // Noise whose level swings +/-6 dB at 4 Hz: loud around each quarter-period's peak, quiet around
-    // each trough. Spec #1 "Dynamics response" (ADR 0005), as amended for #152.
+    // each trough. Spec #1 "Dynamics response" (ADR 0005).
     const double levelDb = GENERATE (-36.0, -12.0);
     const double dynamicRange = GENERATE (-6.0, -12.0);
     CAPTURE (levelDb, dynamicRange);
