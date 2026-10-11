@@ -1614,10 +1614,11 @@ def _blended_magnitude(b: Analog, reference, hold, held_q, analog_q):
     return lambda f: b.squared(f / reference) ** (1 - blend) * own.squared(f / hold) ** blend
 
 
-def bell_section(b: Analog, reference, fs, match_point=_held_match, magnitude=_analog_magnitude):
+def bell_section(b: Analog, reference, fs, match_point=_slid_match, magnitude=_analog_magnitude):
     """One section of a steep Bell, b normalised to its poles' natural frequency, reference in Hz. Up to
     the hold it is a matched section with its zeros exact at match_point(reference, hold). Above it, its
-    poles are held (_held_poles) and its zeros fit magnitude at DC, the match point and Nyquist."""
+    poles are held (_held_poles) and its zeros fit magnitude at DC, the match point and Nyquist. The
+    defaults are ADR 0007's design; bell-continuity and bell-candidates compare the others."""
     hold = BELL_HOLD * fs / 2
     match = match_point(reference, hold)
     if reference <= hold:
@@ -1628,10 +1629,11 @@ def bell_section(b: Analog, reference, fs, match_point=_held_match, magnitude=_a
 
 
 def _band_shelf_section(a: Analog, frequency, fs):
-    """One second-order section of a steep Bell, matched at its poles' natural frequency. Above the hold
-    its poles are placed at the hold with the Q that makes them as loud there, relative to DC, as the
-    analog poles are (never higher), and its zeros fit the analog section at DC, BELL_HOLD_MATCH x the
-    hold and Nyquist. Not continuous as the natural frequency crosses the hold (see ADR 0007)."""
+    """One second-order section of a steep Bell (ADR 0007), matched at its poles' natural frequency. Above
+    the hold its poles are placed at the hold with the Q that makes them as loud there, relative to DC,
+    as the analog poles are (never higher), and its zeros fit the analog section at DC, a match point and
+    Nyquist. The match point slides from the hold to BELL_HOLD_MATCH x the hold as the natural frequency
+    rises BELL_SLIDE above the hold (_slid_match), so the section is continuous across the hold."""
     b, w0 = normalised(a)
     return bell_section(b, frequency * w0, fs)
 
@@ -1726,13 +1728,14 @@ def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000
         print(f"{slope:>5g}  {len(sections):>8}  {off:18.2e}")
 
 
-# --- Steep Bell continuity near Nyquist (#162, docs/adr/0007) -------------------------------------
-# ADR 0007's held section, as first accepted ("hold"), isn't continuous: as a section's natural
-# frequency crosses the hold, its match point jumps from its natural frequency (the hold) to
-# BELL_HOLD_MATCH x the hold. ADR 0007 takes "slide", which slides the match point instead. Each candidate
-# here designs one section of the Butterworth band shelf; bell-continuity measures how far the response
-# moves between two Frequencies a small step apart, across every section's crossing (and on a grid
-# away from them, for scale), and bell-candidates measures each candidate against ADR 0007's bands.
+# --- Steep Bell continuity near Nyquist (docs/adr/0007) -------------------------------------------
+# Candidate designs for a steep Bell's section near the hold. "slide" is ADR 0007's (bell_section's
+# defaults). "hold" isn't continuous: as a section's natural frequency crosses the hold, its match point
+# jumps from its natural frequency (the hold) to BELL_HOLD_MATCH x the hold; it is kept to compare
+# against. Each candidate designs one section of the Butterworth band shelf; bell-continuity measures
+# how far the response moves between two Frequencies a small step apart, across every section's
+# crossing (and on a grid away from them, for scale), and bell-candidates measures each candidate
+# against ADR 0007's bands.
 #
 #     python3 tools/filter-lab/filterlab.py bell-continuity --candidates hold slide
 #     python3 tools/filter-lab/filterlab.py bell-candidates --candidates hold slide --q 0.1 0.71 2 10 40 --at-crossings

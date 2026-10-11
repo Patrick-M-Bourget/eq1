@@ -21,15 +21,15 @@ Fixed at every Slope: Gain at Frequency, 0 dB at DC, and the half-Gain points, 1
 
 | Banded by | Frequency / Nyquist | Today's Bell | Butterworth (proposed) | Chebyshev I |
 |---|---|---|---|---|
-| Frequency | up to 0.45 | 4.3 / 8.3 | 43.3 / 9.7 | 27.7 / 12.2 |
+| Frequency | up to 0.45 | 4.3 / 8.3 | 66.1 / 9.7 | 27.7 / 12.2 |
 | Frequency | up to 0.73 | 13.8 / 9.3 | 20.0 / 15.4 | 14.2 / 12.9 |
-| Frequency | up to 0.91 | 28.2 / 10.2 | 48.1 / 18.6 | 25.4 / 14.5 |
+| Frequency | up to 0.91 | 28.2 / 10.2 | 30.4 / 18.6 | 20.1 / 14.5 |
 | Upper half-Gain point | up to 0.45 | 1.2 / 4.8 | 7.9 / 5.2 | 5.8 / 3.9 |
 | Upper half-Gain point | up to 0.73 | 3.4 / 7.6 | 12.9 / 12.5 | 9.0 / 10.6 |
 | Upper half-Gain point | up to 0.91 | 9.0 / 9.3 | 21.7 / 18.6 | 17.0 / 13.4 |
-| Upper half-Gain point | above 0.91 | 28.2 / 10.2 | 48.1 / 18.3 | 27.7 / 14.5 |
+| Upper half-Gain point | above 0.91 | 28.2 / 10.2 | 66.1 / 18.3 | 27.7 / 14.5 |
 
-Banded by Frequency, the worst cases are a wide Bell (Q 0.1, Frequency 2–5 kHz) whose steep upper skirt sits near Nyquist, and a narrow one (Q 10) at 20 kHz and 44.1 kHz. Banded by where the upper half-Gain point sits, which is where a steep skirt meets Nyquist, the Butterworth candidate is within today's Bell limits up to 0.91. So the Engine's test for steep Bells should band by the upper half-Gain point, not by Frequency.
+Banded by Frequency, the worst cases are wide Bells whose steep upper skirt sits near or past Nyquist: Q 0.1 at 24 dB/oct, and Q 2 at 96 dB/oct. Banded by where the upper half-Gain point sits, which is where a steep skirt meets Nyquist, the Butterworth candidate is within today's Bell limits up to 0.91. So the Engine's test for steep Bells should band by the upper half-Gain point, not by Frequency.
 
 The design: each section of the transformed shelf is a matched section (`docs/dsp/filter-design.md`, "Method") at its own poles' natural frequency. A section whose natural frequency is above 0.95 × Nyquist is held there, as a steep Band Pass's upper sections are: its poles at the hold, with the Q that makes them as loud there, relative to DC, as the analog poles are, and its zeros fitting the analog section at DC, a match point and Nyquist. The match point is the hold while the natural frequency is at the hold, and slides smoothly (in log frequency) to 0.9 × the hold as the natural frequency rises a quarter tone above it (#162, below). Without the hold, wide and high Bells were up to 225% off.
 
