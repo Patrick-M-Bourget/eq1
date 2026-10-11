@@ -961,3 +961,27 @@ TEST_CASE ("Metering another Band forgets the last one's level, even before it i
     playTone (1);
     CHECK (engine.readDetectionLevel() < -20.0);
 }
+
+TEST_CASE ("A Dynamic Band re-prepared mid-movement starts at its Gain, not where it was")
+{
+    const auto settings = withBand (dynamicBell (3.0, -9.0, -30.0));
+    Engine engine;
+    engine.prepare (sampleRate, 512, 1);
+    engine.setSettings (settings);
+    std::vector<float> block (512);
+    float* channels[] = { block.data() };
+    for (int b = 0, n = 0; b < 40; ++b)
+    {
+        for (int i = 0; i < 512; ++i, ++n)
+            block[static_cast<size_t> (i)] = static_cast<float> (sine (1000.0, -3.0, n));
+        engine.process ({ channels, 1, 512 });
+    }
+    REQUIRE (engine.liveGainDb (1) < 0.0); // moving well below its Gain of 3 dB
+
+    // Re-prepared, its first run plays at Gain: the previous session's movement is gone.
+    engine.prepare (sampleRate, 512, 1);
+    engine.setSettings (settings);
+    std::fill (block.begin(), block.end(), 0.0f);
+    engine.process ({ channels, 1, timingBlock }); // one run of the grid
+    CHECK_THAT (engine.liveGainDb (1), WithinAbs (3.0, 1.0e-9));
+}

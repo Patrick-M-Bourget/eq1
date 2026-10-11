@@ -112,6 +112,8 @@ void Band::prepare (double newSampleRate, int numChannels)
     mix.reset (0.0);
     shapeCrossfade.reset (1.0);
     startedRun = noRun;
+    // A Dynamic Band starts the new session at its Gain, as its detector does.
+    dynamicOffset = designedOffset = 0.0;
 }
 
 void Band::setSettings (const BandSettings& settings, bool snap)
