@@ -100,6 +100,15 @@ TEST_CASE ("The Analyzer button opens its popover above it, left-aligned to it, 
     host.open();
 }
 
+TEST_CASE ("The Analyzer popover's card is the prototype's 260 x 227 px, within 1 px")
+{
+    Analyzer host;
+    const auto card = host.popover.getCardBounds();
+    CHECK (card.getWidth() == 260);
+    CHECK (card.getHeight() >= 226);
+    CHECK (card.getHeight() <= 228);
+}
+
 TEST_CASE ("Pre, Post, Sidechain and Peak Hold each toggle their setting, and Pre and Post show on the button")
 {
     Analyzer host;

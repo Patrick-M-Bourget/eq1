@@ -234,6 +234,15 @@ TEST_CASE ("The output popover opens above the Output readout, right-aligned to 
     host.openPopover();
 }
 
+TEST_CASE ("The output popover's card is the prototype's 176 x 188.5 px, within 1 px")
+{
+    Footer host;
+    const auto card = host.popover.getCardBounds();
+    CHECK (card.getWidth() == 176);
+    CHECK (card.getHeight() >= 188);
+    CHECK (card.getHeight() <= 189);
+}
+
 TEST_CASE ("The output popover's controls set their parameters")
 {
     Footer host;
