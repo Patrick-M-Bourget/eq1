@@ -1,6 +1,6 @@
 # Fractional Slopes morph the cascade between neighbouring whole orders
 
-**Status:** Accepted (#18): the partial cascade; beyond about an octave the stopband falls at the next whole order. #161 closed the gaps the first lab design left (jumps between nearby Slopes, Shelf tolerances, the corner rescale), except one seam on Band Pass and Notch, which the Engine crossfades: see "The design the Engine builds".
+**Status:** Accepted (#18): the partial cascade; beyond about an octave the stopband falls at the next whole order. The design the Engine builds has no jumps between nearby Slopes except one seam on Band Pass and Notch, which the Engine crossfades, and keeps Shelves within their tolerances: see "The design the Engine builds".
 
 `band<n>_slope` is already continuous (ADR 0003), but the Engine rounds it to the nearest whole order. Pro-Q 4's Slope is continuous (for example 3.5 dB/oct). This ADR proposes the analog target for a Slope between whole orders. Bell's Slope is #19.
 
@@ -29,7 +29,7 @@ Why this one:
 What it costs:
 
 - **Far stopband:** past roughly an octave beyond Frequency (where the partial pole sits), a Cut falls at the next whole order, 6⌈ν⌉ dB/oct, not at Slope. So Slope sets the steepness near Frequency.
-- **Small bumps and reversals:** a curve can bump against its own direction by up to 0.44 dB on Cuts and Band Pass, 0.34 dB on Notch and 0.22 dB on Shelves. As Slope rises, a Shelf's steepness can briefly ease by up to 0.59 dB. (The 0.91 dB #160 measured on Band Pass came from the lab's missing |p|²/Q² gain.)
+- **Small bumps and reversals:** a curve can bump against its own direction by up to 0.44 dB on Cuts and Band Pass, 0.34 dB on Notch and 0.22 dB on Shelves. As Slope rises, a Shelf's steepness can briefly ease by up to 0.59 dB.
 
 ## Considered Options
 
@@ -50,13 +50,13 @@ All three candidates are realised by the same morphing cascade, so they cost the
 - **Steep change after each whole order:** just past a whole order, the analog curve itself changes quickly, because the incoming pole sweeps through the audio band. For example, a Low Cut at 2 kHz moves up to 0.74 dB per 0.01 dB/oct. Gliding Slope is still continuous.
 - **No parameter changes.** Sessions saved with a rounded Slope sound different once fractional Slopes ship. That is unreleased behaviour, so there is no migration.
 
-## The design the Engine builds (#161)
+## The design the Engine builds
 
-The first lab design (#160) left three gaps. #161 closed them in the lab's `continuous_design`, which the lab's fractional reports now use. Whole orders keep today's designs exactly (within 10⁻¹³ dB). `python3 tools/filter-lab/filterlab.py slope-gaps --jobs 6` reproduces every number below, before (#160's design) and after (about 20 minutes; `slope-gaps rescale` alone takes seconds).
+The lab's `continuous_design` is the design the Engine builds, and the lab's fractional reports use it. Whole orders keep today's designs exactly (within 10⁻¹³ dB). `python3 tools/filter-lab/filterlab.py slope-gaps --jobs 6` reproduces every number below, before (the lab's first design, `fractional_design`) and after (`continuous_design`).
 
-- **High Cut's partial section:** one matched biquad with exact poles, whether they are real or a pair. It is matched at its damped natural frequency like the other High Cut sections, and at 0.1 × its natural frequency while its poles are real. While they are real, the match point aims at the analog magnitude times the error two first-order sections would have there, weighted by 1 − c. Here c = 1 − (1 − near/far)²: c is 0 as the pole comes in from infinity and 1 where the poles meet, and it moves smoothly there. #160 used two first-order sections, then switched to one biquad where the poles meet.
+- **High Cut's partial section:** one matched biquad with exact poles, whether they are real or a pair. It is matched at its damped natural frequency like the other High Cut sections, and at 0.1 × its natural frequency while its poles are real. While they are real, the match point aims at the analog magnitude times the error two first-order sections would have there, weighted by 1 − c. Here c = 1 − (1 − near/far)²: c is 0 as the pole comes in from infinity and 1 where the poles meet, and it moves smoothly there. `fractional_design` uses two first-order sections, then switches to one biquad where the poles meet.
 - **Shelves' resonant split:** each section's zeros' Q is reduced to the Q the same section has at Q 2. For whole orders, this is exactly the existing (2/Q)^(1/sections). The partial section's split is weighted by t³, and by c while its roots are real. While they are real, it is matched like the High Cut's partial section, at Frequency.
-- **Band Pass:** a pair's upper section carries the |p|²/Q² gain. #160's lab used 1/Q², which is right only when |p| is 1, so its fractional passband fell by up to 7.7 dB. That shortfall was the 7.7 dB jump #160 measured where the partial section's poles meet. The steep design (above 24 dB/oct) now comes in linearly from 24 to 30 dB/oct: the held upper sections' coefficients and the cascade's gain correction move from the plain design. A biquad's stable coefficients form a convex set, so every step in between is stable.
+- **Band Pass:** a pair's upper section carries the |p|²/Q² gain. `fractional_design` uses 1/Q², which is right only when |p| is 1, so its fractional passband falls by up to 7.7 dB, and jumps by that where the partial section's poles meet. The steep design (above 24 dB/oct) now comes in linearly from 24 to 30 dB/oct: the held upper sections' coefficients and the cascade's gain correction move from the plain design. A biquad's stable coefficients form a convex set, so every step in between is stable.
 - **Corner rescale:** three Newton steps on the level in dB against ln(frequency), starting from the whole-order corner (x = 1). Each step evaluates the unscaled Q 0.71 cascade and its derivative at one frequency. The worst error against the lab's bisection is 7 × 10⁻⁵ cents for Cuts (every Slope 0.01 dB/oct apart) and 10⁻⁵ cents for Shelves (Gain ±0.1 to ±30 dB), under 10⁻⁶ dB on the response at Q 0.71 or 40. Two steps leave 0.4 cents for Cuts and 2.6 cents for Shelves (0.005 dB). A table isn't needed.
 - **Crossfade where Band Pass and Notch poles meet:** the prototype's two real poles each give their own section, and the pair splits into a lower and an upper section (Band Pass) or two notch sections (Notch). The groupings differ, so the design jumps where the poles meet. That happens at 7.9, 21.1, 33.8, 46.2, 58.5, 70.7, 82.9 and 95.0 dB/oct on Band Pass, and at 15.9, 42.2, 67.5 and 92.4 dB/oct on Notch, whatever the Q. The jump reaches 18.1 dB on Band Pass (Q 10, 20 kHz at 44.1 kHz) and 1.6 dB on Notch (Q 0.1, near Nyquist).
   - A Slope change across one of these Slopes is a structure change, so the Engine crossfades it, as it crossfades every Slope change today. "Changing Slope does not click" crossfades a Low Shelf between 6 and 96 dB/oct, a far larger change.
@@ -77,12 +77,12 @@ Outcome per gap. The worst case covers 44.1, 48 and 96 kHz and Frequency up to 0
 | Resonant Low Shelf (Q above 2), up to 0.45 / 0.73 / 0.91 × Nyquist | 35.1% / 39.8% / 81.4% | 10.9% / 14.6% / 43.9% | closed (limits 12 / 15 / 45%) |
 | Resonant High Shelf (Q above 2) | 20.6% / 40.5% / 141.9% | 11.2% / 16.1% / 43.9% | open at 0.73 × Nyquist, Q 40 only: the whole-order design itself |
 | Low Shelf, Q up to 2 | 10.3% / 10.8% / 43.8% | 10.3% / 11.1% / 43.8% | inside (limits 12 / 12 / 45%) |
-| High Shelf, Q up to 2 | 10.5% / 14.0% / 55.9% | 10.5% / 11.1% / 46.1% | closed: inside the test's limit at 0.91 × Nyquist |
+| High Shelf, Q up to 2 | 10.5% / 14.0% / 55.9% | 10.5% / 11.1% / 46.1% | inside the test tolerance (share 46.1%) |
 | Corner rescale | bisection (unbounded) | 3 Newton steps, 10⁻⁴ cents | closed |
 
 Two Shelf figures stay just over the share limit, and neither is caused by the fractional design:
 
-- **High Shelf at Q 40, up to 0.73 × Nyquist: 16.1%** at 17.25 dB/oct, 15 kHz at 44.1 kHz. The sharp zeros sit at 0.99 × Nyquist. Whole order 3 at the same settings reaches 13.9% with them at 0.96 × Nyquist. Off the test's Frequency grid, the whole-order design itself reaches 18.5% (15.5 kHz at 44.1 kHz, 0.70 × Nyquist). The fractional Slope only moves the zeros to where the whole-order design already has this error.
+- **High Shelf at Q 40, up to 0.73 × Nyquist: 16.1%** at 17.25 dB/oct, 15 kHz at 44.1 kHz. The sharp zeros sit at 0.99 × Nyquist. Whole order 3 at the same settings reaches 13.9% with them at 0.96 × Nyquist. `docs/dsp/filter-design.md`'s 13.9% is the worst on the test's Frequency grid (20 Hz to 20 kHz). Off that grid, the whole-order design itself reaches 25.7% (12 dB/oct, +12 dB, 15.61 kHz at 44.1 kHz, 0.71 × Nyquist). The fractional Slope only moves the zeros to where the whole-order design already has this error.
 - **High Shelf at Q 0.71, up to 0.91 × Nyquist: 46.1%** of the span alone, which is 1.38 dB on a 3 dB span. The test allows 45% plus 0.6 dB there, so 1.95 dB. Whole order 4 reaches 45.4% at the band's edge.
 
 ## Draft for `docs/dsp/filter-design.md`, "Slopes between whole orders"
