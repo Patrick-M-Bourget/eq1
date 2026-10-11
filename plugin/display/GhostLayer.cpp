@@ -60,26 +60,10 @@ std::vector<Label> fadedForGhost (std::vector<Label> labels, const DisplayGeomet
     return labels;
 }
 
-void paintGhost (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost& ghost, double sampleRate, float alpha)
+void paintGhostCurve (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost& ghost, double sampleRate, float alpha)
 {
     const auto white = colour::sheen;
-    const float x = ghost.x, height = static_cast<float> (geometry.height);
-
-    // The line at its Frequency.
-    juce::ColourGradient line (white.withAlpha (ghostStyle::lineTopAlpha * alpha), x, 0.0f,
-                               white.withAlpha (ghostStyle::lineBottomAlpha * alpha), x, height, false);
-    line.addColour (0.5, white.withAlpha (ghostStyle::lineMiddleAlpha * alpha));
-    g.setGradientFill (line);
-    g.fillRect (x - 0.5f, 0.0f, 1.0f, height);
-
-    // The glow at its peak.
-    const juce::Point<float> peak { x, geometry.yOf (ghost.gain) };
-    const float radius = ghostStyle::glowDiameter / 2.0f;
-    juce::ColourGradient glow (colour::ghostGlow.withAlpha (ghostStyle::glowAlpha * alpha), peak,
-                               colour::ghostGlow.withAlpha (0.0f), peak.translated (radius * 0.7f, 0.0f), true);
-    glow.addColour (0.4 / 0.7, colour::ghostGlow.withAlpha (ghostStyle::glowMiddleAlpha * alpha));
-    g.setGradientFill (glow);
-    g.fillEllipse (juce::Rectangle<float> (2.0f * radius, 2.0f * radius).withCentre (peak));
+    const float x = ghost.x;
 
     // The Bell, 190 px either side.
     BandSettings bell;
@@ -106,6 +90,28 @@ void paintGhost (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost
     stroke.addColour (0.5, white.withAlpha (ghostStyle::strokeAlpha * alpha));
     g.setGradientFill (stroke);
     g.strokePath (path, juce::PathStrokeType (ghostStyle::stroke, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void paintGhostMarker (juce::Graphics& g, const DisplayGeometry& geometry, const Ghost& ghost, float alpha)
+{
+    const auto white = colour::sheen;
+    const float x = ghost.x, height = static_cast<float> (geometry.height);
+
+    // The line at its Frequency.
+    juce::ColourGradient line (white.withAlpha (ghostStyle::lineTopAlpha * alpha), x, 0.0f,
+                               white.withAlpha (ghostStyle::lineBottomAlpha * alpha), x, height, false);
+    line.addColour (0.5, white.withAlpha (ghostStyle::lineMiddleAlpha * alpha));
+    g.setGradientFill (line);
+    g.fillRect (x - 0.5f, 0.0f, 1.0f, height);
+
+    // The glow at its peak.
+    const juce::Point<float> peak { x, geometry.yOf (ghost.gain) };
+    const float radius = ghostStyle::glowDiameter / 2.0f;
+    juce::ColourGradient glow (colour::ghostGlow.withAlpha (ghostStyle::glowAlpha * alpha), peak,
+                               colour::ghostGlow.withAlpha (0.0f), peak.translated (radius * 0.7f, 0.0f), true);
+    glow.addColour (0.4 / 0.7, colour::ghostGlow.withAlpha (ghostStyle::glowMiddleAlpha * alpha));
+    g.setGradientFill (glow);
+    g.fillEllipse (juce::Rectangle<float> (2.0f * radius, 2.0f * radius).withCentre (peak));
 
     // The readout.
     g.setColour (colour::text1.withMultipliedAlpha (alpha));
