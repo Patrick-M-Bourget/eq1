@@ -79,6 +79,13 @@ TEST_CASE ("Cmd/Ctrl+V on the display keeps the key from the host with eq1's Ban
     host.click (host.at (host.value (5, "frequency")));
     const auto steps = host.processor.editHistory().undoSteps();
     const auto paste = juce::KeyPress ('v', juce::ModifierKeys::commandModifier, 0);
+    const auto parameterValues = [&host] {
+        std::vector<float> values;
+        for (const auto* parameter : host.processor.getParameters())
+            values.push_back (parameter->getValue());
+        return values;
+    };
+    const auto before = parameterValues();
 
     SECTION ("eq1's Bands: used, and nothing changes")
     {
@@ -88,6 +95,7 @@ TEST_CASE ("Cmd/Ctrl+V on the display keeps the key from the host with eq1's Ban
         host.display.grabKeyboardFocus();
         CHECK (host.press (paste));
         CHECK (host.processor.editHistory().undoSteps() == steps);
+        CHECK (parameterValues() == before);
     }
     SECTION ("Other text: passed on")
     {
