@@ -30,6 +30,16 @@ from dataclasses import dataclass
 
 PI = math.pi
 
+# A Band's parameter ranges, as plugin/Parameters.cpp declares them (scripts/check.sh docs keeps the two equal).
+FREQUENCY_RANGE = (10, 30000)
+GAIN_RANGE = (-30, 30)
+Q_RANGE = (0.025, 40)
+SLOPE_RANGE = (0, 96)
+# The grid a measurement covers when a brief asks for the "full range": both ends of Q and the points between
+# where designs change character, and the sample rates the Engine's response tests run at.
+FULL_QS = (0.025, 0.1, 0.71, 2, 3, 10, 40)
+SAMPLE_RATES = (44100, 48000, 96000)
+
 # Every command line command: name -> (add its options to an argparse parser, run it on the parsed args).
 COMMANDS = {}
 
@@ -452,7 +462,7 @@ def position_band(frequency, fs):
     return "<=0.45" if position <= 0.45 else "<=0.73" if position <= 0.73 else "<=0.91"
 
 
-def report(shape, sample_rates=(44100, 48000, 96000),
+def report(shape, sample_rates=SAMPLE_RATES,
            frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
            gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), qs=(0.71,), orders=(2,), points=200):
     """Worst error per (position band, Q), as dB and as a share of the target's span in dB: how far it
@@ -481,7 +491,7 @@ def report(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {q:>6}  {share:6.1%} {error:6.2f}   fs={fs} F={frequency} G={gain} order={order}")
 
 
-def report_cut(shape, sample_rates=(44100, 48000, 96000),
+def report_cut(shape, sample_rates=SAMPLE_RATES,
                frequencies=(20, 200, 2000, 9000, 15000, 20000), qs=(0.71,), orders=(2,), points=200):
     """Worst error per (position band, Q) in dB, against the target shifted up to 1/12 octave either
     way: above it (louder, or above -60 dB where the target is below) and below it (where the target
@@ -511,7 +521,7 @@ def report_cut(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {q:>6}  {above:6.2f} {below:6.2f}")
 
 
-def report_phase(shape, sample_rates=(44100, 48000, 96000),
+def report_phase(shape, sample_rates=SAMPLE_RATES,
                  frequencies=(20, 200, 2000, 9000, 15000, 20000), qs=(0.71,), orders=(1,), points=200):
     """All Pass: worst phase error in degrees, wrapped to +/-180, from 10 Hz up to Frequency, per
     (position band, order); and the worst magnitude error in dB anywhere."""
@@ -1169,7 +1179,7 @@ SEAM_STEPS = (0.01, 0.001, 0.0001, 0.00001)  # dB/oct: the Slope changes the sea
 
 
 SEAM_SCAN = 0.1  # dB/oct: the step of the scan that looks for seams away from the places _seam_slopes names
-SEAM_QS = (0.025, 0.1, 0.71, 2, 3, 10, 40)  # the Q parameter's whole range, 0.025 to 40
+SEAM_QS = FULL_QS
 
 
 def _lowest_slope(shape):
@@ -1198,7 +1208,7 @@ def _seam_slopes(shape, q):
 
 def _seam_grid(shape):
     gains = (-18, -3, 3, 18) if shape in SHELVES else (0,)
-    return [(fs, frequency, gain, q) for fs in (44100, 48000, 96000) for frequency in (20, 200, 2000, 9000, 15000, 20000)
+    return [(fs, frequency, gain, q) for fs in SAMPLE_RATES for frequency in (20, 200, 2000, 9000, 15000, 20000)
             if frequency <= 0.91 * fs / 2 for gain in gains for q in SEAM_QS]
 
 
@@ -1338,7 +1348,7 @@ def report_shelves(shapes, qs, workers, slopes=None, points=200):
     filter-design doc's measured column), per Shape, position band and Q, over every Slope _gap_slopes
     gives, Gain +/-3 to +/-30 and Frequency 20 Hz to 20 kHz at 44.1, 48 and 96 kHz."""
     jobs = [(design, shape, fs, frequency, q, slopes or _gap_slopes(shape), points)
-            for shape in shapes for design in GAP_DESIGNS for q in qs for fs in (44100, 48000, 96000)
+            for shape in shapes for design in GAP_DESIGNS for q in qs for fs in SAMPLE_RATES
             for frequency in (20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000) if frequency <= 0.91 * fs / 2]
     worst = {}
     for design, shape, q, found in _parallel(_shelf_job, jobs, workers):
@@ -1720,7 +1730,7 @@ def run_bell_slope(args):
     report_bell_slope(BELL_SLOPES[args.command], slopes=args.bell_slopes, qs=args.q)
 
 
-def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000, 96000),
+def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=SAMPLE_RATES,
                       frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
                       gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), qs=(0.71,), points=200):
     """Worst error, louder and quieter than the target (for a boost; a cut mirrors it, louder there
@@ -1781,7 +1791,6 @@ def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000
 #     python3 tools/filter-lab/filterlab.py bell-candidates --candidates hold slide --q 0.1 0.71 2 10 40 --at-crossings
 
 BELL_LIMITS = {"<=0.45": 0.10, "<=0.73": 0.20, "<=0.91": 0.35}  # today's Bell test, as a share of |Gain|
-FREQUENCY_RANGE = (10.0, 30000.0)  # the Frequency parameter's range
 
 
 BELL_SECTIONS = {
@@ -1816,7 +1825,7 @@ def steep_bell(fs, frequency, gain, q, slope=12, section=bell_section):
 
 def bell_candidate_options(parser):
     parser.add_argument("--candidates", nargs="+", default=list(BELL_SECTIONS), choices=list(BELL_SECTIONS))
-    parser.add_argument("--q", type=float, nargs="+", default=[0.025, 0.1, 0.71, 2, 10, 40])
+    parser.add_argument("--q", type=float, nargs="+", default=list(FULL_QS))
     parser.add_argument("--gains", type=float, nargs="+", default=[-30, -12, -3, 3, 12, 30],
                         help="bell-continuity only; bell-candidates uses report_bell_slope's Gains")
     parser.add_argument("--bell-slopes", type=float, nargs="+", default=[12, 24, 36, 48, 60, 72, 84, 96])
@@ -1838,7 +1847,7 @@ def _response_db(sections, fs, points):
     return [cascade_db(sections, f, fs) for f in points]
 
 
-def report_bell_continuity(section, slopes, qs, gains, sample_rates=(44100, 48000, 96000), cents=0.1,
+def report_bell_continuity(section, slopes, qs, gains, sample_rates=SAMPLE_RATES, cents=0.1,
                            points=200):
     """The largest change in the response, at any of points frequencies from 10 Hz to Nyquist (log
     spaced, plus 64 linear ones across the top octave), between Frequencies a step of cents apart:
@@ -1889,7 +1898,7 @@ def run_bell_candidates(args):
         print()
 
 
-def report_bell_candidate(section, slopes, qs, sample_rates=(44100, 48000, 96000),
+def report_bell_candidate(section, slopes, qs, sample_rates=SAMPLE_RATES,
                           frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
                           gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), points=200, crossings=False, cents=0.1):
     """report_bell_slope's measure, over every Slope given at once: the worst error louder and quieter

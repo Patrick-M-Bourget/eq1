@@ -139,7 +139,20 @@ docs() {
         printf '%s\n' "$graphics" | sed 's/$/: opens a Graphics on an image; draw with harness::paintImage (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, every ADR has its own number, no test reads a saved state as raw bytes or an EQ1_ environment variable or opens a Graphics on an image, tests wait with harness::settle and have ASCII titles"
+    # The filter lab measures over a Band's parameter ranges; a copy that drifts from the plugin's
+    # leaves part of the range unmeasured while the lab reports it covered.
+    local name lab plugin
+    for name in Frequency Gain Q Slope; do
+        lab=$(grep -E "^$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_RANGE = \(" tools/filter-lab/filterlab.py |
+            sed -E 's/.*\(([^,]+), *([^)]+)\).*/\1 \2/')
+        plugin=$(awk -v n="\"$name\"" 'found { gsub (/f/, ""); if (match ($0, /\(-?[0-9.]+, *-?[0-9.]+\)/)) { r = substr ($0, RSTART + 1, RLENGTH - 2); sub (/, */, " ", r); print r; exit } }
+                                       index ($0, "slotName (slot, " n ")") { found = 1 }' plugin/Parameters.cpp)
+        if [ -z "$lab" ] || [ -z "$plugin" ] || ! awk -v a="$lab" -v b="$plugin" 'BEGIN { split (a, x, " "); split (b, y, " "); exit ! (x[1] == y[1] && x[2] == y[2]) }'; then
+            echo "tools/filter-lab/filterlab.py: ${name}'s range reads '${lab}', plugin/Parameters.cpp '${plugin}'; keep them equal" >&2
+            broken=1
+        fi
+    done
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, every ADR has its own number, no test reads a saved state as raw bytes or an EQ1_ environment variable or opens a Graphics on an image, tests wait with harness::settle and have ASCII titles, the filter lab's parameter ranges match the plugin's"
     return "$broken"
 }
 
