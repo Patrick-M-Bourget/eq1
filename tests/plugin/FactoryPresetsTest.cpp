@@ -9,7 +9,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <random>
 #include <set>
 
@@ -339,6 +341,89 @@ TEST_CASE ("The Factory library uses every Shape, Stereo Placement and dynamics 
         CAPTURE (feature);
         CHECK (used.contains (feature));
     }
+}
+
+TEST_CASE ("The Factory library has the Bass and Vocals Presets")
+{
+    juce::StringArray names;
+    for (const auto& preset : PresetLibrary::factoryPresets())
+        names.add (preset.name);
+    for (const auto* name : { "Bass \xe2\x80\x93 DI Definition", "Bass \xe2\x80\x93 Synth Sub Focus", "Bass \xe2\x80\x93 Mud Control",
+                              "Bass \xe2\x80\x93 Growl", "Bass \xe2\x80\x93 Duck Under Kick (Sidechain)", "Vocals \xe2\x80\x93 Lead Presence",
+                              "Vocals \xe2\x80\x93 De-Esser", "Vocals \xe2\x80\x93 Dynamic Mud", "Vocals \xe2\x80\x93 Backing Tuck",
+                              "Vocals \xe2\x80\x93 Air", "Vocals \xe2\x80\x93 Dialogue Clarity", "Vocals \xe2\x80\x93 Plosive Control",
+                              "Vocals \xe2\x80\x93 Resonance Control" })
+        CHECK (names.contains (named (name)));
+}
+
+namespace
+{
+
+// The level change in dB of a 60 Hz bass sine through Bass – Duck Under Kick (Sidechain) on a stereo
+// track, over 4 s at 48 kHz: over the whole of it, or (kicksOnly) over the first 100 ms of each kick
+// after the first second. With sidechain, the Sidechain carries a kick: a 55 Hz sine decaying over
+// about 80 ms from full scale, twice a second; silent when routed but kicking is false.
+double duckUnderKickGainDb (const juce::AudioChannelSet& sidechain, bool kicking, bool kicksOnly)
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int blockSize = 512, kickPeriod = 24000, kickLength = 4800;
+    Host host;
+    auto& processor = host.processor;
+    juce::AudioProcessor::BusesLayout layout;
+    layout.inputBuses.add (juce::AudioChannelSet::stereo());
+    layout.inputBuses.add (sidechain);
+    layout.outputBuses.add (juce::AudioChannelSet::stereo());
+    REQUIRE (processor.setBusesLayout (layout));
+    processor.prepareToPlay (sampleRate, blockSize);
+    const auto factory = PresetLibrary::factoryPresets();
+    const auto found = std::find_if (factory.begin(), factory.end(), [] (const auto& preset) {
+        return preset.name == named ("Bass \xe2\x80\x93 Duck Under Kick (Sidechain)");
+    });
+    REQUIRE (found != factory.end());
+    REQUIRE (processor.loadPreset (found->preset, found->name));
+
+    juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
+    juce::MidiBuffer midi;
+    double inputPower = 0.0, outputPower = 0.0;
+    for (int start = 0; start < static_cast<int> (sampleRate) * 4; start += blockSize)
+    {
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const int n = start + i;
+            const auto bass = static_cast<float> (0.5 * std::sin (2.0 * std::numbers::pi * 60.0 * n / sampleRate));
+            const int sinceKick = n % kickPeriod;
+            const auto kick = kicking ? static_cast<float> (std::exp (-sinceKick / (0.08 * sampleRate))
+                                                            * std::sin (2.0 * std::numbers::pi * 55.0 * sinceKick / sampleRate))
+                                      : 0.0f;
+            for (int ch = 0; ch < 2; ++ch)
+                buffer.setSample (ch, i, bass);
+            for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+                buffer.setSample (ch, i, kick);
+        }
+        juce::AudioBuffer<float> input;
+        input.makeCopyOf (buffer);
+        processor.processBlock (buffer, midi);
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const int n = start + i;
+            if (kicksOnly && (n < static_cast<int> (sampleRate) || n % kickPeriod >= kickLength))
+                continue;
+            inputPower += input.getSample (0, i) * input.getSample (0, i);
+            outputPower += buffer.getSample (0, i) * buffer.getSample (0, i);
+        }
+    }
+    return 10.0 * std::log10 (outputPower / inputPower);
+}
+
+} // namespace
+
+TEST_CASE ("Duck Under Kick leaves the bass alone with no Sidechain, and dips it under a kick on the Sidechain")
+{
+    CHECK_THAT (duckUnderKickGainDb (juce::AudioChannelSet::disabled(), false, false), WithinAbs (0.0, 0.01));
+    CHECK_THAT (duckUnderKickGainDb (juce::AudioChannelSet::stereo(), false, false), WithinAbs (0.0, 0.01));
+    const auto ducked = duckUnderKickGainDb (juce::AudioChannelSet::mono(), true, true);
+    CHECK (ducked < -3.0);
+    CHECK (ducked > -12.0);
 }
 
 TEST_CASE ("The Factory gate rejects a name outside the scheme")
