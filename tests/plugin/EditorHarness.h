@@ -169,7 +169,7 @@ inline bool settleUntil (const std::function<bool()>& done)
 inline void settleAnimations (int milliseconds = 60)
 {
     settle (milliseconds);
-    if (! settleUntil ([] { return ! staple::Tween::anyEasing(); }))
+    if (! settleUntil ([] { return staple::Tween::numberEasing() == 0; }))
         FAIL ("settleAnimations gave up after 10 s with " << staple::Tween::numberEasing()
                                                          << " animation(s) still easing");
 }

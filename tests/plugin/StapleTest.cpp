@@ -163,22 +163,22 @@ TEST_CASE ("Staple's LookAndFeel draws a stock knob's and slider thumb's shadows
     }
 }
 
-TEST_CASE ("Some Tween is easing from towards() until it lands, and none after a jump or once it is gone")
+TEST_CASE ("A Tween counts as easing from towards() until it lands, and not after a jump or once it is gone")
 {
     juce::ScopedJuceInitialiser_GUI juce;
-    CHECK_FALSE (staple::Tween::anyEasing());
+    CHECK (staple::Tween::numberEasing() == 0);
     {
         staple::Tween a (100, 0.0f), b (100, 0.0f);
         a.towards (1.0f);
         b.towards (1.0f);
-        CHECK (staple::Tween::anyEasing());
+        CHECK (staple::Tween::numberEasing() == 2);
         a.jump (1.0f);
-        CHECK (staple::Tween::anyEasing()); // b still is
+        CHECK (staple::Tween::numberEasing() == 1);
         CHECK (harness::settleUntil ([&b] { return b.value() == 1.0f; }));
-        CHECK_FALSE (staple::Tween::anyEasing());
+        CHECK (staple::Tween::numberEasing() == 0);
         b.towards (0.0f);
         b.towards (0.0f); // already heading there
-        CHECK (staple::Tween::anyEasing());
+        CHECK (staple::Tween::numberEasing() == 1);
     }
-    CHECK_FALSE (staple::Tween::anyEasing());
+    CHECK (staple::Tween::numberEasing() == 0);
 }

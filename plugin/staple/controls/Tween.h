@@ -26,10 +26,8 @@ public:
     float value() const { return now; }
     float target() const { return to; }
 
-    // Whether any Tween is easing now, on the message thread: what a test waits on before it checks
-    // where an animation ends.
-    static bool anyEasing() { return easingCount > 0; }
-    // How many Tweens are easing now, on the message thread: what a test reports when it gives up waiting.
+    // How many Tweens are easing now, on the message thread: what a test waits to reach 0 before it
+    // checks where an animation ends.
     static int numberEasing() { return easingCount; }
 
 private:
