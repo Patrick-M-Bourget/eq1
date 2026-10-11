@@ -83,9 +83,15 @@ docs() {
         done < <(git ls-files -- '*GLOSSARY.md' ':!GLOSSARY.md')
     fi
     # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
-    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h.
-    local raw
-    raw=$(git grep -nE '[A-Za-z_]*[sS]tate\.toString *\(\)' -- tests || true)
+    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h. Flagged:
+    # toString on any block a file fills with getStateInformation, whatever the block is called.
+    local raw file block
+    raw=$(git grep -lE 'get(CurrentProgram)?StateInformation *\(' -- tests | while IFS= read -r file; do
+        grep -oE 'get(CurrentProgram)?StateInformation *\( *[A-Za-z_][A-Za-z0-9_]*' "$file" | sed -E 's/.*\( *//' | sort -u |
+            while IFS= read -r block; do
+                grep -nE "(^|[^A-Za-z0-9_.])$block *\. *toString *\(" "$file" | sed "s|^|$file:|" || true
+            done
+    done || true)
     if [ -n "$raw" ]; then
         printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
         broken=1
