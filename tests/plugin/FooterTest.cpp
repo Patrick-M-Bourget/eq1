@@ -211,7 +211,10 @@ TEST_CASE ("The output popover opens above the Output readout, right-aligned to 
     Footer host;
     CHECK_FALSE (host.popover.isOpen());
     host.openPopover();
-    host.settle (300); // popped in
+    // Popping in about where it ends up, from the first frame.
+    const auto placed = host.popover.getCardBounds().toFloat() + host.popover.getPosition().toFloat();
+    CHECK_THAT (placed.transformedBy (host.popover.getTransform()).getCentreX(), WithinAbs (placed.getCentreX(), 1.0e-3));
+    REQUIRE (host.settleUntil ([&] { return ! host.popover.isTransformed(); })); // popped in
     CHECK (host.popover.isVisible());
     CHECK (host.popover.getCardBounds().getWidth() == 176);
     const auto card = host.editor->getLocalArea (&host.popover, host.popover.getCardBounds());
@@ -376,10 +379,10 @@ TEST_CASE ("Footer snapshots: normal, under Global Bypass and with the output po
     };
     write ("normal");
     host.footer.toggleGlobalBypass();
-    host.settle (300);
+    host.settleAnimations (300);
     write ("bypassed");
     host.footer.toggleGlobalBypass();
     host.openPopover();
-    host.settle (300);
+    host.settleAnimations (300);
     write ("popover");
 }

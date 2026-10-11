@@ -881,8 +881,7 @@ TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
     item2.setBounds (item1.getBounds().translated (0, 32));
     item1.setState (juce::Button::buttonOver);
     popover.open (opener);
-    for (int frame = 0; frame < 20 && popover.getAlpha() < 1.0f; ++frame) // its pop-in, played to the end
-        harness::settle (20);
+    harness::settleAnimations(); // its pop-in, played to the end
 
     // The focus ring, as LookAndFeel's FocusOutline draws it after Tab (a window of its own, so drawn
     // here in its place).

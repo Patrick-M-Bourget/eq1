@@ -186,14 +186,14 @@ TEST_CASE ("The A/B Compare button switches sides as one undo step, its active l
 
     const int steps = history.undoSteps();
     host.compare().onClick();
-    host.settle (300);
+    host.settleAnimations (300);
     CHECK (host.processor.compareSide() == CompareSide::B);
     CHECK (history.undoSteps() == steps + 1);
     CHECK (host.compare().letterInk (CompareSide::A) == colour::text4);
     CHECK (host.compare().letterInk (CompareSide::B) == colour::text1);
 
     host.titled ("Undo").onClick();
-    host.settle (300);
+    host.settleAnimations (300);
     CHECK (host.processor.compareSide() == CompareSide::A);
     CHECK (host.compare().letterInk (CompareSide::A) == colour::text1);
 }
@@ -228,7 +228,7 @@ TEST_CASE ("Header snapshots: no Loaded Preset, and Modified on B just after Cop
     host.loadPreset ("Warm Vocal Presence");
     host.compare().onClick();
     host.set (2, "gain", 3.0f);
-    host.settle (300);
+    host.settleAnimations (300);
     host.copy().onClick();
     host.settle (100);
     write ("modified-copied");

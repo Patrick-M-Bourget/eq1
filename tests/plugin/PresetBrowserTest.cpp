@@ -356,7 +356,7 @@ TEST_CASE ("Preset browser snapshots: a folder, and a search", "[.screens]")
     REQUIRE (host.processor.loadPreset (factory[1].preset, factory[1].name));
     host.settle (300);
     host.open();
-    host.settle (300);
+    host.settleAnimations (300);
     const auto write = [&] (const char* name) { harness::writeSnapshot (*host.editor, juce::String ("browser-") + name, {}, 1.0f); };
     write ("folder");
     auto* search = findChild<juce::TextEditor> (host.browser(), [] (juce::TextEditor& t) { return t.getTitle() == "Search Presets"; });
