@@ -202,6 +202,15 @@ namespace ghost
     constexpr int fadeInMs = 600;
 } // namespace ghost
 
+// Popovers (HANDOFF.md §4 "Menus / popovers / cards"), in px: the gap to their opener, by the side they
+// open on (the footer's popovers end 38 px above the bottom of a 28 px button), and their edge, inside
+// the card as a border-box border is.
+namespace popover
+{
+    constexpr int gapAbove = 10, gapBelow = 6;
+    constexpr int edge = 1;
+} // namespace popover
+
 // The header (HANDOFF.md §5.6), in px: the padding either side of its text buttons' text (A/B Compare,
 // Copy), and the gap between the Preset name and its Modified dot (the button's 8 px gap and the dot's
 // 6 px margin).

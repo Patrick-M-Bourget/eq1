@@ -477,16 +477,42 @@ TEST_CASE ("A Popover closes on an outside click and on Esc, returns focus to it
     CHECK (elsewhere.hasKeyboardFocus (false));
 }
 
-TEST_CASE ("A Popover opens above its opener where there is no room below")
+TEST_CASE ("A Popover opens on its preferred side where there is room, else on the other, 10 px above its opener or 6 px below")
 {
-    Kit kit;
-    juce::TextButton opener ("Display Range");
-    kit.add (opener, { 20, 260, 80, 24 });
+    Kit kit; // 400 x 300
+    juce::TextButton opener ("Opener");
     staple::Popover popover;
     popover.setCardSize (160, 120);
-    popover.open (opener);
-    REQUIRE (popover.isOpen());
-    CHECK (popover.getCardBounds().translated (popover.getX(), popover.getY()).getBottom() <= opener.getY());
+    const auto card = [&] { return popover.getCardBounds().translated (popover.getX(), popover.getY()); };
+
+    SECTION ("Above, as preferred")
+    {
+        kit.add (opener, { 20, 200, 80, 28 });
+        popover.open (opener, staple::Popover::Placement::above);
+        REQUIRE (popover.isOpen());
+        CHECK (opener.getY() - card().getBottom() == 10);
+    }
+    SECTION ("Below, as preferred")
+    {
+        kit.add (opener, { 20, 20, 80, 28 });
+        popover.open (opener, staple::Popover::Placement::below);
+        REQUIRE (popover.isOpen());
+        CHECK (card().getY() - opener.getBottom() == 6);
+    }
+    SECTION ("Above, preferring below where there is no room below")
+    {
+        kit.add (opener, { 20, 260, 80, 24 });
+        popover.open (opener, staple::Popover::Placement::below);
+        REQUIRE (popover.isOpen());
+        CHECK (opener.getY() - card().getBottom() == 10);
+    }
+    SECTION ("Below, preferring above where there is no room above")
+    {
+        kit.add (opener, { 20, 40, 80, 28 });
+        popover.open (opener, staple::Popover::Placement::above);
+        REQUIRE (popover.isOpen());
+        CHECK (card().getY() - opener.getBottom() == 6);
+    }
 }
 
 TEST_CASE ("A TextChip clicks as a Button, and is as wide as its text, padding and chevron")

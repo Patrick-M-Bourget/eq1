@@ -5,6 +5,7 @@
 #include "staple/Icons.h"
 #include "staple/Light.h"
 #include "staple/LookAndFeel.h"
+#include "staple/Tokens.h"
 
 #include <array>
 #include <cmath>
@@ -17,10 +18,11 @@ namespace
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
 
-constexpr int cardWidth = 260, padding = 10, gap = 10;
+constexpr int edge = staple::tokens::popover::edge;
+constexpr int cardWidth = 260, padding = 10, gap = 10; // padding inside the card's edge
 constexpr int sourceHeight = 28, sourcePadding = 2, sourceGap = 4, rowHeight = 28, rowPadding = 8, peakHoldHeight = 30;
 constexpr int numRows = 4;
-constexpr int cardHeight = padding + sourceHeight + 2 * sourcePadding + gap + numRows * rowHeight + gap + 1 + gap + peakHoldHeight + padding;
+constexpr int cardHeight = edge + padding + sourceHeight + 2 * sourcePadding + gap + numRows * rowHeight + gap + 1 + gap + peakHoldHeight + padding + edge;
 constexpr float dotSize = 5.0f, dotGap = 7.0f;
 constexpr int buttonMinimumWidth = 92;
 constexpr float buttonPaddingLeft = 12.0f, buttonPaddingRight = 10.0f;
@@ -304,7 +306,7 @@ void AnalyzerPopover::store()
 
 juce::Rectangle<int> AnalyzerPopover::sourcesArea() const
 {
-    return getCardBounds().reduced (padding).removeFromTop (sourceHeight + 2 * sourcePadding);
+    return getCardBounds().reduced (edge + padding).removeFromTop (sourceHeight + 2 * sourcePadding);
 }
 
 void AnalyzerPopover::paint (juce::Graphics& g)
@@ -326,7 +328,7 @@ void AnalyzerPopover::resized()
         button->setBounds (sources.removeFromLeft (sourceWidth));
         sources.removeFromLeft (sourceGap);
     }
-    auto area = getCardBounds().reduced (padding).withTrimmedTop (sourceHeight + 2 * sourcePadding + gap);
+    auto area = getCardBounds().reduced (edge + padding).withTrimmedTop (sourceHeight + 2 * sourcePadding + gap);
     for (AnalyzerRow* row : { &range, &resolution, &speed, static_cast<AnalyzerRow*> (tilt.get()) })
         row->setBounds (area.removeFromTop (rowHeight));
     area.removeFromTop (gap + 1 + gap);
