@@ -12,6 +12,8 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py all-pass --orders 1 2 8 --q 0.71
     python3 tools/filter-lab/filterlab.py gain-computer --overshoots 9 12 15
     python3 tools/filter-lab/filterlab.py auto-threshold --spreads 0.1 0.2 0.3 --falls 1 1.25 2
+    python3 tools/filter-lab/filterlab.py high-cut --slopes 15 21 87 --target blend
+    python3 tools/filter-lab/filterlab.py slopes
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report().
@@ -520,6 +522,392 @@ def report_phase(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {order:>5}  {error:7.2f}")
 
 
+# --- Fractional Slopes (#18): candidate targets and one morphing cascade ------------------------
+# A Slope between whole orders N and N + 1 (order nu = N + t; Notch counts 12 dB/oct per order). The
+# candidate targets:
+#   blend:   the neighbouring whole-order targets blended in dB: (1 - t) x order N + t x order N + 1.
+#   partial: the morphing cascade below is itself the target.
+#   formula: the Butterworth magnitude with a fractional exponent, |H|^2 = 1 / (1 + x^(2 nu)) (Shelves:
+#            (g + x^(2 nu)) / (1/g + x^(2 nu))); it has no Q, so it is defined at Q 0.71 only.
+# All are realised by the same morphing cascade, so they cost the same: order N + 1's sections.
+#
+# The morphing cascade: order N + 1's sections, each second-order section's damping moving linearly with
+# t from order N's Butterworth value to order N + 1's (Q scaling applied at both ends). The section order
+# N lacks grows in as a partial section: for N even, a first-order pole coming in from infinity (ts + 1);
+# for N odd, order N's real pole gaining a second pole from infinity (ts^2 + ds + 1), the two meeting and
+# becoming a pair before t reaches 1. The cascade is then rescaled in frequency so its corner stays at
+# Frequency (-3 dB for Cuts, half the Gain in dB for Shelves), measured at Q 0.71; below order 1 the pole
+# just comes in from infinity, unscaled. At t = 0 it is exactly order N's Butterworth cascade, and every
+# coefficient moves continuously with Slope. Proposed in docs/adr/0006-fractional-slopes-morph-between-whole-orders.md.
+
+def _lerp(a, b, t):
+    return a + (b - a) * t
+
+
+def _critical_share(d1_hi):
+    """The t at which ts^2 + lerp(1, d1_hi, t)s + 1 has a double root."""
+    lo, hi = 0.0, 1.0
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if _lerp(1.0, d1_hi, mid) ** 2 > 4 * mid else (lo, mid)
+    return hi
+
+
+def _morph_prototype(nu, q):
+    """The morphing low-pass prototype's sections before rescaling, each with its emerging share: None for
+    a section whose roots are all whole, else the share (0 to 1) of a whole root's step a Shelf gives the
+    root coming in from infinity, reaching 1 where it meets order N's real pole."""
+    n = math.floor(nu)
+    t = nu - n
+    lo = [a for a in _butterworth_sections(n, q) if a.d2]
+    hi = [a for a in _butterworth_sections(n + 1, q) if a.d2]
+    out = [(Analog(0, 0, 1, 1, _lerp(a.d1, b.d1, t), 1), None) for a, b in zip(lo, hi)]
+    if n % 2 == 0:
+        if t > 0:
+            out.append((Analog(0, 0, 1, 0, t, 1), t))
+    else:
+        crit = _critical_share(hi[-1].d1)
+        out.append((Analog(0, 0, 1, t, _lerp(1.0, hi[-1].d1, t), 1), t / crit if 0 < t < crit else None))
+    return out
+
+
+def _scaled(a: Analog, c):
+    """The section with s -> c s."""
+    return Analog(a.n2 * c * c, a.n1 * c, a.n0, a.d2 * c * c, a.d1 * c, a.d0)
+
+
+def _crossing(f, lo=0.01, hi=100.0):
+    """The x in [lo, hi] where f goes from positive to negative, by bisection in log x."""
+    for _ in range(80):
+        mid = math.sqrt(lo * hi)
+        lo, hi = (mid, hi) if f(mid) > 0 else (lo, mid)
+    return math.sqrt(lo * hi)
+
+
+def morph_low_pass(nu, q):
+    """The morphing cascade's low-pass sections, -3 dB at s = 1 at Q 0.71, with the same rescaling at
+    any Q (so a whole order is exactly order N's Butterworth at every Q)."""
+    sections = [a for a, _ in _morph_prototype(nu, q)]
+    if nu == math.floor(nu) or nu < 1:  # below order 1 the pole comes in from infinity: no corner to keep
+        return sections
+    plain = [a for a, _ in _morph_prototype(nu, math.sqrt(0.5))]
+    c = _crossing(lambda x: _analog_db(plain, x, 1) + 10 * math.log10(2))
+    return [_scaled(a, c) for a in sections]
+
+
+def _roots(a: Analog):
+    """A prototype section's poles: the upper-half-plane one of a pair, else the real ones."""
+    if a.d2 == 0:
+        return [complex(-a.d0 / a.d1)] if a.d1 else []
+    disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
+    if disc < 0:
+        return [complex(-a.d1, math.sqrt(-disc)) / (2 * a.d2)]
+    r = math.sqrt(disc)
+    return [complex((-a.d1 + r) / (2 * a.d2)), complex((-a.d1 - r) / (2 * a.d2))]
+
+
+def _monic_at_dc(roots):
+    """prod (1 - s/r) as (c2, c1, c0); an upper-half-plane root stands for its conjugate pair."""
+    if len(roots) == 2:
+        a, b = roots[0].real, roots[1].real
+        return 1 / (a * b), -(1 / a + 1 / b), 1.0
+    r = roots[0]
+    if r.imag:
+        return abs(1 / r) ** 2, -2 * (1 / r).real, 1.0
+    return 0.0, -1 / r.real, 1.0
+
+
+def _morph_low_shelf_analog(nu, dc_gain, q):
+    """Low Shelf of fractional order: each prototype pole r gives a zero at r x rz^w and a pole at r / rz^w,
+    w its share (1 for a whole root), with rz^(2 sum w) = dc_gain, so a root coming in from infinity
+    brings its step in gradually. Rescaled so it reaches half its Gain in dB at s = 1, at Q 0.71."""
+    def build(q_):
+        out, shares = [], []
+        for a, share in _morph_prototype(nu, q_):
+            rs = _roots(a)
+            if share is None:
+                ws = [1.0] * len(rs)
+            elif len(rs) == 1:
+                ws = [share]
+            else:  # two real poles: the one nearer the origin is order N's real pole
+                ws = [1.0, share] if abs(rs[0]) < abs(rs[1]) else [share, 1.0]
+            if rs:
+                out.append(rs)
+                shares.append(ws)
+        total = sum(w * (2 if r.imag else 1) for rs, ws in zip(out, shares) for r, w in zip(rs, ws))
+        rz = dc_gain ** (1 / (2 * total))
+        sections = [Analog(*_monic_at_dc([r * rz ** w for r, w in zip(rs, ws)]),
+                           *_monic_at_dc([r / rz ** w for r, w in zip(rs, ws)])) for rs, ws in zip(out, shares)]
+        first = sections[0]
+        sections[0] = Analog(first.n2 * dc_gain, first.n1 * dc_gain, first.n0 * dc_gain, first.d2, first.d1, first.d0)
+        return sections
+
+    sections = build(q)
+    if nu == math.floor(nu) or dc_gain == 1:
+        return sections
+    plain, half = build(math.sqrt(0.5)), 10 * math.log10(dc_gain)
+    sign = 1 if dc_gain > 1 else -1
+    c = _crossing(lambda x: sign * (_analog_db(plain, x, 1) - half))
+    return [_scaled(a, c) for a in sections]
+
+
+def _product(a: Biquad, b: Biquad):
+    """Two first-order sections as one biquad."""
+    return Biquad(a.b0 * b.b0, a.b0 * b.b1 + a.b1 * b.b0, a.b1 * b.b1, a.a1 + b.a1, a.a1 * b.a1)
+
+
+def _fractional_cut(shape, fs, frequency, q, nu):
+    """high_cut's and low_cut's designs on the morphing prototype. A section whose two poles are real
+    (the partial section before its poles meet) is designed as two first-order sections in one biquad:
+    as one section, its far pole would be held below Nyquist with the near one."""
+    proto = morph_low_pass(nu, q)
+    high = shape == "high-cut"
+    if not high:  # s -> 1/s: 1 / (d2 s^2 + d1 s + 1) -> s^2 / (s^2 + d1 s + d2)
+        target = [Analog(0, 1, 0, 0, 1, a.d1) if a.d2 == 0 else Analog(1, 0, 0, 1, a.d1, a.d2) for a in proto]
+    else:
+        target = proto
+
+    def first_order(pole):  # a real prototype pole -a
+        a = -pole.real
+        return match_section(Analog(0, 0, 1, 0, 1 / a, 1), frequency, fs) if high else \
+            match_high_pass(Analog(0, 1, 0, 0, 1, 1 / a), frequency, fs)
+
+    sections = []
+    for a, t in zip(proto, target):
+        roots = _roots(a)
+        if len(roots) == 1 and not roots[0].imag:
+            sections.append(first_order(roots[0]))
+        elif len(roots) == 2:
+            sections.append(_product(first_order(roots[0]), first_order(roots[1])))
+        elif not high:
+            sections.append(match_high_pass(t, frequency, fs))
+        else:
+            b, w0 = normalised(Analog(0, 0, 1 / a.d2, 1, a.d1 / a.d2, 1 / a.d2))
+            damped = frequency * w0 * math.sqrt(max(1 - b.d1 * b.d1 / 4, 0.01))
+            sections.append(match_section(b, frequency * w0, fs, match_hz=min(damped, fs / 4)))
+    return sections, lambda f: _analog_db(target, f, frequency)
+
+
+def _fractional_band_pass(fs, frequency, q, nu):
+    """band_pass's design on the morphing prototype: a real prototype pole gives one band-pass section,
+    a pair a lower (Low Cut) and an upper (High Cut) section. Steep from ceil(nu) >= 5."""
+    steep = math.ceil(nu) >= STEEP_BAND_PASS_ORDER
+    hold = BAND_PASS_HOLD * fs / 2
+    analog, sections = [], []
+    for a in morph_low_pass(nu, math.sqrt(0.5)):
+        for p in _roots(a):
+            if not p.imag:
+                d = -p.real / q
+                s = Analog(0, d, 0, 1, d, 1)
+                analog.append(s)
+                sections.append(match_section(s, frequency, fs))
+                continue
+            low, high = sorted([(-2 * x.real, abs(x) ** 2) for x in _reciprocal_roots(p / q)], key=lambda d: d[1])
+            lower, w_low = normalised(Analog(1, 0, 0, 1, *low))
+            upper, w_high = normalised(Analog(0, 0, 1 / (q * q), 1, *high))
+            analog += [Analog(1, 0, 0, 1, *low), Analog(0, 0, 1 / (q * q), 1, *high)]
+            sections.append(match_high_pass(lower, frequency * w_low, fs, and_nyquist=True))
+            reference = frequency * w_high
+            damped = math.sqrt(max(1 - upper.d1 * upper.d1 / 4, 0.01))
+            match = min(reference * min(damped, 0.9), fs / 4)
+            if steep and reference > hold:
+                sections.append(_held_upper_section(upper, reference, hold, match, fs))
+            else:
+                sections.append(match_section(upper, reference, fs, match_hz=match))
+    if steep:
+        at = min(frequency, hold)
+        k = 10 ** ((_analog_db(analog, at, frequency) - cascade_db(sections, at, fs)) / 20)
+        s = sections[0]
+        s.b0, s.b1, s.b2 = s.b0 * k, s.b1 * k, s.b2 * k
+    return sections, lambda f: _analog_db(analog, f, frequency)
+
+
+def _fractional_notch(fs, frequency, q, nu):
+    """notch's design on the morphing prototype: every section's zeros exactly at Frequency."""
+    analog, sections = [], []
+    for a in morph_low_pass(nu, math.sqrt(0.5)):
+        for p in _roots(a):
+            xs = _reciprocal_roots(1 / (p * q))
+            quads = [(-2 * x.real, abs(x) ** 2) for x in xs] if p.imag else [(-(xs[0] + xs[1]).real, 1.0)]
+            for d1, d0 in quads:
+                s = Analog(1, 0, 1, 1, d1, d0)
+                b, w0 = normalised(s)
+                analog.append(s)
+                sections.append(match_notch(b, frequency * w0, fs, frequency))
+    return sections, lambda f: _analog_db(analog, f, frequency)
+
+
+def _fractional_shelf(shape, fs, frequency, gain, q, nu):
+    """low_shelf's, high_shelf's and tilt_shelf's designs on the morphing Low Shelf."""
+    order = 2 * sum(1 for a, _ in _morph_prototype(nu, q) if a.d2)  # _shelf_sections reads the pairs from it
+    boost = _morph_low_shelf_analog(nu, 10 ** (abs(gain) / 20), q)
+    if shape == "low-shelf":
+        target = _morph_low_shelf_analog(nu, 10 ** (gain / 20), q)
+        return _shelf_sections(boost, frequency, fs, q, order, gain < 0), lambda f: _analog_db(target, f, frequency)
+    sections = _shelf_sections(map(_mirrored_cut, boost), frequency, fs, q, order, gain >= 0)
+    # The Low Shelf boost mirrored (s -> 1/s), inverted for a cut. (Unlike Butterworth's, a fractional
+    # Low Shelf of -Gain, moved up by Gain, isn't its mirror image.)
+    sign = 1 if gain >= 0 else -1
+    shift = -gain / 2 if shape == "tilt-shelf" else 0.0
+    k = 10 ** (shift / 20)
+    first = sections[0]
+    sections[0] = Biquad(first.b0 * k, first.b1 * k, first.b2 * k, first.a1, first.a2)
+    return sections, lambda f: shift + sign * _analog_db(boost, frequency * frequency / f, frequency)
+
+
+FRACTIONAL_SHAPES = ("low-shelf", "high-shelf", "tilt-shelf", "low-cut", "high-cut", "band-pass", "notch")
+SHELVES = ("low-shelf", "high-shelf", "tilt-shelf")
+TARGETS = ("blend", "partial", "formula")
+
+
+def _order(shape, slope):
+    return slope / (12 if shape == "notch" else 6)
+
+
+def fractional_design(shape, fs, frequency, gain, q, slope):
+    """The morphing cascade for shape at slope in dB/oct: (digital sections, its analog response in dB,
+    which is the partial target). A Cut or Band Pass below 6 dB/oct grows in from passing unchanged."""
+    nu = _order(shape, slope)
+    if nu == 0:
+        return [], lambda f: 0.0
+    if shape in SHELVES:
+        return _fractional_shelf(shape, fs, frequency, gain, q, nu)
+    if shape == "band-pass":
+        return _fractional_band_pass(fs, frequency, q, nu)
+    if shape == "notch":
+        return _fractional_notch(fs, frequency, q, nu)
+    return _fractional_cut(shape, fs, frequency, q, nu)
+
+
+def _whole(shape, fs, frequency, gain, q, order):
+    """The existing whole-order target; a Cut or Band Pass of order 0 passes the signal unchanged."""
+    return (lambda f: 0.0) if order == 0 else SHAPES[shape](fs, frequency, gain, q, order)[1]
+
+
+def _formula_db(nu, x):
+    return -10 * math.log10(1 + x ** (2 * nu))
+
+
+def _formula_low_shelf_db(nu, gain, x):
+    g = 10 ** (gain / 20)
+    xx = x ** (2 * nu)
+    return 10 * math.log10((g + xx) / (1 / g + xx))
+
+
+def fractional_target(target, shape, fs, frequency, gain, q, slope):
+    """A candidate target, target(f) in dB, for shape at slope in dB/oct."""
+    nu = _order(shape, slope)
+    n, t = math.floor(nu), nu - math.floor(nu)
+    if target == "partial":
+        return fractional_design(shape, fs, frequency, gain, q, slope)[1]
+    if target == "blend":
+        lo = _whole(shape, fs, frequency, gain, q, n)
+        hi = _whole(shape, fs, frequency, gain, q, n + 1) if t else lo
+        return lambda f: (1 - t) * lo(f) + t * hi(f)
+    if nu == 0:
+        return lambda f: 0.0
+    band = lambda f: q * abs(f / frequency - frequency / f)
+    return {
+        "high-cut": lambda f: _formula_db(nu, f / frequency),
+        "low-cut": lambda f: _formula_db(nu, frequency / f),
+        "band-pass": lambda f: _formula_db(nu, band(f)),
+        "notch": lambda f: _formula_db(nu, 1 / max(band(f), 1e-300)),
+        "low-shelf": lambda f: _formula_low_shelf_db(nu, gain, f / frequency),
+        "high-shelf": lambda f: gain + _formula_low_shelf_db(nu, -gain, f / frequency),
+        "tilt-shelf": lambda f: gain / 2 + _formula_low_shelf_db(nu, -gain, f / frequency),
+    }[shape]
+
+
+def fractional_shape(shape, target):
+    """A shape for report() and report_cut(): its order argument is the Slope in dB/oct, its design the
+    morphing cascade, and its target the candidate."""
+    def design(fs, frequency, gain, q, slope):
+        sections, _ = fractional_design(shape, fs, frequency, gain, q, slope)
+        return sections, fractional_target(target, shape, fs, frequency, gain, q, slope)
+    return design
+
+
+def _steepness(shape, curve, frequency, gain):
+    """Values that must not rise as Slope rises: the level in a Cut's or Band Pass's stopband, a Notch's
+    level inside its band, and how far a Shelf is from the plateau it is approaching on each side."""
+    if shape == "notch":
+        return [curve(frequency * r) for r in (1.05, 1.1)]
+    if shape == "band-pass":
+        return [curve(frequency * r) for r in (2.5, 3, 4)] + [curve(frequency / r) for r in (2.5, 3, 4)]
+    if shape == "low-cut":
+        return [curve(frequency / r) for r in (1.25, 1.5, 2)]
+    if shape == "high-cut":
+        return [curve(frequency * r) for r in (1.25, 1.5, 2)]
+    high, low = gain, 0.0  # the plateaus above and below Frequency
+    if shape == "low-shelf":
+        high, low = 0.0, gain
+    if shape == "tilt-shelf":
+        high, low = gain / 2, -gain / 2
+    return ([abs(curve(frequency * r) - high) for r in (1.25, 1.5, 2)] +
+            [abs(curve(frequency / r) - low) for r in (1.25, 1.5, 2)])
+
+
+def _bump(values):
+    """How far a curve that should never rise rises above the lowest it has been, in dB."""
+    lowest, bump = math.inf, 0.0
+    for v in values:
+        lowest = min(lowest, v)
+        bump = max(bump, v - lowest)
+    return bump
+
+
+def _bumps(shape, curve, frequency, gain, grid):
+    """The largest bump or dip against the way the curve should run: High Cut down, Low Cut up, Band
+    Pass up then down, Notch down then up, Shelves from one plateau to the other."""
+    below = [curve(f) for f in grid if f < frequency]
+    above = [curve(f) for f in grid if f >= frequency]
+    if shape in SHELVES:
+        rising = (gain > 0) != (shape == "low-shelf")
+        values = below + above
+        return _bump([-v for v in values] if rising else values)
+    if shape == "high-cut":
+        return _bump(below + above)
+    if shape == "low-cut":
+        return _bump([-v for v in below + above])
+    flip = -1 if shape == "band-pass" else 1
+    return max(_bump([flip * v for v in below]), _bump([-flip * v for v in above]))
+
+
+def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqrt(0.5), step=0.25):
+    """Each candidate target's behaviour as Slope moves in step dB/oct from the Shape's minimum to 96,
+    at Q 0.71, analog only:
+    - whole: the largest difference from the existing Butterworth target at whole orders, dB;
+    - steeper: how far the curve ever gets less steep as Slope rises (_steepness), dB; 0 is monotonic;
+    - bump: the largest bump or dip against the way the curve should run (_bumps), dB;
+    - vs partial: the morphing cascade's largest difference from the target, where either is above
+      -60 dB (the Engine tests' floor), dB."""
+    grid = [10 * 2 ** (i / 48) for i in range(48 * 14)]
+    print(f"{'shape':>10} {'target':>8}  {'whole':>7} {'steeper':>7} {'bump':>6} {'vs partial':>10}")
+    for shape in FRACTIONAL_SHAPES:
+        unit = 12 if shape == "notch" else 6
+        lowest = 0 if shape in ("low-cut", "high-cut", "band-pass") else unit
+        slopes = [lowest + i * step for i in range(int(round((96 - lowest) / step)) + 1)]
+        for target in TARGETS:
+            whole, steeper, bump, vs = 0.0, 0.0, 0.0, 0.0
+            for gain in gains if shape in SHELVES else (0.0,):
+                previous = None
+                for slope in slopes:
+                    curve = fractional_target(target, shape, fs, frequency, gain, q, slope)
+                    values = [curve(f) for f in grid]
+                    if slope % unit == 0:
+                        ref = _whole(shape, fs, frequency, gain, q, int(slope // unit))
+                        whole = max(whole, max(abs(v - ref(f)) for v, f in zip(values, grid)))
+                    probe = _steepness(shape, curve, frequency, gain)
+                    if previous is not None:
+                        steeper = max([steeper] + [p - pp for p, pp in zip(probe, previous)])
+                    previous = probe
+                    bump = max(bump, _bumps(shape, curve, frequency, gain, grid))
+                    if target != "partial":
+                        part = fractional_target("partial", shape, fs, frequency, gain, q, slope)
+                        vs = max([vs] + [abs(part(f) - v) for v, f in zip(values, grid) if max(v, part(f)) > -60])
+            print(f"{shape:>10} {target:>8}  {whole:7.0e} {steeper:7.3f} {bump:6.3f} {vs:10.2f}")
+
+
 # --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------
 
 KNEE_DB = 3.0
@@ -619,13 +1007,25 @@ def report_auto_threshold(spreads, falls, rise=4.5):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("shape", choices=[*SHAPES, "gain-computer", "auto-threshold"])
+    parser.add_argument("shape", choices=[*SHAPES, "gain-computer", "auto-threshold", "slopes"])
     parser.add_argument("--q", type=float, nargs="+", default=[0.71])
     parser.add_argument("--orders", type=int, nargs="+", default=[2])
     parser.add_argument("--overshoots", type=float, nargs="+", default=[12])
     parser.add_argument("--spreads", type=float, nargs="+", default=[0.2])
     parser.add_argument("--falls", type=float, nargs="+", default=[1.25])
+    parser.add_argument("--slopes", type=float, nargs="+",
+                        help="fractional Slopes in dB/oct (#18): the morphing cascade instead of --orders")
+    parser.add_argument("--target", choices=TARGETS, default="partial", help="the candidate target for --slopes")
     args = parser.parse_args()
+    if args.shape == "slopes":
+        report_slopes()
+        raise SystemExit
+    if args.slopes:
+        if args.shape not in FRACTIONAL_SHAPES:
+            parser.error(f"--slopes works on {', '.join(FRACTIONAL_SHAPES)}")
+        reporter = report_cut if args.shape in CUTS else report
+        reporter(fractional_shape(args.shape, args.target), qs=args.q, orders=args.slopes)
+        raise SystemExit
     if args.shape == "auto-threshold":
         report_auto_threshold(args.spreads, args.falls)
         raise SystemExit
