@@ -625,13 +625,15 @@ void EqDisplay::paint (juce::Graphics& g)
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
     display::paintCurves (g, shape, frame);
-    // The handles and labels go over the edge fades, unfaded.
-    display::paintEdgeFades (g, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
     const auto shownGhost = ghostFade > 0.0f ? ghost() : std::nullopt;
+    if (shownGhost)
+        display::paintGhostCurve (g, shape, *shownGhost, frame.sampleRate, ghostFade);
+    // The handles, the labels and the ghost's line, glow and readout go over the edge fades, unfaded.
+    display::paintEdgeFades (g, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
     display::paintLabels (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
     display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
     if (shownGhost)
-        display::paintGhost (g, shape, *shownGhost, frame.sampleRate, ghostFade);
+        display::paintGhostMarker (g, shape, *shownGhost, ghostFade);
     display::paintHandles (g, shape, frame);
 }
 

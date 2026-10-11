@@ -613,3 +613,63 @@ TEST_CASE ("The ghost Bell follows the mouse over empty space, rests at 1 kHz wi
     move (atDb (host, 100.0, -5.0));
     CHECK_FALSE (host.display.ghost().has_value());
 }
+
+TEST_CASE ("The ghost Bell's curve fades into the display's left edge, but its line does not")
+{
+    OpenEditor host;
+    analyzerOff (host);
+    host.settle();
+    const auto height = static_cast<float> (host.display.getHeight());
+    // The ghost with its peak near the top, at x, faded fully in.
+    const auto ghostAt = [&] (float x) {
+        const juce::Point<float> to { x, 1.0f };
+        for (int step = 0; step < 8; ++step)
+        {
+            host.display.mouseMove (host.mouseEvent (to, {}, to));
+            host.settle (100);
+        }
+        host.display.mouseMove (host.mouseEvent (to, {}, to));
+        REQUIRE (host.display.ghost().has_value());
+        REQUIRE (host.display.ghost()->x == x);
+        return snapshot (host);
+    };
+    // Its line inside the left edge's fade; and away from it, clear of x = 0 to 220.
+    const float nearEdge = 30.0f, away = 420.0f;
+    REQUIRE (nearEdge < staple::tokens::layout::fadeLeft);
+    const auto withGhost = ghostAt (nearEdge), without = ghostAt (away);
+
+    // How much the ghost near the edge adds to a column of the display, at its strongest between the
+    // top and bottom fades.
+    const auto added = [&] (const juce::Image& image, const juce::Image& under, float x, float fromY, float toY) {
+        float most = 0.0f;
+        for (float y = fromY; y < toY; y += 0.5f)
+            most = std::max (most, std::abs (colourAt (image, { x, y }).getBrightness() - colourAt (under, { x, y }).getBrightness()));
+        return most;
+    };
+    const float top = staple::tokens::layout::fadeTop, bottom = height - staple::tokens::layout::fadeBottom;
+    // The curve, around its peak 60 px from the top: nearly gone 2 px from the left edge, plain 60 px in.
+    const auto inFade = added (withGhost, without, 2.0f, top, height / 2.0f);
+    const auto clear = added (withGhost, without, nearEdge + 60.0f, top, height / 2.0f);
+    CHECK (clear > 0.1f);
+    CHECK (inFade < 0.35f * clear);
+    // Its line, half-way down inside the fade, as strong as the other ghost's away from the edge.
+    const auto lineInFade = added (withGhost, without, nearEdge, height / 2.0f, bottom);
+    const auto lineAway = added (without, withGhost, away, height / 2.0f, bottom);
+    CHECK (lineAway > 0.05f);
+    CHECK (lineInFade > 0.8f * lineAway);
+}
+
+TEST_CASE ("Ghost Bell screenshot: the empty display with the ghost near its left edge", "[.screens]")
+{
+    OpenEditor host;
+    host.editor->setSize (1200, 760);
+    analyzerOff (host);
+    const juce::Point<float> to { 30.0f, 120.0f };
+    for (int step = 0; step < 8; ++step)
+    {
+        host.display.mouseMove (host.mouseEvent (to, {}, to));
+        host.settle (100);
+    }
+    host.display.mouseMove (host.mouseEvent (to, {}, to));
+    harness::writeSnapshot (*host.editor, "ghost-near-left-edge");
+}
