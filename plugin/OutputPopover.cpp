@@ -4,6 +4,7 @@
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
+#include "staple/Tokens.h"
 #include "staple/controls/Overlay.h"
 #include "staple/controls/TextChip.h"
 
@@ -17,10 +18,12 @@ namespace
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
 
+constexpr int edge = staple::tokens::popover::edge;
+// The paddings are inside the card's edge; the readout row is the prototype's 13.5 px, rounded up.
 constexpr int cardWidth = 176, paddingTop = 14, paddingSide = 12, paddingBottom = 10, gap = 12;
-constexpr int knobDiameter = 64, panHeight = 14, panLabelGap = 4, panLabelHeight = 12, toggleHeight = 30, toggleGap = 4;
+constexpr int knobDiameter = 64, panHeight = 14, panLabelGap = 4, panLabelHeight = 14, toggleHeight = 30, toggleGap = 4;
 constexpr int chipHeight = 20, chipPadding = 6;
-constexpr int cardHeight = paddingTop + knobDiameter + gap + panHeight + panLabelGap + panLabelHeight + gap + 1 + gap + toggleHeight + paddingBottom;
+constexpr int cardHeight = edge + paddingTop + knobDiameter + gap + panHeight + panLabelGap + panLabelHeight + gap + 1 + gap + toggleHeight + paddingBottom + edge;
 } // namespace
 
 juce::String outputPanText (double pan, bool midSide)
@@ -253,7 +256,7 @@ void OutputPopover::paint (juce::Graphics& g)
 
 void OutputPopover::resized()
 {
-    auto area = getCardBounds().withTrimmedTop (paddingTop).withTrimmedBottom (paddingBottom).reduced (paddingSide, 0);
+    auto area = getCardBounds().reduced (edge).withTrimmedTop (paddingTop).withTrimmedBottom (paddingBottom).reduced (paddingSide, 0);
     auto knobRow = area.removeFromTop (knobDiameter);
     const int knobSize = outputGain.getIdealSize();
     // The face centred in the row, its shadow below.
