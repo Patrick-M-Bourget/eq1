@@ -11,12 +11,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <numbers>
 #include <random>
 #include <set>
 
 using Catch::Matchers::WithinAbs;
-using Catch::Matchers::WithinRel;
 using eq1::PresetLibrary;
 
 namespace
@@ -28,6 +28,25 @@ using FactoryPreset = PresetLibrary::FactoryPreset;
 const juce::String dash = juce::String::fromUTF8 (" \xe2\x80\x93 ");
 
 juce::String named (const char* utf8) { return juce::String::fromUTF8 (utf8); }
+
+juce::StringArray factoryNames()
+{
+    juce::StringArray names;
+    for (const auto& preset : PresetLibrary::factoryPresets())
+        names.add (preset.name);
+    return names;
+}
+
+// Checks the Factory library has a Preset of each name (UTF-8).
+void checkFactoryHas (std::initializer_list<const char*> namesUtf8)
+{
+    const auto names = factoryNames();
+    for (const auto* name : namesUtf8)
+    {
+        CAPTURE (named (name));
+        CHECK (names.contains (named (name)));
+    }
+}
 
 // A plugin as a host has it.
 struct Host
@@ -284,49 +303,34 @@ TEST_CASE ("Every file in the Factory folder is bundled as a Factory Preset")
 
 TEST_CASE ("The Factory Presets are renamed into Categories, Default kept")
 {
-    juce::StringArray names;
-    for (const auto& preset : PresetLibrary::factoryPresets())
-        names.add (preset.name);
-    for (const auto* name : { "Default", "Drums \xe2\x80\x93 Kick In Punch", "Vocals \xe2\x80\x93 De-Esser", "Vocals \xe2\x80\x93 Lead Presence",
-                              "Master \xe2\x80\x93 Polish" })
-        CHECK (names.contains (named (name)));
+    checkFactoryHas ({ "Default", "Drums \xe2\x80\x93 Kick In Punch", "Vocals \xe2\x80\x93 De-Esser", "Vocals \xe2\x80\x93 Lead Presence",
+                       "Master \xe2\x80\x93 Polish" });
+    const auto names = factoryNames();
     for (const auto* old : { "Kick Punch", "De-Esser", "Vocal Presence", "Master Polish" })
         CHECK_FALSE (names.contains (old));
 }
 
 TEST_CASE ("The Factory library has the Utility and Drums Presets")
 {
-    juce::StringArray names;
-    for (const auto& preset : PresetLibrary::factoryPresets())
-        names.add (preset.name);
-    for (const auto* name : { "Utility \xe2\x80\x93 Rumble Cut", "Utility \xe2\x80\x93 Low Cut 80 Hz", "Utility \xe2\x80\x93 Mono Bass",
-                              "Utility \xe2\x80\x93 Telephone", "Utility \xe2\x80\x93 Tilt Brighter", "Drums \xe2\x80\x93 Kick In Punch",
-                              "Drums \xe2\x80\x93 Kick Out Sub", "Drums \xe2\x80\x93 Snare Top Crack", "Drums \xe2\x80\x93 Snare Ring Tamer",
-                              "Drums \xe2\x80\x93 Toms Punch", "Drums \xe2\x80\x93 Overheads Air", "Drums \xe2\x80\x93 Room Darken" })
-        CHECK (names.contains (named (name)));
+    checkFactoryHas ({ "Utility \xe2\x80\x93 Rumble Cut", "Utility \xe2\x80\x93 Low Cut 80 Hz", "Utility \xe2\x80\x93 Mono Bass",
+                       "Utility \xe2\x80\x93 Telephone", "Utility \xe2\x80\x93 Tilt Brighter", "Drums \xe2\x80\x93 Kick In Punch",
+                       "Drums \xe2\x80\x93 Kick Out Sub", "Drums \xe2\x80\x93 Snare Top Crack", "Drums \xe2\x80\x93 Snare Ring Tamer",
+                       "Drums \xe2\x80\x93 Toms Punch", "Drums \xe2\x80\x93 Overheads Air", "Drums \xe2\x80\x93 Room Darken" });
 }
 
 TEST_CASE ("The Factory library has the Guitar, Keys, Synth and Orchestral Presets")
 {
-    juce::StringArray names;
-    for (const auto& preset : PresetLibrary::factoryPresets())
-        names.add (preset.name);
-    for (const auto* name : { "Guitar \xe2\x80\x93 Acoustic Body & Sparkle", "Guitar \xe2\x80\x93 Acoustic Boom Control",
-                              "Guitar \xe2\x80\x93 Electric Cut Through", "Guitar \xe2\x80\x93 Electric Fizz Tamer", "Keys \xe2\x80\x93 Piano Bright",
-                              "Keys \xe2\x80\x93 Piano Mud Cut", "Keys \xe2\x80\x93 Rhodes Warmth", "Synth \xe2\x80\x93 Pad Make Room",
-                              "Synth \xe2\x80\x93 Lead Bite", "Orchestral \xe2\x80\x93 Strings Smooth", "Orchestral \xe2\x80\x93 Brass Tame Blare" })
-        CHECK (names.contains (named (name)));
+    checkFactoryHas ({ "Guitar \xe2\x80\x93 Acoustic Body & Sparkle", "Guitar \xe2\x80\x93 Acoustic Boom Control",
+                       "Guitar \xe2\x80\x93 Electric Cut Through", "Guitar \xe2\x80\x93 Electric Fizz Tamer", "Keys \xe2\x80\x93 Piano Bright",
+                       "Keys \xe2\x80\x93 Piano Mud Cut", "Keys \xe2\x80\x93 Rhodes Warmth", "Synth \xe2\x80\x93 Pad Make Room",
+                       "Synth \xe2\x80\x93 Lead Bite", "Orchestral \xe2\x80\x93 Strings Smooth", "Orchestral \xe2\x80\x93 Brass Tame Blare" });
 }
 
 TEST_CASE ("The Factory library has the Mix Bus, Master and Sends Presets")
 {
-    juce::StringArray names;
-    for (const auto& preset : PresetLibrary::factoryPresets())
-        names.add (preset.name);
-    for (const auto* name : { "Mix Bus \xe2\x80\x93 Smile", "Mix Bus \xe2\x80\x93 Gentle Tilt", "Mix Bus \xe2\x80\x93 Drum Bus Sculpt",
-                              "Master \xe2\x80\x93 Polish", "Master \xe2\x80\x93 Dynamic Low End", "Master \xe2\x80\x93 Mid-Side Width",
-                              "Master \xe2\x80\x93 Detailed", "Sends \xe2\x80\x93 Reverb Return Clean", "Sends \xe2\x80\x93 Delay Return Dark" })
-        CHECK (names.contains (named (name)));
+    checkFactoryHas ({ "Mix Bus \xe2\x80\x93 Smile", "Mix Bus \xe2\x80\x93 Gentle Tilt", "Mix Bus \xe2\x80\x93 Drum Bus Sculpt",
+                       "Master \xe2\x80\x93 Polish", "Master \xe2\x80\x93 Dynamic Low End", "Master \xe2\x80\x93 Mid-Side Width",
+                       "Master \xe2\x80\x93 Detailed", "Sends \xe2\x80\x93 Reverb Return Clean", "Sends \xe2\x80\x93 Delay Return Dark" });
 }
 
 TEST_CASE ("The Factory library uses every Shape, Stereo Placement and dynamics feature")
@@ -345,15 +349,11 @@ TEST_CASE ("The Factory library uses every Shape, Stereo Placement and dynamics 
 
 TEST_CASE ("The Factory library has the Bass and Vocals Presets")
 {
-    juce::StringArray names;
-    for (const auto& preset : PresetLibrary::factoryPresets())
-        names.add (preset.name);
-    for (const auto* name : { "Bass \xe2\x80\x93 DI Definition", "Bass \xe2\x80\x93 Synth Sub Focus", "Bass \xe2\x80\x93 Mud Control",
-                              "Bass \xe2\x80\x93 Growl", "Bass \xe2\x80\x93 Duck Under Kick (Sidechain)", "Vocals \xe2\x80\x93 Lead Presence",
-                              "Vocals \xe2\x80\x93 De-Esser", "Vocals \xe2\x80\x93 Dynamic Mud", "Vocals \xe2\x80\x93 Backing Tuck",
-                              "Vocals \xe2\x80\x93 Air", "Vocals \xe2\x80\x93 Dialogue Clarity", "Vocals \xe2\x80\x93 Plosive Control",
-                              "Vocals \xe2\x80\x93 Resonance Control" })
-        CHECK (names.contains (named (name)));
+    checkFactoryHas ({ "Bass \xe2\x80\x93 DI Definition", "Bass \xe2\x80\x93 Synth Sub Focus", "Bass \xe2\x80\x93 Mud Control",
+                       "Bass \xe2\x80\x93 Growl", "Bass \xe2\x80\x93 Duck Under Kick (Sidechain)", "Vocals \xe2\x80\x93 Lead Presence",
+                       "Vocals \xe2\x80\x93 De-Esser", "Vocals \xe2\x80\x93 Dynamic Mud", "Vocals \xe2\x80\x93 Backing Tuck",
+                       "Vocals \xe2\x80\x93 Air", "Vocals \xe2\x80\x93 Dialogue Clarity", "Vocals \xe2\x80\x93 Plosive Control",
+                       "Vocals \xe2\x80\x93 Resonance Control" });
 }
 
 namespace
@@ -472,8 +472,8 @@ TEST_CASE ("The Factory gate rejects more than 6 Bands, but for the three Preset
     };
     CHECK (bandCountProblem (bands ("Drums \xe2\x80\x93 Kick", 6)) == "");
     CHECK (bandCountProblem (bands ("Drums \xe2\x80\x93 Kick", 7)).isNotEmpty());
-    for (const auto* allowed : { "Vocals \xe2\x80\x93 Resonance Control", "Mix Bus \xe2\x80\x93 Drum Bus Sculpt", "Master \xe2\x80\x93 Detailed" })
-        CHECK (bandCountProblem (bands (allowed, 12)) == "");
+    for (const auto& allowed : pastBandCap())
+        CHECK (bandCountProblem (bands (allowed.toRawUTF8(), 12)) == "");
 }
 
 TEST_CASE ("The Factory gate rejects Gain Scale, Output Pan, Pan Mode or Phase Invert away from their defaults")
