@@ -8,6 +8,7 @@
 #
 # --user-approved stands for the verdict when the session that built the PR merges it on the user's
 # go-ahead: it waits for CI as usual and records the user's words in the squash commit.
+# After a merge it deletes the PR's branch, on origin and locally.
 set -uo pipefail
 usage='usage: scripts/merge-on-green.sh <PR number> [--user-approved "<the user'"'"'s words>"]'
 pr=${1:?$usage}
@@ -67,10 +68,24 @@ esac
 head_moved
 
 title=$(gh pr view "$pr" --json title -q .title)
+branch=$(gh pr view "$pr" --json headRefName -q .headRefName)
+# A squash merge leaves the PR's branch behind, on origin and here: delete both. A branch still checked out in
+# a worktree stays, and says so.
+delete_branch() {
+    gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/$branch" > /dev/null 2>&1 \
+        || echo "kept origin/$branch: could not delete it"
+    git show-ref -q --verify "refs/heads/$branch" || return 0
+    if git worktree list --porcelain | grep -qx "branch refs/heads/$branch"; then
+        echo "kept $branch: checked out in a worktree"
+    else
+        git branch -q -D "$branch"
+    fi
+}
 # GitHub refuses the merge if the head is no longer the one CI ran on.
 merge() {
     if gh pr merge "$pr" --squash --match-head-commit "$head" --subject "$title (#$pr)" --body "$1"; then
         echo "MERGED #$pr: $title"
+        delete_branch
     else
         echo "NOT MERGED #$pr: gh pr merge refused it (has the head moved from ${head:0:7}?)"
         exit 1
