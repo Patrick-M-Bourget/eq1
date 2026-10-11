@@ -194,7 +194,7 @@ struct OpenEditor
                  static_cast<float> (display.getHeight()) * 0.5f };
     }
 
-    // Where the display draws a Band at frequency with heard Gain db, under the Display Range.
+    // Where the display draws a Band at frequency with Heard Gain db, under the Display Range.
     juce::Point<float> at (double frequency, double db) const
     {
         const eq1::display::DisplayGeometry geometry { .width = display.getWidth(), .height = display.getHeight(), .rangeDb = processor.displayRangeDb() };
