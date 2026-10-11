@@ -353,7 +353,7 @@ void EqDisplay::timerCallback()
     // Solo held here or on the Band panel draws its cue.
     showSolo();
     updateCard();
-    // A heard Gain changed beyond the Display Range, from anywhere, zooms it out.
+    // A Heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
     const bool fading = stepFades();
 
