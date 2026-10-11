@@ -168,12 +168,13 @@ Settings shape (Shape s, double frequency, double gain, double q, double slope)
 // Allowed shelf error as a share of the curve's own span in dB (docs/dsp/filter-design.md, "Test
 // tolerances"): resonant shelves (Q above 2) split each section in two biquads, and come within 12% up
 // to 0.45 x Nyquist as gentle ones do. Nearer Nyquist shelves are the limits of a cascade of
-// decramped biquads (ADR 0001), resonant ones most.
+// decramped biquads (ADR 0001): resonant ones a little more up to 0.73 x Nyquist, and as gentle ones
+// do above it.
 double shelfToleranceDb (double sampleRate, double frequency, double q, double spanDb)
 {
     const double position = frequency / (sampleRate / 2.0);
     const bool resonant = q > 2.0;
-    const double share = position <= 0.45 ? 0.12 : position <= 0.73 ? (resonant ? 0.15 : 0.12) : (resonant ? 0.75 : 0.45);
+    const double share = position <= 0.45 ? 0.12 : position <= 0.73 ? (resonant ? 0.15 : 0.12) : 0.45;
     return 0.6 * (position > 0.73 ? 1.0 : 0.1) + share * spanDb;
 }
 

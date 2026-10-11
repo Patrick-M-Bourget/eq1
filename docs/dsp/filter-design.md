@@ -77,7 +77,7 @@ The measured column is the worst case in the filter lab over the test's grid (Fr
 |---|---|---|---|
 | up to 0.45 | 12% | 12% | 11.1% |
 | up to 0.73 | 12% | 15% | 13.9% |
-| up to 0.91 | 45% | 75% | 41.2% |
+| up to 0.91 | 45% | 45% | 41.2% |
 
 The measured column is the worst case in the filter lab, as a share of the span alone, over Frequency 20 Hz to 20 kHz, Gain ±3 to ±30 dB, every Slope from 6 to 96 dB/oct, Q 2.25, 2.5, 3, 4, 10, 20 and 40, at 44.1, 48 and 96 kHz, at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py low-shelf --orders 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 --q 2.25 2.5 3 4 10 20 40` (`high-shelf` and `tilt-shelf` measure the same).
 
