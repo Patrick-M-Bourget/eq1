@@ -242,8 +242,8 @@ void DetectionRangeBar::update()
         const auto band = editing.band (slot);
         free = isDynamic (band) && ! band.bypass && band.detectionRange == DetectionRange::Free;
     }
-    // Over the display, its line detectionRangeBarAbovePanel above the panel's top.
-    const int line = panel.getY() - layout::detectionRangeBarAbovePanel;
+    // Over the display, its line detectionRangeBarAbovePanel above the slab's top (the bell excluded).
+    const int line = panel.slabBounds().getY() - layout::detectionRangeBarAbovePanel;
     const auto bounds = juce::Rectangle<int> (display.getX(), line - layout::detectionColumnHeight, display.getWidth(),
                                               layout::detectionColumnHeight + layout::pillHeight / 2 + handleMargin);
     if (bounds != getBounds())

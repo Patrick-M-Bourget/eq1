@@ -38,16 +38,17 @@ class BandEditing;
 // Dynamics (HANDOFF.md §4, §5.3): Dynamic Range is a ring round the Gain knob (DynamicRangeRing). On a
 // Dynamic Band, Clear Dynamics, Dynamics Bypass and » show above Gain, and » opens and closes the
 // dynamics section between Gain and Q (DynamicsSection) with a slide, the panel widening by the
-// section's width about its centre; nothing else changes its width. The section is open unless closed
+// section's width about its centre and its slab growing upwards to hold it; nothing else changes its size. The section is open unless closed
 // by », for as long as the editor is open, and absent on a Band that isn't dynamic. The Band shown is
 // the Metered Band while its Shape has dynamics.
 class BandPanel final : public juce::Component, private juce::Timer
 {
 public:
-    // The panel's size at 100 % UI Scale: the slab and the bell above it; wider by the section while
-    // the dynamics section is open.
+    // The panel's size at 100 % UI Scale: the slab and the bell above it; wider by the section and
+    // taller (upwards, its bottom staying put) while the dynamics section is open.
     static constexpr int width = 492, height = 137;
     static constexpr int openWidth = width + staple::tokens::layout::dynamicsSectionWidth + 8;
+    static constexpr int openHeight = height + staple::tokens::layout::bandPanelOpenGrowth;
 
     BandPanel (PluginProcessor& processor, BandEditing& editing);
     ~BandPanel() override;
@@ -60,6 +61,8 @@ public:
     void setAnchor (juce::Point<int> bottomCentre);
     // The dynamics section is open, or opening.
     bool isDynamicsOpen() const;
+    // The slab, the bell excluded, in the parent's coordinates.
+    juce::Rectangle<int> slabBounds() const;
 
     // Called with the Band to select when ‹ or › is pressed; the editor selects it on the display, which
     // shows it here. Without it, the panel shows that Band itself.
@@ -86,7 +89,7 @@ private:
     void step (int direction);
     // The dynamics icons and section for the Band as it is now, sliding the section if animate.
     void showDynamics (bool animate);
-    void placeAtWidth();
+    void placeAtSize();
     // The controls that fade while the Band is Bypassed: all but Bypass and Delete.
     std::vector<juce::Component*> faded();
     juce::Colour bandColour() const;
