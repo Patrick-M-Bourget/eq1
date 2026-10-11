@@ -23,7 +23,9 @@ section, so the entry point at the bottom never changes.
 
 import argparse
 import cmath
+import functools
 import math
+from collections import namedtuple
 from dataclasses import dataclass
 
 PI = math.pi
@@ -1159,6 +1161,10 @@ def continuous_design(shape, fs, frequency, gain, q, slope):
 
 
 GAP_DESIGNS = {"before": fractional_design, "after": continuous_design}
+# Where a seam is worst: its excess over each of SEAM_STEPS, and the place.
+Seam = namedtuple("Seam", "excesses slope fs frequency gain q")
+# Where a Shelf is furthest off: its error as a share of the span and in dB, and the place.
+ShelfError = namedtuple("ShelfError", "share error slope fs frequency gain")
 SEAM_STEPS = (0.01, 0.001, 0.0001, 0.00001)  # dB/oct: the Slope changes the seams report looks at
 
 
@@ -1209,18 +1215,18 @@ def _seam_job(job):
                 if max(da, db) >= -60:
                     excess = max(excess, abs(db - da - (tb(f) - ta(f))))
             excesses.append(excess)
-        _keep_worst(worst, kind, (tuple(excesses), slope, fs, frequency, gain, q))
+        _keep_worst(worst, kind, Seam(tuple(excesses), slope, fs, frequency, gain, q))
     return shape, design, worst
 
 
-def _keep_worst(worst, key, value):
-    """worst[key] = (each step's largest excess, and the place of the smallest step's)."""
+def _keep_worst(worst, key, value: Seam):
+    """worst[key] = each step's largest excess, at the place of the smallest step's."""
     old = worst.get(key)
     if old is None:
         worst[key] = value
         return
-    largest = tuple(map(max, old[0], value[0]))
-    worst[key] = (largest,) + (value if value[0][-1] > old[0][-1] else old)[1:]
+    largest = tuple(map(max, old.excesses, value.excesses))
+    worst[key] = (value if value.excesses[-1] > old.excesses[-1] else old)._replace(excesses=largest)
 
 
 def _parallel(function, jobs, workers):
@@ -1229,6 +1235,10 @@ def _parallel(function, jobs, workers):
     from concurrent.futures import ProcessPoolExecutor
     with ProcessPoolExecutor(workers) as pool:
         return list(pool.map(function, jobs, chunksize=1))
+
+
+def _seam_place(seam: Seam):
+    return f"Slope={seam.slope:.3f} fs={seam.fs} F={seam.frequency} G={seam.gain:g} Q={seam.q:g}"
 
 
 def report_seams(shapes, workers, points=100):
@@ -1248,12 +1258,10 @@ def report_seams(shapes, workers, points=100):
     for shape in shapes:
         for kind in dict.fromkeys(k for s, k, _ in worst if s == shape):
             b, a = worst[(shape, kind, "before")], worst[(shape, kind, "after")]
-            excesses, slope, fs, frequency, gain, q = a
-            seam = excesses[-1] > 0.01 and excesses[-1] > 0.5 * excesses[-2]
-            print(f"{shape:>10} {kind:>10}  {'':6} " + " ".join(f"{e:6.3f}" for e in b[0]) +
-                  f"   {'':5} " + " ".join(f"{e:6.3f}" for e in excesses) +
-                  f"  {'seam' if seam else 'none':7}   Slope={slope:.3f} fs={fs} F={frequency} G={gain:g} Q={q:g}"
-                  f" (Slope={b[1]:.3f} fs={b[2]} F={b[3]} G={b[4]:g} Q={b[5]:g})")
+            seam = a.excesses[-1] > 0.01 and a.excesses[-1] > 0.5 * a.excesses[-2]
+            print(f"{shape:>10} {kind:>10}  {'':6} " + " ".join(f"{e:6.3f}" for e in b.excesses) +
+                  f"   {'':5} " + " ".join(f"{e:6.3f}" for e in a.excesses) +
+                  f"  {'seam' if seam else 'none':7}   {_seam_place(a)} ({_seam_place(b)})")
 
 
 SHELF_LIMITS = {"<=0.45": (0.12, 0.12), "<=0.73": (0.12, 0.15), "<=0.91": (0.45, 0.45)}  # (Q up to 2, above 2)
@@ -1280,8 +1288,8 @@ def _shelf_job(job):
                 error = max(error, abs(cascade_db(sections, f, fs) - t))
             share = error / span
             key = position_band(frequency, fs)
-            if share > worst.get(key, (-1,))[0]:
-                worst[key] = (share, error, slope, fs, frequency, gain)
+            if key not in worst or share > worst[key].share:
+                worst[key] = ShelfError(share, error, slope, fs, frequency, gain)
     return design, shape, q, worst
 
 
@@ -1296,7 +1304,7 @@ def report_shelves(shapes, qs, workers, slopes=None, points=200):
     for design, shape, q, found in _parallel(_shelf_job, jobs, workers):
         for band, value in found.items():
             key = (shape, band, q, design)
-            if value[0] > worst.get(key, (-1,))[0]:
+            if key not in worst or value.share > worst[key].share:
                 worst[key] = value
     print("shelf tolerances: worst error as a share of the span, over the fractional Slopes")
     print(f"{'shape':>10} {'band':>7} {'Q':>5}  {'before':>6} {'after':>6} {'limit':>5}   worst after (before)")
@@ -1305,9 +1313,10 @@ def report_shelves(shapes, qs, workers, slopes=None, points=200):
             continue
         b, a = worst[(shape, band, q, "before")], worst[(shape, band, q, "after")]
         limit = SHELF_LIMITS[band][q > RESONANT_SHELF_Q]
-        mark = " over" if a[0] > limit else ""
-        print(f"{shape:>10} {band:>7} {q:>5g}  {b[0]:6.1%} {a[0]:6.1%} {limit:5.0%}{mark:5}"
-              f" Slope={a[2]:g} fs={a[3]} F={a[4]} G={a[5]} (Slope={b[2]:g} fs={b[3]} F={b[4]} G={b[5]})")
+        mark = " over" if a.share > limit else ""
+        place = lambda e: f"Slope={e.slope:g} fs={e.fs} F={e.frequency} G={e.gain}"
+        print(f"{shape:>10} {band:>7} {q:>5g}  {b.share:6.1%} {a.share:6.1%} {limit:5.0%}{mark:5}"
+              f" {place(a)} ({place(b)})")
 
 
 def report_rescale(steps=(1, 2, 3, 4), gains=(-30, -18, -6, -1, -0.1, 0.1, 1, 6, 18, 30)):
@@ -1560,21 +1569,71 @@ BELL_HOLD = 0.95  # where a steep Bell's sections are held, as a share of Nyquis
 BELL_HOLD_MATCH = 0.9  # a held section's match point, as a share of the hold
 
 
+def _held_poles(b: Analog, reference, hold):
+    """A held section's poles: at the hold, with the Q that makes them as loud there, relative to DC, as
+    the analog poles are (never higher). Returns (held poles, held Q, analog Q)."""
+    poles = Analog(0, 0, 1, 1, b.d1, 1)
+    held_q = min(1 / b.d1, math.sqrt(poles.squared(hold / reference) / poles.squared(0)))
+    return Analog(0, 0, 1, 1, 1 / held_q, 1), held_q, 1 / b.d1
+
+
+BELL_SLIDE = 2 ** (1 / 24)  # the match point slides to BELL_HOLD_MATCH x the hold as the natural frequency rises this far above it
+
+
+def _slid_match(reference, hold):
+    """The natural frequency up to the hold; above it, the hold sliding (in log frequency, smoothly) to
+    BELL_HOLD_MATCH x the hold as the natural frequency rises BELL_SLIDE above it."""
+    if reference <= hold:
+        return reference
+    x = _smoothstep(math.log(reference / hold) / math.log(BELL_SLIDE))
+    return hold * BELL_HOLD_MATCH ** x
+
+
+def _held_match(reference, hold):
+    """The natural frequency up to the hold, BELL_HOLD_MATCH x the hold above it: it jumps there."""
+    return reference if reference <= hold else BELL_HOLD_MATCH * hold
+
+
+def _clamped_match(reference, hold):
+    """The natural frequency, never above BELL_HOLD_MATCH x the hold."""
+    return min(reference, BELL_HOLD_MATCH * hold)
+
+
+def _analog_magnitude(b: Analog, reference, hold, held_q, analog_q):
+    """The analog section's squared magnitude, at f in Hz."""
+    return lambda f: b.squared(f / reference)
+
+
+def _blended_magnitude(b: Analog, reference, hold, held_q, analog_q):
+    """Band Pass's blend of magnitudes (filter-design doc, "Above 24 dB/oct"): the analog section's where
+    the Q isn't lowered and, as it is lowered, more of the held section's own: the analog section moved
+    to the hold, its zeros' and poles' damping both scaled by held Q / analog Q, weighted by
+    sqrt(1 - held Q / analog Q)."""
+    own = Analog(1, b.n1 * analog_q / held_q, b.n0, 1, 1 / held_q, 1)
+    blend = math.sqrt(1 - held_q / analog_q)
+    return lambda f: b.squared(f / reference) ** (1 - blend) * own.squared(f / hold) ** blend
+
+
+def bell_section(b: Analog, reference, fs, match_point=_held_match, magnitude=_analog_magnitude):
+    """One section of a steep Bell, b normalised to its poles' natural frequency, reference in Hz. Up to
+    the hold it is a matched section with its zeros exact at match_point(reference, hold). Above it, its
+    poles are held (_held_poles) and its zeros fit magnitude at DC, the match point and Nyquist."""
+    hold = BELL_HOLD * fs / 2
+    match = match_point(reference, hold)
+    if reference <= hold:
+        return match_section(b, reference, fs, match_hz=match)
+    held, held_q, analog_q = _held_poles(b, reference, hold)
+    squared = magnitude(b, reference, hold, held_q, analog_q)
+    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
+
+
 def _band_shelf_section(a: Analog, frequency, fs):
     """One second-order section of a steep Bell, matched at its poles' natural frequency. Above the hold
     its poles are placed at the hold with the Q that makes them as loud there, relative to DC, as the
     analog poles are (never higher), and its zeros fit the analog section at DC, BELL_HOLD_MATCH x the
     hold and Nyquist. Not continuous as the natural frequency crosses the hold (see ADR 0007)."""
     b, w0 = normalised(a)
-    reference, hold = frequency * w0, BELL_HOLD * fs / 2
-    if reference <= hold:
-        return match_section(b, reference, fs)
-    poles = Analog(0, 0, 1, 1, b.d1, 1)
-    held_q = min(1 / b.d1, math.sqrt(poles.squared(hold / reference) / poles.squared(0)))
-    match = BELL_HOLD_MATCH * hold
-    squared = lambda f: b.squared(f / reference)
-    return match_magnitudes(Analog(0, 0, 1, 1, 1 / held_q, 1), hold, fs, match,
-                            squared(0), squared(match), squared(fs / 2))
+    return bell_section(b, frequency * w0, fs)
 
 
 def _band_shelf_bell(prototype, fs, frequency, gain, q, slope):
@@ -1682,92 +1741,13 @@ BELL_LIMITS = {"<=0.45": 0.10, "<=0.73": 0.20, "<=0.91": 0.35}  # today's Bell t
 FREQUENCY_RANGE = (10.0, 30000.0)  # the Frequency parameter's range
 
 
-def _held_poles(b: Analog, reference, hold):
-    """ADR 0007's held poles: at the hold, with the Q that makes them as loud there, relative to DC,
-    as the analog poles are (never higher). Returns (held poles, held Q, analog Q)."""
-    poles = Analog(0, 0, 1, 1, b.d1, 1)
-    held_q = min(1 / b.d1, math.sqrt(poles.squared(hold / reference) / poles.squared(0)))
-    return Analog(0, 0, 1, 1, 1 / held_q, 1), held_q, 1 / b.d1
-
-
-def _section_hold(b: Analog, reference, fs):
-    """ADR 0007 as accepted (_band_shelf_section): match at the natural frequency below the hold, at
-    BELL_HOLD_MATCH x the hold above it."""
-    hold = BELL_HOLD * fs / 2
-    if reference <= hold:
-        return match_section(b, reference, fs)
-    held, _, _ = _held_poles(b, reference, hold)
-    match = BELL_HOLD_MATCH * hold
-    squared = lambda f: b.squared(f / reference)
-    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
-
-
-def _section_clamp(b: Analog, reference, fs):
-    """As _section_hold, but every section's match point is clamped to BELL_HOLD_MATCH x the hold, held
-    or not: the match point no longer jumps as the natural frequency crosses the hold, and the held poles
-    (Q unchanged there) don't either."""
-    hold = BELL_HOLD * fs / 2
-    match = min(reference, BELL_HOLD_MATCH * hold)
-    squared = lambda f: b.squared(f / reference)
-    if reference <= hold:
-        return match_section(b, reference, fs, match_hz=match)
-    held, _, _ = _held_poles(b, reference, hold)
-    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
-
-
-def _section_blend(b: Analog, reference, fs):
-    """As _section_clamp, with Band Pass's blend of magnitudes (filter-design doc, "Above 24 dB/oct"):
-    the zeros fit the analog section's magnitude where the Q isn't lowered and, as it is lowered, more
-    of the held section's own: the analog section moved to the hold, its zeros' and poles' damping both
-    scaled by held Q / analog Q, weighted by sqrt(1 - held Q / analog Q)."""
-    hold = BELL_HOLD * fs / 2
-    if reference <= hold:
-        return _section_clamp(b, reference, fs)
-    held, held_q, analog_q = _held_poles(b, reference, hold)
-    own = Analog(1, b.n1 * analog_q / held_q, b.n0, 1, 1 / held_q, 1)
-    blend = math.sqrt(1 - held_q / analog_q)
-    squared = lambda f: b.squared(f / reference) ** (1 - blend) * own.squared(f / hold) ** blend
-    match = BELL_HOLD_MATCH * hold
-    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
-
-
-BELL_SLIDE = 2 ** (1 / 24)  # the match point slides to BELL_HOLD_MATCH x the hold as the natural frequency rises this far above it
-
-
-def _slid_match(reference, hold):
-    """The hold while the natural frequency is at the hold, sliding (in log frequency, smoothly) to
-    BELL_HOLD_MATCH x the hold as it rises BELL_SLIDE above it."""
-    x = _smoothstep(math.log(reference / hold) / math.log(BELL_SLIDE))
-    return hold * BELL_HOLD_MATCH ** x
-
-
-def _section_slide(b: Analog, reference, fs):
-    """As _section_hold, but above the hold the match point slides from the hold to BELL_HOLD_MATCH x the
-    hold (_slid_match), so it no longer jumps as the natural frequency crosses the hold."""
-    hold = BELL_HOLD * fs / 2
-    if reference <= hold:
-        return match_section(b, reference, fs)
-    held, _, _ = _held_poles(b, reference, hold)
-    match = _slid_match(reference, hold)
-    squared = lambda f: b.squared(f / reference)
-    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
-
-
-def _section_slide_blend(b: Analog, reference, fs):
-    """_section_slide's match point with _section_blend's blend of magnitudes."""
-    hold = BELL_HOLD * fs / 2
-    if reference <= hold:
-        return match_section(b, reference, fs)
-    held, held_q, analog_q = _held_poles(b, reference, hold)
-    own = Analog(1, b.n1 * analog_q / held_q, b.n0, 1, 1 / held_q, 1)
-    blend = math.sqrt(1 - held_q / analog_q)
-    squared = lambda f: b.squared(f / reference) ** (1 - blend) * own.squared(f / hold) ** blend
-    match = _slid_match(reference, hold)
-    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
-
-
-BELL_SECTIONS = {"hold": _section_hold, "clamp": _section_clamp, "blend": _section_blend,
-                 "slide": _section_slide, "slide-blend": _section_slide_blend}
+BELL_SECTIONS = {
+    "hold": functools.partial(bell_section, match_point=_held_match),
+    "clamp": functools.partial(bell_section, match_point=_clamped_match),
+    "blend": functools.partial(bell_section, match_point=_clamped_match, magnitude=_blended_magnitude),
+    "slide": functools.partial(bell_section, match_point=_slid_match),
+    "slide-blend": functools.partial(bell_section, match_point=_slid_match, magnitude=_blended_magnitude),
+}
 
 
 def _butterworth_bell_analog(gain, q, slope):
@@ -1777,7 +1757,7 @@ def _butterworth_bell_analog(gain, q, slope):
     return order, [normalised(a) for a in band_shelf_analog(*butterworth_shelf_roots(order, abs(gain)), q)]
 
 
-def steep_bell(fs, frequency, gain, q, slope=12, section=_section_hold):
+def steep_bell(fs, frequency, gain, q, slope=12, section=bell_section):
     """ADR 0007's steep Bell with each section designed by section(normalised analog, natural frequency
     in Hz, fs). At 12 dB/oct it is today's bell() exactly. Designed as a boost and inverted for a cut."""
     order, analog = _butterworth_bell_analog(gain, q, slope)
