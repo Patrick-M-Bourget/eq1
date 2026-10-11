@@ -1,6 +1,6 @@
 # A steep Bell is the band-pass transform of the Butterworth Low Shelf
 
-Status: Proposed (#19). The maintainer picks a candidate; the Engine work follows the decision.
+Status: Accepted (#19): the Butterworth band shelf, with the steep-Bell test banded by the upper half-Gain point; Detection and Solo keep the 12 dB/oct region at every Slope. Continuity near Nyquist is explored in #162 before the Engine work.
 
 Every Bell is one second-order section today (12 dB/oct), and `band<n>_slope` is stored for a Bell but ignored (ADR 0003). Pro-Q 4 gives the Bell a Slope from 12 to 96 dB/oct. We propose that a Bell of Slope S is the band-pass transform p = Q·(s + 1/s) of the Butterworth Low Shelf of order S / 12: the Low Shelf target eq1 already has, with Gain at Frequency, 0 dB far away, and half the Gain in dB at the two points 1/Q of Frequency apart. At 12 dB/oct this is exactly today's Bell, (s² + s·A/Q + 1) / (s² + s/(A·Q) + 1), because a first-order shelf is fixed by those three values.
 
@@ -52,11 +52,10 @@ The Butterworth candidate extends to fractional Slopes the way the Low Shelf doe
 
 - Sections: Slope / 12 biquads, 8 at 96 dB/oct, within the 16-section limit. To keep a Slope sweep from changing the section count mid-glide, a Bell always takes 8 biquads, the unused ones the identity, as a resonant shelf always takes two.
 - 12 dB/oct is today's Bell exactly, coefficient for coefficient, so Bells in saved sessions and Presets don't change.
-- Until #18 is decided, a Bell's Slope rounds to the nearest 12 dB/oct, as Notch's does.
-- Open for the Engine step:
-  - The hold isn't continuous: as a section's natural frequency crosses 0.95 × Nyquist, its match point jumps from the hold to 0.9 × the hold, and in isolation a section's response jumps by up to 19 dB at one frequency there. A Frequency sweep across it would click. Sliding the match point with the Q's reduction made wide Bells 80–90% off; Band Pass's blend of magnitudes (`docs/dsp/filter-design.md`, "Above 24 dB/oct") is the precedent to try.
-  - The test's tolerances, banded by the upper half-Gain point.
-  - Whether Detection and Solo keep the Bell's region, a second-order Band Pass as wide as Q, at every Slope (proposed: yes).
+- Until #18 is built, a Bell's Slope rounds to the nearest 12 dB/oct, as Notch's does.
+- The hold isn't continuous (explored in #162): as a section's natural frequency crosses 0.95 × Nyquist, its match point jumps from the hold to 0.9 × the hold, and in isolation a section's response jumps by up to 19 dB at one frequency there. A Frequency sweep across it would click. Sliding the match point with the Q's reduction made wide Bells 80–90% off; Band Pass's blend of magnitudes (`docs/dsp/filter-design.md`, "Above 24 dB/oct") is the precedent to try.
+- The steep-Bell test's tolerances are banded by the upper half-Gain point.
+- Detection and Solo keep the Bell's region, a second-order Band Pass as wide as Q, at every Slope.
 - Whether Pro-Q 4's steep Bell is this curve is unknown: no Pro-Q measurement was made. The flat top and fixed half-Gain width are eq1's own choice.
 
 ## Draft for `docs/dsp/filter-design.md`
