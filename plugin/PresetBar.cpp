@@ -18,6 +18,9 @@ namespace size = staple::tokens::size;
 constexpr float namePadding = 14.0f, dotSize = 5.0f, dotGap = staple::tokens::header::modifiedDotGap;
 
 juce::Font nameFont() { return staple::font (size::fs4, staple::Weight::medium); }
+
+// The entry held, or nullptr: how PresetLibrary and the browser take the side's last loaded entry.
+const PresetLibrary::Entry* orNull (const std::optional<PresetLibrary::Entry>& entry) { return entry.has_value() ? &*entry : nullptr; }
 } // namespace
 
 PresetNameButton::PresetNameButton() : juce::Button ("Presets")
@@ -87,7 +90,7 @@ PresetBar::PresetBar (PluginProcessor& p, juce::File userFolder) : processor (p)
         else
         {
             const auto entry = lastLoadedEntry();
-            browser.open (processor.loadedPresetName(), entry.has_value() ? &*entry : nullptr);
+            browser.open (processor.loadedPresetName(), orNull (entry));
         }
     };
     browser.opener = &presets;
@@ -128,7 +131,7 @@ void PresetBar::showLoadedPreset()
     const auto name = processor.loadedPresetName();
     presets.show (name, processor.isLoadedPresetModified());
     const auto entry = lastLoadedEntry();
-    browser.showLoaded (name, entry.has_value() ? &*entry : nullptr);
+    browser.showLoaded (name, orNull (entry));
     if (getIdealWidth() != widthBefore && onIdealWidthChange != nullptr)
         onIdealWidthChange();
 }
@@ -160,7 +163,7 @@ void PresetBar::step (int by)
 {
     const auto listing = library.listing();
     const auto entry = lastLoadedEntry();
-    if (const auto i = PresetLibrary::step (listing, processor.loadedPresetName(), by, entry.has_value() ? &*entry : nullptr))
+    if (const auto i = PresetLibrary::step (listing, processor.loadedPresetName(), by, orNull (entry)))
         load (listing[*i].preset, listing[*i].name, listing[*i].folder);
 }
 
