@@ -16,9 +16,9 @@ namespace
 {
 
 // 24 Bands of every Shape and Stereo Placement, with Auto Gain and Output Pan; every third one a
-// Dynamic Band when dynamic: under Auto and set Threshold, one External, one with a Free Detection
-// Range and one metered.
-Settings scene (bool dynamic)
+// Dynamic Band when dynamic: under Auto and set Threshold, one External and one with a Free Detection
+// Range. Slot meteredSlot is metered: 22 is a Dynamic Band when dynamic, 21 a Bell that never is.
+Settings scene (bool dynamic, int meteredSlot)
 {
     constexpr Shape shapes[] = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
                                  Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
@@ -40,7 +40,7 @@ Settings scene (bool dynamic)
     settings.bands[18].detectionRange = DetectionRange::Free;
     settings.bands[18].detectionLow = 200.0;
     settings.bands[18].detectionHigh = 2000.0;
-    settings.meteredSlot = 22;
+    settings.meteredSlot = meteredSlot;
     settings.autoGain = true;
     settings.outputPan = 0.3;
     return settings;
@@ -49,7 +49,7 @@ Settings scene (bool dynamic)
 // Plays half a second of stereo noise, loud and quiet in turn every 100 ms, through the scene, in
 // the blocks blockAt(n) gives for the nth block, and returns the left output then the right. The
 // Sidechain plays noise too, loud and quiet every 70 ms, and the Detection Level is read after every block.
-std::vector<float> play (double sampleRate, bool dynamic, const std::function<int (int)>& blockAt)
+std::vector<float> play (double sampleRate, bool dynamic, const std::function<int (int)>& blockAt, int meteredSlot = 22)
 {
     const auto length = static_cast<size_t> (0.5 * sampleRate);
     const auto burst = static_cast<size_t> (0.1 * sampleRate);
@@ -69,7 +69,7 @@ std::vector<float> play (double sampleRate, bool dynamic, const std::function<in
 
     Engine engine;
     engine.prepare (sampleRate, 4096, 2);
-    engine.setSettings (scene (dynamic));
+    engine.setSettings (scene (dynamic, meteredSlot));
     for (size_t start = 0, n = 0; start < length; ++n)
     {
         const auto count = std::min (static_cast<size_t> (blockAt (static_cast<int> (n))), length - start);
@@ -146,10 +146,11 @@ TEST_CASE ("With Dynamic Bands, the output is the same sample for sample however
 {
     const double sampleRate = anySampleRate();
     const auto blocks = anyBlocks();
-    const auto reference = play (sampleRate, true, [] (int) { return 512; });
+    const int meteredSlot = GENERATE (22, 21); // a Dynamic Band, or a Band metered only
+    const auto reference = play (sampleRate, true, [] (int) { return 512; }, meteredSlot);
 
-    CAPTURE (sampleRate, blocks.name);
-    REQUIRE (play (sampleRate, true, blocks.at) == reference);
+    CAPTURE (sampleRate, blocks.name, meteredSlot);
+    REQUIRE (play (sampleRate, true, blocks.at, meteredSlot) == reference);
 }
 
 TEST_CASE ("A Dynamic Band's Live Gain follows the same course in time at every sample rate", "[sweep]")
