@@ -614,6 +614,20 @@ TEST_CASE ("The ghost Bell follows the mouse over empty space, rests at 1 kHz wi
     CHECK_FALSE (host.display.ghost().has_value());
 }
 
+namespace
+{
+// The mouse moving over the display at to for 800 ms, so the ghost Bell there has faded fully in.
+void hoverUntilGhostShown (OpenEditor& host, juce::Point<float> to)
+{
+    for (int step = 0; step < 8; ++step)
+    {
+        host.display.mouseMove (host.mouseEvent (to, {}, to));
+        host.settle (100);
+    }
+    host.display.mouseMove (host.mouseEvent (to, {}, to));
+}
+} // namespace
+
 TEST_CASE ("The ghost Bell's curve fades into the display's left edge, but its line does not")
 {
     OpenEditor host;
@@ -622,13 +636,7 @@ TEST_CASE ("The ghost Bell's curve fades into the display's left edge, but its l
     const auto height = static_cast<float> (host.display.getHeight());
     // The ghost with its peak near the top, at x, faded fully in.
     const auto ghostAt = [&] (float x) {
-        const juce::Point<float> to { x, 1.0f };
-        for (int step = 0; step < 8; ++step)
-        {
-            host.display.mouseMove (host.mouseEvent (to, {}, to));
-            host.settle (100);
-        }
-        host.display.mouseMove (host.mouseEvent (to, {}, to));
+        hoverUntilGhostShown (host, { x, 1.0f });
         REQUIRE (host.display.ghost().has_value());
         REQUIRE (host.display.ghost()->x == x);
         return snapshot (host);
@@ -664,12 +672,6 @@ TEST_CASE ("Ghost Bell screenshot: the empty display with the ghost near its lef
     OpenEditor host;
     host.editor->setSize (1200, 760);
     analyzerOff (host);
-    const juce::Point<float> to { 30.0f, 120.0f };
-    for (int step = 0; step < 8; ++step)
-    {
-        host.display.mouseMove (host.mouseEvent (to, {}, to));
-        host.settle (100);
-    }
-    host.display.mouseMove (host.mouseEvent (to, {}, to));
+    hoverUntilGhostShown (host, { 30.0f, 120.0f });
     harness::writeSnapshot (*host.editor, "ghost-near-left-edge");
 }
