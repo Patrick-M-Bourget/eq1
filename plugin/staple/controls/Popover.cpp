@@ -107,8 +107,16 @@ void Popover::close()
 
 void Popover::popIn (float progress)
 {
-    setTransform (popInTransform (getCardBounds().toFloat(), progress));
+    // A component's transform applies in its parent's pixels, so the card's centre is taken there.
+    setTransform (popInTransform (getCardBounds().toFloat() + getPosition().toFloat(), progress));
     setAlpha (progress);
+}
+
+void Popover::moved()
+{
+    // Placed again mid pop-in (as beside an opener after open()): about where it is now.
+    if (isOpen())
+        popIn (opening.value());
 }
 
 void Popover::paint (juce::Graphics& g)

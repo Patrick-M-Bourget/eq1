@@ -5,6 +5,7 @@
 #include "staple/LookAndFeel.h"
 #include "staple/Tokens.h"
 #include "staple/controls/Overlay.h"
+#include "staple/controls/Tween.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -160,4 +161,24 @@ TEST_CASE ("Staple's LookAndFeel draws a stock knob's and slider thumb's shadows
                    return p.getDistanceFrom (thumb.getCentre()) > thumbSize / 2.0f + 1.5f && std::abs (p.y - 50.0f) > 2.5f;
                }) <= 1);
     }
+}
+
+TEST_CASE ("A Tween counts as easing from towards() until it lands, and not after a jump or once it is gone")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    CHECK (staple::Tween::numberEasing() == 0);
+    {
+        staple::Tween a (100, 0.0f), b (100, 0.0f);
+        a.towards (1.0f);
+        b.towards (1.0f);
+        CHECK (staple::Tween::numberEasing() == 2);
+        a.jump (1.0f);
+        CHECK (staple::Tween::numberEasing() == 1);
+        CHECK (harness::settleUntil ([&b] { return b.value() == 1.0f; }));
+        CHECK (staple::Tween::numberEasing() == 0);
+        b.towards (0.0f);
+        b.towards (0.0f); // already heading there
+        CHECK (staple::Tween::numberEasing() == 1);
+    }
+    CHECK (staple::Tween::numberEasing() == 0);
 }

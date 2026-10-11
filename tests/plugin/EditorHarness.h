@@ -3,8 +3,10 @@
 #include "EqDisplay.h"
 #include "display/DisplayGeometry.h"
 #include "PluginProcessor.h"
+#include "staple/controls/Tween.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
 #include <functional>
@@ -125,7 +127,10 @@ inline void useLayout (juce::AudioProcessor& processor,
 // Lets JUCE's timers run for milliseconds: until a timer started now with that interval has fired.
 // JUCE fires timers in the order they fall due, so every timer due sooner has fired by then, however
 // late a busy machine's timer thread runs them (giving up after 10 s). Tests wait with this, never a
-// loop of their own: a wall-clock wait ends before the timers run on a loaded CI runner.
+// loop of their own: a wall-clock wait ends before the timers run on a loaded CI runner. It doesn't
+// see an animation through, though: a repeating timer (a Tween's 60 Hz frames) fires once for all
+// the frames a stalled timer thread missed, so a 180 ms pop-in can still be halfway in after
+// settle (300). Waits on an animation's end go through settleAnimations or settleUntil (below).
 inline void settle (int milliseconds = 60)
 {
     struct Probe final : juce::Timer
@@ -144,6 +149,41 @@ inline void settle (int milliseconds = 60)
         juce::Timer::callPendingTimersSynchronously();
         juce::Thread::sleep (5);
     }
+}
+
+// Lets JUCE's timers run until done() is true, giving up after 10 s; returns done(). What a test
+// checks once an animation or a run of timer callbacks has ended (a popover popped in) waits with
+// this, not with a fixed settle (ms): the deadline only bounds a real failure, so a slow machine
+// doesn't fail the test.
+inline bool settleUntil (const std::function<bool()>& done)
+{
+    const auto giveUp = juce::Time::getMillisecondCounter() + 10000u;
+    while (! done() && juce::Time::getMillisecondCounter() < giveUp)
+        settle (16);
+    return done();
+}
+
+// Lets JUCE's timers run for milliseconds (settle), so what they start has started, then until no
+// Tween is easing (settleUntil): what a test checks where an animation ends (a popover popped in, the
+// Band panel faded or slid open, an A/B switch's letters) waits with this.
+inline void settleAnimations (int milliseconds = 60)
+{
+    settle (milliseconds);
+    if (! settleUntil ([] { return staple::Tween::numberEasing() == 0; }))
+        FAIL ("settleAnimations gave up after 10 s with " << staple::Tween::numberEasing()
+                                                         << " animation(s) still easing");
+}
+
+// Checks that component, just opened, is drawn at the start of its pop-in (staple::popInTransform):
+// smaller than endsAt, where it ends up in its parent's coordinates, about the same centre, 3 px lower.
+inline void checkPopInStart (const juce::Component& component, juce::Rectangle<float> endsAt)
+{
+    using Catch::Matchers::WithinAbs;
+    REQUIRE (component.isTransformed());
+    const auto drawn = endsAt.transformedBy (component.getTransform());
+    CHECK (drawn.getWidth() < endsAt.getWidth());
+    CHECK_THAT (drawn.getCentreX(), WithinAbs (endsAt.getCentreX(), 1.0e-3));
+    CHECK_THAT (drawn.getCentreY(), WithinAbs (endsAt.getCentreY() + 3.0f, 1.0e-3));
 }
 
 // The editor in a window of its own, as a host shows it, so it takes keyboard focus. Keys go through
@@ -185,6 +225,10 @@ struct OpenEditor
 
     // Lets the editor's timers run for milliseconds, so it shows what the parameters hold (harness::settle).
     void settle (int milliseconds = 60) { harness::settle (milliseconds); }
+    // Lets them run until done() is true (harness::settleUntil).
+    bool settleUntil (const std::function<bool()>& done) { return harness::settleUntil (done); }
+    // Lets them run, then until every animation has ended (harness::settleAnimations).
+    void settleAnimations (int milliseconds = 60) { harness::settleAnimations (milliseconds); }
 
     // Where the display draws a Band at frequency with Gain 0: on a log scale from 10 Hz to 30 kHz,
     // halfway down.

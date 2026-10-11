@@ -176,7 +176,7 @@ PresetBrowser::PresetBrowser (const PresetLibrary& l) : library (l)
     setTitle ("Preset browser");
     setVisible (false);
     opening.apply = [this] (float progress) {
-        panel.setTransform (staple::popInTransform (panel.getLocalBounds().toFloat(), progress));
+        panel.setTransform (staple::popInTransform (panel.getBounds().toFloat(), progress));
         setAlpha (progress);
     };
     // Over everything, the overlay layer's tooltip window included.

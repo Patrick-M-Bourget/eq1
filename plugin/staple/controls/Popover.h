@@ -44,6 +44,7 @@ public:
     bool keyPressed (const juce::KeyPress& key) override;
     // Every press in the app, as a global mouse listener, while it is open.
     void mouseDown (const juce::MouseEvent& event) override;
+    void moved() override;
 
 private:
     // The pop-in's progress, 0 to 1.

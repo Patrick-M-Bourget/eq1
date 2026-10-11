@@ -14,6 +14,7 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py auto-threshold --spreads 0.1 0.2 0.3 --falls 1 1.25 2
     python3 tools/filter-lab/filterlab.py high-cut --slopes 15 21 87 --target blend
     python3 tools/filter-lab/filterlab.py slopes
+    python3 tools/filter-lab/filterlab.py slope-gaps seams shelves rescale --jobs 6
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report(). A new command registers itself with @command in its own
@@ -22,7 +23,9 @@ section, so the entry point at the bottom never changes.
 
 import argparse
 import cmath
+import functools
 import math
+from collections import namedtuple
 from dataclasses import dataclass
 
 PI = math.pi
@@ -649,35 +652,37 @@ def _monic_at_dc(roots):
     return 0.0, -1 / r.real, 1.0
 
 
+def _morph_low_shelf_unscaled(nu, dc_gain, q):
+    """_morph_low_shelf_analog's sections before the corner rescale."""
+    out, shares = [], []
+    for a, share in _morph_prototype(nu, q):
+        rs = _roots(a)
+        if share is None:
+            ws = [1.0] * len(rs)
+        elif len(rs) == 1:
+            ws = [share]
+        else:  # two real poles: the one nearer the origin is order N's real pole
+            ws = [1.0, share] if abs(rs[0]) < abs(rs[1]) else [share, 1.0]
+        if rs:
+            out.append(rs)
+            shares.append(ws)
+    total = sum(w * (2 if r.imag else 1) for rs, ws in zip(out, shares) for r, w in zip(rs, ws))
+    rz = dc_gain ** (1 / (2 * total))
+    sections = [Analog(*_monic_at_dc([r * rz ** w for r, w in zip(rs, ws)]),
+                       *_monic_at_dc([r / rz ** w for r, w in zip(rs, ws)])) for rs, ws in zip(out, shares)]
+    first = sections[0]
+    sections[0] = Analog(first.n2 * dc_gain, first.n1 * dc_gain, first.n0 * dc_gain, first.d2, first.d1, first.d0)
+    return sections
+
+
 def _morph_low_shelf_analog(nu, dc_gain, q):
     """Low Shelf of fractional order: each prototype pole r gives a zero at r x rz^w and a pole at r / rz^w,
     w its share (1 for a whole root), with rz^(2 sum w) = dc_gain, so a root coming in from infinity
     brings its step in gradually. Rescaled so it reaches half its Gain in dB at s = 1, at Q 0.71."""
-    def build(q_):
-        out, shares = [], []
-        for a, share in _morph_prototype(nu, q_):
-            rs = _roots(a)
-            if share is None:
-                ws = [1.0] * len(rs)
-            elif len(rs) == 1:
-                ws = [share]
-            else:  # two real poles: the one nearer the origin is order N's real pole
-                ws = [1.0, share] if abs(rs[0]) < abs(rs[1]) else [share, 1.0]
-            if rs:
-                out.append(rs)
-                shares.append(ws)
-        total = sum(w * (2 if r.imag else 1) for rs, ws in zip(out, shares) for r, w in zip(rs, ws))
-        rz = dc_gain ** (1 / (2 * total))
-        sections = [Analog(*_monic_at_dc([r * rz ** w for r, w in zip(rs, ws)]),
-                           *_monic_at_dc([r / rz ** w for r, w in zip(rs, ws)])) for rs, ws in zip(out, shares)]
-        first = sections[0]
-        sections[0] = Analog(first.n2 * dc_gain, first.n1 * dc_gain, first.n0 * dc_gain, first.d2, first.d1, first.d0)
-        return sections
-
-    sections = build(q)
+    sections = _morph_low_shelf_unscaled(nu, dc_gain, q)
     if nu == math.floor(nu) or dc_gain == 1:
         return sections
-    plain, half = build(math.sqrt(0.5)), 10 * math.log10(dc_gain)
+    plain, half = _morph_low_shelf_unscaled(nu, dc_gain, math.sqrt(0.5)), 10 * math.log10(dc_gain)
     sign = 1 if dc_gain > 1 else -1
     c = _crossing(lambda x: sign * (_analog_db(plain, x, 1) - half))
     return [_scaled(a, c) for a in sections]
@@ -798,7 +803,8 @@ def _order(shape, slope):
 
 def fractional_design(shape, fs, frequency, gain, q, slope):
     """The morphing cascade for shape at slope in dB/oct: (digital sections, its analog response in dB,
-    which is the partial target). A Cut or Band Pass below 6 dB/oct grows in from passing unchanged."""
+    which is the partial target). A Cut or Band Pass below 6 dB/oct grows in from passing unchanged.
+    slope-gaps' "before"; the fractional reports design with continuous_design."""
     nu = _order(shape, slope)
     if nu == 0:
         return [], lambda f: 0.0
@@ -831,7 +837,7 @@ def fractional_target(target, shape, fs, frequency, gain, q, slope):
     nu = _order(shape, slope)
     n, t = math.floor(nu), nu - math.floor(nu)
     if target == "partial":
-        return fractional_design(shape, fs, frequency, gain, q, slope)[1]
+        return continuous_design(shape, fs, frequency, gain, q, slope)[1]
     if target == "blend":
         lo = _whole(shape, fs, frequency, gain, q, n)
         hi = _whole(shape, fs, frequency, gain, q, n + 1) if t else lo
@@ -852,9 +858,9 @@ def fractional_target(target, shape, fs, frequency, gain, q, slope):
 
 def fractional_shape(shape, target):
     """A shape for report() and report_cut(): its order argument is the Slope in dB/oct, its design the
-    morphing cascade, and its target the candidate."""
+    morphing cascade (continuous_design), and its target the candidate."""
     def design(fs, frequency, gain, q, slope):
-        sections, _ = fractional_design(shape, fs, frequency, gain, q, slope)
+        sections, _ = continuous_design(shape, fs, frequency, gain, q, slope)
         return sections, fractional_target(target, shape, fs, frequency, gain, q, slope)
     return design
 
@@ -943,6 +949,478 @@ def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqr
                         part = fractional_target("partial", shape, fs, frequency, gain, q, slope)
                         vs = max([vs] + [abs(part(f) - v) for v, f in zip(values, grid) if max(v, part(f)) > -60])
             print(f"{shape:>10} {target:>8}  {whole:7.0e} {steeper:7.3f} {bump:6.3f} {vs:10.2f}")
+
+
+# --- Fractional Slope gaps (ADR 0006): seams, resonant and High Shelf tolerances, the corner rescale -
+# The continuous design: fractional_design with these changes. Each touches only the partial section, a
+# Shelf's resonant split or Band Pass, and whole orders stay exactly as they are (within 1e-13 dB).
+#   - High Cut: the partial section, real poles or a pair, is one matched biquad with exact poles. While
+#     its poles are real, its match point aims at a blend of the analog and two first-order sections'
+#     response, weighted by how close its poles are (_closeness: 0 as one comes in from infinity, 1 where
+#     they meet). No seam where they meet, and none as the pole comes in.
+#   - Shelves: a section's resonant split reduces its zeros' Q to what the same section has at Q 2 (for
+#     whole orders, exactly the existing (2 / Q)^(1 / pairs)); the partial section's split is weighted by
+#     t^PARTIAL_SPLIT_POWER, and while its roots are real it is matched as the High Cut's is.
+#   - Band Pass: a pair's upper section gets the transform's gain, |p|^2 / Q^2, in the target too; the
+#     steep design comes in over 24 to 30 dB/oct instead of switching on above 24.
+# Low Cut and Notch keep fractional_design's design. Band Pass and Notch keep one seam each where the
+# partial section's poles meet: the prototype's real poles and its pair are grouped into different
+# sections there. The Engine crossfades across it, as it does for every Slope change today.
+# The corner rescale is CORNER_NEWTON_STEPS Newton steps in ln(frequency), from the whole-order corner.
+
+PARTIAL_SPLIT_POWER = 3
+CORNER_NEWTON_STEPS = 3
+
+
+def _level_and_slope(sections, x):
+    """The analog cascade's level at s = jx in dB, and its derivative in dB per unit of ln x."""
+    s, level, slope = 1j * x, 0.0, 0.0
+    for a in sections:
+        n, d = a.n2 * s * s + a.n1 * s + a.n0, a.d2 * s * s + a.d1 * s + a.d0
+        level += 20 * math.log10(abs(n / d))
+        slope += 20 / math.log(10) * (s * (2 * a.n2 * s + a.n1) / n - s * (2 * a.d2 * s + a.d1) / d).real
+    return level, slope
+
+
+def newton_corner(sections, level_db, steps=CORNER_NEWTON_STEPS):
+    """The x where the cascade is at level_db, by a fixed number of Newton steps in ln x from x = 1 (where a
+    whole order has it)."""
+    y = 0.0
+    for _ in range(steps):
+        level, slope = _level_and_slope(sections, math.exp(y))
+        y -= (level - level_db) / slope
+    return math.exp(y)
+
+
+def _corner_problem(shape, nu, gain):
+    """The unscaled Q 0.71 cascade whose corner the rescale finds, and the level it is found at."""
+    if shape in SHELVES:
+        g = 10 ** (gain / 20)
+        return _morph_low_shelf_unscaled(nu, g, math.sqrt(0.5)), 10 * math.log10(g)
+    return [a for a, _ in _morph_prototype(nu, math.sqrt(0.5))], -10 * math.log10(2)
+
+
+def _real_pairs(a: Analog):
+    """A second-order section with real zeros (if any) and real poles as two first-order sections, zeros
+    and poles paired by size; its gain goes with the first."""
+    def real_roots(c2, c1, c0):
+        r = math.sqrt(max(c1 * c1 - 4 * c2 * c0, 0))
+        return sorted([(-c1 + r) / (2 * c2), (-c1 - r) / (2 * c2)], key=abs)
+    poles = real_roots(a.d2, a.d1, a.d0)
+    zeros = real_roots(a.n2, a.n1, a.n0) if a.n2 else [None, None]
+    k = a.n0 / a.d0
+    out = []
+    for z, p in zip(zeros, poles):
+        out.append(Analog(0, -k / z if z else 0, k, 0, -1 / p, 1))
+        k = 1
+    return out
+
+
+def _closeness(a: Analog):
+    """For real poles, 1 - (1 - near / far)^2: 1 where they meet, 0 as one comes in from infinity, and
+    smooth where they meet (near / far alone moves as the square root of the distance). 1 for a pair."""
+    disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
+    if disc < 0:
+        return 1.0
+    r = math.sqrt(disc)
+    return 1 - (2 * r / (a.d1 + r)) ** 2
+
+
+def _partial_biquad(a: Analog, analog_at_match: Analog, frequency, fs, match_hz):
+    """One matched biquad with a's poles; at DC, Nyquist and match_hz it meets analog_at_match's
+    magnitude; at match_hz, times (while a's poles are real) two first-order sections' error there,
+    weighted by 1 - _closeness(a)."""
+    x = match_hz / frequency
+    at_match = analog_at_match.squared(x)
+    beta = _closeness(a)
+    if beta < 1:
+        w = 2 * PI * match_hz / fs
+        first, second = (match_section(s, frequency, fs) for s in _real_pairs(a))
+        at_match *= (abs(first.response(w) * second.response(w)) ** 2 / a.squared(x)) ** (1 - beta)
+    return match_magnitudes(a, frequency, fs, match_hz, analog_at_match.squared(0), at_match,
+                            analog_at_match.squared(fs / 2 / frequency))
+
+
+def _continuous_high_cut(fs, frequency, q, nu):
+    proto = morph_low_pass(nu, q)
+    n, t = math.floor(nu), nu - math.floor(nu)
+    sections, target = _fractional_cut("high-cut", fs, frequency, q, nu)
+    if n % 2 and t > 0:
+        a = proto[-1]
+        w0 = math.sqrt(a.d0 / a.d2)
+        damped = frequency * w0 * math.sqrt(max(1 - a.d1 * a.d1 / (4 * a.d0 * a.d2), 0.01))
+        sections[-1] = _partial_biquad(a, a, frequency, fs, min(damped, fs / 4))
+    return sections, target
+
+
+def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial):
+    """_resonant_split, with the zeros' Q reduced toward reference_q (the section's at Q 2) and the split
+    scaled by weight; a partial section with real roots is matched by _partial_biquad."""
+    natural = math.sqrt(a.n0 / a.n2)
+    zeros_q = math.sqrt(a.n0 * a.n2) / a.n1
+    x = natural * frequency / (fs / 2)
+    t = math.log(SPLIT_NONE / x) / math.log(SPLIT_NONE / SPLIT_FULL)
+    t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
+    t *= weight * (_closeness(a) if partial else 1.0)
+    split_q = zeros_q * min(reference_q / zeros_q, 1.0) ** t
+    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs)
+    split = Analog(a.n2, math.sqrt(a.n0 * a.n2) / split_q, a.n0, a.d2, a.d1, a.d0)
+    poles = _partial_biquad(a, split, frequency, fs, frequency) if partial else match_section(split, frequency, fs)
+    if split_q >= zeros_q:
+        resonance.b0, resonance.b1, resonance.b2 = 1, resonance.a1, resonance.a2
+        return [poles, resonance]
+    return [poles, inverse(resonance)]
+
+
+def _continuous_shelf(shape, fs, frequency, gain, q, nu):
+    n, t = math.floor(nu), nu - math.floor(nu)
+    g = 10 ** (abs(gain) / 20)
+    boost = _morph_low_shelf_analog(nu, g, q)
+    reference = _morph_low_shelf_analog(nu, g, min(q, RESONANT_SHELF_Q))
+    if shape != "low-shelf":
+        boost, reference = list(map(_mirrored_cut, boost)), list(map(_mirrored_cut, reference))
+    invert = gain < 0 if shape == "low-shelf" else gain >= 0
+    sections = []
+    for i, (s, r) in enumerate(zip(boost, reference)):
+        if s.d2 == 0:
+            sections.append(inverse(match_section(s, frequency, fs)) if invert else match_section(s, frequency, fs))
+            continue
+        partial = n % 2 == 1 and t > 0 and i == len(boost) - 1
+        poles, zeros = _split_toward(s, math.sqrt(r.n0 * r.n2) / r.n1, frequency, fs, q,
+                                     t ** PARTIAL_SPLIT_POWER if partial else 1.0, partial)
+        sections += [inverse(poles), inverse(zeros)] if invert else [zeros, poles]
+    _, target = _fractional_shelf(shape, fs, frequency, gain, q, nu)
+    if shape == "tilt-shelf":
+        k = 10 ** (-gain / 40)
+        first = sections[0]
+        sections[0] = Biquad(first.b0 * k, first.b1 * k, first.b2 * k, first.a1, first.a2)
+    return sections, target
+
+
+def _lerp_biquad(a: Biquad, b: Biquad, t):
+    return Biquad(*(_lerp(x, y, t) for x, y in zip((a.b0, a.b1, a.b2, a.a1, a.a2), (b.b0, b.b1, b.b2, b.a1, b.a2))))
+
+
+def _continuous_band_pass(fs, frequency, q, nu):
+    """_fractional_band_pass with two changes:
+    - a pair's upper section has the gain the transform gives it, |p|^2 / Q^2. fractional_design's 1 / Q^2
+      is right only for Butterworth's |p| = 1: its target's passband fell by up to 7.7 dB, and jumped by
+      that where the partial section's poles meet;
+    - the steep design comes in over orders 4 to 5: each held upper section's coefficients and the gain
+      correction move linearly from the plain design (stable throughout, as a biquad's stable
+      coefficients form a convex set)."""
+    steepness = min(max(nu - (STEEP_BAND_PASS_ORDER - 1), 0.0), 1.0)
+    hold = BAND_PASS_HOLD * fs / 2
+
+    def lower_upper(low, high, upper_gain):
+        """A Low Cut section for the quadratic low, a High Cut section for high, as band_pass designs them."""
+        lower, w_low = normalised(Analog(1, 0, 0, 1, *low))
+        upper, w_high = normalised(Analog(0, 0, upper_gain, 1, *high))
+        reference = frequency * w_high
+        damped = math.sqrt(max(1 - upper.d1 * upper.d1 / 4, 0.01))
+        match = min(reference * min(damped, 0.9), fs / 4)
+        plain = match_section(upper, reference, fs, match_hz=match)
+        if steepness and reference > hold:
+            plain = _lerp_biquad(plain, _held_upper_section(upper, reference, hold, match, fs), steepness)
+        return [match_high_pass(lower, frequency * w_low, fs, and_nyquist=True), plain]
+
+    analog, sections = [], []
+    for a in morph_low_pass(nu, math.sqrt(0.5)):
+        roots = _roots(a)
+        if roots[0].imag:
+            p = roots[0]
+            low, high = sorted([(-2 * x.real, abs(x) ** 2) for x in _reciprocal_roots(p / q)], key=lambda d: d[1])
+            gain = abs(p) ** 2 / (q * q)
+            analog += [Analog(1, 0, 0, 1, *low), Analog(0, 0, gain, 1, *high)]
+            sections += lower_upper(low, high, gain)
+            continue
+        ds = [-p.real / q for p in roots]
+        singles = [Analog(0, d, 0, 1, d, 1) for d in ds]
+        analog += singles
+        sections += [match_section(s, frequency, fs) for s in singles]
+    if steepness:
+        at = min(frequency, hold)
+        k = 10 ** (steepness * (_analog_db(analog, at, frequency) - cascade_db(sections, at, fs)) / 20)
+        s = sections[0]
+        s.b0, s.b1, s.b2 = s.b0 * k, s.b1 * k, s.b2 * k
+    return sections, lambda f: _analog_db(analog, f, frequency)
+
+
+def continuous_design(shape, fs, frequency, gain, q, slope):
+    """fractional_design with the changes above, and its section count."""
+    nu = _order(shape, slope)
+    if nu == 0:
+        return [], lambda f: 0.0
+    if shape in SHELVES:
+        return _continuous_shelf(shape, fs, frequency, gain, q, nu)
+    if shape == "band-pass":
+        return _continuous_band_pass(fs, frequency, q, nu)
+    if shape == "high-cut":
+        return _continuous_high_cut(fs, frequency, q, nu)
+    return fractional_design(shape, fs, frequency, gain, q, slope)
+
+
+GAP_DESIGNS = {"before": fractional_design, "after": continuous_design}
+# Where a seam is worst: its excess over each of SEAM_STEPS, and the place.
+Seam = namedtuple("Seam", "excesses slope fs frequency gain q")
+# Where a Shelf is furthest off: its error as a share of the span and in dB, and the place.
+ShelfError = namedtuple("ShelfError", "share error slope fs frequency gain")
+SEAM_STEPS = (0.01, 0.001, 0.0001, 0.00001)  # dB/oct: the Slope changes the seams report looks at
+
+
+SEAM_SCAN = 0.1  # dB/oct: the step of the scan that looks for seams away from the places _seam_slopes names
+SEAM_QS = (0.025, 0.1, 0.71, 2, 3, 10, 40)  # the Q parameter's whole range, 0.025 to 40
+
+
+def _lowest_slope(shape):
+    return 0 if shape in ("low-cut", "high-cut", "band-pass") else (12 if shape == "notch" else 6)
+
+
+def _seam_slopes(shape, q):
+    """(kind, Slope, side): a pair of Slopes a step apart, starting side steps from Slope, at each place a
+    seam can be: each whole order (either side), each place a partial section's poles meet (straddled),
+    and 24 and 30 dB/oct (Band Pass's steep design)."""
+    unit = 12 if shape == "notch" else 6
+    lowest = _lowest_slope(shape)
+    out = []
+    for n in range(lowest // unit, 96 // unit + 1):
+        whole = unit * n
+        out += [("whole" if whole else "from 0", whole, side) for side in (-1, 0)
+                if lowest < whole + side or (side == 0 and whole < 96)]
+        if n % 2 and whole < 96:
+            q_ = q if shape in SHELVES or shape in ("low-cut", "high-cut") else math.sqrt(0.5)
+            pair = [a for a in _butterworth_sections(n + 1, q_) if a.d2][-1]
+            out.append(("poles meet", unit * (n + _critical_share(pair.d1)), -0.5))
+    if shape == "band-pass":
+        out += [("24, 30", s, side) for s in (24, 30) for side in (-1, 0)]
+    return out
+
+
+def _seam_grid(shape):
+    gains = (-18, -3, 3, 18) if shape in SHELVES else (0,)
+    return [(fs, frequency, gain, q) for fs in (44100, 48000, 96000) for frequency in (20, 200, 2000, 9000, 15000, 20000)
+            if frequency <= 0.91 * fs / 2 for gain in gains for q in SEAM_QS]
+
+
+def _seam_job(job):
+    """The worst seams for one (design, shape, fs, Frequency, Gain, Q): per kind, a Seam, the excess being
+    how far the response's change over the step strays from the analog target's own change, in dB, where
+    either response is above -60 dB. A seam's excess stays as the step shrinks; a continuous design's
+    shrinks with it.
+
+    Besides the places _seam_slopes names, the kind "elsewhere" scans every Slope from the Shape's lowest
+    to 96 dB/oct, SEAM_SCAN apart, leaving out the scan steps that touch a named place. The step whose
+    excess stands out most from its neighbours' (a jump adds to one step, a steep curve to all of them)
+    is halved, keeping the half with the larger excess, down to the smallest of SEAM_STEPS; that place
+    is then measured over each of SEAM_STEPS, as the named places are."""
+    design, shape, fs, frequency, gain, q, points = job
+    grid = [10 * (fs / 2 / 10) ** (i / points) for i in range(points + 1)]
+    responses = {}
+
+    def response(slope):
+        if slope not in responses:
+            sections, target = GAP_DESIGNS[design](shape, fs, frequency, gain, q, slope)
+            responses[slope] = [(cascade_db(sections, f, fs), target(f)) for f in grid]
+        return responses[slope]
+
+    def excess(a, b):
+        worst = 0.0
+        for (da, ta), (db, tb) in zip(response(a), response(b)):
+            if max(da, db) >= -60:
+                worst = max(worst, abs(db - da - (tb - ta)))
+        return worst
+
+    def over_steps(slope, side):
+        starts = [max(slope + side * step, 0) for step in SEAM_STEPS]
+        return tuple(excess(start, start + step) for start, step in zip(starts, SEAM_STEPS))
+
+    worst = {}
+    places = _seam_slopes(shape, q)
+    for kind, slope, side in places:
+        _keep_worst(worst, kind, Seam(over_steps(slope, side), slope, fs, frequency, gain, q))
+
+    lowest = _lowest_slope(shape)
+    scan = [lowest + i * SEAM_SCAN for i in range(round((96 - lowest) / SEAM_SCAN) + 1)]
+    steps = [excess(a, b) for a, b in zip(scan, scan[1:])]
+    named = [slope for _, slope, _ in places]
+    standing_out = []
+    for i, e in enumerate(steps):
+        if any(scan[i] - 1e-9 <= slope <= scan[i + 1] + 1e-9 for slope in named):
+            continue
+        neighbours = [steps[k] for k in (i - 1, i + 1) if 0 <= k < len(steps)]
+        standing_out.append((e - max(neighbours), i))
+    _, i = max(standing_out)
+    lo, hi = scan[i], scan[i + 1]
+    while hi - lo > SEAM_STEPS[-1]:
+        mid = 0.5 * (lo + hi)
+        lo, hi = (lo, mid) if excess(lo, mid) >= excess(mid, hi) else (mid, hi)
+    place = 0.5 * (lo + hi)
+    _keep_worst(worst, "elsewhere", Seam(over_steps(place, -0.5), place, fs, frequency, gain, q))
+    return shape, design, worst
+
+
+def _keep_worst(worst, key, value: Seam):
+    """worst[key] = each step's largest excess, at the place of the smallest step's."""
+    old = worst.get(key)
+    if old is None:
+        worst[key] = value
+        return
+    largest = tuple(map(max, old.excesses, value.excesses))
+    worst[key] = (value if value.excesses[-1] > old.excesses[-1] else old)._replace(excesses=largest)
+
+
+def _parallel(function, jobs, workers):
+    if workers <= 1:
+        return list(map(function, jobs))
+    from concurrent.futures import ProcessPoolExecutor
+    with ProcessPoolExecutor(workers) as pool:
+        return list(pool.map(function, jobs, chunksize=1))
+
+
+def _seam_place(seam: Seam):
+    return f"Slope={seam.slope:.3f} fs={seam.fs} F={seam.frequency} G={seam.gain:g} Q={seam.q:g}"
+
+
+def report_seams(shapes, workers, points=100):
+    """Seams, before and after: per Shape and kind of place, the worst excess over each of SEAM_STEPS, and
+    the place whose excess over the smallest step is worst."""
+    jobs = [(design, shape, *point, points) for shape in shapes for design in GAP_DESIGNS for point in _seam_grid(shape)]
+    worst = {}
+    for shape, design, found in _parallel(_seam_job, jobs, workers):
+        for kind, value in found.items():
+            _keep_worst(worst, (shape, kind, design), value)
+    steps = " ".join(f"{s:>6g}" for s in SEAM_STEPS)
+    print("seams: how far the response's change over a step in Slope (dB/oct) strays from the analog")
+    print("target's own change, dB, worst over the grid. A seam stays as the step shrinks; 'after' is")
+    print("a seam if its last step keeps over half the one before and over 0.01 dB. Each column is its")
+    print("own worst case; the place shown is the smallest step's.")
+    print(f"{'shape':>10} {'kind':>10}  before {steps}   after {steps}  verdict   worst after (before)")
+    for shape in shapes:
+        for kind in dict.fromkeys(k for s, k, _ in worst if s == shape):
+            b, a = worst[(shape, kind, "before")], worst[(shape, kind, "after")]
+            seam = a.excesses[-1] > 0.01 and a.excesses[-1] > 0.5 * a.excesses[-2]
+            print(f"{shape:>10} {kind:>10}  {'':6} " + " ".join(f"{e:6.3f}" for e in b.excesses) +
+                  f"   {'':5} " + " ".join(f"{e:6.3f}" for e in a.excesses) +
+                  f"  {'seam' if seam else 'none':7}   {_seam_place(a)} ({_seam_place(b)})")
+
+
+SHELF_LIMITS = {"<=0.45": (0.12, 0.12), "<=0.73": (0.12, 0.15), "<=0.91": (0.45, 0.45)}  # (Q up to 2, above 2)
+
+
+def _gap_slopes(shape, per_order=(0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 0.95)):
+    """Slopes between whole orders, from the Shape's lowest whole order to 96 dB/oct."""
+    unit = 12 if shape == "notch" else 6
+    return [unit * (n + t) for n in range(1, 96 // unit) for t in per_order]
+
+
+def _shelf_job(job):
+    """report()'s worst share of the span per position band, for one (design, shape, fs, Frequency, Q)."""
+    design, shape, fs, frequency, q, slopes, points = job
+    worst = {}
+    for gain in (-30, -18, -12, -6, -3, 3, 12, 18, 30):
+        for slope in slopes:
+            sections, target = GAP_DESIGNS[design](shape, fs, frequency, gain, q, slope)
+            error, span, lowest = 0.0, abs(gain), target(10)
+            for i in range(points + 1):
+                f = 10 * (fs / 2 / 10) ** (i / points)
+                t = target(f)
+                span = max(span, abs(t - lowest))
+                error = max(error, abs(cascade_db(sections, f, fs) - t))
+            share = error / span
+            key = position_band(frequency, fs)
+            if key not in worst or share > worst[key].share:
+                worst[key] = ShelfError(share, error, slope, fs, frequency, gain)
+    return design, shape, q, worst
+
+
+def report_shelves(shapes, qs, workers, slopes=None, points=200):
+    """Shelf tolerances, before and after: the worst error as a share of the span (as report() and the
+    filter-design doc's measured column), per Shape, position band and Q, over every Slope _gap_slopes
+    gives, Gain +/-3 to +/-30 and Frequency 20 Hz to 20 kHz at 44.1, 48 and 96 kHz."""
+    jobs = [(design, shape, fs, frequency, q, slopes or _gap_slopes(shape), points)
+            for shape in shapes for design in GAP_DESIGNS for q in qs for fs in (44100, 48000, 96000)
+            for frequency in (20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000) if frequency <= 0.91 * fs / 2]
+    worst = {}
+    for design, shape, q, found in _parallel(_shelf_job, jobs, workers):
+        for band, value in found.items():
+            key = (shape, band, q, design)
+            if key not in worst or value.share > worst[key].share:
+                worst[key] = value
+    print("shelf tolerances: worst error as a share of the span, over the fractional Slopes")
+    print(f"{'shape':>10} {'band':>7} {'Q':>5}  {'before':>6} {'after':>6} {'limit':>5}   worst after (before)")
+    for shape, band, q, design in sorted(worst):
+        if design != "after":
+            continue
+        b, a = worst[(shape, band, q, "before")], worst[(shape, band, q, "after")]
+        limit = SHELF_LIMITS[band][q > RESONANT_SHELF_Q]
+        mark = " over" if a.share > limit else ""
+        place = lambda e: f"Slope={e.slope:g} fs={e.fs} F={e.frequency} G={e.gain}"
+        print(f"{shape:>10} {band:>7} {q:>5g}  {b.share:6.1%} {a.share:6.1%} {limit:5.0%}{mark:5}"
+              f" {place(a)} ({place(b)})")
+
+
+def report_rescale(steps=(1, 2, 3, 4), gains=(-30, -18, -6, -1, -0.1, 0.1, 1, 6, 18, 30)):
+    """The corner rescale by newton_corner against the lab's bisection, over every Slope 0.01 dB/oct apart
+    (Shelves: every 0.07 dB/oct, at each of gains): the worst corner error in cents; and at that worst
+    case, the largest difference it makes to the analog response, in dB, at Q 0.71 and at Q 40."""
+    print("corner rescale: Newton steps in ln(frequency) from the whole-order corner, against bisection")
+    print(f"{'shapes':>7} {'steps':>5}  {'cents':>8} {'dB, Q 0.71':>10} {'dB, Q 40':>9}   worst at")
+    grid = [2 ** (i / 48) for i in range(-48 * 8, 48 * 8 + 1)]
+    for kind, slopes, gs in (("cuts", [i / 100 for i in range(601, 9600)], (0.0,)),
+                             ("shelves", [i / 100 for i in range(601, 9600, 7)], gains)):
+        problems = []
+        for slope in slopes:
+            nu = slope / 6
+            if nu == math.floor(nu):
+                continue
+            for gain in gs:
+                sections, level = _corner_problem("low-shelf" if gain else "high-cut", nu, gain)
+                sign = -1 if gain < 0 else 1  # the level falls through the corner, but a cut Shelf's rises
+                problems.append((slope, gain, sections, level,
+                                 _crossing(lambda x: sign * (_analog_db(sections, x, 1) - level))))
+        for n in steps:
+            cents, slope, gain, exact, c = max(
+                (abs(1200 * math.log2(max(newton_corner(s, lv, n), 1e-30) / e)), sl, g, e, newton_corner(s, lv, n))
+                for sl, g, s, lv, e in problems)
+            effect = []
+            for q in (math.sqrt(0.5), 40.0):
+                if gain:
+                    sections = _morph_low_shelf_unscaled(slope / 6, 10 ** (gain / 20), q)
+                else:
+                    sections = [a for a, _ in _morph_prototype(slope / 6, q)]
+                levels = [(_analog_db(sections, x * exact, 1), _analog_db(sections, x * c, 1)) for x in grid] if c > 0 else []
+                effect.append(max((abs(a - b) for a, b in levels if max(a, b) > -60), default=math.inf))
+            print(f"{kind:>7} {n:>5}  {cents:8.2g} {effect[0]:10.2g} {effect[1]:9.2g}   Slope={slope:g}"
+                  + (f" G={gain:g}" if gain else ""))
+
+
+GAPS = ("seams", "shelves", "rescale")
+
+
+def gap_options(parser):
+    def gap(name):
+        if name not in GAPS:
+            raise argparse.ArgumentTypeError(f"choose from {', '.join(GAPS)}")
+        return name
+    parser.add_argument("gaps", nargs="*", type=gap, metavar="gap", help=f"{', '.join(GAPS)} (default: all)")
+    parser.add_argument("--shapes", nargs="+", choices=FRACTIONAL_SHAPES, help="seams: default all; shelves: default low-shelf high-shelf")
+    parser.add_argument("--q", type=float, nargs="+", default=[0.71, 2, 2.25, 2.5, 3, 4, 10, 20, 40], help="shelves")
+    parser.add_argument("--slopes", type=float, nargs="+", help="shelves: default 8 between each pair of whole orders")
+    parser.add_argument("--jobs", type=int, default=4, help="worker processes")
+
+
+@command("slope-gaps", options=gap_options)
+def run_slope_gaps(args):
+    """ADR 0006's gaps, before (fractional_design) and after (continuous_design)."""
+    gaps = args.gaps or GAPS
+    if "seams" in gaps:
+        report_seams(args.shapes or FRACTIONAL_SHAPES, args.jobs)
+        print()
+    if "shelves" in gaps:
+        report_shelves(args.shapes or ("low-shelf", "high-shelf"), args.q, args.jobs, args.slopes)
+        print()
+    if "rescale" in gaps:
+        report_rescale()
 
 
 # --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------
@@ -1131,21 +1609,73 @@ BELL_HOLD = 0.95  # where a steep Bell's sections are held, as a share of Nyquis
 BELL_HOLD_MATCH = 0.9  # a held section's match point, as a share of the hold
 
 
-def _band_shelf_section(a: Analog, frequency, fs):
-    """One second-order section of a steep Bell, matched at its poles' natural frequency. Above the hold
-    its poles are placed at the hold with the Q that makes them as loud there, relative to DC, as the
-    analog poles are (never higher), and its zeros fit the analog section at DC, BELL_HOLD_MATCH x the
-    hold and Nyquist. Not continuous as the natural frequency crosses the hold (see ADR 0007)."""
-    b, w0 = normalised(a)
-    reference, hold = frequency * w0, BELL_HOLD * fs / 2
-    if reference <= hold:
-        return match_section(b, reference, fs)
+def _held_poles(b: Analog, reference, hold):
+    """A held section's poles: at the hold, with the Q that makes them as loud there, relative to DC, as
+    the analog poles are (never higher). Returns (held poles, held Q, analog Q)."""
     poles = Analog(0, 0, 1, 1, b.d1, 1)
     held_q = min(1 / b.d1, math.sqrt(poles.squared(hold / reference) / poles.squared(0)))
-    match = BELL_HOLD_MATCH * hold
-    squared = lambda f: b.squared(f / reference)
-    return match_magnitudes(Analog(0, 0, 1, 1, 1 / held_q, 1), hold, fs, match,
-                            squared(0), squared(match), squared(fs / 2))
+    return Analog(0, 0, 1, 1, 1 / held_q, 1), held_q, 1 / b.d1
+
+
+BELL_SLIDE = 2 ** (1 / 24)  # the match point slides to BELL_HOLD_MATCH x the hold as the natural frequency rises this far above it
+
+
+def _slid_match(reference, hold):
+    """The natural frequency up to the hold; above it, the hold sliding (in log frequency, smoothly) to
+    BELL_HOLD_MATCH x the hold as the natural frequency rises BELL_SLIDE above it."""
+    if reference <= hold:
+        return reference
+    x = _smoothstep(math.log(reference / hold) / math.log(BELL_SLIDE))
+    return hold * BELL_HOLD_MATCH ** x
+
+
+def _held_match(reference, hold):
+    """The natural frequency up to the hold, BELL_HOLD_MATCH x the hold above it: it jumps there."""
+    return reference if reference <= hold else BELL_HOLD_MATCH * hold
+
+
+def _clamped_match(reference, hold):
+    """The natural frequency, never above BELL_HOLD_MATCH x the hold."""
+    return min(reference, BELL_HOLD_MATCH * hold)
+
+
+def _analog_magnitude(b: Analog, reference, hold, held_q, analog_q):
+    """The analog section's squared magnitude, at f in Hz."""
+    return lambda f: b.squared(f / reference)
+
+
+def _blended_magnitude(b: Analog, reference, hold, held_q, analog_q):
+    """Band Pass's blend of magnitudes (filter-design doc, "Above 24 dB/oct"): the analog section's where
+    the Q isn't lowered and, as it is lowered, more of the held section's own: the analog section moved
+    to the hold, its zeros' and poles' damping both scaled by held Q / analog Q, weighted by
+    sqrt(1 - held Q / analog Q)."""
+    own = Analog(1, b.n1 * analog_q / held_q, b.n0, 1, 1 / held_q, 1)
+    blend = math.sqrt(1 - held_q / analog_q)
+    return lambda f: b.squared(f / reference) ** (1 - blend) * own.squared(f / hold) ** blend
+
+
+def bell_section(b: Analog, reference, fs, match_point=_slid_match, magnitude=_analog_magnitude):
+    """One section of a steep Bell, b normalised to its poles' natural frequency, reference in Hz. Up to
+    the hold it is a matched section with its zeros exact at match_point(reference, hold). Above it, its
+    poles are held (_held_poles) and its zeros fit magnitude at DC, the match point and Nyquist. The
+    defaults are ADR 0007's design; bell-continuity and bell-candidates compare the others."""
+    hold = BELL_HOLD * fs / 2
+    match = match_point(reference, hold)
+    if reference <= hold:
+        return match_section(b, reference, fs, match_hz=match)
+    held, held_q, analog_q = _held_poles(b, reference, hold)
+    squared = magnitude(b, reference, hold, held_q, analog_q)
+    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
+
+
+def _band_shelf_section(a: Analog, frequency, fs):
+    """One second-order section of a steep Bell (ADR 0007), matched at its poles' natural frequency. Above
+    the hold its poles are placed at the hold with the Q that makes them as loud there, relative to DC,
+    as the analog poles are (never higher), and its zeros fit the analog section at DC, a match point and
+    Nyquist. The match point slides from the hold to BELL_HOLD_MATCH x the hold as the natural frequency
+    rises BELL_SLIDE above the hold (_slid_match), so the section is continuous across the hold."""
+    b, w0 = normalised(a)
+    return bell_section(b, frequency * w0, fs)
 
 
 def _band_shelf_bell(prototype, fs, frequency, gain, q, slope):
@@ -1236,6 +1766,168 @@ def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000
                 _, bell_target = bell(48000, 1000, gain, q)
                 off = max(off, max(abs(target(f) - bell_target(f)) for f in (10 * 2 ** (i / 8) for i in range(90))))
         print(f"{slope:>5g}  {len(sections):>8}  {off:18.2e}")
+
+
+# --- Steep Bell continuity near Nyquist (docs/adr/0007) -------------------------------------------
+# Candidate designs for a steep Bell's section near the hold. "slide" is ADR 0007's (bell_section's
+# defaults). "hold" isn't continuous: as a section's natural frequency crosses the hold, its match point
+# jumps from its natural frequency (the hold) to BELL_HOLD_MATCH x the hold; it is kept to compare
+# against. Each candidate designs one section of the Butterworth band shelf; bell-continuity measures
+# how far the response moves between two Frequencies a small step apart, across every section's
+# crossing (and on a grid away from them, for scale), and bell-candidates measures each candidate
+# against ADR 0007's bands.
+#
+#     python3 tools/filter-lab/filterlab.py bell-continuity --candidates hold slide
+#     python3 tools/filter-lab/filterlab.py bell-candidates --candidates hold slide --q 0.1 0.71 2 10 40 --at-crossings
+
+BELL_LIMITS = {"<=0.45": 0.10, "<=0.73": 0.20, "<=0.91": 0.35}  # today's Bell test, as a share of |Gain|
+FREQUENCY_RANGE = (10.0, 30000.0)  # the Frequency parameter's range
+
+
+BELL_SECTIONS = {
+    "hold": functools.partial(bell_section, match_point=_held_match),
+    "clamp": functools.partial(bell_section, match_point=_clamped_match),
+    "blend": functools.partial(bell_section, match_point=_clamped_match, magnitude=_blended_magnitude),
+    "slide": functools.partial(bell_section, match_point=_slid_match),
+    "slide-blend": functools.partial(bell_section, match_point=_slid_match, magnitude=_blended_magnitude),
+}
+
+
+def _butterworth_bell_analog(gain, q, slope):
+    """A boost's analog sections (ADR 0007), each normalised to its poles' natural frequency, which is
+    independent of Frequency: [(section, natural frequency / Frequency)]."""
+    order = max(1, round(slope / 12))
+    return order, [normalised(a) for a in band_shelf_analog(*butterworth_shelf_roots(order, abs(gain)), q)]
+
+
+def steep_bell(fs, frequency, gain, q, slope=12, section=bell_section):
+    """ADR 0007's steep Bell with each section designed by section(normalised analog, natural frequency
+    in Hz, fs). At 12 dB/oct it is today's bell() exactly. Designed as a boost and inverted for a cut."""
+    order, analog = _butterworth_bell_analog(gain, q, slope)
+    if order == 1:
+        boost = [match_section(analog[0][0], frequency * analog[0][1], fs)]
+    else:
+        boost = [section(b, frequency * w0, fs) for b, w0 in analog]
+    sign = 1 if gain >= 0 else -1
+    raw = band_shelf_analog(*butterworth_shelf_roots(order, abs(gain)), q)
+    return ([c if gain >= 0 else inverse(c) for c in boost],
+            lambda f: sign * _analog_db(raw, f, frequency))
+
+
+def bell_candidate_options(parser):
+    parser.add_argument("--candidates", nargs="+", default=list(BELL_SECTIONS), choices=list(BELL_SECTIONS))
+    parser.add_argument("--q", type=float, nargs="+", default=[0.025, 0.1, 0.71, 2, 10, 40])
+    parser.add_argument("--gains", type=float, nargs="+", default=[-30, -12, -3, 3, 12, 30],
+                        help="bell-continuity only; bell-candidates uses report_bell_slope's Gains")
+    parser.add_argument("--bell-slopes", type=float, nargs="+", default=[12, 24, 36, 48, 60, 72, 84, 96])
+    parser.add_argument("--cents", type=float, default=0.1, help="the Frequency step, in cents")
+    parser.add_argument("--at-crossings", action="store_true",
+                        help="bell-candidates: add Frequencies either side of each section's crossing of the hold")
+
+
+@command("bell-continuity", options=bell_candidate_options)
+def run_bell_continuity(args):
+    for name in args.candidates:
+        print(f"candidate {name}")
+        report_bell_continuity(BELL_SECTIONS[name], slopes=args.bell_slopes, qs=args.q, gains=args.gains,
+                               cents=args.cents)
+        print()
+
+
+def _response_db(sections, fs, points):
+    return [cascade_db(sections, f, fs) for f in points]
+
+
+def report_bell_continuity(section, slopes, qs, gains, sample_rates=(44100, 48000, 96000), cents=0.1,
+                           points=200):
+    """The largest change in the response, at any of points frequencies from 10 Hz to Nyquist (log
+    spaced, plus 64 linear ones across the top octave), between Frequencies a step of cents apart:
+    straddling each section's crossing of the hold within the Frequency range, and 8 more points as its
+    natural frequency rises BELL_SLIDE above the hold (where _slid_match slides), and, for scale, at
+    Frequencies an octave apart across the range. Per Slope, worst over sample rates, Q and
+    Gain, with its case."""
+    grid = [FREQUENCY_RANGE[0] * 2 ** k for k in range(int(math.log2(FREQUENCY_RANGE[1] / FREQUENCY_RANGE[0])) + 1)]
+    half = 2 ** (cents / 2400)
+    worst = {}
+    for fs in sample_rates:
+        hold = BELL_HOLD * fs / 2
+        at = [10 * (fs / 2 / 10) ** (i / points) for i in range(points + 1)]
+        at += [fs / 4 * (1 + i / 64) for i in range(64)]
+        for slope in slopes:
+            for q in qs:
+                for gain in gains:
+                    _, analog = _butterworth_bell_analog(gain, q, slope)
+                    crossings = [hold / w0 * BELL_SLIDE ** (k / 8) for _, w0 in analog for k in range(9)]
+                    crossings = [f for f in crossings if FREQUENCY_RANGE[0] <= f <= FREQUENCY_RANGE[1]]
+                    for kind, frequencies in (("crossing", crossings), ("grid", grid)):
+                        for frequency in frequencies:
+                            below = _response_db(steep_bell(fs, frequency / half, gain, q, slope, section)[0], fs, at)
+                            above = _response_db(steep_bell(fs, frequency * half, gain, q, slope, section)[0], fs, at)
+                            change = max(abs(x - y) for x, y in zip(below, above))
+                            key = (slope, kind if kind == "grid" or frequency <= fs / 2 else "above")
+                            if change > worst.get(key, (-1,))[0]:
+                                worst[key] = (change, fs, frequency, q, gain)
+    print(f"step {cents:g} cents; dB, worst over sample rates, Q and Gain; near the hold with Frequency up to")
+    print("Nyquist and above it (to the top of the Frequency range), and on the octave grid")
+    print(f"{'slope':>5}  {'near':>6}  {'above':>6}  {'grid':>6}   worst near / above")
+    for slope in slopes:
+        cells, cases = [], []
+        for kind in ("crossing", "above"):
+            change, fs, frequency, q, gain = worst.get((slope, kind), (0.0, 0, 0, 0, 0))
+            cells.append(change)
+            cases.append(f"fs={fs} F={frequency:.0f} Q={q} G={gain}" if fs else "none")
+        print(f"{slope:>5g}  {cells[0]:6.3f}  {cells[1]:6.3f}  {worst[(slope, 'grid')][0]:6.3f}   {' / '.join(cases)}")
+
+
+
+@command("bell-candidates", options=bell_candidate_options)
+def run_bell_candidates(args):
+    for name in args.candidates:
+        print(f"candidate {name}")
+        report_bell_candidate(BELL_SECTIONS[name], slopes=[s for s in args.bell_slopes if s > 12], qs=args.q,
+                              crossings=args.at_crossings, cents=args.cents)
+        print()
+
+
+def report_bell_candidate(section, slopes, qs, sample_rates=(44100, 48000, 96000),
+                          frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
+                          gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), points=200, crossings=False, cents=0.1):
+    """report_bell_slope's measure, over every Slope given at once: the worst error louder and quieter
+    than the target (for a boost; a cut mirrors it) as a share of |Gain|, banded by where the upper
+    half-Gain point sits (ADR 0007), against today's Bell limits, with the worst case. With crossings,
+    the grid adds the Frequencies a step of cents either side of each section's crossing of the hold
+    (up to 0.91 x Nyquist), where a section sits at the hold and the fixed grid would miss it."""
+    worst = {}
+    for fs in sample_rates:
+        hold = BELL_HOLD * fs / 2
+        for gain in gains:
+            for q in qs:
+                for slope in slopes:
+                    _, analog = _butterworth_bell_analog(gain, q, slope)
+                    at = list(frequencies)
+                    if crossings:
+                        at += [hold / w0 * 2 ** (side * cents / 1200) for _, w0 in analog for side in (-1, 1)]
+                    for frequency in at:
+                        if not 20 <= frequency <= 0.91 * fs / 2:
+                            continue
+                        upper = _upper_half_gain(frequency, q)
+                        edge = ">0.91" if upper > 0.91 * fs / 2 else position_band(upper, fs)
+                        sections, target = steep_bell(fs, frequency, gain, q, slope, section)
+                        for i in range(points + 1):
+                            f = 10 * (fs / 2 / 10) ** (i / points)
+                            error = (cascade_db(sections, f, fs) - target(f)) * (1 if gain > 0 else -1) / abs(gain)
+                            for side, e in ((0, error), (1, -error)):
+                                if e > worst.get((edge, side), (-1,))[0]:
+                                    worst[(edge, side)] = (e, fs, frequency, q, gain, slope)
+    print(f"by upper half-Gain point / Nyquist, Slopes {', '.join(f'{s:g}' for s in slopes)}")
+    print(f"{'band':>7}  {'louder':>6} {'quieter':>7}  {'limit':>5}   worst case")
+    for band in ("<=0.45", "<=0.73", "<=0.91", ">0.91"):
+        if (band, 0) not in worst:
+            continue
+        up, down = worst[(band, 0)], worst[(band, 1)]
+        limit = f"{BELL_LIMITS[band]:5.0%}" if band in BELL_LIMITS else "    -"
+        e, fs, frequency, q, gain, slope = max(up, down)
+        print(f"{band:>7}  {up[0]:6.1%} {down[0]:7.1%}  {limit}   fs={fs} F={frequency:.0f} Q={q} G={gain} slope={slope:g}")
 
 
 if __name__ == "__main__":
