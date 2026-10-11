@@ -86,7 +86,8 @@ public:
     // The editor's look at the Bands, each frame while it is open and when a drag ends: when a Band's
     // Heard Gain has changed since the last look to beyond the Display Range, the range zooms out to
     // fit it (fittedDisplayRangeDb). Nothing while an edit is in progress, so a drag zooms when it
-    // ends. Restoring a session takes its Bands as seen. Message thread only.
+    // ends. Restoring a session takes its Bands as seen, and a look that overlaps a restore from
+    // another thread changes nothing, so the restored range is the one shown. Message thread only.
     void fitDisplayRangeToHeardGains();
 
     // Solo, while the editor holds a Band: its Band Slot (1 to 24), or 0. Not a host parameter, not
@@ -191,6 +192,9 @@ private:
     // while the editor is closed.
     HeardGains seenGains;
     juce::SpinLock seenGainsLock; // a host may restore a session from another thread
+    // Restores begun and done, each counted under seenGainsLock: a look that overlaps a restore
+    // leaves the Display Range and seenGains to it.
+    std::atomic<int> restoresBegun { 0 }, restoresDone { 0 };
     HeardGains currentHeardGains() const;
     std::atomic<int> heldSoloSlot { 0 };
     std::atomic<SoloHolder> soloHolder { SoloHolder::none };
