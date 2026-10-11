@@ -36,13 +36,18 @@ public:
     void copyToOther();
 
     // Puts a Preset's settings on the side you're on, inside gestures, and makes it the side's Loaded
+    // Preset, named name, as one undo step. folder is where the browser lists it (PresetLibrary::Entry),
+    // empty for a Preset from elsewhere.
+    void loadPreset (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder = {});
+    // The side you're on was saved as a Preset holding preset, into folder: it becomes the side's Loaded
     // Preset, named name, as one undo step.
-    void loadPreset (const juce::ValueTree& preset, const juce::String& name);
-    // The side you're on was saved as a Preset holding preset: it becomes the side's Loaded Preset,
-    // named name, as one undo step.
-    void presetSaved (const juce::ValueTree& preset, const juce::String& name);
+    void presetSaved (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder = {});
     // The Loaded Preset of the side you're on, or an empty name for none.
     juce::String loadedPresetName() const;
+    // The folder the side you're on last loaded or saved its Loaded Preset in, while the Loaded Preset
+    // still has that name, as a name can be listed in more than one folder; empty otherwise. Kept in
+    // memory only: neither saved with the session nor undone.
+    juce::String loadedPresetFolder() const;
     // Whether the side you're on is Modified: its settings differ from its Loaded Preset's as loaded.
     // Never, with no Loaded Preset.
     bool isModified() const;
@@ -87,6 +92,14 @@ private:
     EditHistory& history;
     mutable juce::SpinLock lock; // a host may save or restore while the editor switches sides
     State state;
+    // Each side's last load or save, A then B: the Loaded Preset's name then and its folder. Message
+    // thread only.
+    struct LoadedFrom
+    {
+        juce::String name, folder;
+    };
+    std::array<LoadedFrom, 2> loadedFrom;
+    static std::size_t indexOf (CompareSide side) { return side == CompareSide::A ? 0 : 1; }
     juce::ValueTree arriving; // the settings putOnParameters() is putting on the parameters, while it does
     int changes = 0;          // counts every change of the above, so a save can tell it raced one
 

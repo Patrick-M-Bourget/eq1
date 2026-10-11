@@ -69,14 +69,20 @@ public:
     juce::ValueTree presetState();
     // Puts a Preset's settings on the side you're on and makes it the side's Loaded Preset, named
     // name, as one undo step, bringing an older version of the format up to date first. Anything that
-    // isn't a Preset changes nothing and returns false. Message thread only.
-    bool loadPreset (const juce::ValueTree& preset, const juce::String& name);
-    // The side you're on was saved as a Preset (presetState()) named name: it becomes the side's
-    // Loaded Preset, as one undo step. Message thread only.
-    void presetSaved (const juce::ValueTree& preset, const juce::String& name) { compare.presetSaved (preset, name); }
+    // isn't a Preset changes nothing and returns false. folder is where the browser lists it, empty for
+    // a Preset from elsewhere (ABCompare::loadedPresetFolder). Message thread only.
+    bool loadPreset (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder = {});
+    // The side you're on was saved as a Preset (presetState()) named name, into folder: it becomes the
+    // side's Loaded Preset, as one undo step. Message thread only.
+    void presetSaved (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder = {})
+    {
+        compare.presetSaved (preset, name, folder);
+    }
     // The Loaded Preset of the side you're on, or an empty name for none, and whether the side is
     // Modified. Message thread only.
     juce::String loadedPresetName() const { return compare.loadedPresetName(); }
+    // The folder the side's Loaded Preset was last loaded or saved in, in memory only (ABCompare).
+    juce::String loadedPresetFolder() const { return compare.loadedPresetFolder(); }
     bool isLoadedPresetModified() const { return compare.isModified(); }
 
     // The Display Range, +/- this many dB: 6, 12 or 30. Saved with the plugin, whether picked by hand
@@ -86,7 +92,8 @@ public:
     // The editor's look at the Bands, each frame while it is open and when a drag ends: when a Band's
     // Heard Gain has changed since the last look to beyond the Display Range, the range zooms out to
     // fit it (fittedDisplayRangeDb). Nothing while an edit is in progress, so a drag zooms when it
-    // ends. Restoring a session takes its Bands as seen. Message thread only.
+    // ends. Restoring a session takes its Bands as seen, and a look that overlaps a restore from
+    // another thread changes nothing, so the restored range is the one shown. Message thread only.
     void fitDisplayRangeToHeardGains();
 
     // Solo, while the editor holds a Band: its Band Slot (1 to 24), or 0. Not a host parameter, not
@@ -191,6 +198,9 @@ private:
     // while the editor is closed.
     HeardGains seenGains;
     juce::SpinLock seenGainsLock; // a host may restore a session from another thread
+    // Restores begun and done, each counted under seenGainsLock: a look that overlaps a restore
+    // leaves the Display Range and seenGains to it.
+    std::atomic<int> restoresBegun { 0 }, restoresDone { 0 };
     HeardGains currentHeardGains() const;
     std::atomic<int> heldSoloSlot { 0 };
     std::atomic<SoloHolder> soloHolder { SoloHolder::none };
