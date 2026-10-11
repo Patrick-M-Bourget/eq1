@@ -217,6 +217,36 @@ FactoryPreset preset (const char* nameUtf8, std::initializer_list<std::pair<cons
     return { named (nameUtf8), tree };
 }
 
+// The features the Factory library shows between its Presets (spec #1, "Factory Presets"), each named
+// once some Band in use has it: every Shape but All Pass, Brickwall, the Stereo Placements other than
+// Stereo, a dynamic cut and boost, and the Free Detection Range and External Detection Source.
+juce::StringArray featuresUsed (const std::vector<FactoryPreset>& library)
+{
+    namespace p = eq1::parameters;
+    juce::StringArray used;
+    for (const auto& preset : library)
+    {
+        Host host;
+        host.processor.loadPreset (preset.preset, preset.name);
+        for (int slot = 1; slot <= eq1::numBandSlots; ++slot)
+        {
+            if (host.value (p::inUseId (slot)) < 0.5f)
+                continue;
+            used.addIfNotAlreadyThere (p::shapeNames()[juce::roundToInt (host.value (p::shapeId (slot)))]);
+            used.addIfNotAlreadyThere (p::placementNames()[juce::roundToInt (host.value (p::placementId (slot)))]);
+            if (host.value (p::brickwallId (slot)) >= 0.5f)
+                used.addIfNotAlreadyThere ("Brickwall");
+            const auto dynamicRange = host.value (p::dynamicRangeId (slot));
+            if (juce::exactlyEqual (dynamicRange, 0.0f))
+                continue;
+            used.addIfNotAlreadyThere (dynamicRange < 0.0f ? "dynamic cut" : "dynamic boost");
+            used.addIfNotAlreadyThere (p::detectionRangeNames()[juce::roundToInt (host.value (p::detectionRangeId (slot)))]);
+            used.addIfNotAlreadyThere (p::detectionSourceNames()[juce::roundToInt (host.value (p::detectionSourceId (slot)))]);
+        }
+    }
+    return used;
+}
+
 } // namespace
 
 TEST_CASE ("Every Factory Preset passes the gate")
@@ -283,6 +313,20 @@ TEST_CASE ("The Factory library has the Mix Bus, Master and Sends Presets")
                               "Master \xe2\x80\x93 Polish", "Master \xe2\x80\x93 Dynamic Low End", "Master \xe2\x80\x93 Mid-Side Width",
                               "Master \xe2\x80\x93 Detailed", "Sends \xe2\x80\x93 Reverb Return Clean", "Sends \xe2\x80\x93 Delay Return Dark" })
         CHECK (names.contains (named (name)));
+}
+
+TEST_CASE ("The Factory library uses every Shape, Stereo Placement and dynamics feature")
+{
+    const auto used = featuresUsed (PresetLibrary::factoryPresets());
+    juce::StringArray wanted { "Brickwall", "Left", "Right", "Mid", "Side", "dynamic cut", "dynamic boost", "Free", "External" };
+    for (const auto& shape : eq1::parameters::shapeNames())
+        if (shape != "All Pass") // optional (spec #1)
+            wanted.add (shape);
+    for (const auto& feature : wanted)
+    {
+        CAPTURE (feature);
+        CHECK (used.contains (feature));
+    }
 }
 
 TEST_CASE ("The Factory gate rejects a name outside the scheme")
