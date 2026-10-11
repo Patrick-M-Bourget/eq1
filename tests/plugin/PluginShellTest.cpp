@@ -430,10 +430,11 @@ TEST_CASE ("Holding Detection Audition plays the detection signal; it is not a h
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
             CHECK_FALSE (ranged->getParameterID().containsIgnoreCase ("audition"));
     processor.setDetectionAudition (3);
-    REQUIRE (eq1::test::savedState (processor).isValid());
-    CHECK (eq1::test::savedNamesContaining (processor, "audition").isEmpty());
     juce::MemoryBlock state;
     processor.getStateInformation (state);
+    const auto tree = eq1::test::savedState (state);
+    REQUIRE (tree.isValid());
+    CHECK (eq1::test::savedNamesContaining (tree, "audition").isEmpty());
     eq1::PluginProcessor restored;
     restored.setDetectionAudition (2);
     restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
@@ -462,11 +463,12 @@ TEST_CASE ("The editor reads the Detection Level of the Band it meters; the mete
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (parameter))
             CHECK_FALSE (ranged->getParameterID().containsIgnoreCase ("meter"));
     processor.setMeteredBand (3);
-    REQUIRE (eq1::test::savedState (processor).isValid());
-    // Whether the Output Meter is shown (outputMeterShown) is saved on purpose; the Metered Band isn't.
-    CHECK (eq1::test::savedNamesContaining (processor, "metered").isEmpty());
     juce::MemoryBlock state;
     processor.getStateInformation (state);
+    const auto tree = eq1::test::savedState (state);
+    REQUIRE (tree.isValid());
+    // Whether the Output Meter is shown (outputMeterShown) is saved on purpose; the Metered Band isn't.
+    CHECK (eq1::test::savedNamesContaining (tree, "metered").isEmpty());
     eq1::PluginProcessor restored;
     restored.setMeteredBand (2);
     restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
@@ -536,10 +538,11 @@ TEST_CASE ("Solo is not a host parameter and is not saved with the session")
 
     setParameter (saved, "band3_in_use", 1.0f);
     saved.setSolo (3);
-    REQUIRE (eq1::test::savedState (saved).isValid());
-    CHECK (eq1::test::savedNamesContaining (saved, "solo").isEmpty());
     juce::MemoryBlock state;
     saved.getStateInformation (state);
+    const auto tree = eq1::test::savedState (state);
+    REQUIRE (tree.isValid());
+    CHECK (eq1::test::savedNamesContaining (tree, "solo").isEmpty());
 
     eq1::PluginProcessor restored;
     restored.setSolo (5);
