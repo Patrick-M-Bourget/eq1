@@ -617,15 +617,189 @@ def report_auto_threshold(spreads, falls, rise=4.5):
             print(f"{k:5g} {fall:5g}  {peak:5.2f} {trough:6.2f} {swelled:5.2f}")
 
 
+# --- Bell Slope candidates (#19, docs/adr/0007) ---------------------------------------------------
+# A steep Bell as a band shelf: the band-pass transform p = Q (s + 1/s) of a low-shelf prototype of
+# order Slope / 12 in p, whose Gain is Gain at p = 0 (Frequency), 0 dB at p = infinity (DC and
+# infinity), and half the Gain in dB at p = 1 (the half-Gain points, 1/Q of Frequency apart). At
+# 12 dB/oct every prototype is the one first-order shelf with those three values, so every candidate
+# is today's Bell there.
+#
+#     python3 tools/filter-lab/filterlab.py bell-butterworth --bell-slopes 12 24 48 96 --q 0.1 0.71 2 10 40
+#     python3 tools/filter-lab/filterlab.py bell-chebyshev --bell-slopes 12 24 48 96 --q 0.1 0.71 2 10 40
+
+CHEBYSHEV_RIPPLE = 0.05  # Chebyshev band shelf: ripple across its top, as a share of |Gain|
+
+
+def butterworth_shelf_roots(order, gain_db):
+    """Zeros and poles in p of the Butterworth low shelf (Gain at p = 0, 0 dB at infinity, half the
+    Gain at p = 1): the Low Shelf target's roots, zeros on a circle of radius g^(1/2N), poles on the
+    reciprocal one."""
+    rz = (10 ** (gain_db / 20)) ** (1 / (2 * order))
+    angles = [PI / 2 + (2 * k + 1) * PI / (2 * order) for k in range(order)]
+    return [rz * cmath.exp(1j * a) for a in angles], [cmath.exp(1j * a) / rz for a in angles]
+
+
+def chebyshev_shelf_roots(order, gain_db, ripple_share=CHEBYSHEV_RIPPLE):
+    """Zeros and poles in p of a Chebyshev type I low shelf, |H|^2 = (g^2 + e^2 T_N^2) / (1 + e^2 T_N^2),
+    equiripple across its top by ripple_share x |Gain|, with Gain exactly at p = 0 (so at even orders,
+    where T_N(0) = 1, the ripple peaks rise above Gain), rescaled so p = 1 is the half-Gain point."""
+    big = 10 ** (gain_db / 20)
+    ripple = 10 ** (ripple_share * gain_db / 20)
+    if order % 2:  # T_N(0) = 0: the top's peak is Gain, its troughs a ripple below
+        g, low = big, big / ripple
+        e2 = (g * g - low * low) / (low * low - 1)
+    else:  # T_N(0) = 1: Gain is a trough, the peaks a ripple above
+        g = big * ripple
+        e2 = (g * g - big * big) / (big * big - 1)
+    if order == 1:
+        e2 = big  # one first-order shelf: Gain at 0, half the Gain at 1, nothing to ripple
+    t_half = max(1.0, math.sqrt((g * g - big) / (e2 * (big - 1))))
+    scale = math.cosh(math.acosh(t_half) / order)
+
+    def roots(e):
+        v = math.asinh(1 / e) / order
+        thetas = [(2 * k - 1) * PI / (2 * order) for k in range(1, order + 1)]
+        return [complex(-math.sinh(v) * math.sin(t), math.cosh(v) * math.cos(t)) / scale for t in thetas]
+
+    e = math.sqrt(e2)
+    return roots(e / g), roots(e)
+
+
+def _band_quadratics(root, q):
+    """p = Q (s + 1/s) maps a root r in p to the roots of s^2 - (r / Q) s + 1. A real r gives one real
+    quadratic; a complex r (with its conjugate) gives a lower and an upper one. Returns [(d1, d0)]."""
+    if abs(root.imag) < 1e-12:
+        return [(-root.real / q, 1.0)]
+    return sorted(((-2 * x.real, abs(x) ** 2) for x in _reciprocal_roots(root / q)), key=lambda d: d[1])
+
+
+def band_shelf_analog(zeros, poles, q):
+    """The band-pass transform of a low shelf given by its roots in p: second-order sections in s, each
+    pairing a zero quadratic with the pole quadratic from the same prototype root (lower with lower,
+    upper with upper). Only roots in the upper half plane (and real ones) are passed through."""
+    sections = []
+    for z, p in zip(zeros, poles):
+        if z.imag < -1e-12:
+            continue
+        for (n1, n0), (d1, d0) in zip(_band_quadratics(z, q), _band_quadratics(p, q)):
+            sections.append(Analog(1, n1, n0, 1, d1, d0))
+    return sections
+
+
+BELL_HOLD = 0.95  # where a steep Bell's sections are held, as a share of Nyquist
+BELL_HOLD_MATCH = 0.9  # a held section's match point, as a share of the hold
+
+
+def _band_shelf_section(a: Analog, frequency, fs):
+    """One second-order section of a steep Bell, matched at its poles' natural frequency. Above the hold
+    its poles are placed at the hold with the Q that makes them as loud there, relative to DC, as the
+    analog poles are (never higher), and its zeros fit the analog section at DC, BELL_HOLD_MATCH x the
+    hold and Nyquist. Not continuous as the natural frequency crosses the hold (see ADR 0007)."""
+    b, w0 = normalised(a)
+    reference, hold = frequency * w0, BELL_HOLD * fs / 2
+    if reference <= hold:
+        return match_section(b, reference, fs)
+    poles = Analog(0, 0, 1, 1, b.d1, 1)
+    held_q = min(1 / b.d1, math.sqrt(poles.squared(hold / reference) / poles.squared(0)))
+    match = BELL_HOLD_MATCH * hold
+    squared = lambda f: b.squared(f / reference)
+    return match_magnitudes(Analog(0, 0, 1, 1, 1 / held_q, 1), hold, fs, match,
+                            squared(0), squared(match), squared(fs / 2))
+
+
+def _band_shelf_bell(prototype, fs, frequency, gain, q, slope):
+    """A steep Bell from a prototype (roots in p): designed as a boost and inverted for a cut, as the
+    Bell is today. At 12 dB/oct it is today's bell() exactly; steeper, each section is designed by
+    _band_shelf_section."""
+    order = max(1, round(slope / 12))
+    analog = band_shelf_analog(*prototype(order, abs(gain)), q)
+    if order == 1:  # (s^2 + s A/Q + 1) / (s^2 + s/(A Q) + 1): bell()'s one section
+        boost = [match_section(analog[0], frequency, fs)]
+    else:
+        boost = [_band_shelf_section(a, frequency, fs) for a in analog]
+    sign = 1 if gain >= 0 else -1
+    return ([c if gain >= 0 else inverse(c) for c in boost],
+            lambda f: sign * _analog_db(analog, f, frequency))
+
+
+def bell_butterworth(fs, frequency, gain, q, slope=12):
+    """Candidate A: the band-pass transform of the Butterworth Low Shelf of order Slope / 12."""
+    return _band_shelf_bell(butterworth_shelf_roots, fs, frequency, gain, q, slope)
+
+
+def bell_chebyshev(fs, frequency, gain, q, slope=12):
+    """Candidate B: the band-pass transform of a Chebyshev type I low shelf of order Slope / 12."""
+    return _band_shelf_bell(chebyshev_shelf_roots, fs, frequency, gain, q, slope)
+
+
+BELL_SLOPES = {"bell-butterworth": bell_butterworth, "bell-chebyshev": bell_chebyshev}
+
+
+def _upper_half_gain(frequency, q):
+    return frequency * (math.sqrt(1 + 1 / (4 * q * q)) + 1 / (2 * q))
+
+
+def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000, 96000),
+                      frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
+                      gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), qs=(0.71,), points=200):
+    """Worst error, louder and quieter than the target (for a boost; a cut mirrors it, louder there
+    being less cut), as a share of |Gain| (the Bell test's measure) and in dB: per (position band, Slope,
+    Q) by where Frequency sits, as the Bell test bands it; then per (position band, Slope) by where the
+    upper half-Gain point sits, which is where a steep Bell's skirt meets Nyquist. Last, each Slope's
+    sections per Band and how far its target strays from today's Bell (should be 0 at 12 dB/oct)."""
+    by_frequency, by_edge = {}, {}
+    for fs in sample_rates:
+        for frequency in frequencies:
+            if frequency > 0.91 * fs / 2:
+                continue
+            for gain in gains:
+                for q in qs:
+                    upper = _upper_half_gain(frequency, q)
+                    edge = ">0.91" if upper > 0.91 * fs / 2 else position_band(upper, fs)
+                    for slope in slopes:
+                        sections, target = shape(fs, frequency, gain, q, slope)
+                        w = by_frequency.setdefault((position_band(frequency, fs), slope, q), [0, 0, 0, 0])
+                        v = by_edge.setdefault((edge, slope), [0, 0, 0, 0])
+                        for i in range(points + 1):
+                            f = 10 * (fs / 2 / 10) ** (i / points)
+                            error = (cascade_db(sections, f, fs) - target(f)) * (1 if gain > 0 else -1)
+                            for x in (w, v):
+                                x[0], x[1] = max(x[0], error / abs(gain)), max(x[1], -error / abs(gain))
+                                x[2], x[3] = max(x[2], error), max(x[3], -error)
+    print("by Frequency / Nyquist")
+    print(f"{'band':>7} {'slope':>5} {'Q':>6}  {'louder':>6} {'quieter':>7}  {'dB':>5} {'dB':>5}")
+    for (band, slope, q), (up, down, up_db, down_db) in sorted(by_frequency.items()):
+        print(f"{band:>7} {slope:>5g} {q:>6}  {up:6.1%} {down:7.1%}  {up_db:5.2f} {down_db:5.2f}")
+    print()
+    print("by upper half-Gain point / Nyquist, every Q")
+    print(f"{'band':>7} {'slope':>5}  {'louder':>6} {'quieter':>7}  {'dB':>5} {'dB':>5}")
+    for (band, slope), (up, down, up_db, down_db) in sorted(by_edge.items()):
+        print(f"{band:>7} {slope:>5g}  {up:6.1%} {down:7.1%}  {up_db:5.2f} {down_db:5.2f}")
+    print()
+    print(f"{'slope':>5}  {'sections':>8}  {'target vs Bell, dB':>18}")
+    for slope in slopes:
+        off = 0.0
+        for q in qs:
+            for gain in gains:
+                sections, target = shape(48000, 1000, gain, q, slope)
+                _, bell_target = bell(48000, 1000, gain, q)
+                off = max(off, max(abs(target(f) - bell_target(f)) for f in (10 * 2 ** (i / 8) for i in range(90))))
+        print(f"{slope:>5g}  {len(sections):>8}  {off:18.2e}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("shape", choices=[*SHAPES, "gain-computer", "auto-threshold"])
+    parser.add_argument("shape", choices=[*SHAPES, *BELL_SLOPES, "gain-computer", "auto-threshold"])
     parser.add_argument("--q", type=float, nargs="+", default=[0.71])
     parser.add_argument("--orders", type=int, nargs="+", default=[2])
     parser.add_argument("--overshoots", type=float, nargs="+", default=[12])
     parser.add_argument("--spreads", type=float, nargs="+", default=[0.2])
     parser.add_argument("--falls", type=float, nargs="+", default=[1.25])
+    parser.add_argument("--bell-slopes", type=float, nargs="+", default=[12, 24, 48, 96])
     args = parser.parse_args()
+    if args.shape in BELL_SLOPES:
+        report_bell_slope(BELL_SLOPES[args.shape], slopes=args.bell_slopes, qs=args.q)
+        raise SystemExit
     if args.shape == "auto-threshold":
         report_auto_threshold(args.spreads, args.falls)
         raise SystemExit
