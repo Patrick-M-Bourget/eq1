@@ -4,8 +4,9 @@
 #
 #   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
-#                               glossary, no test reads a saved state as raw bytes, runs timers itself, has a non-ASCII
-#                               title, reads an EQ1_ environment variable or opens a Graphics on an image outside
+#                               glossary, no two ADRs share a number, no test reads a saved state as raw bytes, runs
+#                               timers itself, has a non-ASCII title, reads an EQ1_ environment variable or opens a
+#                               Graphics on an image outside
 #                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh colours    only that last check: no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh hooks      the Claude Code worktree hook's, merge-on-green.sh's, the git pre-push hook's and the
@@ -84,6 +85,14 @@ docs() {
             broken=1
         done < <(git ls-files -- '*GLOSSARY.md' ':!GLOSSARY.md')
     fi
+    # Each ADR has its own number. Two parallel branches can each take the next one; the second to
+    # rebase onto main finds out here.
+    local taken
+    taken=$(git ls-files -- 'docs/adr/[0-9]*.md' | sed -E 's|docs/adr/([0-9]+)-.*|\1|' | sort | uniq -d)
+    if [ -n "$taken" ]; then
+        printf '%s\n' "$taken" | sed 's|^|docs/adr/|; s|$|-*: two ADRs share this number; renumber the newer one|' >&2
+        broken=1
+    fi
     # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
     # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h. Flagged:
     # toString on any block a file fills with getStateInformation, whatever the block is called.
@@ -130,7 +139,7 @@ docs() {
         printf '%s\n' "$graphics" | sed 's/$/: opens a Graphics on an image; draw with harness::paintImage (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, no test reads a saved state as raw bytes or an EQ1_ environment variable or opens a Graphics on an image, tests wait with harness::settle and have ASCII titles"
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, every ADR has its own number, no test reads a saved state as raw bytes or an EQ1_ environment variable or opens a Graphics on an image, tests wait with harness::settle and have ASCII titles"
     return "$broken"
 }
 
