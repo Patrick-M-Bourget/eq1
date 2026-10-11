@@ -21,6 +21,8 @@ public:
     // The User folder this library keeps its Presets in.
     const juce::File& folder() const { return userFolder; }
     static inline const juce::String fileExtension { ".eq1preset" };
+    // The User folder itself as Entry::folder names it; its subfolders' paths start with it and a /.
+    static inline const juce::String userFolderName { "User" };
 
     // The User Presets' files, in browser order: the User folder's own, then its subfolders' at any
     // depth, depth-first, each level by name. None when the folder doesn't exist yet.

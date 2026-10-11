@@ -176,7 +176,7 @@ void PresetBar::saveAs (const juce::String& name)
     const auto preset = processor.presetState();
     if (const auto file = library.save (name, preset))
     {
-        processor.presetSaved (preset, file->getFileNameWithoutExtension(), "User");
+        processor.presetSaved (preset, file->getFileNameWithoutExtension(), PresetLibrary::userFolderName);
         edited();
     }
     else
