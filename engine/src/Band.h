@@ -34,8 +34,9 @@ public:
     // Moves the Band's Live Gain away from its Gain by db, from the next run's start: its dynamics.
     void setDynamicOffset (double db) { dynamicOffset = db; }
 
-    // The Gain the Band's filter applies at the last sample processed: Gain plus the dynamic offset,
-    // held to +/-30 dB.
+    // About the Gain the Band's filter applies at the last sample processed (Gain plus the dynamic
+    // offset, held to +/-30 dB), for the display: linear in dB between the run's start and end, which
+    // the coefficients only approximate.
     double liveGainDb() const;
 
     // Processes the piece of the grid's run numbered run (counted by the Engine from prepare) from

@@ -3,6 +3,7 @@
 #include "Solo.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <span>
 
@@ -118,6 +119,7 @@ void Dynamics::startAfresh()
     rangeFilter.setSettings (rangeFilterSettings, true);
     highLimit.setSettings (highLimitSettings, true);
     power = {};
+    runLevelCount = 0;
     movement = sustain = 0.0;
     samplesHeard = 0.0; // Auto Threshold learns the material playing now
 }
@@ -235,7 +237,10 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         // Metered only: whatever comes next starts afresh, as if never metered.
         if (! moving)
             continue;
-        runLevels[static_cast<size_t> (runLevelCount++)] = level;
+        // A run is at most maxSubBlock samples, and finishRun() empties the levels at its end.
+        assert (runLevelCount < Band::maxSubBlock);
+        if (runLevelCount < Band::maxSubBlock)
+            runLevels[static_cast<size_t> (runLevelCount++)] = level;
         // The mean and variance of every level heard, until a rise time's worth has been: then
         // rising over about the rise time and falling over about the fall time.
         if (level > autoThresholdGateDb)
