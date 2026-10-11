@@ -16,7 +16,7 @@ namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
 
 constexpr int sidePadding = 6, groupGap = 16, buttonGap = 4, compareMargin = 4;
-constexpr int iconButtonSize = 32, chipHeight = 32, chipPadding = 10;
+constexpr int iconButtonSize = 32, chipHeight = 32, chipPadding = staple::tokens::header::chipPadding;
 
 juce::Font wordmarkFont() { return staple::font (size::fs5, staple::Weight::semiBold).withExtraKerningFactor (-0.01f); }
 juce::Font letterFont() { return staple::font (size::fs4, staple::Weight::semiBold).withExtraKerningFactor (0.02f); }
@@ -101,9 +101,12 @@ HeaderBar::HeaderBar (PluginProcessor& p) : processor (p), presetBar (p)
         processor.selectCompareSide (otherSide (processor.compareSide()));
         edited();
     };
+    // Wide enough for "Copied", its label to the right, so A/B never moves when the label changes.
     copyButton.setInk (colour::text1);
+    copyButton.setPadding (chipPadding, chipPadding);
+    copyButton.setTextJustification (juce::Justification::centredRight);
     copyButton.setButtonText ("Copied");
-    copyWidth = copyButton.getIdealWidth() + 2 * (chipPadding - 6);
+    copyWidth = copyButton.getIdealWidth();
     copyButton.setButtonText ("Copy");
     copyButton.onClick = [this] { copyToOther(); };
 

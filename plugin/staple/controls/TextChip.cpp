@@ -42,6 +42,12 @@ void TextChip::setPadding (float left, float right)
     repaint();
 }
 
+void TextChip::setTextJustification (juce::Justification j)
+{
+    justification = j;
+    repaint();
+}
+
 void TextChip::setInk (std::optional<juce::Colour> colour)
 {
     fixedInk = colour;
@@ -84,7 +90,8 @@ void TextChip::paintButton (juce::Graphics& g, bool highlighted, bool down)
     }
     g.setFont (textFont());
     g.setColour (ink);
-    g.drawText (getButtonText(), area, chevron ? juce::Justification::centredLeft : juce::Justification::centred, true);
+    g.drawText (getButtonText(), area,
+                justification.value_or (chevron ? juce::Justification::centredLeft : juce::Justification::centred), true);
 }
 
 std::unique_ptr<juce::AccessibilityHandler> TextChip::createAccessibilityHandler()
