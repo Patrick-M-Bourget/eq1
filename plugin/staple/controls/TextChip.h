@@ -40,6 +40,9 @@ public:
     void setChevron (Chevron look);
     // The space either side of its text (by default 8 px filled, 6 px plain).
     void setPadding (float left, float right);
+    // Where its text sits between its padding: centred by default, or to the left with a chevron.
+    // Copy sets it to the right, so its text ends in one place whichever label it shows.
+    void setTextJustification (juce::Justification j);
     // Whether its text is a value a screen reader reads (the Display Range chip's "±12 dB"), rather
     // than an action's name (Copy).
     void setTextIsValue (bool isValue) { textIsValue = isValue; }
@@ -62,6 +65,7 @@ private:
     Weight weight;
     float paddingLeft, paddingRight;
     std::optional<Chevron> chevron;
+    std::optional<juce::Justification> justification;
     bool textIsValue = false;
     std::optional<juce::Colour> fixedInk;
 };
