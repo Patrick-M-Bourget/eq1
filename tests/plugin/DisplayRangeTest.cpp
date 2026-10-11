@@ -236,3 +236,40 @@ TEST_CASE ("A zoomed Display Range is saved with the session, and a restored ses
     restored.processor.setStateInformation (zoomed.getData(), static_cast<int> (zoomed.getSize()));
     CHECK (restored.frame() == 30);
 }
+
+TEST_CASE ("An editor frame in the middle of a restore takes the restored Bands as seen and keeps the restored Display Range")
+{
+    // A session with a Band at +10 dB and a range picked by hand that doesn't fit it.
+    Host saved;
+    saved.addBell (10.0f);
+    REQUIRE (saved.frame() == 12);
+    saved.processor.setDisplayRangeDb (6);
+    REQUIRE (saved.frame() == 6);
+    juce::MemoryBlock session;
+    saved.processor.getStateInformation (session);
+
+    Host host;
+    host.addBell (0.0f);
+    REQUIRE (host.frame() == 12);
+
+    // A host restoring off the message thread while the editor looks at the Bands: the frame lands
+    // once the Gain is restored, before the restore is done.
+    struct FrameOnGainChange : juce::AudioProcessorValueTreeState::Listener
+    {
+        Host& host;
+        int frames = 0;
+        explicit FrameOnGainChange (Host& h) : host (h) {}
+        void parameterChanged (const juce::String&, float) override
+        {
+            host.frame();
+            ++frames;
+        }
+    } frameInRestore { host };
+    host.processor.parameterState().addParameterListener ("band1_gain", &frameInRestore);
+    host.processor.setStateInformation (session.getData(), static_cast<int> (session.getSize()));
+    host.processor.parameterState().removeParameterListener ("band1_gain", &frameInRestore);
+    REQUIRE (frameInRestore.frames > 0);
+
+    CHECK (host.processor.displayRangeDb() == 6);
+    CHECK (host.frame() == 6);
+}

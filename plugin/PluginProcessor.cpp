@@ -196,8 +196,12 @@ void PluginProcessor::fitDisplayRangeToHeardGains()
 {
     if (history.isEditing())
         return;
+    const int begun = restoresBegun.load();
     const auto now = currentHeardGains();
     const juce::SpinLock::ScopedLockType lock (seenGainsLock);
+    // A restore in progress, or one since this look began, sets the range and what is seen itself.
+    if (restoresBegun.load() != begun || restoresDone.load() != begun)
+        return;
     setDisplayRangeDb (fittedDisplayRangeDb (displayRangeDb(), seenGains, now));
     seenGains = now;
 }
@@ -240,6 +244,10 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         setDetectionAudition (0);
         setMeteredBand (0);
         clearClipLights();
+        {
+            const juce::SpinLock::ScopedLockType lock (seenGainsLock);
+            ++restoresBegun;
+        }
         auto state = juce::ValueTree::fromXml (*xml);
         migrate (state);
         state.removeProperty (versionProperty, nullptr);
@@ -269,6 +277,7 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         const auto restored = currentHeardGains();
         const juce::SpinLock::ScopedLockType lock (seenGainsLock);
         seenGains = restored;
+        ++restoresDone;
     }
 }
 
