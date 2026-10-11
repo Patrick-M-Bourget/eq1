@@ -7,7 +7,8 @@
 #                               glossary, no test reads a saved state as raw bytes, runs timers itself, has a non-ASCII
 #                               title, reads an EQ1_ environment variable or opens a Graphics on an image outside
 #                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
-#   scripts/check.sh hooks      the Claude Code worktree hook's tests (not run by git hooks, which run docs)
+#   scripts/check.sh hooks      the Claude Code worktree hook's and merge-on-green.sh's tests, against fakes (not run by
+#                               git hooks, which run docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
 #   scripts/check.sh test       Engine and Plugin Shell tests
@@ -129,6 +130,8 @@ docs() {
 hooks() {
     step "Worktree hook"
     .claude/hooks/one-branch-per-worktree.test.sh
+    step "Merge on green"
+    scripts/merge-on-green.test.sh
 }
 
 # Every colour in the editor comes from Staple's tokens (plugin/staple/Tokens.h): a colour written as a
