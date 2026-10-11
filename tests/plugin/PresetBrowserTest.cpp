@@ -6,14 +6,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
-#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <memory>
 
 using eq1::PresetBrowser;
 using eq1::PresetLibrary;
 using harness::findChild;
-using Catch::Matchers::WithinAbs;
 
 namespace
 {
@@ -297,12 +295,7 @@ TEST_CASE ("The Preset browser's panel pops in about its own centre, from 3 px l
         if (child->getBounds() == browser.getPanelBounds())
             panel = child;
     REQUIRE (panel != nullptr);
-    REQUIRE (panel->isTransformed()); // just opened: at the pop-in's start
-    const auto bounds = browser.getPanelBounds().toFloat();
-    const auto drawn = bounds.transformedBy (panel->getTransform());
-    CHECK (drawn.getWidth() < bounds.getWidth());
-    CHECK_THAT (drawn.getCentreX(), WithinAbs (bounds.getCentreX(), 1.0e-3));
-    CHECK_THAT (drawn.getCentreY(), WithinAbs (bounds.getCentreY() + 3.0f, 1.0e-3));
+    harness::checkPopInStart (*panel, browser.getPanelBounds().toFloat());
 }
 
 TEST_CASE ("While the Preset browser is open, Tab stays within it")

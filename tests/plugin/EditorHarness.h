@@ -6,6 +6,7 @@
 #include "staple/controls/Tween.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
 #include <functional>
@@ -169,6 +170,18 @@ inline void settleAnimations (int milliseconds = 60)
 {
     settle (milliseconds);
     REQUIRE (settleUntil ([] { return ! staple::Tween::anyEasing(); }));
+}
+
+// Checks that component, just opened, is drawn at the start of its pop-in (staple::popInTransform):
+// smaller than endsAt, where it ends up in its parent's coordinates, about the same centre, 3 px lower.
+inline void checkPopInStart (const juce::Component& component, juce::Rectangle<float> endsAt)
+{
+    using Catch::Matchers::WithinAbs;
+    REQUIRE (component.isTransformed());
+    const auto drawn = endsAt.transformedBy (component.getTransform());
+    CHECK (drawn.getWidth() < endsAt.getWidth());
+    CHECK_THAT (drawn.getCentreX(), WithinAbs (endsAt.getCentreX(), 1.0e-3));
+    CHECK_THAT (drawn.getCentreY(), WithinAbs (endsAt.getCentreY() + 3.0f, 1.0e-3));
 }
 
 // The editor in a window of its own, as a host shows it, so it takes keyboard focus. Keys go through

@@ -212,8 +212,7 @@ TEST_CASE ("The output popover opens above the Output readout, right-aligned to 
     CHECK_FALSE (host.popover.isOpen());
     host.openPopover();
     // Popping in about where it ends up, from the first frame.
-    const auto placed = host.popover.getCardBounds().toFloat() + host.popover.getPosition().toFloat();
-    CHECK_THAT (placed.transformedBy (host.popover.getTransform()).getCentreX(), WithinAbs (placed.getCentreX(), 1.0e-3));
+    harness::checkPopInStart (host.popover, host.popover.getCardBounds().toFloat() + host.popover.getPosition().toFloat());
     REQUIRE (host.settleUntil ([&] { return ! host.popover.isTransformed(); })); // popped in
     CHECK (host.popover.isVisible());
     CHECK (host.popover.getCardBounds().getWidth() == 176);

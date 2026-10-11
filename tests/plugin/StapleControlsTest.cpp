@@ -524,13 +524,8 @@ TEST_CASE ("A Popover pops in about its card's centre, from 3 px lower, wherever
     popover.setCardSize (160, 120);
     popover.open (opener, staple::Popover::Placement::above);
     REQUIRE (popover.isOpen());
-    REQUIRE (popover.isTransformed()); // just opened: at the pop-in's start
-    // The card where it ends up, in the window's pixels, and where the pop-in draws it now.
-    const auto card = popover.getCardBounds().toFloat() + popover.getPosition().toFloat();
-    const auto drawn = card.transformedBy (popover.getTransform());
-    CHECK (drawn.getWidth() < card.getWidth());
-    CHECK_THAT (drawn.getCentreX(), WithinAbs (card.getCentreX(), 1.0e-3));
-    CHECK_THAT (drawn.getCentreY(), WithinAbs (card.getCentreY() + 3.0f, 1.0e-3));
+    // The card where it ends up, in the window's pixels.
+    harness::checkPopInStart (popover, popover.getCardBounds().toFloat() + popover.getPosition().toFloat());
 }
 
 TEST_CASE ("A TextChip clicks as a Button, and is as wide as its text, padding and chevron")
