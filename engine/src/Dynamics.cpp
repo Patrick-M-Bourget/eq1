@@ -1,5 +1,6 @@
 #include "Dynamics.h"
 
+#include "Smoothstep.h"
 #include "Solo.h"
 
 #include <algorithm>
@@ -274,8 +275,7 @@ double Dynamics::finishRun()
     {
         // A soft knee from kneeDb below Threshold, then smoothly to the full Dynamic Range at
         // fullRangeOvershootDb + kneeDb above it.
-        const double x = listening ? std::clamp ((level - thresholdDb + kneeDb) / span, 0.0, 1.0) : 0.0;
-        const double target = x * x * (3.0 - 2.0 * x);
+        const double target = listening ? smoothstep ((level - thresholdDb + kneeDb) / span) : 0.0;
         movement += (target > movement ? attackCoefficient : releaseCoefficient) * (target - movement);
         sustain += sustainCoefficient * (target - sustain);
     }

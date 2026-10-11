@@ -1,6 +1,7 @@
 #include "ShapeDesign.h"
 
 #include "MatchedDesign.h"
+#include "Smoothstep.h"
 
 #include <algorithm>
 #include <array>
@@ -78,14 +79,8 @@ void lowShelfSections (int order, double dcGain, double q, Use use)
 // limit of the split, so coefficients glide in and out of the split without a jump.
 constexpr double resonantShelfQ = 2.0, fullySplitQ = 2.5;
 constexpr double splitFull = 0.8, splitNone = 1.1; // the zeros' natural frequency over Nyquist
-
-// 0 below 0, 1 above 1 and smooth in between, so the split eases in and out without a corner in the
-// coefficients' path: a corner sounds as one in a section with large coefficients.
-double smoothstep (double x)
-{
-    x = std::clamp (x, 0.0, 1.0);
-    return x * x * (3.0 - 2.0 * x);
-}
+// Both fades are smoothsteps, so the split eases in and out without a corner in the coefficients'
+// path: a corner sounds as one in a section with large coefficients.
 
 // Adds a shelf section, designed with its poles at or below Frequency, as matched biquads, inverted
 // when invert is set. Of a split's two biquads, the one with the sharp zeros comes first and the one
