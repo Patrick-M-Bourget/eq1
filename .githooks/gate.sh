@@ -14,6 +14,34 @@ if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
     exit 1
 fi
 log="$BUILD_DIR/$hook.log"
+
+# At most GATE_SLOTS (3) gates build at once across every worktree: past that, an 8-core Mac slows each one
+# several times over and the editor tests' timing flakes (docs/agents/builder.md, "Running several builders").
+# A slot is a directory in the shared git dir holding its gate's PID; a slot whose gate died is reclaimed.
+slots="$(git rev-parse --path-format=absolute --git-common-dir)/gate-slots"
+mkdir -p "$slots"
+slot= waited=
+until [ -n "$slot" ]; do
+    for ((n = 1; n <= ${GATE_SLOTS:-3}; n++)); do
+        if mkdir "$slots/$n" 2> /dev/null; then
+            echo $$ > "$slots/$n/pid"
+            slot=$slots/$n
+            break
+        fi
+        pid=$(cat "$slots/$n/pid" 2> /dev/null || true)
+        if [ -n "$pid" ] && ! kill -0 "$pid" 2> /dev/null; then
+            rm -rf "$slots/$n"
+            n=$((n - 1)) # try that slot again
+        fi
+    done
+    if [ -z "$slot" ]; then
+        [ -z "$waited" ] && echo "$hook: ${GATE_SLOTS:-3} gates are already building; waiting for one to finish" >&2
+        waited=1
+        sleep 5
+    fi
+done
+trap 'rm -rf "$slot"' EXIT
+
 printf '\n== Build and tests (%s), log in %s\n' "$hook" "$log"
 if ! { cmake --build "$BUILD_DIR" --config Release --parallel \
     && ctest --test-dir "$BUILD_DIR" -C Release -LE response -j 8 --output-on-failure; } > "$log" 2>&1; then

@@ -5,7 +5,9 @@
 # The fake reads its PR from files in $FAKE: mergeable, title, comments (JSON array of bodies), checks
 # (JSON array of {name, bucket}; [] is answered as gh does, "no checks reported") and heads (one SHA per line:
 # each read of headRefOid takes the next, the last repeating, so a later line is a push landing meanwhile).
-# gh pr merge is logged to merge.log, and refused when --match-head-commit isn't the PR's head.
+# gh pr merge is logged to merge.log, and refused when --match-head-commit isn't the PR's head. Branch deletions,
+# through gh api and a fake git (local branch "topic" exists unless $FAKE/no-local, and is checked out in a
+# worktree if $FAKE/checked-out), are logged to deleted.log.
 set -uo pipefail
 script=$(cd "$(dirname "$0")" && pwd)/merge-on-green.sh
 tmp=$(mktemp -d)
@@ -34,6 +36,8 @@ current_head() {
 case "$1 $2 $fields" in
     "pr view mergeable") jq -n --arg m "$(cat "$FAKE/mergeable")" '{mergeable: $m}' | jq -r "$query" ;;
     "pr view title") jq -n --arg t "$(cat "$FAKE/title")" '{title: $t}' | jq -r "$query" ;;
+    "pr view headRefName") echo topic ;;
+    "api -X ") echo "origin ${args[3]##*/}" >> "$FAKE/deleted.log" ;;
     "pr view comments") jq '{comments: map({body: .})}' "$FAKE/comments" | jq -r "$query" ;;
     "pr view headRefOid")
         jq -n --arg h "$(current_head)" '{headRefOid: $h}' | jq -r "$query"
@@ -57,7 +61,17 @@ case "$1 $2 $fields" in
     *) echo "fake gh: unexpected call: $*" >&2; exit 99 ;;
 esac
 EOF
-chmod +x "$tmp/bin/sleep" "$tmp/bin/gh"
+cat > "$tmp/bin/git" << 'EOF'
+#!/usr/bin/env bash
+case "$1 $2" in
+    "show-ref -q") [ ! -e "$FAKE/no-local" ]; exit ;;
+    "worktree list") [ -e "$FAKE/checked-out" ] && printf 'worktree /x\nbranch refs/heads/topic\n' ;;
+    "branch -q") echo "local $4" >> "$FAKE/deleted.log" ;;
+    *) echo "fake git: unexpected call: $*" >&2; exit 99 ;;
+esac
+exit 0
+EOF
+chmod +x "$tmp/bin/sleep" "$tmp/bin/gh" "$tmp/bin/git"
 
 a=aaaaaaa1111111111111111111111111111111111
 b=bbbbbbb2222222222222222222222222222222222
@@ -109,8 +123,28 @@ grep -q 'Approved by the user: "merge it"' "$FAKE/merge.log" || {
     failures=$((failures + 1))
 }
 
+# deleted <expected deleted.log> <description>
+deleted() {
+    if [ "$(cat "$FAKE/deleted.log" 2> /dev/null)" != "$1" ]; then
+        echo "FAIL: $2: deleted $(cat "$FAKE/deleted.log" 2> /dev/null || echo nothing)" >&2
+        failures=$((failures + 1))
+    fi
+}
+deleted $'origin topic\nlocal topic' "a merge deletes the branch on origin and locally"
+
+pr "$green" "$a"
+touch "$FAKE/checked-out"
+expect 0 "kept topic: checked out in a worktree" merged "a branch checked out in a worktree stays"
+deleted "origin topic" "a branch checked out in a worktree stays"
+
+pr "$green" "$a"
+touch "$FAKE/no-local"
+expect 0 "^MERGED #7" merged "a branch with no local copy merges"
+deleted "origin topic" "a branch with no local copy is deleted on origin only"
+
 pr "$green" "$a"$'\n'"$b"
 expect 1 "head moved from ${a:0:7} to ${b:0:7}" unmerged "a push while CI ran stops the merge"
+deleted "" "an unmerged PR keeps its branch"
 
 pr "$green" "$a"$'\n'"$a"$'\n'"$a"$'\n'"$b" "[]"
 expect 1 "head moved from ${a:0:7} to ${b:0:7}" unmerged "a push while waiting for the verdict stops the merge"

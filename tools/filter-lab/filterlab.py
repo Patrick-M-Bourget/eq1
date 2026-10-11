@@ -16,7 +16,8 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py slopes
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
-ones under "Shapes", and pass it to report().
+ones under "Shapes", and pass it to report(). A new command registers itself with @command in its own
+section, so the entry point at the bottom never changes.
 """
 
 import argparse
@@ -25,6 +26,18 @@ import math
 from dataclasses import dataclass
 
 PI = math.pi
+
+# Every command line command: name -> (add its options to an argparse parser, run it on the parsed args).
+COMMANDS = {}
+
+
+def command(*names, options=lambda parser: None):
+    """Registers the decorated run(args) as each of names, with options(parser) adding its arguments."""
+    def register(run):
+        for name in names:
+            COMMANDS[name] = (options, run)
+        return run
+    return register
 
 
 # --- Matched sections (engine/src/MatchedDesign.cpp) ---------------------------------------------
@@ -522,6 +535,25 @@ def report_phase(shape, sample_rates=(44100, 48000, 96000),
         print(f"{band:>7} {order:>5}  {error:7.2f}")
 
 
+def shape_options(parser):
+    parser.add_argument("--q", type=float, nargs="+", default=[0.71])
+    parser.add_argument("--orders", type=int, nargs="+", default=[2])
+    parser.add_argument("--slopes", type=float, nargs="+",
+                        help="fractional Slopes in dB/oct (#18): the morphing cascade instead of --orders")
+    parser.add_argument("--target", choices=TARGETS, default="partial", help="the candidate target for --slopes")
+
+
+@command(*SHAPES, options=shape_options)
+def run_shape(args):
+    reporter = report_phase if args.command == "all-pass" else report_cut if args.command in CUTS else report
+    if not args.slopes:
+        reporter(SHAPES[args.command], qs=args.q, orders=args.orders)
+    elif args.command in FRACTIONAL_SHAPES:
+        reporter(fractional_shape(args.command, args.target), qs=args.q, orders=args.slopes)
+    else:
+        raise SystemExit(f"--slopes works on {', '.join(FRACTIONAL_SHAPES)}")
+
+
 # --- Fractional Slopes (#18): candidate targets and one morphing cascade ------------------------
 # A Slope between whole orders N and N + 1 (order nu = N + t; Notch counts 12 dB/oct per order). The
 # candidate targets:
@@ -873,6 +905,11 @@ def _bumps(shape, curve, frequency, gain, grid):
     return max(_bump([flip * v for v in below]), _bump([-flip * v for v in above]))
 
 
+@command("slopes")
+def run_slopes(args):
+    report_slopes()
+
+
 def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqrt(0.5), step=0.25):
     """Each candidate target's behaviour as Slope moves in step dB/oct from the Shape's minimum to 96,
     at Q 0.71, analog only:
@@ -918,6 +955,12 @@ def movement(overshoot_db, full_range_overshoot_db, knee_db=KNEE_DB):
     Threshold: a smoothstep from knee_db below Threshold to full_range_overshoot_db + knee_db above it."""
     x = min(max((overshoot_db + knee_db) / (full_range_overshoot_db + 2 * knee_db), 0.0), 1.0)
     return x * x * (3 - 2 * x)
+
+
+@command("gain-computer",
+         options=lambda parser: parser.add_argument("--overshoots", type=float, nargs="+", default=[12]))
+def run_gain_computer(args):
+    report_gain_computer(args.overshoots)
 
 
 def report_gain_computer(full_range_overshoots, ranges=(6, 12, 18, 30), overshoots=(0, 3, 6, 9, 12, 15)):
@@ -984,6 +1027,16 @@ def auto_threshold_movement(levels, spreads, rise, fall, hold=0.25, full=12.0, g
             sustain += cs * (target - sustain)
         out.append(moved)
     return out
+
+
+def auto_threshold_options(parser):
+    parser.add_argument("--spreads", type=float, nargs="+", default=[0.2])
+    parser.add_argument("--falls", type=float, nargs="+", default=[1.25])
+
+
+@command("auto-threshold", options=auto_threshold_options)
+def run_auto_threshold(args):
+    report_auto_threshold(args.spreads, args.falls)
 
 
 def report_auto_threshold(spreads, falls, rise=4.5):
@@ -1127,6 +1180,16 @@ def _upper_half_gain(frequency, q):
     return frequency * (math.sqrt(1 + 1 / (4 * q * q)) + 1 / (2 * q))
 
 
+def bell_slope_options(parser):
+    parser.add_argument("--q", type=float, nargs="+", default=[0.71])
+    parser.add_argument("--bell-slopes", type=float, nargs="+", default=[12, 24, 48, 96])
+
+
+@command(*BELL_SLOPES, options=bell_slope_options)
+def run_bell_slope(args):
+    report_bell_slope(BELL_SLOPES[args.command], slopes=args.bell_slopes, qs=args.q)
+
+
 def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000, 96000),
                       frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
                       gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), qs=(0.71,), points=200):
@@ -1177,34 +1240,9 @@ def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("shape", choices=[*SHAPES, *BELL_SLOPES, "gain-computer", "auto-threshold", "slopes"])
-    parser.add_argument("--q", type=float, nargs="+", default=[0.71])
-    parser.add_argument("--orders", type=int, nargs="+", default=[2])
-    parser.add_argument("--overshoots", type=float, nargs="+", default=[12])
-    parser.add_argument("--spreads", type=float, nargs="+", default=[0.2])
-    parser.add_argument("--falls", type=float, nargs="+", default=[1.25])
-    parser.add_argument("--slopes", type=float, nargs="+",
-                        help="fractional Slopes in dB/oct (#18): the morphing cascade instead of --orders")
-    parser.add_argument("--target", choices=TARGETS, default="partial", help="the candidate target for --slopes")
-    parser.add_argument("--bell-slopes", type=float, nargs="+", default=[12, 24, 48, 96])
+    commands = parser.add_subparsers(dest="command", required=True, metavar="command",
+                                     help=", ".join(COMMANDS))
+    for name, (options, _) in COMMANDS.items():
+        options(commands.add_parser(name))
     args = parser.parse_args()
-    if args.shape == "slopes":
-        report_slopes()
-        raise SystemExit
-    if args.shape in BELL_SLOPES:
-        report_bell_slope(BELL_SLOPES[args.shape], slopes=args.bell_slopes, qs=args.q)
-        raise SystemExit
-    if args.slopes:
-        if args.shape not in FRACTIONAL_SHAPES:
-            parser.error(f"--slopes works on {', '.join(FRACTIONAL_SHAPES)}")
-        reporter = report_cut if args.shape in CUTS else report
-        reporter(fractional_shape(args.shape, args.target), qs=args.q, orders=args.slopes)
-        raise SystemExit
-    if args.shape == "auto-threshold":
-        report_auto_threshold(args.spreads, args.falls)
-        raise SystemExit
-    if args.shape == "gain-computer":
-        report_gain_computer(args.overshoots)
-        raise SystemExit
-    reporter = report_phase if args.shape == "all-pass" else report_cut if args.shape in CUTS else report
-    reporter(SHAPES[args.shape], qs=args.q, orders=args.orders)
+    COMMANDS[args.command][1](args)

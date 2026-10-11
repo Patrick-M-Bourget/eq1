@@ -22,7 +22,7 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents
 
 ### Feature workflow
 
-New features: `/grilling` → amend the spec (#1) → `/domain-modeling` for new terms → slice tickets (`needs-triage`) → triage writes each `## Agent Brief`. Tickets come last, never straight from analysis.
+New features: `/grilling` → amend the spec (#1) → `/domain-modeling` for new terms → slice tickets (`needs-triage`) → triage writes each `## Agent Brief`. Tickets come last, never straight from analysis. A brief's DSP numbers come from a `tools/filter-lab/` run, and the brief cites its command.
 
 ### Tickets and PRs
 
