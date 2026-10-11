@@ -189,22 +189,69 @@ def _analog_db(sections, f, frequency):
     return 10 * math.log10(math.prod(s.squared(f / frequency) for s in sections))
 
 
+RESONANT_SHELF_Q = 2.0  # above this Q, a shelf section's extra resonance goes into a second biquad
+SPLIT_IN = 2.5  # the split eases in from Q 2 to this Q
+SPLIT_FULL, SPLIT_NONE = 0.8, 1.1  # zeros' natural frequency, as a share of Nyquist, where the split fades out
+
+
+def _smoothstep(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def _resonant_split(a: Analog, frequency, fs, q, pairs):
+    """A second-order shelf section (designed with its sharp poles at or below Frequency) as two biquads,
+    [poles, zeros]: the section's poles over zeros at the Q the section has at Q 2, and the zeros' extra
+    resonance, (zeros at their Q) / (zeros at that Q), designed as its inverse and inverted back. The
+    split eases in from Q 2 to SPLIT_IN and fades out, geometrically in the zeros' Q, as the zeros'
+    natural frequency goes from SPLIT_FULL to SPLIT_NONE x Nyquist, where the inverse's poles would be
+    held; both fades are smoothsteps, so the coefficients' path has no corner. Unsplit, the second is its
+    matched poles over equal zeros: exactly the identity, and the limit of the split."""
+    natural = math.sqrt(a.n0 / a.n2)
+    zeros_q = math.sqrt(a.n0 * a.n2) / a.n1
+    x = natural * frequency / (fs / 2)
+    t = math.log(SPLIT_NONE / x) / math.log(SPLIT_NONE / SPLIT_FULL)
+    t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
+    split_q = zeros_q * (RESONANT_SHELF_Q / q) ** (t / pairs)
+    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs)
+    if split_q >= zeros_q:
+        resonance.b0, resonance.b1, resonance.b2 = 1, resonance.a1, resonance.a2
+        return [match_section(a, frequency, fs), resonance]
+    poles = match_section(Analog(a.n2, math.sqrt(a.n0 * a.n2) / split_q, a.n0, a.d2, a.d1, a.d0), frequency, fs)
+    return [poles, inverse(resonance)]
+
+
+def _shelf_sections(sections, frequency, fs, q, order, invert):
+    """Each analog section matched, second-order ones split by _resonant_split into two biquads: the one
+    with the sharp zeros first, then the one with the sharp poles, so what a moving resonance stirs up
+    near Nyquist isn't amplified by the other. Inverted, the two swap roles and places, so at 0 dB, where
+    the two directions meet, so do the biquads in each place."""
+    out = []
+    for s in sections:
+        if s.d2 == 0:
+            out.append(inverse(match_section(s, frequency, fs)) if invert else match_section(s, frequency, fs))
+            continue
+        poles, zeros = _resonant_split(s, frequency, fs, q, order // 2)
+        out += [inverse(poles), inverse(zeros)] if invert else [zeros, poles]
+    return out
+
+
 def low_shelf(fs, frequency, gain, q, order=2):
-    sections = []
-    for s in _low_shelf_sections(order, 10 ** (abs(gain) / 20), q):
-        boost = match_section(s, frequency, fs)
-        sections.append(boost if gain >= 0 else inverse(boost))
+    sections = _shelf_sections(_low_shelf_sections(order, 10 ** (abs(gain) / 20), q), frequency, fs, q, order, gain < 0)
     target_sections = list(_low_shelf_sections(order, 10 ** (gain / 20), q))
     return sections, lambda f: _analog_db(target_sections, f, frequency)
 
 
+def _mirrored_cut(low: Analog):
+    """The High Shelf cut section for a Low Shelf boost section: mirrored (s -> 1/s) and inverted."""
+    boost = (Analog(0, low.n0, low.n1, 0, low.d0, low.d1) if low.d2 == 0
+             else Analog(low.n0, low.n1, low.n2, low.d0, low.d1, low.d2))
+    return Analog(boost.d2, boost.d1, boost.d0, boost.n2, boost.n1, boost.n0)
+
+
 def high_shelf(fs, frequency, gain, q, order=2):
-    sections = []
-    for low in _low_shelf_sections(order, 10 ** (abs(gain) / 20), q):
-        boost = (Analog(0, low.n0, low.n1, 0, low.d0, low.d1) if low.d2 == 0
-                 else Analog(low.n0, low.n1, low.n2, low.d0, low.d1, low.d2))
-        cut = match_section(Analog(boost.d2, boost.d1, boost.d0, boost.n2, boost.n1, boost.n0), frequency, fs)
-        sections.append(inverse(cut) if gain >= 0 else cut)
+    sections = _shelf_sections(map(_mirrored_cut, _low_shelf_sections(order, 10 ** (abs(gain) / 20), q)),
+                               frequency, fs, q, order, gain >= 0)
     low_sections = list(_low_shelf_sections(order, 10 ** (-gain / 20), q))
     return sections, lambda f: gain + _analog_db(low_sections, f, frequency)
 
@@ -387,9 +434,10 @@ def position_band(frequency, fs):
 
 
 def report(shape, sample_rates=(44100, 48000, 96000),
-           frequencies=(20, 200, 1000, 5000, 10000, 15000, 18000, 20000),
-           gains=(-30, -12, -3, 3, 12, 30), qs=(0.71,), orders=(2,), points=200):
-    """Worst error per (position band, Q), as dB and as a share of the target's span in dB."""
+           frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
+           gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), qs=(0.71,), orders=(2,), points=200):
+    """Worst error per (position band, Q), as dB and as a share of the target's span in dB: how far it
+    strays from its value at 10 Hz, and at least |Gain|, as in the Engine tests."""
     worst = {}
     for fs in sample_rates:
         for frequency in frequencies:
@@ -399,13 +447,13 @@ def report(shape, sample_rates=(44100, 48000, 96000),
                 for q in qs:
                     for order in orders:
                         sections, target = shape(fs, frequency, gain, q, order)
-                        error = span = 0.0
+                        error, span, lowest = 0.0, abs(gain), target(10)
                         for i in range(points + 1):
                             f = 10 * (fs / 2 / 10) ** (i / points)
                             t = target(f)
-                            span = max(span, abs(t))
+                            span = max(span, abs(t - lowest))
                             error = max(error, abs(cascade_db(sections, f, fs) - t))
-                        share = error / max(span, abs(gain), 1e-9)
+                        share = error / max(span, 1e-9)
                         key = (position_band(frequency, fs), q)
                         if share > worst.get(key, (0,))[0]:
                             worst[key] = (share, error, fs, frequency, gain, order)
