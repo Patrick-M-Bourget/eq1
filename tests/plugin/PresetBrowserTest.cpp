@@ -24,14 +24,20 @@ void click (juce::Button& button)
     button.onClick();
 }
 
-// The browser over a User folder of its own, deleted afterwards: A, Drums/Kick and Drums/Acoustic/Booth,
-// and an empty Drums/Brushes.
-struct Browser
+// A User folder of a test's own, deleted afterwards.
+struct UserFolder
+{
+    juce::TemporaryFile temporary;
+    juce::File folder = temporary.getFile();
+    ~UserFolder() { folder.deleteRecursively(); }
+};
+
+// The browser over a User folder of its own: A, Drums/Kick and Drums/Acoustic/Booth, and an empty
+// Drums/Brushes.
+struct Browser : UserFolder
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    juce::TemporaryFile temporary;
-    juce::File folder = temporary.getFile();
     PresetLibrary library { folder };
     PresetBrowser browser { library };
     std::vector<juce::String> loads, saves;
@@ -58,7 +64,6 @@ struct Browser
             browser.showLoaded (name, &entry);
         };
     }
-    ~Browser() { folder.deleteRecursively(); }
 
     juce::Button& button (const juce::String& title)
     {
@@ -346,13 +351,8 @@ TEST_CASE ("Each A/B side's browser mark and Previous and Next Preset follow the
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    juce::TemporaryFile temporary;
-    const auto folder = temporary.getFile();
-    const struct Removed
-    {
-        juce::File folder;
-        ~Removed() { folder.deleteRecursively(); }
-    } removed { folder };
+    const UserFolder user;
+    const auto folder = user.folder;
     const auto factory = PresetLibrary::factoryPresets();
     REQUIRE (factory.size() >= 2u);
     // User holds a Preset named as the first Factory one, and one listed after it.
