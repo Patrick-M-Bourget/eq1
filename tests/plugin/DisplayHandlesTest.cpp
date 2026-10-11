@@ -38,7 +38,7 @@ std::optional<eq1::display::DynamicRangeHandle> dynamicRangeHandleOf (const std:
 }
 } // namespace
 
-TEST_CASE ("A Dynamic Range Handle sits at its Band's Frequency and heard Gain + Dynamic Range, 26 px below the handle with none, 14 px inside the edges")
+TEST_CASE ("A Dynamic Range Handle sits at its Band's Frequency and Heard Gain + Dynamic Range, 26 px below the handle with none, 14 px inside the edges")
 {
     const DisplayGeometry geometry { .width = 1134, .height = 612, .rangeDb = 12 };
     Frame f;

@@ -84,7 +84,7 @@ public:
     int displayRangeDb() const { return displayRange.load(); }
     void setDisplayRangeDb (int rangeDb);
     // The editor's look at the Bands, each frame while it is open and when a drag ends: when a Band's
-    // heard Gain has changed since the last look to beyond the Display Range, the range zooms out to
+    // Heard Gain has changed since the last look to beyond the Display Range, the range zooms out to
     // fit it (fittedDisplayRangeDb). Nothing while an edit is in progress, so a drag zooms when it
     // ends. Restoring a session takes its Bands as seen. Message thread only.
     void fitDisplayRangeToHeardGains();
@@ -187,7 +187,7 @@ private:
     std::atomic<int> editorWidth { staple::tokens::layout::windowWidth }, editorHeight { staple::tokens::layout::windowHeight };
     std::atomic<int> uiScale { 0 }; // 0 until the instance has one
     UserSettings userSettings;
-    // The heard Gains at the editor's last look, or as a session restored them: not saved, and kept
+    // The Heard Gains at the editor's last look, or as a session restored them: not saved, and kept
     // while the editor is closed.
     HeardGains seenGains;
     juce::SpinLock seenGainsLock; // a host may restore a session from another thread
