@@ -1,6 +1,6 @@
 # Filter design
 
-How each Shape becomes a decramped digital filter (ADR 0001), what analog curve it must match, and how closely the Engine tests hold it to that curve. The code is in `engine/src/MatchedDesign.cpp` and `engine/src/ShapeDesign.cpp`. Try a new or changed design in `tools/filter-lab/filterlab.py` before writing C++: it runs the same design and the same error measure in Python.
+How each Shape becomes a decramped digital filter (ADR 0001), what analog curve it must match, and how closely the Engine tests hold it to that curve. The code is in `engine/src/MatchedDesign.cpp` and `engine/src/ShapeDesign.cpp`. Try a new or changed design in `tools/filter-lab/filterlab.py` before writing C++: it runs the same design and the same error measure in Python. A measurement over "the full range" covers the lab's `FULL_QS` and `SAMPLE_RATES` and both ends of its `*_RANGE`s (the plugin's own ranges; `scripts/check.sh docs` keeps them equal); a narrower grid is named in the command and the result.
 
 ## Method
 

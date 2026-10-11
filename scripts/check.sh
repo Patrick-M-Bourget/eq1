@@ -4,7 +4,8 @@
 #
 #   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
-#                               glossary, no two ADRs share a number, no test reads a saved state as raw bytes, runs
+#                               glossary, no two ADRs share a number, the filter lab's parameter ranges match the
+#                               plugin's, code points at no closed ticket (when gh is signed in), no test reads a saved state as raw bytes, runs
 #                               timers itself, has a non-ASCII title, reads an EQ1_ environment variable or opens a
 #                               Graphics on an image outside
 #                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
@@ -139,7 +140,37 @@ docs() {
         printf '%s\n' "$graphics" | sed 's/$/: opens a Graphics on an image; draw with harness::paintImage (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
-    [ "$broken" = 0 ] && echo "Every cited doc and section exists, every ADR has its own number, no test reads a saved state as raw bytes or an EQ1_ environment variable or opens a Graphics on an image, tests wait with harness::settle and have ASCII titles"
+    # The filter lab measures over a Band's parameter ranges; a copy that drifts from the plugin's
+    # leaves part of the range unmeasured while the lab reports it covered.
+    local name lab plugin
+    for name in Frequency Gain Q Slope; do
+        lab=$(grep -E "^$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_RANGE = \(" tools/filter-lab/filterlab.py |
+            sed -E 's/.*\(([^,]+), *([^)]+)\).*/\1 \2/')
+        plugin=$(awk -v n="\"$name\"" 'found { gsub (/f/, ""); if (match ($0, /\(-?[0-9.]+, *-?[0-9.]+\)/)) { r = substr ($0, RSTART + 1, RLENGTH - 2); sub (/, */, " ", r); print r; exit } }
+                                       index ($0, "slotName (slot, " n ")") { found = 1 }' plugin/Parameters.cpp)
+        if [ -z "$lab" ] || [ -z "$plugin" ] || ! awk -v a="$lab" -v b="$plugin" 'BEGIN { split (a, x, " "); split (b, y, " "); exit ! (x[1] == y[1] && x[2] == y[2]) }'; then
+            echo "tools/filter-lab/filterlab.py: ${name}'s range reads '${lab}', plugin/Parameters.cpp '${plugin}'; keep them equal" >&2
+            broken=1
+        fi
+    done
+    # Code points only at open tickets (CODING_STANDARDS.md, "Comments and docs state current behaviour"):
+    # a closed one is history, which belongs in commit messages. It asks GitHub which are closed, so it
+    # is skipped where gh isn't signed in (CI's docs stage among them).
+    local closed stale
+    if closed=$(gh issue list --state closed --limit 2000 --json number --jq '.[].number' 2>/dev/null) && [ -n "$closed" ]; then
+        stale=$(git grep -noP '(?<![A-Za-z0-9&/_])#\d{1,4}(?![0-9A-Za-z])' -- engine plugin tools tests ':!*.md' |
+            awk -F: -v list="$(printf '%s ' $closed)" 'BEGIN { n = split (list, c, " "); for (i = 1; i <= n; i++) shut["#" c[i]] = 1 }
+                                       ($NF in shut) { print $1 ":" $2 ": points at closed ticket " $NF }' || true)
+        if [ -n "$stale" ]; then
+            printf '%s\n' "$stale" | sed 's/$/; say what the code does now, or point at an open ticket/' >&2
+            broken=1
+        else
+            echo "Code points at no closed ticket"
+        fi
+    else
+        echo "Skipped the closed-ticket check: gh isn't signed in"
+    fi
+    [ "$broken" = 0 ] && echo "Every cited doc and section exists, every ADR has its own number, no test reads a saved state as raw bytes or an EQ1_ environment variable or opens a Graphics on an image, tests wait with harness::settle and have ASCII titles, the filter lab's parameter ranges match the plugin's"
     return "$broken"
 }
 

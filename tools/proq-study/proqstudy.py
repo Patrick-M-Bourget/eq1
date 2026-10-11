@@ -15,7 +15,7 @@ corpus.json and corpus.txt (every preset's Bands in use, in eq1's terms) and sta
 Calibration: the mappings under "Mappings" are derived from the stored values alone. Frequency (log2 of Hz),
 Shape (ADR 0003) and Gain (dB) are certain. Slope's points and how fractions interpolate, Stereo Placement's
 order, Q's range and Threshold's range are not yet confirmed against Pro-Q 4's own display: each needs a few
-presets checked in a host (#135), and any correction goes here.
+presets checked in a host, and any correction goes here.
 
 Anything eq1 leaves out is flagged, never dropped: spectral dynamics, Character, a Processing Mode other than Zero
 Latency, surround Speakers, and Brickwall on a Shape other than a Cut. Keys the tool doesn't know are ignored.
