@@ -72,7 +72,7 @@ TEST_CASE ("The Analyzer button opens its popover above it, left-aligned to it, 
     Analyzer host;
     CHECK_FALSE (host.popover.isOpen());
     host.open();
-    host.settle (300); // popped in
+    host.settleAnimations(); // popped in
     CHECK (host.popover.getCardBounds().getWidth() == 260);
     const auto card = host.editor->getLocalArea (&host.popover, host.popover.getCardBounds());
     const auto anchor = host.editor->getLocalArea (&host.button, host.button.getLocalBounds());
@@ -310,7 +310,7 @@ TEST_CASE ("Analyzer popover snapshot", "[.screens]")
     Analyzer host;
     host.settle (300);
     host.open();
-    host.settle (300);
+    host.settleAnimations (300);
     const auto area = host.editor->getLocalBounds().removeFromBottom (340).removeFromLeft (520);
     harness::writeSnapshot (*host.editor, "analyzer", area);
 }

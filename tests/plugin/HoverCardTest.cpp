@@ -435,7 +435,7 @@ TEST_CASE ("On a Cut the Hover Card shows its Slope in Gain's place, on other ga
 
     host.set (4, "shape", static_cast<float> (eq1::Shape::Bell));
     host.set (4, "bypass", 1.0f);
-    host.settle (300);
+    host.settleAnimations (300);
     CHECK (gain.isEnabled());
     auto& frequency = control<eq1::HoverCard::Value> (card, "Band 4 Frequency");
     CHECK_THAT (frequency.getAlpha(), WithinAbs (0.38, 1.0e-3));
@@ -506,7 +506,7 @@ TEST_CASE ("Hover Card screenshots", "[.screens]")
     auto& card = cardOf (host);
     // The card and what is around it, in the editor's coordinates.
     const auto save = [&] (const juce::String& name) {
-        host.settle (300);
+        host.settleAnimations (300);
         auto area = host.editor->getLocalArea (card.getParentComponent(), card.body()).expanded (60, 30);
         if (auto* strip = card.shapeStrip())
             area = area.getUnion (host.editor->getLocalArea (card.getParentComponent(), strip->getBoundsInParent()).expanded (20));

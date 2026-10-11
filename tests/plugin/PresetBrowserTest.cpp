@@ -6,12 +6,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <memory>
 
 using eq1::PresetBrowser;
 using eq1::PresetLibrary;
 using harness::findChild;
+using Catch::Matchers::WithinAbs;
 
 namespace
 {
@@ -285,6 +287,24 @@ TEST_CASE ("The Preset browser opens as a modal over the whole editor; the scrim
     CHECK (host.presets().hasKeyboardFocus (false));
 }
 
+TEST_CASE ("The Preset browser's panel pops in about its own centre, from 3 px lower")
+{
+    Editor host;
+    host.open();
+    auto& browser = host.browser();
+    juce::Component* panel = nullptr;
+    for (auto* child : browser.getChildren())
+        if (child->getBounds() == browser.getPanelBounds())
+            panel = child;
+    REQUIRE (panel != nullptr);
+    REQUIRE (panel->isTransformed()); // just opened: at the pop-in's start
+    const auto bounds = browser.getPanelBounds().toFloat();
+    const auto drawn = bounds.transformedBy (panel->getTransform());
+    CHECK (drawn.getWidth() < bounds.getWidth());
+    CHECK_THAT (drawn.getCentreX(), WithinAbs (bounds.getCentreX(), 1.0e-3));
+    CHECK_THAT (drawn.getCentreY(), WithinAbs (bounds.getCentreY() + 3.0f, 1.0e-3));
+}
+
 TEST_CASE ("While the Preset browser is open, Tab stays within it")
 {
     Editor host;
@@ -336,7 +356,7 @@ TEST_CASE ("Preset browser snapshots: a folder, and a search", "[.screens]")
     REQUIRE (host.processor.loadPreset (factory[1].preset, factory[1].name));
     host.settle (300);
     host.open();
-    host.settle (300);
+    host.settleAnimations (300);
     const auto write = [&] (const char* name) { harness::writeSnapshot (*host.editor, juce::String ("browser-") + name, {}, 1.0f); };
     write ("folder");
     auto* search = findChild<juce::TextEditor> (host.browser(), [] (juce::TextEditor& t) { return t.getTitle() == "Search Presets"; });

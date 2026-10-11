@@ -14,6 +14,7 @@ class Tween final : private juce::Timer
 {
 public:
     Tween (int durationMs, float start);
+    ~Tween() override;
 
     std::function<void (float)> apply;
 
@@ -25,8 +26,15 @@ public:
     float value() const { return now; }
     float target() const { return to; }
 
+    // Whether any Tween is easing now, on the message thread: what a test waits on before it checks
+    // where an animation ends.
+    static bool anyEasing() { return easingCount > 0; }
+
 private:
     void timerCallback() override;
+    // Starts or stops the frames, keeping count of the Tweens easing.
+    void setEasing (bool on);
+    inline static int easingCount = 0;
 
     int durationMs;
     float from, to, now;

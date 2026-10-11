@@ -209,7 +209,7 @@ TEST_CASE ("A Bypassed Band's panel fades to 38 % but Bypass and Delete, and sta
     PanelEditor host;
     host.set (1, "dynamic_range", -6.0f);
     host.set (1, "bypass", 1.0f);
-    host.settle (300);
+    host.settleAnimations (300);
     for (const juce::String title : { "Band 1 Solo", "Band 1 Shape", "Band 1 Slope", "Band 1 Frequency", "Band 1 Gain", "Band 1 Q",
                                       "Band 1 Stereo Placement", "Previous Band", "Next Band", "Band 1 Clear Dynamics",
                                       "Band 1 Dynamics Bypass" })
@@ -225,7 +225,7 @@ TEST_CASE ("A Bypassed Band's panel fades to 38 % but Bypass and Delete, and sta
     CHECK_THAT (host.value (1, "gain"), WithinAbs (4.0, 1.0e-4));
 
     host.set (1, "bypass", 0.0f);
-    host.settle (300);
+    host.settleAnimations (300);
     CHECK (host.control ("Band 1 Gain").getAlpha() == 1.0f);
 }
 
@@ -494,7 +494,7 @@ struct DynamicEditor : PanelEditor
     DynamicEditor()
     {
         set (1, "dynamic_range", -6.0f);
-        settle (300);
+        settleAnimations (300);
     }
 
     staple::Knob& gain() { return control<staple::Knob> ("Band 1 Gain"); }
@@ -705,7 +705,7 @@ TEST_CASE ("The dynamics section opens and closes, widening the panel alone; it 
     CHECK_FALSE (host.findAll<eq1::DynamicsSection> ().front()->isShowing());
 
     host.set (1, "dynamic_range", -6.0f);
-    host.settle (400);
+    host.settleAnimations (400);
     auto& section = *host.findAll<eq1::DynamicsSection>().front();
     // Open by default: wider by the section, about the same centre.
     CHECK (section.isShowing());
@@ -722,7 +722,7 @@ TEST_CASE ("The dynamics section opens and closes, widening the panel alone; it 
 
     auto& chevron = host.control<juce::Button> ("Hide Band 1 dynamics");
     chevron.onClick();
-    host.settle (400);
+    host.settleAnimations (400);
     CHECK_FALSE (section.isShowing());
     CHECK (panel.getBounds() == closed);
     CHECK (chevron.getTitle() == "Show Band 1 dynamics");
@@ -730,15 +730,15 @@ TEST_CASE ("The dynamics section opens and closes, widening the panel alone; it 
     host.click (host.at (100.0));
     host.settle();
     host.click (host.at (1000.0));
-    host.settle (300);
+    host.settleAnimations (300);
     CHECK_FALSE (section.isShowing());
     chevron.onClick();
-    host.settle (400);
+    host.settleAnimations (400);
     CHECK (section.isShowing());
 
     // Absent once the Band isn't dynamic.
     host.set (1, "dynamic_range", 0.0f);
-    host.settle (400);
+    host.settleAnimations (400);
     CHECK_FALSE (section.isShowing());
     CHECK (panel.getBounds() == closed);
 }
@@ -775,7 +775,7 @@ TEST_CASE ("With the dynamics section open the slab grows 11 px up, its bottom w
     check (492, 115, 539, 545, 570, 612);
 
     host.set (1, "dynamic_range", -6.0f);
-    host.settle (400);
+    host.settleAnimations (400);
     REQUIRE (panel.isDynamicsOpen());
     check (634, 126, 528, 534, 565, 607);
     // The dynamics section inside the slab.
@@ -783,7 +783,7 @@ TEST_CASE ("With the dynamics section open the slab grows 11 px up, its bottom w
     CHECK (panel.slabBounds().contains (panel.getParentComponent()->getLocalArea (&section, section.getLocalBounds())));
 
     host.control<juce::Button> ("Hide Band 1 dynamics").onClick();
-    host.settle (400);
+    host.settleAnimations (400);
     check (492, 115, 539, 545, 570, 612);
 }
 
@@ -933,15 +933,15 @@ TEST_CASE ("The Detection Range bar shows on a Free Dynamic Band that isn't Bypa
     const auto& panel = host.panel();
     // 30 px above the slab's top, the bell excluded, with the dynamics section open and closed.
     const auto line = [&] { return juce::roundToInt (bar.getY() + bar.lineY()); };
-    host.settle (400);
+    host.settleAnimations (400);
     REQUIRE (panel.isDynamicsOpen());
     CHECK (line() == panel.slabBounds().getY() - 30);
     CHECK (line() == host.display.getBottom() - 36 - 126 - 30);
     host.control<juce::Button> ("Hide Band 1 dynamics").onClick();
-    host.settle (400);
+    host.settleAnimations (400);
     CHECK (line() == host.display.getBottom() - 36 - 115 - 30);
     host.control<juce::Button> ("Show Band 1 dynamics").onClick();
-    host.settle (400);
+    host.settleAnimations (400);
     CHECK (bar.getX() == host.display.getX());
     CHECK (bar.getWidth() == host.display.getWidth());
     host.set (1, "bypass", 1.0f);
@@ -1026,7 +1026,7 @@ TEST_CASE ("Band panel screenshots", "[.screens]")
 {
     const auto save = [] (PanelEditor& host, const juce::String& name) {
         host.editor->setSize (1200, 760);
-        host.settle (300);
+        host.settleAnimations (300);
         harness::writeSnapshot (*host.editor, "panel-" + name);
     };
     {

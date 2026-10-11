@@ -515,6 +515,24 @@ TEST_CASE ("A Popover opens on its preferred side where there is room, else on t
     }
 }
 
+TEST_CASE ("A Popover pops in about its card's centre, from 3 px lower, wherever it is placed")
+{
+    Kit kit; // 400 x 300
+    juce::TextButton opener ("Opener");
+    kit.add (opener, { 220, 200, 80, 28 });
+    staple::Popover popover;
+    popover.setCardSize (160, 120);
+    popover.open (opener, staple::Popover::Placement::above);
+    REQUIRE (popover.isOpen());
+    REQUIRE (popover.isTransformed()); // just opened: at the pop-in's start
+    // The card where it ends up, in the window's pixels, and where the pop-in draws it now.
+    const auto card = popover.getCardBounds().toFloat() + popover.getPosition().toFloat();
+    const auto drawn = card.transformedBy (popover.getTransform());
+    CHECK (drawn.getWidth() < card.getWidth());
+    CHECK_THAT (drawn.getCentreX(), WithinAbs (card.getCentreX(), 1.0e-3));
+    CHECK_THAT (drawn.getCentreY(), WithinAbs (card.getCentreY() + 3.0f, 1.0e-3));
+}
+
 TEST_CASE ("A TextChip clicks as a Button, and is as wide as its text, padding and chevron")
 {
     Kit kit;
@@ -863,8 +881,7 @@ TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
     item2.setBounds (item1.getBounds().translated (0, 32));
     item1.setState (juce::Button::buttonOver);
     popover.open (opener);
-    for (int frame = 0; frame < 20 && popover.getAlpha() < 1.0f; ++frame) // its pop-in, played to the end
-        harness::settle (20);
+    harness::settleAnimations(); // its pop-in, played to the end
 
     // The focus ring, as LookAndFeel's FocusOutline draws it after Tab (a window of its own, so drawn
     // here in its place).

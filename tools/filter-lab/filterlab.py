@@ -1667,6 +1667,246 @@ def report_bell_slope(shape, slopes=(12, 24, 48, 96), sample_rates=(44100, 48000
         print(f"{slope:>5g}  {len(sections):>8}  {off:18.2e}")
 
 
+# --- Steep Bell continuity near Nyquist (#162, docs/adr/0007) -------------------------------------
+# ADR 0007's held section, as first accepted ("hold"), isn't continuous: as a section's natural
+# frequency crosses the hold, its match point jumps from its natural frequency (the hold) to
+# BELL_HOLD_MATCH x the hold. ADR 0007 takes "slide", which slides the match point instead. Each candidate
+# here designs one section of the Butterworth band shelf; bell-continuity measures how far the response
+# moves between two Frequencies a small step apart, across every section's crossing (and on a grid
+# away from them, for scale), and bell-candidates measures each candidate against ADR 0007's bands.
+#
+#     python3 tools/filter-lab/filterlab.py bell-continuity --candidates hold slide
+#     python3 tools/filter-lab/filterlab.py bell-candidates --candidates hold slide --q 0.1 0.71 2 10 40 --at-crossings
+
+BELL_LIMITS = {"<=0.45": 0.10, "<=0.73": 0.20, "<=0.91": 0.35}  # today's Bell test, as a share of |Gain|
+FREQUENCY_RANGE = (10.0, 30000.0)  # the Frequency parameter's range
+
+
+def _held_poles(b: Analog, reference, hold):
+    """ADR 0007's held poles: at the hold, with the Q that makes them as loud there, relative to DC,
+    as the analog poles are (never higher). Returns (held poles, held Q, analog Q)."""
+    poles = Analog(0, 0, 1, 1, b.d1, 1)
+    held_q = min(1 / b.d1, math.sqrt(poles.squared(hold / reference) / poles.squared(0)))
+    return Analog(0, 0, 1, 1, 1 / held_q, 1), held_q, 1 / b.d1
+
+
+def _section_hold(b: Analog, reference, fs):
+    """ADR 0007 as accepted (_band_shelf_section): match at the natural frequency below the hold, at
+    BELL_HOLD_MATCH x the hold above it."""
+    hold = BELL_HOLD * fs / 2
+    if reference <= hold:
+        return match_section(b, reference, fs)
+    held, _, _ = _held_poles(b, reference, hold)
+    match = BELL_HOLD_MATCH * hold
+    squared = lambda f: b.squared(f / reference)
+    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
+
+
+def _section_clamp(b: Analog, reference, fs):
+    """As _section_hold, but every section's match point is clamped to BELL_HOLD_MATCH x the hold, held
+    or not: the match point no longer jumps as the natural frequency crosses the hold, and the held poles
+    (Q unchanged there) don't either."""
+    hold = BELL_HOLD * fs / 2
+    match = min(reference, BELL_HOLD_MATCH * hold)
+    squared = lambda f: b.squared(f / reference)
+    if reference <= hold:
+        return match_section(b, reference, fs, match_hz=match)
+    held, _, _ = _held_poles(b, reference, hold)
+    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
+
+
+def _section_blend(b: Analog, reference, fs):
+    """As _section_clamp, with Band Pass's blend of magnitudes (filter-design doc, "Above 24 dB/oct"):
+    the zeros fit the analog section's magnitude where the Q isn't lowered and, as it is lowered, more
+    of the held section's own: the analog section moved to the hold, its zeros' and poles' damping both
+    scaled by held Q / analog Q, weighted by sqrt(1 - held Q / analog Q)."""
+    hold = BELL_HOLD * fs / 2
+    if reference <= hold:
+        return _section_clamp(b, reference, fs)
+    held, held_q, analog_q = _held_poles(b, reference, hold)
+    own = Analog(1, b.n1 * analog_q / held_q, b.n0, 1, 1 / held_q, 1)
+    blend = math.sqrt(1 - held_q / analog_q)
+    squared = lambda f: b.squared(f / reference) ** (1 - blend) * own.squared(f / hold) ** blend
+    match = BELL_HOLD_MATCH * hold
+    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
+
+
+BELL_SLIDE = 2 ** (1 / 24)  # the match point slides to BELL_HOLD_MATCH x the hold as the natural frequency rises this far above it
+
+
+def _slid_match(reference, hold):
+    """The hold while the natural frequency is at the hold, sliding (in log frequency, smoothly) to
+    BELL_HOLD_MATCH x the hold as it rises BELL_SLIDE above it."""
+    x = _smoothstep(math.log(reference / hold) / math.log(BELL_SLIDE))
+    return hold * BELL_HOLD_MATCH ** x
+
+
+def _section_slide(b: Analog, reference, fs):
+    """As _section_hold, but above the hold the match point slides from the hold to BELL_HOLD_MATCH x the
+    hold (_slid_match), so it no longer jumps as the natural frequency crosses the hold."""
+    hold = BELL_HOLD * fs / 2
+    if reference <= hold:
+        return match_section(b, reference, fs)
+    held, _, _ = _held_poles(b, reference, hold)
+    match = _slid_match(reference, hold)
+    squared = lambda f: b.squared(f / reference)
+    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
+
+
+def _section_slide_blend(b: Analog, reference, fs):
+    """_section_slide's match point with _section_blend's blend of magnitudes."""
+    hold = BELL_HOLD * fs / 2
+    if reference <= hold:
+        return match_section(b, reference, fs)
+    held, held_q, analog_q = _held_poles(b, reference, hold)
+    own = Analog(1, b.n1 * analog_q / held_q, b.n0, 1, 1 / held_q, 1)
+    blend = math.sqrt(1 - held_q / analog_q)
+    squared = lambda f: b.squared(f / reference) ** (1 - blend) * own.squared(f / hold) ** blend
+    match = _slid_match(reference, hold)
+    return match_magnitudes(held, hold, fs, match, squared(0), squared(match), squared(fs / 2))
+
+
+BELL_SECTIONS = {"hold": _section_hold, "clamp": _section_clamp, "blend": _section_blend,
+                 "slide": _section_slide, "slide-blend": _section_slide_blend}
+
+
+def _butterworth_bell_analog(gain, q, slope):
+    """A boost's analog sections (ADR 0007), each normalised to its poles' natural frequency, which is
+    independent of Frequency: [(section, natural frequency / Frequency)]."""
+    order = max(1, round(slope / 12))
+    return order, [normalised(a) for a in band_shelf_analog(*butterworth_shelf_roots(order, abs(gain)), q)]
+
+
+def steep_bell(fs, frequency, gain, q, slope=12, section=_section_hold):
+    """ADR 0007's steep Bell with each section designed by section(normalised analog, natural frequency
+    in Hz, fs). At 12 dB/oct it is today's bell() exactly. Designed as a boost and inverted for a cut."""
+    order, analog = _butterworth_bell_analog(gain, q, slope)
+    if order == 1:
+        boost = [match_section(analog[0][0], frequency * analog[0][1], fs)]
+    else:
+        boost = [section(b, frequency * w0, fs) for b, w0 in analog]
+    sign = 1 if gain >= 0 else -1
+    raw = band_shelf_analog(*butterworth_shelf_roots(order, abs(gain)), q)
+    return ([c if gain >= 0 else inverse(c) for c in boost],
+            lambda f: sign * _analog_db(raw, f, frequency))
+
+
+def bell_candidate_options(parser):
+    parser.add_argument("--candidates", nargs="+", default=list(BELL_SECTIONS), choices=list(BELL_SECTIONS))
+    parser.add_argument("--q", type=float, nargs="+", default=[0.025, 0.1, 0.71, 2, 10, 40])
+    parser.add_argument("--gains", type=float, nargs="+", default=[-30, -12, -3, 3, 12, 30],
+                        help="bell-continuity only; bell-candidates uses report_bell_slope's Gains")
+    parser.add_argument("--bell-slopes", type=float, nargs="+", default=[12, 24, 36, 48, 60, 72, 84, 96])
+    parser.add_argument("--cents", type=float, default=0.1, help="the Frequency step, in cents")
+    parser.add_argument("--at-crossings", action="store_true",
+                        help="bell-candidates: add Frequencies either side of each section's crossing of the hold")
+
+
+@command("bell-continuity", options=bell_candidate_options)
+def run_bell_continuity(args):
+    for name in args.candidates:
+        print(f"candidate {name}")
+        report_bell_continuity(BELL_SECTIONS[name], slopes=args.bell_slopes, qs=args.q, gains=args.gains,
+                               cents=args.cents)
+        print()
+
+
+def _response_db(sections, fs, points):
+    return [cascade_db(sections, f, fs) for f in points]
+
+
+def report_bell_continuity(section, slopes, qs, gains, sample_rates=(44100, 48000, 96000), cents=0.1,
+                           points=200):
+    """The largest change in the response, at any of points frequencies from 10 Hz to Nyquist (log
+    spaced, plus 64 linear ones across the top octave), between Frequencies a step of cents apart:
+    straddling each section's crossing of the hold within the Frequency range, and 8 more points as its
+    natural frequency rises BELL_SLIDE above the hold (where _slid_match slides), and, for scale, at
+    Frequencies an octave apart across the range. Per Slope, worst over sample rates, Q and
+    Gain, with its case."""
+    grid = [FREQUENCY_RANGE[0] * 2 ** k for k in range(int(math.log2(FREQUENCY_RANGE[1] / FREQUENCY_RANGE[0])) + 1)]
+    half = 2 ** (cents / 2400)
+    worst = {}
+    for fs in sample_rates:
+        hold = BELL_HOLD * fs / 2
+        at = [10 * (fs / 2 / 10) ** (i / points) for i in range(points + 1)]
+        at += [fs / 4 * (1 + i / 64) for i in range(64)]
+        for slope in slopes:
+            for q in qs:
+                for gain in gains:
+                    _, analog = _butterworth_bell_analog(gain, q, slope)
+                    crossings = [hold / w0 * BELL_SLIDE ** (k / 8) for _, w0 in analog for k in range(9)]
+                    crossings = [f for f in crossings if FREQUENCY_RANGE[0] <= f <= FREQUENCY_RANGE[1]]
+                    for kind, frequencies in (("crossing", crossings), ("grid", grid)):
+                        for frequency in frequencies:
+                            below = _response_db(steep_bell(fs, frequency / half, gain, q, slope, section)[0], fs, at)
+                            above = _response_db(steep_bell(fs, frequency * half, gain, q, slope, section)[0], fs, at)
+                            change = max(abs(x - y) for x, y in zip(below, above))
+                            key = (slope, kind if kind == "grid" or frequency <= fs / 2 else "above")
+                            if change > worst.get(key, (-1,))[0]:
+                                worst[key] = (change, fs, frequency, q, gain)
+    print(f"step {cents:g} cents; dB, worst over sample rates, Q and Gain; near the hold with Frequency up to")
+    print("Nyquist and above it (to the top of the Frequency range), and on the octave grid")
+    print(f"{'slope':>5}  {'near':>6}  {'above':>6}  {'grid':>6}   worst near / above")
+    for slope in slopes:
+        cells, cases = [], []
+        for kind in ("crossing", "above"):
+            change, fs, frequency, q, gain = worst.get((slope, kind), (0.0, 0, 0, 0, 0))
+            cells.append(change)
+            cases.append(f"fs={fs} F={frequency:.0f} Q={q} G={gain}" if fs else "none")
+        print(f"{slope:>5g}  {cells[0]:6.3f}  {cells[1]:6.3f}  {worst[(slope, 'grid')][0]:6.3f}   {' / '.join(cases)}")
+
+
+
+@command("bell-candidates", options=bell_candidate_options)
+def run_bell_candidates(args):
+    for name in args.candidates:
+        print(f"candidate {name}")
+        report_bell_candidate(BELL_SECTIONS[name], slopes=[s for s in args.bell_slopes if s > 12], qs=args.q,
+                              crossings=args.at_crossings, cents=args.cents)
+        print()
+
+
+def report_bell_candidate(section, slopes, qs, sample_rates=(44100, 48000, 96000),
+                          frequencies=(20, 200, 1000, 2000, 5000, 9000, 10000, 15000, 18000, 20000),
+                          gains=(-30, -18, -12, -6, -3, 3, 12, 18, 30), points=200, crossings=False, cents=0.1):
+    """report_bell_slope's measure, over every Slope given at once: the worst error louder and quieter
+    than the target (for a boost; a cut mirrors it) as a share of |Gain|, banded by where the upper
+    half-Gain point sits (ADR 0007), against today's Bell limits, with the worst case. With crossings,
+    the grid adds the Frequencies a step of cents either side of each section's crossing of the hold
+    (up to 0.91 x Nyquist), where a section sits at the hold and the fixed grid would miss it."""
+    worst = {}
+    for fs in sample_rates:
+        hold = BELL_HOLD * fs / 2
+        for gain in gains:
+            for q in qs:
+                for slope in slopes:
+                    _, analog = _butterworth_bell_analog(gain, q, slope)
+                    at = list(frequencies)
+                    if crossings:
+                        at += [hold / w0 * 2 ** (side * cents / 1200) for _, w0 in analog for side in (-1, 1)]
+                    for frequency in at:
+                        if not 20 <= frequency <= 0.91 * fs / 2:
+                            continue
+                        upper = _upper_half_gain(frequency, q)
+                        edge = ">0.91" if upper > 0.91 * fs / 2 else position_band(upper, fs)
+                        sections, target = steep_bell(fs, frequency, gain, q, slope, section)
+                        for i in range(points + 1):
+                            f = 10 * (fs / 2 / 10) ** (i / points)
+                            error = (cascade_db(sections, f, fs) - target(f)) * (1 if gain > 0 else -1) / abs(gain)
+                            for side, e in ((0, error), (1, -error)):
+                                if e > worst.get((edge, side), (-1,))[0]:
+                                    worst[(edge, side)] = (e, fs, frequency, q, gain, slope)
+    print(f"by upper half-Gain point / Nyquist, Slopes {', '.join(f'{s:g}' for s in slopes)}")
+    print(f"{'band':>7}  {'louder':>6} {'quieter':>7}  {'limit':>5}   worst case")
+    for band in ("<=0.45", "<=0.73", "<=0.91", ">0.91"):
+        if (band, 0) not in worst:
+            continue
+        up, down = worst[(band, 0)], worst[(band, 1)]
+        limit = f"{BELL_LIMITS[band]:5.0%}" if band in BELL_LIMITS else "    -"
+        e, fs, frequency, q, gain, slope = max(up, down)
+        print(f"{band:>7}  {up[0]:6.1%} {down[0]:7.1%}  {limit}   fs={fs} F={frequency:.0f} Q={q} G={gain} slope={slope:g}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True, metavar="command",

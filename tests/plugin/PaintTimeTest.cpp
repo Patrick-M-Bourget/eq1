@@ -115,5 +115,6 @@ TEST_CASE ("Screenshot: the editor with a few Bands, the Analyzer and a selected
         }
         host.settle (20);
     }
+    host.settleAnimations(); // the Band panel slid open
     harness::writeSnapshot (*host.editor, "screenshot");
 }
