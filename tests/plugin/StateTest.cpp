@@ -38,13 +38,6 @@ void set (juce::AudioProcessor& processor, const juce::String& id, float plain)
     p.setValueNotifyingHost (p.convertTo0to1 (plain));
 }
 
-std::unique_ptr<juce::XmlElement> savedXml (juce::AudioProcessor& processor)
-{
-    juce::MemoryBlock state;
-    processor.getStateInformation (state);
-    return juce::AudioProcessor::getXmlFromBinary (state.getData(), static_cast<int> (state.getSize()));
-}
-
 void load (juce::AudioProcessor& processor, const juce::XmlElement& xml)
 {
     juce::MemoryBlock state;
@@ -86,7 +79,7 @@ TEST_CASE ("Saved state carries the state version")
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    const auto xml = savedXml (processor);
+    const auto xml = eq1::test::savedXml (processor);
     REQUIRE (xml != nullptr);
     CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
     CHECK (eq1::PluginProcessor::stateVersion == 3);
@@ -105,7 +98,7 @@ TEST_CASE ("Save and reload sound exactly the same: Bands, dynamics, Sidechain d
         { "pan_mode", 1.0f },             { "phase_invert", 1.0f } };
     for (const auto& [id, v] : values)
         set (saved, id, v);
-    const auto xml = savedXml (saved);
+    const auto xml = eq1::test::savedXml (saved);
     REQUIRE (xml != nullptr);
 
     eq1::PluginProcessor restored;
@@ -128,7 +121,7 @@ TEST_CASE ("A/B Compare survives save and reload: the side you're on and both si
     set (saved, "band4_in_use", 1.0f);
     set (saved, "band4_shape", 2.0f);
     set (saved, "output_gain", -2.0f);
-    const auto xml = savedXml (saved);
+    const auto xml = eq1::test::savedXml (saved);
     REQUIRE (xml != nullptr);
 
     eq1::PluginProcessor restored;
@@ -191,7 +184,7 @@ TEST_CASE ("A session saved before the state had a version (version 0) loads eve
     CHECK (analyzer.peakHold);
 
     // Saved again, it is the current version.
-    CHECK (savedXml (processor)->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
+    CHECK (eq1::test::savedXml (processor)->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
 }
 
 TEST_CASE ("A session from a newer version loads the settings this version knows")
@@ -227,7 +220,7 @@ TEST_CASE ("A session saved in the middle of an A/B switch or a Preset load hold
         void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override
         {
             if (saved == nullptr)
-                saved = savedXml (processor);
+                saved = eq1::test::savedXml (processor);
         }
         void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override {}
     };
@@ -297,7 +290,7 @@ TEST_CASE ("Save and reload keep each side's Loaded Preset and Modified state, e
     set (saved, "band2_gain", 3.0f);
     saved.selectCompareSide (eq1::CompareSide::B);
     saved.loadPreset (eq1::PresetLibrary::read (kick), "Kick");
-    const auto xml = savedXml (saved);
+    const auto xml = eq1::test::savedXml (saved);
     REQUIRE (xml != nullptr);
     folder.getFile().deleteRecursively();
 
@@ -342,7 +335,7 @@ TEST_CASE ("Whether the Output Meter is shown is saved with the session, isn't u
     saved.setOutputMeterShown (false);
     CHECK_FALSE (saved.isLoadedPresetModified());
     CHECK (saved.editHistory().undoSteps() == steps);
-    const auto xml = savedXml (saved);
+    const auto xml = eq1::test::savedXml (saved);
     REQUIRE (xml != nullptr);
     CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
 

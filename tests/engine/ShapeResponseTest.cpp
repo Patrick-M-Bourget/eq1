@@ -165,12 +165,15 @@ Settings shape (Shape s, double frequency, double gain, double q, double slope)
     return settings;
 }
 
-// Allowed shelf error as a share of the curve's own span in dB: shelves near Nyquist and
-// resonant shelves (Q above 2) are the limits of a cascade of decramped biquads (ADR 0001).
+// Allowed shelf error as a share of the curve's own span in dB (docs/dsp/filter-design.md, "Test
+// tolerances"): resonant shelves (Q above 2) split each section in two biquads, and come within 12% up
+// to 0.45 x Nyquist as gentle ones do. Nearer Nyquist shelves are the limits of a cascade of
+// decramped biquads (ADR 0001), resonant ones most.
 double shelfToleranceDb (double sampleRate, double frequency, double q, double spanDb)
 {
     const double position = frequency / (sampleRate / 2.0);
-    const double share = q > 2.0 ? 0.75 : position <= 0.73 ? 0.12 : 0.45;
+    const bool resonant = q > 2.0;
+    const double share = position <= 0.45 ? 0.12 : position <= 0.73 ? (resonant ? 0.15 : 0.12) : (resonant ? 0.75 : 0.45);
     return 0.6 * (position > 0.73 ? 1.0 : 0.1) + share * spanDb;
 }
 
@@ -190,7 +193,7 @@ TEST_CASE ("Low Shelf, High Shelf and Tilt Shelf match their analog targets up t
     const double frequency = GENERATE (20.0, 200.0, 2000.0, 9000.0, 15000.0, 20000.0);
     const double gain = GENERATE (-30.0, -6.0, 3.0, 18.0);
     const int order = GENERATE (1, 2, 5, 16);
-    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0, 40.0);
+    const double q = GENERATE (0.1, std::sqrt (0.5), 2.0, 10.0, 40.0);
     const Shape s = GENERATE (Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf);
     if (frequency > 0.91 * sampleRate / 2.0)
         return;
