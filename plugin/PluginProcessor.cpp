@@ -207,13 +207,13 @@ juce::ValueTree PluginProcessor::presetState()
     return capturePresetSettings (parameters, parameters.state.getType()).setProperty (versionProperty, stateVersion, nullptr);
 }
 
-bool PluginProcessor::loadPreset (const juce::ValueTree& preset, const juce::String& name)
+bool PluginProcessor::loadPreset (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder)
 {
     if (! preset.hasType (parameters.state.getType()))
         return false;
     auto settings = preset.createCopy();
     migrate (settings);
-    compare.loadPreset (settings, name);
+    compare.loadPreset (settings, name, folder);
     return true;
 }
 

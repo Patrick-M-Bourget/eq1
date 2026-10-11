@@ -5,6 +5,7 @@
 #include "staple/Tokens.h"
 
 #include <cmath>
+#include <utility>
 
 namespace eq1
 {
@@ -78,20 +79,23 @@ std::unique_ptr<juce::AccessibilityHandler> PresetNameButton::createAccessibilit
         [this] { triggerClick(); });
 }
 
-PresetBar::PresetBar (PluginProcessor& p) : processor (p)
+PresetBar::PresetBar (PluginProcessor& p, juce::File userFolder) : processor (p), library (std::move (userFolder))
 {
     presets.onClick = [this] {
         if (browser.isVisible())
             browser.close();
         else
-            browser.open (processor.loadedPresetName(), lastLoadedEntry());
+        {
+            const auto entry = lastLoadedEntry();
+            browser.open (processor.loadedPresetName(), entry.has_value() ? &*entry : nullptr);
+        }
     };
     browser.opener = &presets;
     presets.spokenValue = [this] {
         const auto name = processor.loadedPresetName();
         return name.isEmpty() ? juce::String ("No Preset") : name + (processor.isLoadedPresetModified() ? ", Modified" : "");
     };
-    browser.onLoad = [this] (const PresetLibrary::Entry& entry) { load (entry.preset, entry.name, entry); };
+    browser.onLoad = [this] (const PresetLibrary::Entry& entry) { load (entry.preset, entry.name, entry.folder); };
     browser.onSave = [this] (const juce::String& name) { saveAs (name); };
     browser.onLoadFile = [this] {
         browser.close();
@@ -123,7 +127,8 @@ void PresetBar::showLoadedPreset()
     const int widthBefore = getIdealWidth();
     const auto name = processor.loadedPresetName();
     presets.show (name, processor.isLoadedPresetModified());
-    browser.showLoaded (name, lastLoadedEntry());
+    const auto entry = lastLoadedEntry();
+    browser.showLoaded (name, entry.has_value() ? &*entry : nullptr);
     if (getIdealWidth() != widthBefore && onIdealWidthChange != nullptr)
         onIdealWidthChange();
 }
@@ -135,13 +140,18 @@ void PresetBar::edited()
         onEdit();
 }
 
-void PresetBar::load (const juce::ValueTree& preset, const juce::String& name, std::optional<PresetLibrary::Entry> entry)
+std::optional<PresetLibrary::Entry> PresetBar::lastLoadedEntry() const
 {
-    if (processor.loadPreset (preset, name))
-    {
-        lastLoaded = std::move (entry);
+    const auto folder = processor.loadedPresetFolder();
+    if (folder.isEmpty())
+        return std::nullopt;
+    return PresetLibrary::Entry { processor.loadedPresetName(), folder, {}, {} };
+}
+
+void PresetBar::load (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder)
+{
+    if (processor.loadPreset (preset, name, folder))
         edited();
-    }
     else
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Load Preset", "That file isn't an eq1 Preset.", {}, this);
 }
@@ -149,8 +159,9 @@ void PresetBar::load (const juce::ValueTree& preset, const juce::String& name, s
 void PresetBar::step (int by)
 {
     const auto listing = library.listing();
-    if (const auto i = PresetLibrary::step (listing, processor.loadedPresetName(), by, lastLoadedEntry()))
-        load (listing[*i].preset, listing[*i].name, listing[*i]);
+    const auto entry = lastLoadedEntry();
+    if (const auto i = PresetLibrary::step (listing, processor.loadedPresetName(), by, entry.has_value() ? &*entry : nullptr))
+        load (listing[*i].preset, listing[*i].name, listing[*i].folder);
 }
 
 // The file chooser calls back after the editor may have closed: its callback holds the bar by a
@@ -162,8 +173,7 @@ void PresetBar::saveAs (const juce::String& name)
     const auto preset = processor.presetState();
     if (const auto file = library.save (name, preset))
     {
-        processor.presetSaved (preset, file->getFileNameWithoutExtension());
-        lastLoaded = PresetLibrary::Entry { file->getFileNameWithoutExtension(), "User", *file, preset };
+        processor.presetSaved (preset, file->getFileNameWithoutExtension(), "User");
         edited();
     }
     else
@@ -180,7 +190,7 @@ void PresetBar::chooseFileToLoad()
     const juce::Component::SafePointer<PresetBar> bar (this);
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [bar] (const juce::FileChooser& chosen) {
         if (const auto file = chosen.getResult(); bar != nullptr && file.existsAsFile())
-            bar->load (PresetLibrary::read (file), file.getFileNameWithoutExtension(), std::nullopt);
+            bar->load (PresetLibrary::read (file), file.getFileNameWithoutExtension(), {});
     });
 }
 
