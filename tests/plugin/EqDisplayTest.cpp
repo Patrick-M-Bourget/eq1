@@ -12,7 +12,7 @@ using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
 using harness::OpenEditor;
 
-TEST_CASE ("A right-click on the display never Solos, drags or starts a marquee")
+TEST_CASE ("A right-click on the display never Solos, drags or starts a marquee", "[clipboard]")
 {
     OpenEditor host;
     host.addBand (1, 100.0f, 0.0f);
@@ -69,7 +69,7 @@ struct ClipboardHolding
 };
 } // namespace
 
-TEST_CASE ("Cmd/Ctrl+V on the display keeps the key from the host with eq1's Bands on the clipboard, even with no free Band Slot")
+TEST_CASE ("Cmd/Ctrl+V on the display keeps the key from the host with eq1's Bands on the clipboard, even with no free Band Slot", "[clipboard]")
 {
     OpenEditor host;
     // Every Band Slot in use, a third of an octave apart from 25 Hz.

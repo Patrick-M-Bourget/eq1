@@ -73,7 +73,9 @@ if(EQ1_BUILD_PLUGIN)
         EQ1_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/plugin/fixtures"
         EQ1_FACTORY_PRESETS="${PROJECT_SOURCE_DIR}/presets/factory")
     target_link_libraries(eq1_plugin_tests PRIVATE eq1 eq1::engine Catch2::Catch2WithMain)
-    catch_discover_tests(eq1_plugin_tests)
+    # Tests tagged [clipboard] use the system clipboard, one per machine, so they never run at once.
+    catch_discover_tests(eq1_plugin_tests TEST_SPEC "~[clipboard]")
+    catch_discover_tests(eq1_plugin_tests TEST_SPEC "[clipboard]" PROPERTIES RESOURCE_LOCK system_clipboard)
 endif()
 
 if(EQ1_BUILD_PLUGIN)
