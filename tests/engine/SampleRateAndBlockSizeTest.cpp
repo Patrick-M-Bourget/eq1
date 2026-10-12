@@ -1,4 +1,4 @@
-#include "eq1/Engine.h"
+#include "Measure.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -20,19 +20,15 @@ namespace
 // Range. Slot meteredSlot is metered: 22 is a Dynamic Band when dynamic, 21 a Bell that never is.
 Settings scene (bool dynamic, int meteredSlot)
 {
-    constexpr Shape shapes[] = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
-                                 Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
-    constexpr StereoPlacement placements[] = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
-                                               StereoPlacement::Mid, StereoPlacement::Side };
     Settings settings;
     for (size_t slot = 0; slot < settings.bands.size(); ++slot)
         settings.bands[slot] = { .inUse = true,
-                                 .shape = shapes[slot % 10],
+                                 .shape = test::allShapes[slot % test::allShapes.size()],
                                  .frequency = 30.0 * std::pow (1.3, static_cast<double> (slot)),
                                  .gain = slot % 2 == 0 ? -6.0 : 6.0,
                                  .q = 1.5,
                                  .slope = 24.0,
-                                 .placement = placements[slot % 5],
+                                 .placement = test::allPlacements[slot % test::allPlacements.size()],
                                  .dynamicRange = dynamic && slot % 3 == 0 ? -9.0 : 0.0,
                                  .threshold = -30.0,
                                  .thresholdAuto = slot % 2 == 0 };
@@ -98,8 +94,6 @@ Blocks anyBlocks()
                      Blocks { "1 to 1000, changing", [] (int n) { return 1 + n * 7919 % 1000; } });
 }
 
-double anySampleRate() { return GENERATE (44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0); }
-
 // A Dynamic Bell's Live Gain every 10 ms for two seconds, on a tone at its Frequency that is loud
 // for 200 ms of every 500.
 std::vector<double> liveGainCourse (double sampleRate, const BandSettings& band)
@@ -134,7 +128,7 @@ std::vector<double> liveGainCourse (double sampleRate, const BandSettings& band)
 
 TEST_CASE ("Without Dynamic Bands, the output is the same sample for sample however the host cuts it into blocks", "[sweep]")
 {
-    const double sampleRate = anySampleRate();
+    const double sampleRate = test::anySampleRate();
     const auto blocks = anyBlocks();
     const auto reference = play (sampleRate, false, [] (int) { return 512; });
 
@@ -144,7 +138,7 @@ TEST_CASE ("Without Dynamic Bands, the output is the same sample for sample howe
 
 TEST_CASE ("With Dynamic Bands, the output is the same sample for sample however the host cuts it into blocks", "[sweep]")
 {
-    const double sampleRate = anySampleRate();
+    const double sampleRate = test::anySampleRate();
     const auto blocks = anyBlocks();
     const int meteredSlot = GENERATE (22, 21); // a Dynamic Band, or a Band metered only
     const auto reference = play (sampleRate, true, [] (int) { return 512; }, meteredSlot);
@@ -155,7 +149,7 @@ TEST_CASE ("With Dynamic Bands, the output is the same sample for sample however
 
 TEST_CASE ("A Dynamic Band's Live Gain follows the same course in time at every sample rate", "[sweep]")
 {
-    const double sampleRate = anySampleRate();
+    const double sampleRate = test::anySampleRate();
     const auto timing = GENERATE (0.0, 50.0, 100.0); // fastest, Auto and slowest Attack and Release
     const bool thresholdAuto = GENERATE (false, true);
     const BandSettings band { .inUse = true, .shape = Shape::Bell, .frequency = 1000.0, .q = 1.0, .dynamicRange = -12.0,

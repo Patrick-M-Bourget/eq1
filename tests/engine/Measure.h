@@ -1,11 +1,15 @@
 #pragma once
 
-// Measurement helpers for Engine and Plugin Shell tests: drive the Engine through its public
-// interface and measure what comes out.
+// The Engine tests' shared helpers: what the Engine is driven with (every Shape and Stereo
+// Placement, the sample rates checked) and how what comes out of its public interface is measured.
+// A helper a second test needs lives here (CODING_STANDARDS.md, "Shared behaviour lives once").
 
 #include "eq1/Engine.h"
 
+#include <catch2/generators/catch_generators.hpp>
+
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <numbers>
@@ -13,6 +17,15 @@
 
 namespace eq1::test
 {
+
+// Every Shape and every Stereo Placement, in their enums' order.
+inline constexpr std::array allShapes = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
+                                          Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
+inline constexpr std::array allPlacements = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
+                                              StereoPlacement::Mid, StereoPlacement::Side };
+
+// The sample rates eq1 is checked at, one Catch2 section each.
+inline double anySampleRate() { return GENERATE (44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0); }
 
 inline BandSettings bellBand (double frequency, double gain, double q)
 {
