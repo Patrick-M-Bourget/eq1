@@ -41,6 +41,7 @@ void Band::Chain::Lines::prepare (int numChannels)
     const auto size = static_cast<size_t> (numChannels);
     samples.assign (size, nullptr);
     states.assign (size, 0);
+    carried.assign (size, {});
     count = 0;
 }
 
@@ -48,6 +49,9 @@ void Band::Chain::run (Lines& lines, const Piece& piece)
 {
     const auto numLines = static_cast<size_t> (lines.count);
     const auto numSamples = static_cast<size_t> (piece.numSamples);
+    for (size_t line = 0; line < numLines; ++line)
+        std::copy_n (lines.samples[line], numSamples, lines.carried[line].begin());
+
     for (size_t s = 0; s < static_cast<size_t> (cascade.count); ++s)
     {
         const auto& to = cascade.sections[s];
@@ -56,7 +60,7 @@ void Band::Chain::run (Lines& lines, const Piece& piece)
             for (size_t line = 0; line < numLines; ++line)
             {
                 auto& state = states[lines.states[line]][s];
-                for (auto& sample : std::span (lines.samples[line], numSamples))
+                for (auto& sample : std::span (lines.carried[line]).first (numSamples))
                     sample = state.process (to, sample);
             }
             continue;
@@ -67,9 +71,13 @@ void Band::Chain::run (Lines& lines, const Piece& piece)
         {
             const auto coefficients = interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / maxSubBlock);
             for (size_t line = 0; line < numLines; ++line)
-                lines.samples[line][i] = states[lines.states[line]][s].process (coefficients, lines.samples[line][i]);
+                lines.carried[line][i] = states[lines.states[line]][s].process (coefficients, lines.carried[line][i]);
         }
     }
+
+    for (size_t line = 0; line < numLines; ++line)
+        for (size_t i = 0; i < numSamples; ++i)
+            lines.samples[line][i] = static_cast<float> (lines.carried[line][i]);
 }
 
 void Band::Chain::runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece)

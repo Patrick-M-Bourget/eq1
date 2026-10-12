@@ -78,18 +78,21 @@ private:
         };
 
         // The channels a cascade runs on together: each one's samples, and which channel's section
-        // states it keeps. The chain's Stereo Placement fills it.
+        // states it keeps. The chain's Stereo Placement fills it. carried is the signal between
+        // sections, in double: it is rounded to float once, after the last section.
         struct Lines
         {
             std::vector<float*> samples;
             std::vector<size_t> states;
             int count = 0;
+            std::vector<std::array<double, maxSubBlock>> carried;
 
             void prepare (int numChannels);
         };
 
-        // Runs the lines' samples through the cascade, in place: over a gliding run, with the
-        // coefficients interpolated once per position, for every line at once.
+        // Runs the lines' samples through the cascade, in place: in double from the first section to
+        // the last, and over a gliding run with the coefficients interpolated once per position, for
+        // every line at once.
         void run (Lines& lines, const Piece& piece);
         // Runs the part of the signal the chain's Stereo Placement selects, in place.
         void runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
