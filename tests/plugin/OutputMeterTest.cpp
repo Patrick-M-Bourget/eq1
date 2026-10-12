@@ -203,8 +203,10 @@ TEST_CASE ("The Output Meter repaints only while its levels move: not on silence
     auto* meter = harness::findChild<eq1::OutputMeter> (*host.editor);
     REQUIRE (meter != nullptr);
     REQUIRE (meter->isShowing());
-    // Silent since it opened: at the floor, with nothing to redraw.
-    host.settle (100);
+    // Silent since it opened, the Analyzer off and the display's resting ghost faded in: at the floor,
+    // with nothing to redraw.
+    host.processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = false });
+    REQUIRE (host.settleUntil ([&] { return host.editorTick().rateHz() == eq1::EditorTick::idleHz; }));
     auto& repaints = harness::countRepaintsOf (*meter);
     host.settle (300);
     CHECK (repaints.count == 0);

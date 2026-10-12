@@ -72,6 +72,12 @@ EditorTick::Client::~Client()
     join (nullptr);
 }
 
+void EditorTick::Client::wake()
+{
+    if (source != nullptr)
+        source->wake();
+}
+
 void EditorTick::Client::follow()
 {
     auto* host = dynamic_cast<Host*> (&component);

@@ -28,7 +28,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     content.addAndMakeVisible (header);
     content.addAndMakeVisible (footer);
 
-    // The display's Gain range, saved with the plugin; the display follows it on its timer.
+    // The display's Gain range, saved with the plugin; the display follows it on the tick.
     content.addAndMakeVisible (displayRange);
     content.addChildComponent (header.presetBrowser());
 

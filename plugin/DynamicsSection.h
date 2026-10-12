@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorTick.h"
 #include "KeyboardSlider.h"
 #include "LevelBallistics.h"
 #include "staple/controls/IconButton.h"
@@ -20,8 +21,9 @@ class PluginProcessor;
 // up its travel, then one more step at the top for Auto Threshold, its own host parameter (ADR 0003).
 // Dragged only, with no jump on a click; a double-click sets Auto. The Detection Level fills the track
 // from the bottom up to the thumb position of the Threshold it equals, so Threshold is set against what
-// the detector hears; it rises at once and falls at 20 dB/s, and never reaches Auto.
-class ThresholdFader final : public KeyboardSlider, private juce::Timer
+// the detector hears; it rises at once and falls at 20 dB/s, and never reaches Auto. It reads the level
+// on the editor's tick (EditorTick), which it keeps at 60 Hz while the level moves.
+class ThresholdFader final : public KeyboardSlider, private EditorTick::Client
 {
 public:
     // The position at the top of its travel that is Auto.
@@ -45,15 +47,16 @@ public:
     void mouseDoubleClick (const juce::MouseEvent&) override {}
 
 private:
-    void timerCallback() override;
+    void tick (double seconds) override;
+    bool isActive() const override { return moving; }
     double valueDraggedBy (double from, float pixels, bool fine) override;
     juce::Rectangle<float> track() const;
 
     PluginProcessor& processor;
     LevelBallistics ballistics;
     int meteredSlot = 0;
-    double lastRead = 0.0; // seconds, when the Detection Level was last read
-    double level = 0.0;    // dB, as last painted
+    double level = 0.0;  // dB, as last painted
+    bool moving = false; // the last tick moved the level
 
 };
 

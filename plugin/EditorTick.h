@@ -69,6 +69,11 @@ public:
     // True while it animates or meters, which keeps the tick at activeHz.
     virtual bool isActive() const { return false; }
 
+protected:
+    // Asks for the next tick at once (EditorTick::wake): what a pointer event that starts an animation
+    // or a wait does, so the first frame isn't up to an idle interval late.
+    void wake();
+
 private:
     friend class EditorTick;
     // Joins the Host the component is under now, if any.
