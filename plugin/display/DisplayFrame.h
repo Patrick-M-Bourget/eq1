@@ -40,6 +40,19 @@ struct AnalyzerFrame
     const AnalyzerSpectrum* held = nullptr; // the spectrum Peak Hold is drawn for, if any
 };
 
+// Exactly the same in everything the display draws or reads out, field by field, so any change at all
+// counts and the comparison is exact. (BandSettings' own == would do, but its float comparison warns
+// where it is defined.)
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
+inline bool sameBand (const BandSettings& x, const BandSettings& y)
+{
+    return x.inUse == y.inUse && x.bypass == y.bypass && x.shape == y.shape && x.frequency == y.frequency && x.gain == y.gain
+           && x.q == y.q && x.slope == y.slope && x.brickwall == y.brickwall && x.placement == y.placement
+           && x.dynamicRange == y.dynamicRange && x.threshold == y.threshold && x.thresholdAuto == y.thresholdAuto
+           && x.attack == y.attack && x.release == y.release && x.dynamicsBypass == y.dynamicsBypass;
+}
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+
 // Each Band Slot keeps its own colour.
 inline juce::Colour bandColour (int slot)
 {

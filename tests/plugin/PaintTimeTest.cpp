@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -77,6 +78,47 @@ TEST_CASE ("Paint time: the editor at 1200 x 760 and 2x with 24 Dynamic Bells, e
     CHECK (median < ceilingMs);
 
     harness::writeSnapshot (frame, "paint-frame");
+}
+
+// What an idle frame costs with the Analyzer on (docs/performance.md, "Paint time"): the display at 2x
+// with 24 Bells, one selected, the Analyzer showing Pre and Post on silence and nothing changing. It
+// prints the median of 20 paints of the display alone, and the message thread's CPU per tick over 2 s
+// of ticks (a repaint asked of a window that never paints in a test costs nothing, so that is the
+// tick's own work). Hidden like the paint time, and run with it.
+TEST_CASE ("Idle frame, Analyzer on: the display at 2x with 24 Bells, one selected, nothing changing", "[.paint]")
+{
+    harness::OpenEditor host;
+    host.editor->setSize (1200, 760);
+    harness::useLayout (host.processor, juce::AudioChannelSet::stereo());
+    for (int slot = 1; slot <= 24; ++slot)
+        host.addBand (slot, static_cast<float> (30.0 * std::pow (2.0, (slot - 1) / 3.0)), slot == 12 ? 0.0f : (slot % 2 == 0 ? 4.0f : -4.0f));
+    host.settle();
+    host.click (host.at (30.0 * std::pow (2.0, 11.0 / 3.0)));
+    host.settle();
+    REQUIRE (host.editorTick().rateHz() == eq1::EditorTick::activeHz); // the Analyzer keeps it at 60 Hz
+
+    std::vector<double> milliseconds;
+    for (int i = 0; i < 25; ++i)
+    {
+        host.settle (20);
+        const auto start = juce::Time::getMillisecondCounterHiRes();
+        const auto frame = host.display.createComponentSnapshot (host.display.getLocalBounds(), true, 2.0f);
+        if (i >= 5) // warmed up
+            milliseconds.push_back (juce::Time::getMillisecondCounterHiRes() - start);
+        CHECK (frame.isValid());
+    }
+    std::sort (milliseconds.begin(), milliseconds.end());
+    const double paint = milliseconds[milliseconds.size() / 2];
+
+    const int ticksBefore = host.editorTick().count();
+    const auto cpuBefore = std::clock();
+    host.settle (2000);
+    const double cpuMs = 1000.0 * static_cast<double> (std::clock() - cpuBefore) / CLOCKS_PER_SEC;
+    const int ticks = host.editorTick().count() - ticksBefore;
+    REQUIRE (ticks > 0);
+    std::cout << "Idle frame, Analyzer on: display paint median " << paint << " ms over " << milliseconds.size() << " frames; tick "
+              << cpuMs / ticks << " ms CPU over " << ticks << " ticks" << std::endl;
+    CHECK (paint > 0.0);
 }
 
 // The display as the Staple handoff's screenshot shows it, for checking by hand against the

@@ -17,7 +17,7 @@
 
 The 24 Dynamic Bells row was measured 2026-10-09, the other rows on this Mac 2026-10-11 with other builds running (the 24 Dynamic Bells scene read the same as on 2026-10-09, so the rest are taken as quiet too; the subnormal input number varied between runs). The CI columns are GitHub's `windows-latest` and `macos-latest` runners; the new scenes' CI numbers (pending) come from the first CI run's job summary, where `scripts/check.sh cpu` writes the scene lines. The ceilings are about three times the slowest runner's worst run: high enough that runner noise doesn't fail the check, low enough to fail on a regression that multiplies the cost. They are absolute, not relative to a baseline.
 
-The same run fails if the 24 Dynamic Bells on silence (timed after 10 s of nothing, when every filter has rung down) or on input made of subnormal numbers cost more than 1.5 times the 24 Dynamic Bells on music. That catches arithmetic on subnormal numbers, many times slower than normal on x64; on arm64 it runs at full speed, so the Windows x64 run is the one that would catch it. Silence costing almost as much as music is the Dynamic Bands redesigning their filters after the sound has stopped (#164).
+The same run fails if the 24 Dynamic Bells on silence (timed after 10 s of nothing, when every filter has rung down) or on input made of subnormal numbers cost more than 1.5 times the 24 Dynamic Bells on music. That catches arithmetic on subnormal numbers, many times slower than normal on x64; on arm64 it runs at full speed, so the Windows x64 run is the one that would catch it. It also shows the Dynamic Bands at rest: a Dynamic Band whose detector has gone quiet stops redesigning its filter within a few seconds (`docs/dsp/filter-design.md`, "Rest"), so silence costs about what the 24 static Bells do.
 
 ## Null check
 
@@ -37,6 +37,15 @@ The test is tagged `[.paint]`, hidden from the normal run so its timing never fl
 | Apple M3, with the Staple display (`c601e21`) | 64.2 ms |
 
 Measured 2026-10-10. On a machine busy with other builds the median reached 125 to 160 ms at a load average above 80: the ceiling allows for some load, but not that much.
+
+**Idle frame, Analyzer on.** The same file's `Idle frame, Analyzer on` test, run with the paint time, measures what a frame costs when nothing changes but the spectra, which is every frame with the Analyzer on: the display alone at 2× with 24 Bells, one selected, the Analyzer showing Pre and Post on silence. It prints the median of 20 paints of the display and the message thread's CPU per tick over 2 s of ticks (a test window never paints on its own, so that is the tick's own work: the Settings read, the spectra updated, and whatever the frame places). The display keeps its Band curves, fills, wash and sum as paths (`display::CurveCache`) and places its handles, reading out what changed, only when the Bands shown or the Display Range change, so an Analyzer frame draws the spectra and strokes the paths it has.
+
+| Machine | Display paint | Tick CPU |
+| --- | --- | --- |
+| Apple M3, load average about 65 from parallel builds, before the curve cache (`7f175d4`) | 34 to 43 ms | 0.63 to 0.66 ms |
+| Apple M3, the same load, with it (`8ccf0bc`) | 15 to 28 ms | 0.11 to 0.40 ms |
+
+Measured 2026-10-12, three runs each, back to back; the whole editor's busy frame above went from 171 to 196 ms to 69 to 113 ms in the same runs. Quiet-machine figures are still to be taken.
 
 ## Footprint
 

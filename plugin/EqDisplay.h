@@ -6,6 +6,7 @@
 #include "HoverCard.h"
 #include "Parameters.h"
 #include "AnalyzerSpectrum.h"
+#include "display/CurvesLayer.h"
 #include "display/DisplayFrame.h"
 #include "display/DisplayGeometry.h"
 #include "display/EdgeFadeLayer.h"
@@ -95,6 +96,12 @@ public:
     // The Band whose handle draws the Solo cue: the Soloed one, whichever holder Solos it, or 0.
     int soloCueSlot() const { return frame().soloedSlot; }
 
+    // What the display has built since it opened, for a test of what a frame does: the curves it has
+    // designed (display::CurveCache) and how many times it has placed its handles, reading out what
+    // changed (placeHandles). An Analyzer frame with the Bands unchanged does neither.
+    const display::CurveCache& curveCache() const { return curves; }
+    int handlePlacements() const { return placements; }
+
 private:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     // A Band's place in Tab's order: an element at its handle that takes keyboard focus. The display
@@ -106,8 +113,10 @@ private:
     class DynamicRangeHandleElement;
     std::array<std::unique_ptr<DynamicRangeHandleElement>, numBandSlots> dynamicRangeHandleElements;
     // Puts each Band in use's element at its handle, and each shown Dynamic Range Handle's over it, and
-    // orders them by Frequency, each Dynamic Range Handle after its Band, unless one has focus.
+    // orders them by Frequency, each Dynamic Range Handle after its Band, unless one has focus. Each
+    // element announces its value if it changed.
     void placeHandles();
+    int placements = 0; // how many times
     int dynamicRangeHandleAt (juce::Point<float> position) const; // the Band whose Dynamic Range Handle is there, or 0
     // The Dynamic Range Handle's arrow keys: Dynamic Range by dB, one undo step until the key is released.
     void stepDynamicRange (int slot, double db);
@@ -145,6 +154,19 @@ private:
     // What the layers draw this frame, and the Band whose filled curve is at a point, or 0.
     display::DisplayFrame frame() const;
     int bandAreaAt (juce::Point<float> position) const;
+    // The Band curves as paths, designed again only when what they show changes (display::CurveCache),
+    // brought up to date wherever they are read: a cache, so from const reads too.
+    mutable display::CurveCache curves;
+    // The Band whose filled curve is under the pointer (bandAreaAt), found once per pointer position
+    // and set of curves rather than on every frame the ghost or the hover asks.
+    struct PointerArea
+    {
+        juce::Point<float> pointer;
+        int generation = 0; // curves.generation() it was found at
+        int slot = 0;
+    };
+    mutable std::optional<PointerArea> pointerArea;
+    int areaUnderPointer() const; // while the pointer is over the display
 
     void select (std::set<int> slots);
     void selectAll();

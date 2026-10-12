@@ -41,7 +41,8 @@ double responseDb (const Settings& settings, double frequency, double sampleRate
 double autoGainDb (const Settings& settings, double sampleRate)
 {
     AutoGainEstimate estimate;
-    estimate.start (settings, sampleRate);
+    estimate.prepare (sampleRate);
+    estimate.start (settings);
     estimate.advance (AutoGainEstimate::numPoints);
     return estimate.db();
 }

@@ -37,6 +37,10 @@ constexpr double autoReleaseFastestSeconds = 0.040, autoReleaseSustainedSeconds 
 constexpr double sustainTimeConstantSeconds = 0.5;
 // Attack and Release at 0% and 100% are the Auto timing times 1/10 and 10.
 constexpr double timingSpread = 10.0;
+// Coming to rest after the music stops: the movement and sustain release exponentially, so they
+// snap to exactly 0 below this much (a billionth of the Dynamic Range: 3e-8 dB at its largest). The
+// Band's offset is then exactly 0 run after run, and it neither glides nor redesigns its filter.
+constexpr double movementRest = 1.0e-9;
 
 // A Free Detection Range's limits roll off at this Slope, steep enough to pick out a kick alone.
 constexpr double freeRangeSlope = 24.0;
@@ -270,6 +274,10 @@ double Dynamics::finishRun()
         movement += (target > movement ? attackCoefficient : releaseCoefficient) * (target - movement);
         sustain += sustainCoefficient * (target - sustain);
     }
+    if (movement < movementRest)
+        movement = 0.0;
+    if (sustain < movementRest)
+        sustain = 0.0;
 
     dynamicRangeGlide.skip (Band::maxSubBlock);
     active.skip (Band::maxSubBlock);

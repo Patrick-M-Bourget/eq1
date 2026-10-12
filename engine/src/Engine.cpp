@@ -161,7 +161,7 @@ struct Engine::Impl
         {
             // The first estimate is worked out at once, so the output starts at the right level.
             estimated = settings;
-            autoGain.start (settings, sampleRate);
+            autoGain.start (settings);
             autoGain.advance (AutoGainEstimate::numPoints);
             estimateStale = false;
         }
@@ -219,7 +219,7 @@ struct Engine::Impl
             if (! estimateStale)
                 return;
             estimated = settings;
-            autoGain.start (settings, sampleRate);
+            autoGain.start (settings);
             estimateStale = false;
         }
         if (autoGain.advance ((numSamples + samplesPerAutoGainPoint - 1) / samplesPerAutoGainPoint))
@@ -272,6 +272,7 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     for (auto& dynamics : impl->dynamics)
         dynamics.prepare (sampleRate);
     impl->output.prepare (sampleRate, numChannels);
+    impl->autoGain.prepare (sampleRate);
     impl->bypassMix.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     impl->bypassMix.reset (0.0);
     impl->dry.assign (static_cast<size_t> (numChannels), {});
