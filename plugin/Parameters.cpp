@@ -326,4 +326,19 @@ void OutputValues::readInto (Settings& settings) const
     settings.globalBypass = isOn (globalBypass);
 }
 
+SettingsReader::SettingsReader (juce::AudioProcessorValueTreeState& parameters) : outputs (OutputValues::of (parameters))
+{
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        slots[static_cast<size_t> (slot - 1)] = SlotValues::of (parameters, slot);
+}
+
+Settings SettingsReader::read() const
+{
+    Settings settings;
+    for (size_t i = 0; i < slots.size(); ++i)
+        settings.bands[i] = slots[i].read();
+    outputs.readInto (settings);
+    return settings;
+}
+
 } // namespace eq1::parameters

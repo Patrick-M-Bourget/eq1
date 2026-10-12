@@ -137,7 +137,7 @@ private:
 };
 
 EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
-    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), output (parameters::OutputValues::of (p.parameterState())), card (p, e)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), output (p.hostSettings().outputValues()), card (p, e)
 {
     setName ("EQ Display");
     setTitle ("EQ display");

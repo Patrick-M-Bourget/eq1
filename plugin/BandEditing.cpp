@@ -1,6 +1,7 @@
 #include "BandEditing.h"
 
 #include "Parameters.h"
+#include "PluginProcessor.h"
 
 #include <algorithm>
 #include <array>
@@ -11,11 +12,9 @@
 namespace eq1
 {
 
-BandEditing::BandEditing (juce::AudioProcessorValueTreeState& parametersToEdit, EditHistory& editHistory)
-    : parameters (parametersToEdit), history (editHistory), output (parameters::OutputValues::of (parametersToEdit))
+BandEditing::BandEditing (PluginProcessor& processor, EditHistory& editHistory)
+    : parameters (processor.parameterState()), history (editHistory), reader (processor.hostSettings())
 {
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-        slots[static_cast<size_t> (slot - 1)] = parameters::SlotValues::of (parameters, slot);
 }
 
 BandEditing::~BandEditing()
@@ -45,22 +44,18 @@ void BandEditing::set (const juce::String& id, double value)
 
 BandSettings BandEditing::band (int slot) const
 {
-    return slots[static_cast<size_t> (slot - 1)].read();
+    return reader.band (slot);
 }
 
 Settings BandEditing::settings() const
 {
-    Settings result;
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-        result.bands[static_cast<size_t> (slot - 1)] = band (slot);
-    output.readInto (result);
-    return result;
+    return reader.read();
 }
 
 double BandEditing::storedGain (double heard) const
 {
     Settings whole;
-    output.readInto (whole);
+    reader.outputValues().readInto (whole);
     const double gainScale = whole.gainScale;
     return gainScale > 0.0 ? heard / gainScale : 0.0;
 }
@@ -200,7 +195,7 @@ void BandEditing::dragDynamicRangeTo (double heardEnd)
     if (rangeDragged == 0)
         return;
     Settings whole;
-    output.readInto (whole);
+    reader.outputValues().readInto (whole);
     if (whole.gainScale < 0.01)
         return;
     const double stored = heardEnd / whole.gainScale - band (rangeDragged).gain;

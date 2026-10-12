@@ -168,12 +168,10 @@ std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHand
 }
 
 FooterBar::FooterBar (PluginProcessor& p)
-    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerPopover (p), outputPopover (p)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), analyzerPopover (p), outputPopover (p)
 {
     bypassedFade.apply = [this] (float) { repaint(); };
     auto& state = processor.parameterState();
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-        slotValues.push_back (parameters::SlotValues::of (state, slot));
 
     globalBypass.setClickingTogglesState (true);
     globalBypass.setOffLook (true);
@@ -284,10 +282,7 @@ void FooterBar::showBypass()
 
 void FooterBar::showOutputLevel()
 {
-    Settings settings;
-    for (size_t slot = 0; slot < slotValues.size(); ++slot)
-        settings.bands[slot] = slotValues[slot].read();
-    outputValues.readInto (settings);
+    const auto settings = processor.hostSettings().read();
     double db = settings.outputGainDb;
     if (settings.autoGain && std::isfinite (db))
     {

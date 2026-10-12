@@ -4,6 +4,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <array>
 #include <atomic>
 #include <vector>
 
@@ -128,6 +129,28 @@ struct OutputValues
     static OutputValues of (juce::AudioProcessorValueTreeState& parameters);
     // Sets the whole-plugin settings, leaving the Bands, Solo and Detection Audition alone.
     void readInto (Settings& settings) const;
+};
+
+// The host parameters as Settings, each resolved once: the one table of every Band Slot's and the
+// whole-plugin parameters, which the processor owns (PluginProcessor::hostSettings) and the editor
+// reads too. Reads from any thread, with no allocation or lock.
+class SettingsReader
+{
+public:
+    explicit SettingsReader (juce::AudioProcessorValueTreeState& parameters);
+
+    // Every Band's and the whole-plugin settings. Solo, Detection Audition and the Metered Band are
+    // not host parameters: they stay at 0.
+    Settings read() const;
+    // One Band Slot's (1 to 24) settings.
+    BandSettings band (int slot) const { return slotValues (slot).read(); }
+    // One Band Slot's (1 to 24) parameters, and the whole-plugin ones, for a read of only a few.
+    const SlotValues& slotValues (int slot) const { return slots[static_cast<size_t> (slot - 1)]; }
+    const OutputValues& outputValues() const { return outputs; }
+
+private:
+    std::array<SlotValues, numBandSlots> slots;
+    OutputValues outputs;
 };
 
 } // namespace eq1::parameters

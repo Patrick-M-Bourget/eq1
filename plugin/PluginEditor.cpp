@@ -13,7 +13,7 @@ namespace eq1
 namespace layout = staple::tokens::layout;
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), EditorTick::Client (static_cast<juce::Component&> (*this)), eqProcessor (p), ticker (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), detectionRange (p, editing, panel), header (p),
+    : AudioProcessorEditor (p), EditorTick::Client (static_cast<juce::Component&> (*this)), eqProcessor (p), ticker (p), editing (p, p.editHistory()), display (p, editing), panel (p, editing), detectionRange (p, editing, panel), header (p),
       footer (p), displayRange (p), meter (p), keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
