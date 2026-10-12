@@ -80,6 +80,14 @@ inline Settings dynamicBells()
     });
 }
 
+// 24 Brickwall Cuts across the spectrum: Low Cuts in the even slots, High Cuts in the odd ones.
+inline Settings brickwallCuts()
+{
+    return spreadBands ([] (size_t slot) {
+        return BandSettings { .shape = slot % 2 == 0 ? Shape::LowCut : Shape::HighCut, .brickwall = true };
+    });
+}
+
 inline BandSettings bellBand (double frequency, double gain, double q)
 {
     return { .inUse = true, .shape = Shape::Bell, .frequency = frequency, .gain = gain, .q = q };

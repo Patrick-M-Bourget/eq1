@@ -27,14 +27,6 @@ Settings dynamicBells()
     return settings;
 }
 
-// 24 Brickwall Cuts across the spectrum: Low Cuts in the even slots, High Cuts in the odd ones.
-Settings brickwallCuts()
-{
-    return test::spreadBands ([] (size_t slot) {
-        return BandSettings { .shape = slot % 2 == 0 ? Shape::LowCut : Shape::HighCut, .brickwall = true };
-    });
-}
-
 Settings withOutputGainAndPan (Settings settings)
 {
     settings.outputGainDb = 3.0;
@@ -73,7 +65,7 @@ std::vector<Scene> scenes()
         { "24 Dynamic Bells", dynamicBells(), 512, bursts },
         { "24 Bells", test::bells(), 512, bursts },
         { "1 Bell", test::bell (1000.0, 3.0, 1.0), 512, bursts },
-        { "24 Brickwall Cuts", brickwallCuts(), 512, bursts },
+        { "24 Brickwall Cuts", test::brickwallCuts(), 512, bursts },
         { "24 Bells, Output Gain and Pan", withOutputGainAndPan (test::bells()), 512, bursts },
         { "24 Dynamic Bells, 32-sample blocks", dynamicBells(), 32, bursts },
         // Timed after 10 s of silence, long enough for every filter to have rung down below the
