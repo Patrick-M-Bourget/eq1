@@ -56,7 +56,7 @@ private:
     const int channel;
 };
 
-OutputMeter::OutputMeter (PluginProcessor& p) : processor (p)
+OutputMeter::OutputMeter (PluginProcessor& p) : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p)
 {
     setName ("Output Meter");
     setTitle ("Output Meter");
@@ -69,8 +69,7 @@ OutputMeter::OutputMeter (PluginProcessor& p) : processor (p)
     // Tab reaches the Clip Lights, which Space or Return puts out; a click leaves focus where it was.
     setWantsKeyboardFocus (true);
     setMouseClickGrabsKeyboardFocus (false);
-    timerCallback();
-    startTimerHz (60);
+    tick (1.0 / EditorTick::activeHz);
 }
 
 OutputMeter::~OutputMeter() = default;
@@ -92,12 +91,22 @@ juce::Rectangle<float> OutputMeter::barsArea() const
     return { 0.0f, top, static_cast<float> (getWidth()), juce::jmax (0.0f, static_cast<float> (getHeight()) - paddingBottom - top) };
 }
 
-void OutputMeter::timerCallback()
+bool OutputMeter::Drawn::operator== (const Drawn& other) const
 {
-    const auto now = juce::Time::getMillisecondCounter();
-    const double seconds = lastFrame == 0 ? 1.0 / 60.0 : juce::jlimit (0.001, 0.25, (now - lastFrame) / 1000.0);
-    lastFrame = now;
+    if (numChannels != other.numChannels || clipLit != other.clipLit)
+        return false;
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const auto &a = channels[static_cast<size_t> (ch)], &b = other.channels[static_cast<size_t> (ch)];
+        if (! juce::exactlyEqual (a.peakDb(), b.peakDb()) || ! juce::exactlyEqual (a.heldPeakDb(), b.heldPeakDb())
+            || ! juce::exactlyEqual (a.rmsDb(), b.rmsDb()))
+            return false;
+    }
+    return true;
+}
 
+void OutputMeter::tick (double seconds)
+{
     // Read even while hidden, so an over lights its Clip Light when it happens.
     const int shownChannels = juce::jlimit (0, static_cast<int> (channels.size()), processor.outputLevelChannels());
     if (shownChannels != numChannels)
@@ -106,8 +115,17 @@ void OutputMeter::timerCallback()
         numChannels = shownChannels;
         placeClipLights();
     }
+    Drawn now { .numChannels = numChannels };
     for (int ch = 0; ch < numChannels; ++ch)
+    {
         channels[static_cast<size_t> (ch)].update (processor.readOutputLevel (ch), seconds);
+        now.channels[static_cast<size_t> (ch)] = channels[static_cast<size_t> (ch)];
+        now.clipLit[static_cast<size_t> (ch)] = processor.isClipLit (ch);
+    }
+    moving = ! (now == drawn);
+    if (! moving)
+        return;
+    drawn = now;
     if (isShowing())
         repaint();
 }

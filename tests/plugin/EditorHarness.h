@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorTick.h"
 #include "EqDisplay.h"
 #include "display/DisplayGeometry.h"
 #include "PluginProcessor.h"
@@ -174,6 +175,30 @@ inline void settleAnimations (int milliseconds = 60)
                                                          << " animation(s) still easing");
 }
 
+// Counts the repaints asked of a component, standing in for its drawing (it draws nothing, children
+// included). Installed with countRepaintsOf, through setCachedComponentImage, which owns it: a test that
+// renders the component afterwards takes it off first (setCachedComponentImage (nullptr)). JUCE asks a
+// component's cached image before anything else about a repaint, so every repaint() is counted, whether
+// or not a window would paint it.
+struct RepaintCounter final : juce::CachedComponentImage
+{
+    int count = 0;
+    void paint (juce::Graphics&) override {}
+    bool invalidateAll() override { return ++count > 0; }
+    bool invalidate (const juce::Rectangle<int>&) override { return ++count > 0; }
+    void releaseResources() override {}
+};
+
+// Counts component's repaints from now on (RepaintCounter), not the one installing the counter asks
+// for; component owns the counter.
+inline RepaintCounter& countRepaintsOf (juce::Component& component)
+{
+    auto* counter = new RepaintCounter();
+    component.setCachedComponentImage (counter);
+    counter->count = 0;
+    return *counter;
+}
+
 // Checks that component, just opened, is drawn at the start of its pop-in (staple::popInTransform):
 // smaller than endsAt, where it ends up in its parent's coordinates, about the same centre, 3 px lower.
 inline void checkPopInStart (const juce::Component& component, juce::Rectangle<float> endsAt)
@@ -207,6 +232,9 @@ struct OpenEditor
         juce::PopupMenu::dismissAllActiveMenus();
         editor.reset();
     }
+
+    // The editor's one tick (EditorTick), which its components follow the processor on.
+    eq1::EditorTick& editorTick() { return dynamic_cast<eq1::EditorTick::Host&> (*editor).editorTick(); }
 
     juce::RangedAudioParameter& parameter (const juce::String& id) { return *processor.parameterState().getParameter (id); }
     float value (const juce::String& id) { return processor.parameterState().getRawParameterValue (id)->load(); }
