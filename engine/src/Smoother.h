@@ -7,6 +7,11 @@
 namespace eq1
 {
 
+// The time constant of every glide and crossfade in the Engine: a Band's Frequency, Gain and Q, its
+// fades in and out and between filters, Dynamic Range and Dynamics Bypass, the Output's amounts,
+// Global Bypass, Solo and Detection Audition. They settle in about 7 time constants, so about 50 ms.
+inline constexpr double glideTimeConstantSeconds = 0.007;
+
 // Glides a value to its target along a critically damped curve (two one-pole stages): it starts
 // and settles without corners, and follows a target that keeps moving without zippering.
 class Smoother

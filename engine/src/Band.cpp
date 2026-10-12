@@ -7,12 +7,6 @@
 namespace eq1
 {
 
-namespace
-{
-// Glides and crossfades settle in about 7 time constants, so about 50 ms.
-constexpr double glideTimeConstantSeconds = 0.007;
-} // namespace
-
 void Band::Chain::clear()
 {
     for (auto& channel : states)

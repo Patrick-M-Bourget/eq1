@@ -36,8 +36,6 @@ constexpr double autoReleaseFastestSeconds = 0.040, autoReleaseSustainedSeconds 
 constexpr double sustainTimeConstantSeconds = 0.5;
 // Attack and Release at 0% and 100% are the Auto timing times 1/10 and 10.
 constexpr double timingSpread = 10.0;
-// Dynamic Range and Dynamics Bypass changes glide like a Band's settings: about 50 ms.
-constexpr double glideTimeConstantSeconds = 0.007;
 
 // A Free Detection Range's limits roll off at this Slope, steep enough to pick out a kick alone.
 constexpr double freeRangeSlope = 24.0;
@@ -48,7 +46,7 @@ double timingScale (double percent) { return std::pow (timingSpread, (std::clamp
 // A Free Detection Range's limit: a Butterworth Cut at frequency.
 BandSettings freeLimit (Shape cut, double frequency)
 {
-    return { .inUse = true, .shape = cut, .frequency = frequency, .q = std::sqrt (0.5), .slope = freeRangeSlope };
+    return { .inUse = true, .shape = cut, .frequency = frequency, .q = butterworthQ, .slope = freeRangeSlope };
 }
 } // namespace
 

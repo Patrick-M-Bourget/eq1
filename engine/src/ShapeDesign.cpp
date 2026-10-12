@@ -58,7 +58,7 @@ void lowShelfSections (int order, double dcGain, double q, Use use)
 {
     const double rz = std::pow (dcGain, 1.0 / (2.0 * order)), rp = 1.0 / rz;
     const int pairs = order / 2;
-    const double resonance = pairs > 0 ? std::pow (q / std::sqrt (0.5), 1.0 / pairs) : 1.0;
+    const double resonance = pairs > 0 ? std::pow (q / butterworthQ, 1.0 / pairs) : 1.0;
     for (int k = 1; k <= pairs; ++k)
     {
         const double sectionQ = resonance / (2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)));
@@ -152,7 +152,7 @@ template <typename Use>
 void butterworthSections (int order, double q, Use use)
 {
     const int pairs = order / 2;
-    const double resonance = pairs > 0 ? std::pow (q / std::sqrt (0.5), 1.0 / pairs) : 1.0;
+    const double resonance = pairs > 0 ? std::pow (q / butterworthQ, 1.0 / pairs) : 1.0;
     for (int k = 1; k <= pairs; ++k)
     {
         const double sectionQ = resonance / (2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)));
@@ -220,7 +220,7 @@ Normalised normalise (const AnalogSection& a)
 template <typename Roots, typename Use, typename OddPole>
 void transformedButterworth (int order, Roots roots, Use use, OddPole oddPole)
 {
-    butterworthSections (order, std::sqrt (0.5), [&] (const AnalogSection& lowPass) {
+    butterworthSections (order, butterworthQ, [&] (const AnalogSection& lowPass) {
         if (lowPass.d2 == 0.0)
         {
             oddPole();

@@ -58,8 +58,6 @@ public:
     }
 
 private:
-    static constexpr double glideTimeConstantSeconds = 0.007; // as a Band's glides: about 50 ms
-
     // left = ll * left + lr * right, right = rl * left + rr * right; on mono only ll applies.
     using Mix = std::array<double, 4>;
 

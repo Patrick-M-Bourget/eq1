@@ -43,7 +43,6 @@ struct Engine::Impl
     Output output;
 
     // Global Bypass: bypassMix crossfades from the processed output (0) to the input (1), copied into dry.
-    static constexpr double bypassFadeTimeConstantSeconds = 0.007; // as a Band's crossfades: about 50 ms
     Smoother bypassMix;
     std::vector<std::array<float, Band::maxSubBlock>> dry; // per channel
 
@@ -72,7 +71,6 @@ struct Engine::Impl
     // Solo: the region filter, run on the part of the input the Soloed Band processes. Detection
     // Audition: the auditioned Band's detection signal. heldMix crossfades between the EQ's output
     // (0) and them (1).
-    static constexpr double heldFadeTimeConstantSeconds = 0.007; // as a Band's crossfades: about 50 ms
     Band soloRegion;
     Smoother heldMix;
     Held playing; // what heldMix fades in, and soloRegion is set up for
@@ -293,12 +291,12 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     for (auto& dynamics : impl->dynamics)
         dynamics.prepare (sampleRate);
     impl->output.prepare (sampleRate, numChannels);
-    impl->bypassMix.configure (Impl::bypassFadeTimeConstantSeconds * sampleRate, 1.0e-6);
+    impl->bypassMix.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     impl->bypassMix.reset (0.0);
     impl->dry.assign (static_cast<size_t> (numChannels), {});
     impl->subBlock.assign (static_cast<size_t> (numChannels), nullptr);
     impl->soloRegion.prepare (sampleRate, numChannels);
-    impl->heldMix.configure (Impl::heldFadeTimeConstantSeconds * sampleRate, 1.0e-6);
+    impl->heldMix.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     impl->heldMix.reset (0.0);
     impl->soloPart.assign (static_cast<size_t> (std::max (numChannels, 1)), {});
     impl->soloPartChannels.clear();
