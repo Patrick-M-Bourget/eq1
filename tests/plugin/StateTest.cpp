@@ -38,13 +38,6 @@ void set (juce::AudioProcessor& processor, const juce::String& id, float plain)
     p.setValueNotifyingHost (p.convertTo0to1 (plain));
 }
 
-void load (juce::AudioProcessor& processor, const juce::XmlElement& xml)
-{
-    juce::MemoryBlock state;
-    juce::AudioProcessor::copyXmlToBinary (xml, state);
-    processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
-}
-
 std::unique_ptr<juce::XmlElement> fixture (const char* name)
 {
     auto xml = juce::XmlDocument::parse (juce::File (EQ1_TEST_FIXTURES).getChildFile (name));
@@ -102,7 +95,7 @@ TEST_CASE ("Save and reload sound exactly the same: Bands, dynamics, Sidechain d
     REQUIRE (xml != nullptr);
 
     eq1::PluginProcessor restored;
-    load (restored, *xml);
+    eq1::test::restoreState (restored, *xml);
     const auto expected = play (saved), actual = play (restored);
     for (int ch = 0; ch < 2; ++ch)
         for (int i = 0; i < expected.getNumSamples(); ++i)
@@ -125,7 +118,7 @@ TEST_CASE ("A/B Compare survives save and reload: the side you're on and both si
     REQUIRE (xml != nullptr);
 
     eq1::PluginProcessor restored;
-    load (restored, *xml);
+    eq1::test::restoreState (restored, *xml);
     CHECK (restored.compareSide() == eq1::CompareSide::B);
     const auto checkSameSound = [&] {
         const auto expected = play (saved), actual = play (restored);
@@ -147,7 +140,7 @@ TEST_CASE ("A version 1 session loads on side A, with B a copy of it")
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     processor.selectCompareSide (eq1::CompareSide::B);
-    load (processor, *fixture ("state-v1.xml"));
+    eq1::test::restoreState (processor, *fixture ("state-v1.xml"));
     CHECK (processor.compareSide() == eq1::CompareSide::A);
     CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
 
@@ -161,7 +154,7 @@ TEST_CASE ("A session saved before the state had a version (version 0) loads eve
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    load (processor, *fixture ("state-v0.xml"));
+    eq1::test::restoreState (processor, *fixture ("state-v0.xml"));
 
     CHECK (value (processor, "band1_in_use") == 1.0f);
     CHECK_THAT (value (processor, "band1_frequency"), WithinAbs (250.0, 1.0e-3));
@@ -199,7 +192,7 @@ TEST_CASE ("A session from a newer version loads the settings this version knows
 
     eq1::PluginProcessor processor;
     processor.selectCompareSide (eq1::CompareSide::B);
-    load (processor, *xml);
+    eq1::test::restoreState (processor, *xml);
     CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
     CHECK (processor.displayRangeDb() == 30);
     CHECK (processor.analyzerSettings().rangeDb == 120);
@@ -252,7 +245,7 @@ TEST_CASE ("A session saved in the middle of an A/B switch or a Preset load hold
 
     // Reloaded, the side being switched to is whole on the parameters, and the other side whole too.
     eq1::PluginProcessor restored;
-    load (restored, *xml);
+    eq1::test::restoreState (restored, *xml);
     // A's settings are on the side the change ends on, and on the other side too after a load.
     const auto ending = loadOnB ? eq1::CompareSide::B : eq1::CompareSide::A;
     CHECK (restored.compareSide() == ending);
@@ -295,7 +288,7 @@ TEST_CASE ("Save and reload keep each side's Loaded Preset and Modified state, e
     folder.getFile().deleteRecursively();
 
     eq1::PluginProcessor restored;
-    load (restored, *xml);
+    eq1::test::restoreState (restored, *xml);
     CHECK (restored.loadedPresetName() == "Kick");
     CHECK_FALSE (restored.isLoadedPresetModified());
     restored.selectCompareSide (eq1::CompareSide::A);
@@ -314,7 +307,7 @@ TEST_CASE ("A version 2 session loads with no Loaded Preset on either side")
     processor.loadPreset (maker.presetState(), "Before");
     processor.selectCompareSide (eq1::CompareSide::B);
 
-    load (processor, *fixture ("state-v2.xml"));
+    eq1::test::restoreState (processor, *fixture ("state-v2.xml"));
     CHECK (processor.compareSide() == eq1::CompareSide::A);
     CHECK_THAT (value (processor, "band1_gain"), WithinAbs (-4.5, 1.0e-4));
     CHECK (processor.loadedPresetName().isEmpty());
@@ -340,7 +333,7 @@ TEST_CASE ("Whether the Output Meter is shown is saved with the session, isn't u
     CHECK (xml->getIntAttribute ("version", -1) == eq1::PluginProcessor::stateVersion);
 
     eq1::PluginProcessor restored;
-    load (restored, *xml);
+    eq1::test::restoreState (restored, *xml);
     CHECK_FALSE (restored.isOutputMeterShown());
 }
 
@@ -349,7 +342,7 @@ TEST_CASE ("A session saved before the Output Meter loads with it shown")
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     processor.setOutputMeterShown (false);
-    load (processor, *fixture ("state-v0.xml"));
+    eq1::test::restoreState (processor, *fixture ("state-v0.xml"));
     CHECK (processor.isOutputMeterShown());
 }
 
@@ -375,26 +368,6 @@ TEST_CASE ("The saved names a test checks include nested properties and host par
 
 namespace
 {
-
-// Every host parameter holds a finite normalised value within 0 to 1, and a plain one within its range.
-void checkEveryParameterFiniteAndInRange (juce::AudioProcessor& processor)
-{
-    for (auto* p : processor.getParameters())
-    {
-        auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p);
-        REQUIRE (ranged != nullptr);
-        CAPTURE (ranged->getParameterID());
-        const float normalised = ranged->getValue();
-        REQUIRE (std::isfinite (normalised));
-        REQUIRE (normalised >= 0.0f);
-        REQUIRE (normalised <= 1.0f);
-        const float plain = ranged->convertFrom0to1 (normalised);
-        const auto& range = ranged->getNormalisableRange();
-        REQUIRE (std::isfinite (plain));
-        REQUIRE (plain >= range.start);
-        REQUIRE (plain <= range.end);
-    }
-}
 
 // Sets a saved setting's value as written in the file, which may be anything.
 void setSaved (juce::XmlElement& state, const juce::String& id, const juce::String& text)
@@ -430,8 +403,8 @@ TEST_CASE ("A state with nan, inf and out-of-range values restores to finite, in
     setSaved (*xml, "gain_scale", "not a number");
 
     eq1::PluginProcessor restored;
-    load (restored, *xml);
-    checkEveryParameterFiniteAndInRange (restored);
+    eq1::test::restoreState (restored, *xml);
+    REQUIRE (eq1::test::firstParameterOutOfRange (restored).isEmpty());
     // Not finite: the default.
     CHECK_THAT (value (restored, "band1_frequency"), WithinAbs (1000.0, 1.0e-3));
     CHECK (value (restored, "band1_gain") == 0.0f);
@@ -494,7 +467,7 @@ TEST_CASE ("A state whose Display Range, editor size or Analyzer settings aren't
     eq1::PluginProcessor restored;
     restored.setDisplayRangeDb (6);
     restored.setEditorSize ({ 1000, 700 });
-    load (restored, *xml);
+    eq1::test::restoreState (restored, *xml);
     // The Display Range and the Analyzer's range are one of a few choices: anything else is the default.
     CHECK (restored.displayRangeDb() == 12);
     CHECK (restored.analyzerSettings().rangeDb == defaults.rangeDb);

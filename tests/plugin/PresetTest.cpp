@@ -1,11 +1,11 @@
 #include "PluginProcessor.h"
 #include "PresetLibrary.h"
+#include "SavedState.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
-#include <cmath>
 #include <functional>
 #include <vector>
 
@@ -379,15 +379,7 @@ TEST_CASE ("A Preset file with nan, inf and out-of-range values loads finite, in
 
     Host host;
     REQUIRE (host.processor.loadPreset (preset, "Odd"));
-    for (auto* p : host.processor.getParameters())
-    {
-        auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p);
-        REQUIRE (ranged != nullptr);
-        CAPTURE (ranged->getParameterID());
-        REQUIRE (std::isfinite (ranged->getValue()));
-        REQUIRE (ranged->getValue() >= 0.0f);
-        REQUIRE (ranged->getValue() <= 1.0f);
-    }
+    REQUIRE (eq1::test::firstParameterOutOfRange (host.processor).isEmpty());
     CHECK_THAT (host.value ("band1_frequency"), WithinAbs (1000.0, 1.0e-3));
     CHECK (host.value ("band1_gain") == 0.0f);
     CHECK_THAT (host.value ("band1_q"), WithinAbs (1.0, 1.0e-4));

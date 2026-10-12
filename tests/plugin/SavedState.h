@@ -2,8 +2,43 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <cmath>
+
 namespace eq1::test
 {
+
+// Restores a session into processor, as a host does: the block as saved, or a state as XML.
+inline void restoreState (juce::AudioProcessor& processor, const juce::MemoryBlock& saved)
+{
+    processor.setStateInformation (saved.getData(), static_cast<int> (saved.getSize()));
+}
+
+inline void restoreState (juce::AudioProcessor& processor, const juce::XmlElement& xml)
+{
+    juce::MemoryBlock saved;
+    juce::AudioProcessor::copyXmlToBinary (xml, saved);
+    restoreState (processor, saved);
+}
+
+// The first host parameter whose value isn't finite and in range, named with its value: its normalised
+// value within 0 to 1 and its plain one within the parameter's range. Empty when every one is.
+inline juce::String firstParameterOutOfRange (juce::AudioProcessor& processor)
+{
+    for (auto* p : processor.getParameters())
+    {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p);
+        if (ranged == nullptr)
+            return p->getName (64) + ": not a RangedAudioParameter";
+        const float normalised = ranged->getValue();
+        if (! std::isfinite (normalised) || normalised < 0.0f || normalised > 1.0f)
+            return ranged->getParameterID() + ": normalised " + juce::String (normalised);
+        const float plain = ranged->convertFrom0to1 (normalised);
+        const auto& range = ranged->getNormalisableRange();
+        if (! std::isfinite (plain) || plain < range.start || plain > range.end)
+            return ranged->getParameterID() + ": " + juce::String (plain) + " outside " + juce::String (range.start) + " to " + juce::String (range.end);
+    }
+    return {};
+}
 
 // A saved session decoded as setStateInformation reads it. The saved block starts with a binary
 // header, so its raw bytes (MemoryBlock::toString) never show the XML.
