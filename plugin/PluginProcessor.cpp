@@ -40,8 +40,8 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    juce::ScopedNoDenormals noDenormals;
-
+    // The Engine flushes subnormal numbers for its own duration (engine/src/NoSubnormals.h); nothing
+    // here computes on the audio.
     // Host Automation arrives on the audio thread, so the snapshot is taken here, once per block.
     Settings settings;
     for (size_t slot = 0; slot < slots.size(); ++slot)
