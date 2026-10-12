@@ -39,13 +39,16 @@ int UserSettings::uiScalePercent() const
     return uiScale::isOffered (percent) ? percent : uiScale::defaultPercent;
 }
 
-void UserSettings::setUiScalePercent (int percent)
+bool UserSettings::setUiScalePercent (int percent)
 {
     if (file == juce::File() || ! uiScale::isOffered (percent))
-        return;
+        return false;
     juce::PropertiesFile settings (file, options());
     settings.setValue (uiScaleKey, percent);
-    settings.save();
+    if (settings.save())
+        return true;
+    juce::Logger::writeToLog ("eq1: couldn't save the user settings to " + file.getFullPathName() + "; the UI Scale will be saved again on the next pick");
+    return false;
 }
 
 } // namespace eq1

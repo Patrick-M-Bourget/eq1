@@ -167,7 +167,7 @@ std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHand
 }
 
 FooterBar::FooterBar (PluginProcessor& p)
-    : processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerPopover (p), outputPopover (p)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerPopover (p), outputPopover (p)
 {
     bypassedFade.apply = [this] (float) { repaint(); };
     auto& state = processor.parameterState();
@@ -241,12 +241,10 @@ FooterBar::FooterBar (PluginProcessor& p)
     showBypass();
     showOutputLevel();
     showAnalyzerSources();
-    startTimerHz (30);
 }
 
 FooterBar::~FooterBar()
 {
-    stopTimer();
     outputPopover.onClose = nullptr;
     analyzerPopover.onClose = nullptr;
 }
@@ -261,7 +259,7 @@ void FooterBar::toggleGlobalBypass()
     globalBypass.setToggleState (! globalBypass.getToggleState(), juce::sendNotificationSync);
 }
 
-void FooterBar::timerCallback()
+void FooterBar::tick (double)
 {
     showBypass();
     showOutputLevel();

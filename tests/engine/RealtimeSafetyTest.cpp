@@ -1,14 +1,21 @@
 #include "AllocationGuard.h"
-
-#include "eq1/Engine.h"
+#include "Measure.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cmath>
 #include <limits>
 #include <vector>
 
 using namespace eq1;
+
+namespace
+{
+// The Shapes a Dynamic Band can take: the ones with a Gain to move. A Cut, Notch, Band Pass or All
+// Pass has none, so a Dynamic Range on it does nothing (eq1/Settings.h, BandSettings).
+constexpr std::array dynamicShapes = { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt };
+} // namespace
 
 TEST_CASE ("Engine does not allocate while processing, taking new settings or being read, with all 24 Bands in use")
 {
@@ -37,13 +44,9 @@ TEST_CASE ("Engine does not allocate while processing, taking new settings or be
             band.gain = block % 2 == 0 ? 12.0 : -12.0;
             band.bypass = (block + static_cast<int> (slot)) % 5 == 0;
             band.inUse = (block + static_cast<int> (slot)) % 7 != 0;
-            constexpr Shape shapes[] = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
-                                         Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
-            band.shape = shapes[(static_cast<size_t> (block / 8) + slot) % 10];
+            band.shape = test::allShapes[(static_cast<size_t> (block / 8) + slot) % test::allShapes.size()];
             band.slope = 6.0 * static_cast<double> (1 + (static_cast<size_t> (block) + slot) % 16);
-            constexpr StereoPlacement placements[] = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
-                                                       StereoPlacement::Mid, StereoPlacement::Side };
-            band.placement = placements[(static_cast<size_t> (block / 4) + slot) % 5];
+            band.placement = test::allPlacements[(static_cast<size_t> (block / 4) + slot) % test::allPlacements.size()];
         }
         // Solo moving from Band to Band, and off.
         settings.soloSlot = block % 6 == 5 ? 0 : 1 + block % numBandSlots;
@@ -119,15 +122,12 @@ TEST_CASE ("Engine does not allocate with 24 Dynamic Bands, one of them metered"
         }
         for (size_t slot = 0; slot < settings.bands.size(); ++slot)
         {
-            constexpr Shape shapes[] = { Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf, Shape::FlatTilt };
-            constexpr StereoPlacement placements[] = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
-                                                       StereoPlacement::Mid, StereoPlacement::Side };
             settings.bands[slot] = { .inUse = true,
-                                     .shape = shapes[slot % 5],
+                                     .shape = dynamicShapes[slot % dynamicShapes.size()],
                                      .frequency = 100.0 + 400.0 * static_cast<double> (slot) + 10.0 * block,
                                      .gain = 3.0,
                                      .q = 1.0,
-                                     .placement = placements[(slot / 5) % 5],
+                                     .placement = test::allPlacements[(slot / 5) % test::allPlacements.size()],
                                      .detectionSource = (block + static_cast<int> (slot)) % 4 < 2 ? DetectionSource::Internal : DetectionSource::External,
                                      .detectionRange = (block / 3 + static_cast<int> (slot)) % 2 == 0 ? DetectionRange::Band : DetectionRange::Free,
                                      .detectionLow = 40.0 + 5.0 * block,

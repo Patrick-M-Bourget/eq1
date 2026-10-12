@@ -29,12 +29,11 @@ juce::ColourGradient meterGradient (juce::Rectangle<float> track)
     gradient.addColour (tokens::dynamics::meterStop3, colour::meter3);
     return gradient;
 }
-
-double now() { return juce::Time::getMillisecondCounterHiRes() / 1000.0; }
 } // namespace
 
 //==============================================================================
-ThresholdFader::ThresholdFader (PluginProcessor& p) : KeyboardSlider ("Threshold"), processor (p)
+ThresholdFader::ThresholdFader (PluginProcessor& p)
+    : KeyboardSlider ("Threshold"), EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p)
 {
     setSliderStyle (juce::Slider::LinearVertical);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -53,8 +52,6 @@ ThresholdFader::ThresholdFader (PluginProcessor& p) : KeyboardSlider ("Threshold
     };
     ballistics.reset();
     level = levelFloorDb;
-    lastRead = now();
-    startTimerHz (60);
 }
 
 juce::Rectangle<float> ThresholdFader::track() const
@@ -76,7 +73,7 @@ float ThresholdFader::levelTopY (double levelDb)
     return thumbCentreY (std::min (levelDb, thresholdTopDb));
 }
 
-void ThresholdFader::timerCallback()
+void ThresholdFader::tick (double seconds)
 {
     // A newly metered Band starts from nothing rather than from the last one's falling level.
     if (const int slot = processor.meteredSlot(); slot != meteredSlot)
@@ -84,9 +81,8 @@ void ThresholdFader::timerCallback()
         meteredSlot = slot;
         ballistics.reset();
     }
-    const double time = now();
-    const double read = ballistics.update (processor.readDetectionLevel(), time - lastRead);
-    lastRead = time;
+    const double read = ballistics.update (processor.readDetectionLevel(), seconds);
+    moving = ! juce::exactlyEqual (read, level);
     if (isShowing() && std::abs (levelTopY (read) - levelTopY (level)) > 0.1f)
         repaint();
     level = read;

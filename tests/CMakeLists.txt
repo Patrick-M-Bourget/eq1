@@ -15,15 +15,20 @@ add_executable(eq1_engine_tests
     engine/BellResponseTest.cpp
     engine/BellStabilityTest.cpp
     engine/ClickFreeTest.cpp
+    engine/Double2Test.cpp
     engine/DynamicsTest.cpp
+    engine/FootprintTest.cpp
+    engine/NonFiniteInputTest.cpp
     engine/OutputLevelTest.cpp
     engine/OutputTest.cpp
     engine/RealtimeSafetyTest.cpp
+    engine/RenderScenesTest.cpp
     engine/ResponseTest.cpp
     engine/RobustnessTest.cpp
     engine/SampleRateAndBlockSizeTest.cpp
     engine/SettingsHandoffTest.cpp
     engine/ShapeResponseTest.cpp
+    engine/SmootherTest.cpp
     engine/SoloTest.cpp
     engine/StereoPlacementTest.cpp
 )
@@ -45,8 +50,10 @@ if(EQ1_BUILD_PLUGIN)
         plugin/DisplayHandlesTest.cpp
         plugin/DisplayLayersTest.cpp
         plugin/DisplayRangeTest.cpp
+        plugin/DisplayRedrawTest.cpp
         plugin/EditHistoryTest.cpp
         plugin/EditorLayoutTest.cpp
+        plugin/EditorTickTest.cpp
         plugin/EqDisplayTest.cpp
         plugin/FactoryPresetsTest.cpp
         plugin/HoverCardTest.cpp
@@ -62,6 +69,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/PresetTest.cpp
         plugin/StapleControlsTest.cpp
         plugin/StapleTest.cpp
+        plugin/StateFuzzTest.cpp
         plugin/StateTest.cpp
         plugin/UiScaleTest.cpp
     )
@@ -91,6 +99,13 @@ if(EQ1_BUILD_PLUGIN)
 endif()
 
 # Measures the Engine's CPU load against its budget (scripts/check.sh cpu). Not a ctest test: it
-# needs the machine to itself.
+# needs the machine to itself. It shares the Engine tests' helpers (engine/Measure.h), whose
+# generators are Catch2's, so it links Catch2 without its main.
 add_executable(eq1_cpu_budget cpu/CpuBudget.cpp)
-target_link_libraries(eq1_cpu_budget PRIVATE eq1::engine)
+target_link_libraries(eq1_cpu_budget PRIVATE eq1::engine Catch2::Catch2)
+
+# Renders the null check's scenes through the Engine and compares two trees' renders
+# (scripts/check.sh null). Not a ctest test; the scenes themselves are tested in eq1_engine_tests.
+# Linked against the Engine only, and Catch2 without its main for the shared helpers' generators.
+add_executable(eq1_render render/RenderTool.cpp)
+target_link_libraries(eq1_render PRIVATE eq1::engine Catch2::Catch2)

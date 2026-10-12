@@ -2,8 +2,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
+#include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <random>
 #include <vector>
 
@@ -114,8 +118,7 @@ TEST_CASE ("A Mid or Side Band processes only its part of the signal and leaves 
 
 TEST_CASE ("On a mono track, a Side Band has no effect and every other Stereo Placement processes the signal")
 {
-    const auto placement = GENERATE (StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right, StereoPlacement::Mid,
-                                     StereoPlacement::Side);
+    const auto placement = GENERATE (from_range (test::allPlacements));
     CAPTURE (static_cast<int> (placement));
     const auto input = noise (3);
     std::vector<std::vector<float>> signal { input };
@@ -148,4 +151,65 @@ TEST_CASE ("A stored Stereo Placement comes back when the Engine goes from stere
 
     checkClose (after[0], before[0], 1.0e-6f);
     checkClose (after[1], before[1], 1.0e-6f);
+}
+
+namespace
+{
+// Processes signal through an Engine in 97-sample blocks (not a multiple of the Engine's run), with
+// the settings changed a quarter of the way in, so Frequency, Gain and Q glide.
+void processWithGlide (const Settings& settings, const Settings& changed, std::vector<std::vector<float>>& signal)
+{
+    constexpr int blockSize = 97;
+    Engine engine;
+    engine.prepare (sampleRate, blockSize, static_cast<int> (signal.size()));
+    engine.setSettings (settings);
+    std::vector<float*> channels (signal.size());
+    for (int start = 0; start < length; start += blockSize)
+    {
+        if (start >= length / 4 && start - blockSize < length / 4)
+            engine.setSettings (changed);
+        for (size_t ch = 0; ch < signal.size(); ++ch)
+            channels[ch] = signal[ch].data() + start;
+        engine.process ({ channels.data(), static_cast<int> (channels.size()), std::min (blockSize, length - start) });
+    }
+}
+
+std::vector<std::uint32_t> bitsOf (const std::vector<float>& samples)
+{
+    std::vector<std::uint32_t> bits (samples.size());
+    for (size_t i = 0; i < samples.size(); ++i)
+        bits[i] = std::bit_cast<std::uint32_t> (samples[i]);
+    return bits;
+}
+} // namespace
+
+TEST_CASE ("A Stereo Band on a stereo track sounds bit for bit as a Left and a Right Band with its settings, every Shape, gliding")
+{
+    // The Stereo Band runs both channels in one loop, a lane each; a Left or Right Band runs one channel
+    // on its own. Each lane must round exactly as the single channel does.
+    const auto shape = GENERATE (from_range (test::allShapes));
+    const bool brickwall = GENERATE (false, true);
+    if (brickwall && ! isCut (shape))
+        return;
+    CAPTURE (static_cast<int> (shape), brickwall);
+
+    const auto band = [&] (StereoPlacement placement, double frequency, double gainDb, double q) {
+        return BandSettings { .inUse = true, .shape = shape, .frequency = frequency, .gain = gainDb, .q = q, .slope = 24.0, .brickwall = brickwall, .placement = placement };
+    };
+    Settings stereo, stereoChanged, split, splitChanged;
+    stereo.bands[0] = band (StereoPlacement::Stereo, 1000.0, 12.0, 1.0);
+    stereoChanged.bands[0] = band (StereoPlacement::Stereo, 1500.0, 6.0, 2.0);
+    split.bands[0] = band (StereoPlacement::Left, 1000.0, 12.0, 1.0);
+    split.bands[1] = band (StereoPlacement::Right, 1000.0, 12.0, 1.0);
+    splitChanged.bands[0] = band (StereoPlacement::Left, 1500.0, 6.0, 2.0);
+    splitChanged.bands[1] = band (StereoPlacement::Right, 1500.0, 6.0, 2.0);
+
+    const auto left = noise (1), right = noise (2);
+    std::vector<std::vector<float>> stereoSignal { left, right }, splitSignal { left, right };
+    processWithGlide (stereo, stereoChanged, stereoSignal);
+    processWithGlide (split, splitChanged, splitSignal);
+
+    REQUIRE (stereoSignal[0] != left); // the Band did something
+    REQUIRE (bitsOf (stereoSignal[0]) == bitsOf (splitSignal[0]));
+    REQUIRE (bitsOf (stereoSignal[1]) == bitsOf (splitSignal[1]));
 }

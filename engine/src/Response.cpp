@@ -2,6 +2,7 @@
 
 #include "AutoGain.h"
 #include "ShapeDesign.h"
+#include "Units.h"
 
 #include <cmath>
 
@@ -12,7 +13,7 @@ namespace
 {
 double magnitudeDb (const Cascade& cascade, double frequency, double sampleRate)
 {
-    return 20.0 * std::log10 (std::abs (responseAt (cascade, frequency, sampleRate)));
+    return gainToDecibels (std::abs (responseAt (cascade, frequency, sampleRate)));
 }
 } // namespace
 
@@ -40,7 +41,8 @@ double responseDb (const Settings& settings, double frequency, double sampleRate
 double autoGainDb (const Settings& settings, double sampleRate)
 {
     AutoGainEstimate estimate;
-    estimate.start (settings, sampleRate);
+    estimate.prepare (sampleRate);
+    estimate.start (settings);
     estimate.advance (AutoGainEstimate::numPoints);
     return estimate.db();
 }

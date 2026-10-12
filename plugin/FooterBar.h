@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AnalyzerPopover.h"
+#include "EditorTick.h"
 #include "KeyboardSlider.h"
 #include "OutputPopover.h"
 #include "Parameters.h"
@@ -93,8 +94,9 @@ private:
 // beside it while on) and the Analyzer button; at the right, the Gain Scale and Output readouts and the
 // UI Scale menu. Under Global Bypass the readouts are drawn in text4, not applied. Output opens the
 // output popover; the Analyzer button, which reads the sources the Analyzer shows, opens the Analyzer
-// popover.
-class FooterBar final : public juce::Component, private juce::Timer
+// popover. It follows Global Bypass, the Output readout's level and the Analyzer's sources on the
+// editor's tick (EditorTick).
+class FooterBar final : public juce::Component, private EditorTick::Client
 {
 public:
     explicit FooterBar (PluginProcessor& processor);
@@ -118,7 +120,7 @@ public:
     AnalyzerPopover& getAnalyzerPopover() { return analyzerPopover; }
 
 private:
-    void timerCallback() override;
+    void tick (double seconds) override;
     void showAnalyzerSources();
     void showBypass();
     void showOutputLevel();

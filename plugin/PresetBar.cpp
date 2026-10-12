@@ -82,7 +82,8 @@ std::unique_ptr<juce::AccessibilityHandler> PresetNameButton::createAccessibilit
         [this] { triggerClick(); });
 }
 
-PresetBar::PresetBar (PluginProcessor& p, juce::File userFolder) : processor (p), library (std::move (userFolder))
+PresetBar::PresetBar (PluginProcessor& p, juce::File userFolder)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), library (std::move (userFolder))
 {
     presets.onClick = [this] {
         if (browser.isVisible())
@@ -118,12 +119,11 @@ PresetBar::PresetBar (PluginProcessor& p, juce::File userFolder) : processor (p)
         addAndMakeVisible (*button);
     }
     showLoadedPreset();
-    startTimerHz (4);
 }
 
 int PresetBar::getIdealWidth() const { return 2 * (stepButtonSize + gap) + presets.getIdealWidth(); }
 
-void PresetBar::timerCallback() { showLoadedPreset(); }
+void PresetBar::tick (double) { showLoadedPreset(); }
 
 void PresetBar::showLoadedPreset()
 {
@@ -171,7 +171,7 @@ void PresetBar::step (int by)
 // SafePointer and does nothing once it is gone.
 void PresetBar::saveAs (const juce::String& name)
 {
-    if (name.isEmpty())
+    if (PresetLibrary::legalName (name).isEmpty())
         return;
     const auto preset = processor.presetState();
     if (const auto file = library.save (name, preset))

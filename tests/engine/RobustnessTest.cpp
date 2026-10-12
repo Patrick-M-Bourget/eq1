@@ -1,11 +1,11 @@
-#include "eq1/Engine.h"
+#include "Measure.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include <algorithm>
 #include <cmath>
-#include <random>
 #include <vector>
 
 using namespace eq1;
@@ -17,18 +17,13 @@ namespace
 // ring longest, and so take longest to decay into subnormal numbers.
 Settings everyShapeRinging()
 {
-    constexpr Shape shapes[] = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
-                                 Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
-    Settings settings;
-    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
-        settings.bands[slot] = { .inUse = true,
-                                 .shape = shapes[slot % 10],
-                                 .frequency = 20.0 * std::pow (1.33, static_cast<double> (slot)),
-                                 .gain = slot % 2 == 0 ? 12.0 : -12.0,
-                                 .q = 20.0,
-                                 .slope = 96.0,
-                                 .dynamicRange = slot % 2 == 0 ? -12.0 : 0.0 };
-    return settings;
+    return test::spreadBands ([] (size_t slot) {
+        return BandSettings { .shape = test::allShapes[slot % test::allShapes.size()],
+                              .gain = slot % 2 == 0 ? 12.0 : -12.0,
+                              .q = 20.0,
+                              .slope = 96.0,
+                              .dynamicRange = slot % 2 == 0 ? -12.0 : 0.0 };
+    }, 20.0);
 }
 
 int subnormalsIn (const std::vector<float>& samples)
@@ -38,9 +33,6 @@ int subnormalsIn (const std::vector<float>& samples)
         count += std::fpclassify (s) == FP_SUBNORMAL ? 1 : 0;
     return count;
 }
-
-// The sample rates eq1 is checked at.
-double anySampleRate() { return GENERATE (44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0); }
 
 // All 24 Band slots with one Shape, at every combination of the ends of Frequency, Q, Gain and
 // Slope (2 x 2 x 2 x 3 = 24), as Dynamic Bands moving the full +/-30 dB at the fastest and slowest
@@ -116,9 +108,8 @@ TEST_CASE ("Processing leaves the caller's floating-point mode as it found it")
 
 TEST_CASE ("Every Shape at the ends of every setting stays finite and bounded, through the input and the silence after it", "[sweep]")
 {
-    const double sampleRate = anySampleRate();
-    const auto shape = GENERATE (Shape::Bell, Shape::LowShelf, Shape::LowCut, Shape::HighShelf, Shape::HighCut,
-                                 Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt, Shape::AllPass);
+    const double sampleRate = test::anySampleRate();
+    const auto shape = GENERATE (from_range (test::allShapes));
     constexpr int blockSize = 256;
     Engine engine;
     engine.prepare (sampleRate, blockSize, 2);
@@ -127,8 +118,7 @@ TEST_CASE ("Every Shape at the ends of every setting stays finite and bounded, t
     // Full-scale noise for 0.25 s, then silence. The tail is not required to fall yet: Bands resonating
     // together at 10 Hz stack into a ringing that builds for seconds before it decays. An
     // unstable filter grows without limit instead.
-    std::mt19937 random (7);
-    std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
+    test::Noise noise (7);
     const auto inputSamples = static_cast<int> (0.25 * sampleRate);
     std::vector<float> left (blockSize), right (blockSize);
     float* main[] = { left.data(), right.data() };
@@ -139,8 +129,8 @@ TEST_CASE ("Every Shape at the ends of every setting stays finite and bounded, t
         for (size_t i = 0; i < left.size(); ++i)
         {
             const bool playing = n + static_cast<int> (i) < inputSamples;
-            left[i] = playing ? noise (random) : 0.0f;
-            right[i] = playing ? noise (random) : 0.0f;
+            left[i] = playing ? noise() : 0.0f;
+            right[i] = playing ? noise() : 0.0f;
         }
         engine.process ({ main, 2, blockSize });
         for (size_t i = 0; i < left.size(); ++i)

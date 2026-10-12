@@ -196,6 +196,33 @@ TEST_CASE ("An Output Meter bar's held-peak tick holds the highest peak for 1 s,
     CHECK_THAT (channel.heldPeakDb(), WithinAbs (-2.0, 1.0e-9));
 }
 
+TEST_CASE ("The Output Meter repaints only while its levels move: not on silence, and at 60 Hz while a signal's peaks fall")
+{
+    harness::OpenEditor host;
+    harness::useLayout (host.processor, juce::AudioChannelSet::stereo());
+    auto* meter = harness::findChild<eq1::OutputMeter> (*host.editor);
+    REQUIRE (meter != nullptr);
+    REQUIRE (meter->isShowing());
+    // Silent since it opened, the Analyzer off and the display's resting ghost faded in: at the floor,
+    // with nothing to redraw.
+    host.processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = false });
+    REQUIRE (host.settleUntil ([&] { return host.editorTick().rateHz() == eq1::EditorTick::idleHz; }));
+    auto& repaints = harness::countRepaintsOf (*meter);
+    host.settle (300);
+    CHECK (repaints.count == 0);
+    REQUIRE (host.editorTick().rateHz() == eq1::EditorTick::idleHz);
+
+    // A sine, then silence: the peaks fall at 20 dB/s, redrawn at 60 Hz as they fall.
+    playSine (host.processor, 0.5f);
+    host.settle (100);
+    const int falling = repaints.count;
+    CHECK (falling > 0);
+    CHECK (host.editorTick().rateHz() == eq1::EditorTick::activeHz);
+    host.settle (100);
+    CHECK (repaints.count > falling);
+    meter->setCachedComponentImage (nullptr);
+}
+
 TEST_CASE ("The Output Meter's scale runs linearly in dB from -60 dBFS at the bottom to +6 dBFS at the top")
 {
     CHECK_THAT (eq1::OutputMeter::position (-60.0), WithinAbs (0.0, 1.0e-9));

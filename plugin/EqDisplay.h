@@ -2,8 +2,11 @@
 
 #include "AnalyzerSettings.h"
 #include "BandEditing.h"
+#include "EditorTick.h"
 #include "HoverCard.h"
+#include "Parameters.h"
 #include "AnalyzerSpectrum.h"
+#include "display/CurvesLayer.h"
 #include "display/DisplayFrame.h"
 #include "display/DisplayGeometry.h"
 #include "display/EdgeFadeLayer.h"
@@ -49,8 +52,10 @@ class PluginProcessor;
 // "Band 4" with its stored settings as its value (spokenBand), announced again whenever the Band moves,
 // and each shown Dynamic Range Handle, "Band 4 Dynamic Range Handle". It paints no background: the
 // window's (staple/WindowBackground.h) shows through, and its edges fade into it, so its parent is the
-// window's content.
-class EqDisplay final : public juce::Component, private juce::Timer
+// window's content. It follows the Bands, the Analyzer and the Live Gains on the editor's tick
+// (EditorTick), which it keeps at 60 Hz while the Analyzer shows, a curve fades, a Live Gain moves, a
+// handle is held, the pointer rests on a handle, the Hover Card is up or a message shows.
+class EqDisplay final : public juce::Component, private EditorTick::Client
 {
 public:
     EqDisplay (PluginProcessor& processor, BandEditing& editing);
@@ -91,6 +96,12 @@ public:
     // The Band whose handle draws the Solo cue: the Soloed one, whichever holder Solos it, or 0.
     int soloCueSlot() const { return frame().soloedSlot; }
 
+    // What the display has built since it opened, for a test of what a frame does: the curves it has
+    // designed (display::CurveCache) and how many times it has placed its handles, reading out what
+    // changed (placeHandles). An Analyzer frame with the Bands unchanged does neither.
+    const display::CurveCache& curveCache() const { return curves; }
+    int handlePlacements() const { return placements; }
+
 private:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     // A Band's place in Tab's order: an element at its handle that takes keyboard focus. The display
@@ -102,8 +113,10 @@ private:
     class DynamicRangeHandleElement;
     std::array<std::unique_ptr<DynamicRangeHandleElement>, numBandSlots> dynamicRangeHandleElements;
     // Puts each Band in use's element at its handle, and each shown Dynamic Range Handle's over it, and
-    // orders them by Frequency, each Dynamic Range Handle after its Band, unless one has focus.
+    // orders them by Frequency, each Dynamic Range Handle after its Band, unless one has focus. Each
+    // element announces its value if it changed.
     void placeHandles();
+    int placements = 0; // how many times
     int dynamicRangeHandleAt (juce::Point<float> position) const; // the Band whose Dynamic Range Handle is there, or 0
     // The Dynamic Range Handle's arrow keys: Dynamic Range by dB, one undo step until the key is released.
     void stepDynamicRange (int slot, double db);
@@ -114,9 +127,12 @@ private:
     void endHeldNudge();
     bool nudging = false;
 
-    void timerCallback() override;
-    // Reads the analysis taps into the spectra; false when the Analyzer shows nothing.
-    bool updateAnalyzer();
+    void tick (double seconds) override;
+    bool isActive() const override { return wantsFrames; }
+    bool wantsFrames = false; // as the last tick found it (isActive)
+    // Reads the analysis taps into the spectra, seconds after the last read; false when the Analyzer
+    // shows nothing.
+    bool updateAnalyzer (double seconds);
     // Where a spectrum is drawn at x, with Analyzer Tilt: the top of the display is 0 dB, the bottom
     // the Analyzer's range below.
     float spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const;
@@ -138,6 +154,19 @@ private:
     // What the layers draw this frame, and the Band whose filled curve is at a point, or 0.
     display::DisplayFrame frame() const;
     int bandAreaAt (juce::Point<float> position) const;
+    // The Band curves as paths, designed again only when what they show changes (display::CurveCache),
+    // brought up to date wherever they are read: a cache, so from const reads too.
+    mutable display::CurveCache curves;
+    // The Band whose filled curve is under the pointer (bandAreaAt), found once per pointer position
+    // and set of curves rather than on every frame the ghost or the hover asks.
+    struct PointerArea
+    {
+        juce::Point<float> pointer;
+        int generation = 0; // curves.generation() it was found at
+        int slot = 0;
+    };
+    mutable std::optional<PointerArea> pointerArea;
+    int areaUnderPointer() const; // while the pointer is over the display
 
     void select (std::set<int> slots);
     void selectAll();
@@ -151,16 +180,16 @@ private:
 
     PluginProcessor& processor;
     BandEditing& editing;
+    parameters::OutputValues output; // Global Bypass, read each frame
 
     AnalyzerSpectrum preEq, postEq, sidechain;
     AnalyzerSettings analyzer; // taken once a frame
     AnalyzerSpectrum* held = nullptr; // the spectrum Peak Hold is drawn for, if any
     std::vector<float> tapSamples; // read from the taps each frame
-    juce::uint32 lastFrame = 0;
     // The Bands as heard: their Gain and Dynamic Range under Gain Scale. The display draws, and the
     // mouse moves, these (BandEditing takes Gains as heard).
     Settings heardSettings() const;
-    Settings shown; // what was drawn last, refreshed on the timer
+    Settings shown; // what was drawn last, refreshed on the tick
     std::array<double, numBandSlots> shownLiveGains {};
 
     std::set<int> selected;
@@ -191,7 +220,7 @@ private:
     int shownRangeDb = 0;
     juce::uint32 allInUseMessageUntil = 0; // shows "All 24 Bands are in use" until this time
 
-    // The curves' fades, all run from the display's one timer: each Band's hover (the handle under the
+    // The curves' fades, all stepped on the tick: each Band's hover (the handle under the
     // mouse) and Global Bypass's, read from its parameter each frame. Each runs from 0 to 1.
     int hoveredSlot = 0;
     std::optional<juce::Point<float>> pointer; // the mouse, while over the display
@@ -211,7 +240,7 @@ private:
     // Shows the card for a Band at its handle, or moves it there; hides it.
     void showCard (int slot);
     void hideCard();
-    // On the timer: shows the card once the pointer has rested long enough, and keeps it at its handle.
+    // On the tick: shows the card once the pointer has rested long enough, and keeps it at its handle.
     void updateCard();
     // The mouse is pressed here: a drag, a marquee, a Dynamic Range Handle or a Spectrum Grab under way.
     bool isPressed() const;

@@ -696,6 +696,42 @@ TEST_CASE ("With every parameter at its default, the output is the input bit for
     }
 }
 
+TEST_CASE ("A block with no parameter or held-state change publishes no settings to the Engine")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    processor.prepareToPlay (sampleRate, blockSize);
+    juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), blockSize);
+    juce::MidiBuffer midi;
+    const auto block = [&] {
+        buffer.clear();
+        processor.processBlock (buffer, midi);
+    };
+
+    block();
+    CHECK (processor.settingsPublished() == 1);
+    for (int i = 0; i < 8; ++i)
+        block();
+    CHECK (processor.settingsPublished() == 1);
+
+    setParameter (processor, "band1_in_use", 1.0f);
+    block();
+    block();
+    CHECK (processor.settingsPublished() == 2);
+
+    // What the editor holds is part of the snapshot too.
+    processor.setSolo (1);
+    block();
+    block();
+    CHECK (processor.settingsPublished() == 3);
+
+    // The first block after the host prepares again publishes, changed or not.
+    processor.prepareToPlay (sampleRate, blockSize);
+    block();
+    block();
+    CHECK (processor.settingsPublished() == 4);
+}
+
 TEST_CASE ("Auto Gain on the host parameters compensates the Bands' level by its estimate")
 {
     juce::ScopedJuceInitialiser_GUI juce;

@@ -221,7 +221,7 @@ public:
 };
 
 AnalyzerPopover::AnalyzerPopover (PluginProcessor& p)
-    : processor (p), showPreEq (std::make_unique<SourceButton> ("Pre", "Analyzer Pre-EQ")),
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), showPreEq (std::make_unique<SourceButton> ("Pre", "Analyzer Pre-EQ")),
       showPostEq (std::make_unique<SourceButton> ("Post", "Analyzer Post-EQ")),
       showSidechain (std::make_unique<SourceButton> ("Sidechain", "Analyzer Sidechain")), range ("Analyzer Range", "Range"),
       resolution ("Analyzer Resolution", "Resolution"), speed ("Analyzer Speed", "Speed"), tilt (std::make_unique<TiltRow>()),
@@ -261,7 +261,7 @@ AnalyzerPopover::AnalyzerPopover (PluginProcessor& p)
     show();
 }
 
-AnalyzerPopover::~AnalyzerPopover() { follow.stopTimer(); }
+AnalyzerPopover::~AnalyzerPopover() = default;
 
 void AnalyzerPopover::openFrom (juce::Component& button, juce::Component& alignTo)
 {
@@ -271,14 +271,17 @@ void AnalyzerPopover::openFrom (juce::Component& button, juce::Component& alignT
     {
         const int left = layer->getLocalArea (&alignTo, alignTo.getLocalBounds()).getX();
         setTopLeftPosition (left - getCardBounds().getX(), getY());
-        follow.startTimerHz (4);
     }
+}
+
+void AnalyzerPopover::tick (double)
+{
+    if (isOpen())
+        show();
 }
 
 void AnalyzerPopover::show()
 {
-    if (! isOpen())
-        follow.stopTimer();
     const auto settings = processor.analyzerSettings();
     showPreEq->setToggleState (settings.showPreEq, juce::dontSendNotification);
     showPostEq->setToggleState (settings.showPostEq, juce::dontSendNotification);

@@ -610,19 +610,10 @@ namespace
 // its next frame.)
 struct HoverKit
 {
-    // Stands in for the window's own drawing, which is all children's, and counts repaints asked of it.
-    struct Repaints final : juce::CachedComponentImage
-    {
-        int count = 0;
-        void paint (juce::Graphics&) override {}
-        bool invalidateAll() override { return ++count > 0; }
-        bool invalidate (const juce::Rectangle<int>&) override { return ++count > 0; }
-        void releaseResources() override {}
-    };
-
     Kit kit;
     staple::EdgeSelector shape { "Shape", staple::EdgeSelector::Side::left };
-    Repaints* repaints = new Repaints();
+    // Stands in for the window's own drawing, which is all children's, and counts repaints asked of it.
+    harness::RepaintCounter* repaints = nullptr;
 
     HoverKit()
     {
@@ -631,7 +622,7 @@ struct HoverKit
         shape.setEdgeColour (staple::tokens::band[3]);
         shape.setIconColour (staple::tokens::band[3]);
         kit.add (shape, { 20, 20, staple::tokens::layout::edgeSelectorWidth, staple::tokens::layout::edgeSelectorHeight });
-        kit.window.setCachedComponentImage (repaints); // owned by the window
+        repaints = &harness::countRepaintsOf (kit.window); // owned by the window
     }
 
     ~HoverKit()

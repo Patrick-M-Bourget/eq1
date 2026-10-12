@@ -23,23 +23,14 @@ namespace
 {
 constexpr float handleRadius = display::DisplayGeometry::handleRadius;
 
-// Exactly the same, field by field: any change at all counts, so the comparison is exact. (Settings'
-// own == would do, but its float comparison warns where it is defined.)
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
+// Exactly the same, Band by Band (display::sameBand): any change at all counts.
 bool same (const Settings& a, const Settings& b)
 {
     for (size_t i = 0; i < a.bands.size(); ++i)
-    {
-        const auto &x = a.bands[i], &y = b.bands[i];
-        if (x.inUse != y.inUse || x.bypass != y.bypass || x.shape != y.shape || x.frequency != y.frequency || x.gain != y.gain
-            || x.q != y.q || x.slope != y.slope || x.brickwall != y.brickwall || x.placement != y.placement
-            || x.dynamicRange != y.dynamicRange || x.threshold != y.threshold || x.thresholdAuto != y.thresholdAuto
-            || x.attack != y.attack || x.release != y.release || x.dynamicsBypass != y.dynamicsBypass)
+        if (! display::sameBand (a.bands[i], b.bands[i]))
             return false;
-    }
     return true;
 }
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 } // namespace
 
 class EqDisplay::BandHandle final : public juce::Component
@@ -143,7 +134,8 @@ private:
     juce::String spoken;
 };
 
-EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e), card (p, e)
+EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), output (parameters::OutputValues::of (p.parameterState())), card (p, e)
 {
     setName ("EQ Display");
     setTitle ("EQ display");
@@ -158,20 +150,15 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editi
         addChildComponent (*dynamicRangeHandle);
     }
     shown = heardSettings();
-    tapSamples.resize (1 << 16);
     // An editor opened under Global Bypass shows it at once.
     globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
     lastFadeStep = juce::Time::getMillisecondCounter();
-    startTimerHz (60);
 }
 
-bool EqDisplay::updateAnalyzer()
+bool EqDisplay::updateAnalyzer (double seconds)
 {
     analyzer = processor.analyzerSettings();
     const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
-    const auto now = juce::Time::getMillisecondCounter();
-    const double seconds = lastFrame == 0 ? 1.0 / 60.0 : juce::jlimit (0.001, 0.25, (now - lastFrame) / 1000.0);
-    lastFrame = now;
 
     // Peak Hold starts afresh on a spectrum it wasn't held for last frame: switched to, or turned on.
     // The spectrum forgets it too when prepared again for a new Resolution or sample rate.
@@ -191,7 +178,9 @@ bool EqDisplay::updateAnalyzer()
             || spectrum->getResolution() != analyzer.resolution)
             spectrum->prepare (sampleRate, analyzer.resolution);
         // Always drained, so the taps hold only the newest samples when a spectrum is shown again;
-        // analysed only when shown.
+        // analysed only when shown. The buffer takes a whole tap, so one read drains it.
+        if (const auto capacity = static_cast<size_t> (processor.analysisCapacity()); tapSamples.size() != capacity)
+            tapSamples = std::vector<float> (capacity);
         const int count = processor.readAnalysis (tap, tapSamples.data(), static_cast<int> (tapSamples.size()));
         spectrum->push (tapSamples.data(), count);
         if (showing[i])
@@ -231,6 +220,7 @@ void EqDisplay::resized()
 
 void EqDisplay::placeHandles()
 {
+    ++placements;
     const bool reorder = focusedSlot() == 0;
     std::vector<int> inUse;
     for (int slot = 1; slot <= numBandSlots; ++slot)
@@ -339,7 +329,7 @@ void EqDisplay::showSolo()
     repaint();
 }
 
-void EqDisplay::timerCallback()
+void EqDisplay::tick (double seconds)
 {
     if (heldSlot != 0 && juce::Time::getMillisecondCounter() - heldSince >= soloHoldMilliseconds)
     {
@@ -356,16 +346,7 @@ void EqDisplay::timerCallback()
     // A Heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
     const bool fading = stepFades();
-
-    if (updateAnalyzer())
-    {
-        // The spectra move every frame.
-        shown = heardSettings();
-        shownRangeDb = processor.displayRangeDb();
-        placeHandles();
-        repaint();
-        return;
-    }
+    const bool analyzing = updateAnalyzer (seconds);
 
     const bool messageExpired = allInUseMessageUntil != 0 && juce::Time::getMillisecondCounter() > allInUseMessageUntil;
     if (messageExpired)
@@ -381,25 +362,34 @@ void EqDisplay::timerCallback()
         liveGainsMoved = liveGainsMoved || ! juce::exactlyEqual (live, shownLiveGains[static_cast<size_t> (slot - 1)]);
         shownLiveGains[static_cast<size_t> (slot - 1)] = live;
     }
-    if (fading)
-        repaint();
-    if (same (latest, shown) && range == shownRangeDb && ! messageExpired && ! liveGainsMoved)
-        return;
-    shown = latest;
-    shownRangeDb = range;
+    // What needs the next frame soon: a spectrum, a fade or a Live Gain moving, a wait on the pointer
+    // (a held handle's Solo, the Hover Card's rest and hide) or the message's end.
+    wantsFrames = analyzing || fading || liveGainsMoved || heldSlot != 0 || restingSlot != 0 || card.shownSlot() != 0 || allInUseMessageUntil != 0;
 
-    // A Band deleted from elsewhere is no longer selected.
-    auto stillInUse = selected;
-    std::erase_if (stillInUse, [this] (int slot) { return ! shown.bands[static_cast<size_t> (slot - 1)].inUse; });
-    if (stillInUse != selected)
-        select (stillInUse);
-    placeHandles();
-    repaint();
+    // The handles move, and their values are read out, only when the Bands or the range shown change:
+    // an Analyzer frame, a fade or a Live Gain moves only what is painted.
+    if (! same (latest, shown) || range != shownRangeDb)
+    {
+        shown = latest;
+        shownRangeDb = range;
+        // A Band deleted from elsewhere is no longer selected.
+        auto stillInUse = selected;
+        std::erase_if (stillInUse, [this] (int slot) { return ! shown.bands[static_cast<size_t> (slot - 1)].inUse; });
+        if (stillInUse != selected)
+            select (stillInUse); // places the handles
+        else
+            placeHandles();
+        repaint();
+    }
+    else if (analyzing || fading || liveGainsMoved || messageExpired)
+    {
+        repaint();
+    }
 }
 
 bool EqDisplay::isGlobalBypassOn() const
 {
-    return processor.parameterState().getRawParameterValue (parameters::globalBypassId)->load() >= 0.5f;
+    return output.globalBypass->load() >= 0.5f;
 }
 
 bool EqDisplay::stepFades()
@@ -438,7 +428,7 @@ std::optional<display::Ghost> EqDisplay::ghost() const
         return std::nullopt;
     if (pointer)
     {
-        if (slotAt (*pointer) != 0 || dynamicRangeHandleAt (*pointer) != 0 || bandAreaAt (*pointer) != 0)
+        if (slotAt (*pointer) != 0 || dynamicRangeHandleAt (*pointer) != 0 || areaUnderPointer() != 0)
             return std::nullopt;
         return display::ghostBell (geometry(), *pointer);
     }
@@ -505,6 +495,7 @@ void EqDisplay::updateCard()
 
 void EqDisplay::mouseMove (const juce::MouseEvent& e)
 {
+    wake(); // the hover and ghost fades, and the rest, start on the next frame
     // The pointer resting on a handle shows its card; moving on or off starts the rest afresh.
     if (const int handle = slotAt (e.position); handle != restingSlot || pointer != e.position)
     {
@@ -525,6 +516,7 @@ void EqDisplay::mouseMove (const juce::MouseEvent& e)
 
 void EqDisplay::mouseExit (const juce::MouseEvent&)
 {
+    wake();
     hoveredSlot = 0;
     restingSlot = 0;
     pointer.reset();
@@ -600,6 +592,16 @@ int EqDisplay::bandAreaAt (juce::Point<float> position) const
     return display::bandAreaAt (geometry(), frame(), position);
 }
 
+int EqDisplay::areaUnderPointer() const
+{
+    jassert (pointer);
+    // Brought up to date first, so its generation stands for the curves as they are now.
+    curves.update (geometry(), frame());
+    if (! pointerArea || pointerArea->pointer != *pointer || pointerArea->generation != curves.generation())
+        pointerArea = PointerArea { *pointer, curves.generation(), bandAreaAt (*pointer) };
+    return pointerArea->slot;
+}
+
 const display::EdgeFadeOverlay& EqDisplay::edgeFadeAt (float scale)
 {
     const auto* window = getParentComponent();
@@ -624,7 +626,8 @@ void EqDisplay::paint (juce::Graphics& g)
     const auto frame = this->frame();
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
-    display::paintCurves (g, shape, frame);
+    curves.update (shape, frame);
+    curves.paint (g, frame);
     const auto shownGhost = ghostFade > 0.0f ? ghost() : std::nullopt;
     if (shownGhost)
         display::paintGhostCurve (g, shape, *shownGhost, frame.sampleRate, ghostFade);
@@ -639,6 +642,7 @@ void EqDisplay::paint (juce::Graphics& g)
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)
 {
+    wake(); // a held handle's Solo waits from here
     // Any press here hides the card; a press on a handle then selects and drags it.
     hideCard();
     // Right-click, or Ctrl-click on macOS: never a Solo, a drag or a marquee.

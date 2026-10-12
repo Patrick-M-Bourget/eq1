@@ -13,6 +13,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <array>
+#include <atomic>
+#include <cstdint>
 
 namespace eq1
 {
@@ -143,12 +145,17 @@ public:
     // meaningful once audio has been processed since the host last prepared the plugin.
     double liveGainDb (int slot) const { return engine.liveGainDb (slot); }
     bool hasProcessedAudio() const { return processedAudio.load (std::memory_order_relaxed); }
+    // How many Settings snapshots processBlock() has published to the Engine: the first block after
+    // prepareToPlay(), then each block whose snapshot differs from the last published, so a block with
+    // no parameter or held-state change publishes nothing. From any thread, for tests.
+    std::uint64_t settingsPublished() const { return publications.load (std::memory_order_relaxed); }
 
     AnalyzerSettings analyzerSettings() const;
     void setAnalyzerSettings (const AnalyzerSettings& settings);
 
     // The Engine's analysis taps, for the Analyzer: from one reader thread, the message thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return engine.readAnalysis (tap, destination, maxSamples); }
+    int analysisCapacity() const { return engine.analysisCapacity(); }
 
     // The Output Meter. The Engine's Output Level of a channel (0 to outputLevelChannels() - 1), from
     // one reader thread, the message thread. A peak read above 0 dBFS lights that channel's Clip Light,
@@ -205,6 +212,11 @@ private:
     std::atomic<int> heldSoloSlot { 0 };
     std::atomic<SoloHolder> soloHolder { SoloHolder::none };
     std::atomic<bool> processedAudio { false };
+    // The last snapshot published to the Engine, kept on the audio thread; the first block after
+    // prepareToPlay() publishes whatever it reads.
+    Settings publishedSettings;
+    std::atomic<bool> publishedSincePrepare { false };
+    std::atomic<std::uint64_t> publications { 0 };
     std::atomic<int> heldAuditionSlot { 0 };
     std::atomic<int> heldMeteredSlot { 0 };
     std::array<std::atomic<bool>, 2> clipLit {}; // per channel, not saved; mono and stereo only

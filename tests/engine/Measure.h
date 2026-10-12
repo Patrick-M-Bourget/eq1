@@ -1,18 +1,92 @@
 #pragma once
 
-// Measurement helpers for Engine and Plugin Shell tests: drive the Engine through its public
-// interface and measure what comes out.
+// The Engine tests' shared helpers, and the CPU budget's: what the Engine is driven with (every
+// Shape and Stereo Placement, the sample rates checked, a 24-Band scene, seeded noise) and how what
+// comes out of its public interface is measured. A helper a second test needs lives here
+// (CODING_STANDARDS.md, "Shared behaviour lives once").
 
 #include "eq1/Engine.h"
 
+#include <catch2/generators/catch_generators.hpp>
+
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
+#include <functional>
 #include <numbers>
+#include <random>
 #include <vector>
 
 namespace eq1::test
 {
+
+// Every Shape and every Stereo Placement, in their enums' order.
+inline constexpr std::array allShapes = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
+                                          Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
+inline constexpr std::array allPlacements = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
+                                              StereoPlacement::Mid, StereoPlacement::Side };
+
+// The sample rates eq1 is checked at, one Catch2 section each.
+inline double anySampleRate() { return GENERATE (44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0); }
+
+// White noise between -1 and 1: the same sequence for the same seed, so a test repeats exactly.
+class Noise
+{
+public:
+    explicit Noise (std::mt19937::result_type seed) : random (seed) {}
+    float operator()() { return unit (random); }
+
+private:
+    std::mt19937 random;
+    std::uniform_real_distribution<float> unit { -1.0f, 1.0f };
+};
+
+// A scene of all 24 Band slots in use, spread geometrically across the spectrum: slot n at
+// lowest x ratio^n Hz, 30 Hz to about 21 kHz by default. band (slot) gives each one everything else:
+// Shape, Gain, Q, Slope, Stereo Placement and dynamics.
+inline Settings spreadBands (const std::function<BandSettings (size_t slot)>& band, double lowest = 30.0, double ratio = 1.33)
+{
+    Settings settings;
+    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
+    {
+        settings.bands[slot] = band (slot);
+        settings.bands[slot].inUse = true;
+        settings.bands[slot].frequency = lowest * std::pow (ratio, static_cast<double> (slot));
+    }
+    return settings;
+}
+
+// 24 static Bells across the spectrum.
+inline Settings bells()
+{
+    return spreadBands ([] (size_t) { return BandSettings { .shape = Shape::Bell, .gain = 3.0, .q = 1.0 }; });
+}
+
+// 24 Dynamic Bells across the spectrum, the CPU budget's scene: every Detection Range and Threshold
+// kind, so every Band's filter is redesigned as its Live Gain moves.
+inline Settings dynamicBells()
+{
+    return spreadBands ([] (size_t slot) {
+        return BandSettings { .shape = Shape::Bell,
+                              .gain = 3.0,
+                              .q = 1.0,
+                              .detectionRange = slot % 2 == 0 ? DetectionRange::Band : DetectionRange::Free,
+                              .detectionLow = 100.0,
+                              .detectionHigh = 5000.0,
+                              .dynamicRange = slot % 2 == 0 ? -12.0 : 6.0,
+                              .threshold = -30.0,
+                              .thresholdAuto = slot % 3 == 0 };
+    });
+}
+
+// 24 Brickwall Cuts across the spectrum: Low Cuts in the even slots, High Cuts in the odd ones.
+inline Settings brickwallCuts()
+{
+    return spreadBands ([] (size_t slot) {
+        return BandSettings { .shape = slot % 2 == 0 ? Shape::LowCut : Shape::HighCut, .brickwall = true };
+    });
+}
 
 inline BandSettings bellBand (double frequency, double gain, double q)
 {

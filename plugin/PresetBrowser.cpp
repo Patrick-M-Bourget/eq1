@@ -460,7 +460,8 @@ void PresetBrowser::stopSaving (bool commit)
     layOutPanel();
     if (hadFocus)
         focusOn (save);
-    if (! commit || name.isEmpty() || onSave == nullptr)
+    // A name with nothing a file name can hold is refused as an empty one is: the field closes, nothing is saved.
+    if (! commit || PresetLibrary::legalName (name).isEmpty() || onSave == nullptr)
         return;
     onSave (name);
     // Listed in User now, as the Loaded Preset: show it there.

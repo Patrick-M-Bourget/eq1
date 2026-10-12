@@ -1,6 +1,7 @@
 #include "eq1/Engine.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <atomic>
@@ -112,4 +113,46 @@ TEST_CASE ("The Analyzer can keep reading the taps while the host prepares the E
     done = true;
     reader.join();
     SUCCEED();
+}
+
+TEST_CASE ("Analysis taps hold the smallest power of two covering 150 ms at the prepared sample rate")
+{
+    struct Expected
+    {
+        double sampleRate;
+        int capacity;
+    };
+    const auto expected = GENERATE (Expected { 44100.0, 8192 }, Expected { 48000.0, 8192 }, Expected { 96000.0, 16384 }, Expected { 192000.0, 32768 });
+    CAPTURE (expected.sampleRate);
+
+    Engine engine;
+    engine.prepare (expected.sampleRate, 512, 2);
+    CHECK (engine.analysisCapacity() == expected.capacity);
+}
+
+TEST_CASE ("Analysis taps keep samples in order while the ring wraps around")
+{
+    Engine engine;
+    engine.prepare (48000.0, 512, 1);
+    const int capacity = engine.analysisCapacity();
+    // Blocks that don't divide the capacity, read in chunks that don't either, for over three turns.
+    constexpr int blockSize = 1000, readSize = 777;
+    std::vector<float> block (blockSize), read (readSize);
+    float* main[] = { block.data() };
+    long long pushed = 0, popped = 0;
+    while (pushed < 3LL * capacity + blockSize)
+    {
+        for (int i = 0; i < blockSize; ++i)
+            block[static_cast<size_t> (i)] = static_cast<float> (pushed + i); // exact in float up to 2^24
+        engine.process ({ main, 1, blockSize });
+        pushed += blockSize;
+        for (int count = 1; count > 0;)
+        {
+            count = engine.readAnalysis (AnalysisTap::PreEq, read.data(), readSize);
+            for (int i = 0; i < count; ++i)
+                REQUIRE (read[static_cast<size_t> (i)] == static_cast<float> (popped + i));
+            popped += count;
+        }
+    }
+    CHECK (popped == pushed);
 }

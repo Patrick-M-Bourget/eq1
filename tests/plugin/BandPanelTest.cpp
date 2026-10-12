@@ -696,6 +696,23 @@ TEST_CASE ("The dynamics icons show only on a Dynamic Band: Clear Dynamics clear
     CHECK_FALSE (bypass.isShowing());
 }
 
+TEST_CASE ("The Band panel's Slope and Dynamics buttons are not repainted while the Band stays as it is, and are when its Shape changes")
+{
+    PanelEditor host;
+    host.set (1, "dynamic_range", -6.0f);
+    host.settleAnimations (300);
+    auto& slope = harness::countRepaintsOf (host.control ("Band 1 Slope"));
+    auto& dynamics = harness::countRepaintsOf (host.control ("Hide Band 1 dynamics"));
+    host.settle (300);
+    CHECK (slope.count == 0);
+    CHECK (dynamics.count == 0);
+
+    // A Low Cut offers its Slope, so the button is drawn enabled.
+    host.set (1, "shape", 2.0f);
+    host.settle (120);
+    CHECK (slope.count > 0);
+}
+
 TEST_CASE ("The dynamics section opens and closes, widening the panel alone; it is absent on a Band that isn't dynamic")
 {
     PanelEditor host;

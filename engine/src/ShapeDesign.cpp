@@ -2,6 +2,7 @@
 
 #include "MatchedDesign.h"
 #include "Smoothstep.h"
+#include "Units.h"
 
 #include <algorithm>
 #include <array>
@@ -26,8 +27,6 @@ static_assert (maxSlopeOrder / 2 + maxSlopeOrder % 2 <= maxSections);
 static_assert (2 * (maxSlopeOrder / 2) + maxSlopeOrder % 2 <= maxSections); // shelves: two biquads per second-order section
 static_assert (brickwallOrder / 2 <= maxSections);
 
-double decibelsToGain (double db) { return std::pow (10.0, db / 20.0); }
-
 void add (Cascade& cascade, const BiquadCoefficients& section) { cascade.sections[static_cast<size_t> (cascade.count++)] = section; }
 
 void scale (BiquadCoefficients& section, double factor)
@@ -39,11 +38,12 @@ void scale (BiquadCoefficients& section, double factor)
 
 void scale (Cascade& cascade, double factor) { scale (cascade.sections[0], factor); }
 
-// Bell: (s^2 + s A/Q + 1) / (s^2 + s/(A Q) + 1) with A = 10^(Gain/40). A cut is the inverse of
-// the boost of the same size, whose high-Q poles the matched z-transform follows well.
+// Bell: (s^2 + s A/Q + 1) / (s^2 + s/(A Q) + 1) with A = 10^(Gain/40), the gain of half the Gain.
+// A cut is the inverse of the boost of the same size, whose high-Q poles the matched z-transform
+// follows well.
 Cascade designBell (const ShapeParameters& p, double sampleRate)
 {
-    const double a = std::pow (10.0, std::abs (p.gain) / 40.0);
+    const double a = decibelsToGain (std::abs (p.gain) / 2.0);
     const auto boost = matchSection ({ 1.0, a / p.q, 1.0, 1.0, 1.0 / (a * p.q), 1.0 }, p.frequency, sampleRate);
     Cascade cascade;
     add (cascade, p.gain >= 0.0 ? boost : inverse (boost));
@@ -58,7 +58,7 @@ void lowShelfSections (int order, double dcGain, double q, Use use)
 {
     const double rz = std::pow (dcGain, 1.0 / (2.0 * order)), rp = 1.0 / rz;
     const int pairs = order / 2;
-    const double resonance = pairs > 0 ? std::pow (q / std::sqrt (0.5), 1.0 / pairs) : 1.0;
+    const double resonance = pairs > 0 ? std::pow (q / butterworthQ, 1.0 / pairs) : 1.0;
     for (int k = 1; k <= pairs; ++k)
     {
         const double sectionQ = resonance / (2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)));
@@ -152,7 +152,7 @@ template <typename Use>
 void butterworthSections (int order, double q, Use use)
 {
     const int pairs = order / 2;
-    const double resonance = pairs > 0 ? std::pow (q / std::sqrt (0.5), 1.0 / pairs) : 1.0;
+    const double resonance = pairs > 0 ? std::pow (q / butterworthQ, 1.0 / pairs) : 1.0;
     for (int k = 1; k <= pairs; ++k)
     {
         const double sectionQ = resonance / (2.0 * std::sin ((2 * k - 1) * std::numbers::pi / (2.0 * order)));
@@ -220,7 +220,7 @@ Normalised normalise (const AnalogSection& a)
 template <typename Roots, typename Use, typename OddPole>
 void transformedButterworth (int order, Roots roots, Use use, OddPole oddPole)
 {
-    butterworthSections (order, std::sqrt (0.5), [&] (const AnalogSection& lowPass) {
+    butterworthSections (order, butterworthQ, [&] (const AnalogSection& lowPass) {
         if (lowPass.d2 == 0.0)
         {
             oddPole();
@@ -377,7 +377,7 @@ Cascade designFlatTilt (const ShapeParameters& p, double sampleRate)
     const double octaves = std::log2 (tiltHighest / tiltLowest);
     const double step = octaves / tiltSections;
     const double perOctave = p.gain / std::log2 (20000.0 / 20.0);
-    const double k = std::pow (10.0, perOctave * step / 40.0);
+    const double k = decibelsToGain (perOctave * step / 2.0); // the zero and the pole each give half a step's gain
 
     Cascade cascade;
     double analogGainAtFrequency = 1.0;
@@ -392,18 +392,8 @@ Cascade designFlatTilt (const ShapeParameters& p, double sampleRate)
     }
 
     // Pass exactly 0 dB at Frequency: measured on the digital cascade when Frequency is below Nyquist.
-    double gainAtFrequency = analogGainAtFrequency;
-    if (p.frequency < sampleRate / 2.0)
-    {
-        const std::complex<double> z = std::polar (1.0, -2.0 * std::numbers::pi * p.frequency / sampleRate);
-        std::complex<double> h = 1.0;
-        for (int i = 0; i < cascade.count; ++i)
-        {
-            const auto& c = cascade.sections[static_cast<size_t> (i)];
-            h *= (c.b0 + c.b1 * z) / (1.0 + c.a1 * z);
-        }
-        gainAtFrequency = std::abs (h);
-    }
+    const double gainAtFrequency = p.frequency < sampleRate / 2.0 ? std::abs (responseAt (cascade, p.frequency, sampleRate))
+                                                                   : analogGainAtFrequency;
     scale (cascade, 1.0 / gainAtFrequency);
     return cascade;
 }

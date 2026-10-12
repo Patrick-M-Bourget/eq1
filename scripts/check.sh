@@ -2,7 +2,7 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script, a stage at a time), and the local-only
 # paint time, on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
+#   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate (not null, which needs a ref)
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
 #                               glossary, no two ADRs share a number, the filter lab's parameter ranges match the
 #                               plugin's, code points at no closed ticket (when gh is signed in), no test reads a saved state as raw bytes, runs
@@ -19,10 +19,19 @@
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
 #   scripts/check.sh screens <dir>  build the tests and render every hidden [.screens] test into <dir> as PNGs, to
 #                               compare with the rendered Staple prototype
-#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget"); on a
-#                               Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh cpu        the Engine's CPU load in every CPU scene against its budget (docs/performance.md,
+#                               "CPU budget"); on a Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh null <ref> the null check (docs/performance.md, "Null check"): builds <ref>'s render tool in a
+#                               temporary worktree (removed on exit) and this tree's, renders every render scene through
+#                               both Engines into BUILD_DIR/null, and prints each scene's worst deviation in dBFS, or
+#                               "exact"; fails above -120 dBFS, or on a scene <ref> has that this tree hasn't
 #   scripts/check.sh paint      the editor's paint time against its ceiling (docs/performance.md, "Paint time"); local
 #                               only, not in CI; on a Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh size       the shipping build's footprint (docs/performance.md, "Footprint"): each format's
+#                               binary per architecture, as built and after strip -x; that the .dSYM beside each
+#                               bundle carries the binary's UUIDs and resolves its entry point (fails otherwise);
+#                               the VST3's code by library; and the heap one Engine holds, whose test fails above
+#                               its ceiling. Not in CI. On Windows, the heap only
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
@@ -226,21 +235,31 @@ match_generator() {
     fi
 }
 
-build() {
-    step "Build ($os)"
+# Configures a source tree into a build folder the way CI builds: Release, without link-time
+# optimisation or stripping (its binaries keep their symbols), sharing the dependencies. The main build
+# is build(); the null check configures <ref>'s.
+configure() {
+    local source=$1 build=$2
+    shift 2
     if [ "$os" = macos ]; then
         match_generator Ninja
-        cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
-            -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+        cmake -S "$source" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+            -DEQ1_LTO=OFF -DEQ1_STRIP=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     elif command -v cl > /dev/null; then
         # In an MSVC developer environment (CI sets one up), Ninja compiles every file in parallel.
         match_generator Ninja
-        cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+        cmake -S "$source" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF -DEQ1_STRIP=OFF \
+            "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     else
         # Without one, Visual Studio finds the compiler itself.
         match_generator "Visual Studio"
-        cmake -S . -B "$BUILD_DIR" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+        cmake -S "$source" -B "$build" -A x64 -DEQ1_LTO=OFF -DEQ1_STRIP=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     fi
+}
+
+build() {
+    step "Build ($os)"
+    configure . "$BUILD_DIR"
     cmake --build "$BUILD_DIR" --config Release --parallel
 }
 
@@ -325,6 +344,35 @@ cpu() {
     return "$status"
 }
 
+# Both trees' render tools (tests/render/RenderTool.cpp) render the same scenes; this tree's compares
+# them. <ref> is built in a worktree under BUILD_DIR/null, the Engine and the tool only (no Plugin Shell),
+# with the same compiler and flags as this tree, so a deviation is the source's. A subshell, so the EXIT
+# trap that removes the worktree stays local.
+null() (
+    local ref=$1 work=$BUILD_DIR/null
+    step "Null check against $ref"
+    if ! git rev-parse --verify --quiet "$ref^{commit}" > /dev/null; then
+        echo "null: no such ref: $ref" >&2
+        exit 1
+    fi
+    mkdir -p "$work"
+    work=$(cd "$work" && pwd)
+    rm -rf "$work/current" "$work/ref"
+    git worktree remove --force "$work/src" 2> /dev/null || rm -rf "$work/src"
+    trap 'git worktree remove --force "$work/src" 2> /dev/null || true; rm -rf "$work/src" "$work/build"' EXIT
+    git worktree add --quiet --detach "$work/src" "$ref"
+    if [ ! -f "$work/src/tests/render/RenderTool.cpp" ]; then
+        echo "null: $ref has no render tool (tests/render/RenderTool.cpp); compare against a ref that has one" >&2
+        exit 1
+    fi
+    configure "$work/src" "$work/build" -DEQ1_BUILD_PLUGIN=OFF > "$work/configure.log" 2>&1 || { cat "$work/configure.log" >&2; exit 1; }
+    cmake --build "$work/build" --config Release --parallel --target eq1_render
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_render
+    "$(BUILD_DIR=$work/build test_exe eq1_render)" render "$work/ref"
+    "$(test_exe eq1_render)" render "$work/current"
+    "$(test_exe eq1_render)" compare "$work/current" "$work/ref"
+)
+
 # The editor drawing a busy frame at 2x, from the hidden [paint] test, which fails above its ceiling.
 # Local only: CI has no step for it.
 paint() {
@@ -333,6 +381,126 @@ paint() {
     # `all` calls paint under ||, where set -e is off: return a failed build rather than time a stale exe.
     cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_plugin_tests || return
     "$(test_exe eq1_plugin_tests)" "[paint]"
+}
+
+# The heap one stereo Engine holds after prepare(), at 48 and 192 kHz, from the [footprint] tests
+# (tests/engine/FootprintTest.cpp), which fail above their ceilings.
+engine_heap() {
+    step "Engine heap"
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_engine_tests
+    local out status=0
+    out=$("$(test_exe eq1_engine_tests)" "[footprint]") || status=$?
+    if [ "$status" != 0 ]; then
+        printf '%s\n' "$out"
+        return "$status"
+    fi
+    grep -E 'Engine heap|Analyzer FIFOs' <<< "$out"
+}
+
+# The binary of one format in the shipping build.
+shipping_binary() {
+    local bundle
+    case "$1" in
+        VST3) bundle=eq1.vst3 ;;
+        AU) bundle=eq1.component ;;
+        AAX) bundle=eq1.aaxplugin ;;
+        CLAP) bundle=eq1.clap ;;
+        Standalone) bundle=eq1.app ;;
+    esac
+    printf '%s\n' "$BUILD_DIR-size/plugin/eq1_artefacts/Release/$1/$bundle/Contents/MacOS/eq1"
+}
+
+# The debug information of each shipping bundle is a .dSYM beside it, which must carry the binary's UUID
+# for each architecture and resolve the binary's entry function to a source line (what symbolicating a
+# crash log needs): a plugin's factory (the CLAP's is the init function its exported entry table points
+# at), the Standalone's main. The stripped binary keeps its exported symbols only; the .dSYM keeps them
+# all, at the binary's addresses, so the function's address comes from there.
+shipping_symbols() {
+    step "Debug symbols: the .dSYM beside each bundle has the binary's UUIDs and resolves its entry function"
+    local format arch binary dsym dwarf entry name address resolved
+    for format in VST3 AU AAX CLAP Standalone; do
+        binary=$(shipping_binary "$format")
+        dsym=${binary%/Contents/MacOS/eq1}.dSYM
+        dwarf=$dsym/Contents/Resources/DWARF/eq1
+        if [ ! -f "$dwarf" ]; then
+            echo "$format: no debug symbols at $dsym" >&2
+            return 1
+        fi
+        # Stripping after the link invalidates the linker's ad hoc signature, without which macOS loads no
+        # arm64 code; the build signs the stripped binary again.
+        codesign --verify "$binary" || { echo "$format: the stripped binary's signature is invalid" >&2; return 1; }
+        # The symbol as the symbol table spells it, and as atos prints it (demangled).
+        case "$format" in
+            VST3) entry=_GetPluginFactory name=GetPluginFactory ;;
+            AU) entry=_JuceAUFactory name=JuceAUFactory ;;
+            AAX) entry=_ACFRegisterPlugin name=ACFRegisterPlugin ;;
+            CLAP) entry=__ZN11ClapAdapterL9clap_initEPKc name='ClapAdapter::clap_init(char const*)' ;;
+            Standalone) entry=_main name=main ;;
+        esac
+        for arch in arm64 x86_64; do
+            if [ "$(dwarfdump --uuid --arch="$arch" "$binary" | cut -d' ' -f2)" != "$(dwarfdump --uuid --arch="$arch" "$dwarf" | cut -d' ' -f2)" ]; then
+                echo "$format $arch: the .dSYM's UUID is not the binary's" >&2
+                return 1
+            fi
+            address=0x$(nm -arch "$arch" --defined-only "$dwarf" | awk -v s="$entry" '$3 == s { print $1 }')
+            resolved=$(atos -arch "$arch" -o "$dwarf" "$address")
+            # With the DWARF, atos adds the source line: "GetPluginFactory (in eq1) (juce_VST3_Wrapper.cpp:123)".
+            case "$resolved" in
+                "$name (in eq1) ("*:[0-9]*")") printf '%-11s %-7s %s\n' "$format" "$arch" "$resolved" ;;
+                *) echo "$format $arch: $address resolves to '$resolved', not $name with a source line" >&2; return 1 ;;
+            esac
+        done
+    done
+}
+
+# What ships, measured (docs/performance.md, "Footprint"): a report, not a check, except the heap and the
+# debug symbols.
+# The shipping configuration (Release, EQ1_LTO=ON, Universal) is built in its own folder, BUILD_DIR-size,
+# without the tests. Code is attributed by scripts/code-by-library.py from the normal build's objects, so
+# BUILD_DIR is built first if it isn't. lipo, strip and nm make the binary reports macOS-only.
+size() {
+    if [ "$os" != macos ]; then
+        step "Footprint"
+        echo "Binary size and code by library are measured on macOS only; the Engine heap follows"
+        engine_heap
+        return
+    fi
+    [ -f "$BUILD_DIR/CMakeCache.txt" ] || build
+    step "Shipping build (Release, EQ1_LTO=ON, Universal) in $BUILD_DIR-size"
+    match_generator Ninja
+    cmake -S . -B "$BUILD_DIR-size" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+        -DEQ1_LTO=ON -DEQ1_BUILD_TESTS=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+    cmake --build "$BUILD_DIR-size" --config Release --parallel
+
+    step "Binary size (bytes): as built, and as strip -x leaves it (the same once the build strips)"
+    local scratch=$BUILD_DIR-size/size-report format arch binary thin
+    mkdir -p "$scratch"
+    printf '%-11s %-10s %12s %12s\n' Format Arch "As built" Stripped
+    for format in VST3 AU AAX CLAP Standalone; do
+        binary=$(shipping_binary "$format")
+        for arch in arm64 x86_64; do
+            thin=$scratch/$format-$arch
+            lipo -thin "$arch" -output "$thin" "$binary"
+            cp "$thin" "$thin-stripped"
+            strip -x -no_code_signature_warning "$thin-stripped"
+            printf '%-11s %-10s %12s %12s\n' "$format" "$arch" "$(stat -f %z "$thin")" "$(stat -f %z "$thin-stripped")"
+        done
+        printf '%-11s %-10s %12s\n' "$format" universal "$(stat -f %z "$binary")"
+    done
+
+    shipping_symbols
+
+    # The stripped binary keeps its exported symbols only; its .dSYM carries the whole symbol table at the
+    # binary's addresses.
+    step "Code by library (bytes of the VST3's __text)"
+    for arch in arm64 x86_64; do
+        echo "-- $arch"
+        python3 scripts/code-by-library.py "$(shipping_binary VST3 | sed 's|/Contents/MacOS/eq1$|.dSYM/Contents/Resources/DWARF/eq1|')" "$arch" \
+            "$BUILD_DIR/plugin/CMakeFiles/eq1.dir" "$BUILD_DIR/plugin/CMakeFiles/eq1_VST3.dir" \
+            "$BUILD_DIR/engine/CMakeFiles/eq1_engine.dir" "$DEPS/clap-juce-extensions-build/libclap_juce_extensions.a"
+    done
+
+    engine_heap
 }
 
 tsan() {
@@ -426,6 +594,8 @@ case "${1:-all}" in
     test) run_tests ;;
     cpu) cpu ;;
     paint) paint ;;
+    null) null "${2:?usage: scripts/check.sh null <ref>}" ;;
+    size) size ;;
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     screens) screens "${2:?usage: scripts/check.sh screens <dir>}" ;;
     tsan) tsan ;;
@@ -435,5 +605,5 @@ case "${1:-all}" in
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,26p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,35p' "$0" >&2; exit 2 ;;
 esac

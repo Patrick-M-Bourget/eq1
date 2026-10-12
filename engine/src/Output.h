@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Smoother.h"
+#include "Units.h"
 #include "eq1/Settings.h"
 
 #include <algorithm>
@@ -57,14 +58,12 @@ public:
     }
 
 private:
-    static constexpr double glideTimeConstantSeconds = 0.007; // as a Band's glides: about 50 ms
-
     // left = ll * left + lr * right, right = rl * left + rr * right; on mono only ll applies.
     using Mix = std::array<double, 4>;
 
     Mix mixOf (const Settings& settings, double extraGainDb) const
     {
-        const double gain = std::pow (10.0, (settings.outputGainDb + extraGainDb) / 20.0) * (settings.phaseInvert ? -1.0 : 1.0);
+        const double gain = decibelsToGain (settings.outputGainDb + extraGainDb) * (settings.phaseInvert ? -1.0 : 1.0);
         if (numChannels < 2)
             return { gain, 0.0, 0.0, 0.0 };
         const double pan = std::clamp (settings.outputPan, -1.0, 1.0);

@@ -147,8 +147,8 @@ std::unique_ptr<juce::AccessibilityHandler> DetectionRangeBar::Segment::createAc
 
 //==============================================================================
 DetectionRangeBar::DetectionRangeBar (PluginProcessor& p, BandEditing& e, BandPanel& b)
-    : processor (p), editing (e), panel (b), low (std::make_unique<Handle> (*this, true)), high (std::make_unique<Handle> (*this, false)),
-      segment (std::make_unique<Segment> (*this))
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), panel (b),
+      low (std::make_unique<Handle> (*this, true)), high (std::make_unique<Handle> (*this, false)), segment (std::make_unique<Segment> (*this))
 {
     setInterceptsMouseClicks (false, true);
     addAndMakeVisible (*segment);
@@ -158,7 +158,6 @@ DetectionRangeBar::DetectionRangeBar (PluginProcessor& p, BandEditing& e, BandPa
     high->setExplicitFocusOrder (2);
     setVisible (false);
     panel.addComponentListener (this);
-    startTimerHz (30);
 }
 
 DetectionRangeBar::~DetectionRangeBar()
@@ -214,8 +213,6 @@ void DetectionRangeBar::setDisplayBounds (juce::Rectangle<int> d)
 void DetectionRangeBar::componentMovedOrResized (juce::Component&, bool, bool) { update(); }
 
 void DetectionRangeBar::componentVisibilityChanged (juce::Component&) { update(); }
-
-void DetectionRangeBar::timerCallback() { update(); }
 
 void DetectionRangeBar::update()
 {

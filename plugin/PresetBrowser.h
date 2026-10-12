@@ -39,7 +39,8 @@ public:
     void showLoaded (const juce::String& loadedPreset, const PresetLibrary::Entry* lastLoaded);
 
     std::function<void (const PresetLibrary::Entry&)> onLoad;
-    // Saves the settings as a User Preset named name (never empty), making it the Loaded Preset.
+    // Saves the settings as a User Preset named name (never one PresetLibrary::legalName() empties), making
+    // it the Loaded Preset.
     std::function<void (const juce::String& name)> onSave;
     std::function<void()> onLoadFile;
     // The button that opens it, which keyboard focus goes back to when it closes if nothing had it.
