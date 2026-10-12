@@ -1,10 +1,12 @@
 #include "EqDisplay.h"
 
 #include "Accessibility.h"
+#include "AssumedSampleRate.h"
 #include "BandClipboard.h"
 #include "BandMenu.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ShowMenu.h"
 #include "display/AnalyzerLayer.h"
 #include "display/CurvesLayer.h"
 #include "display/EdgeFadeLayer.h"
@@ -158,7 +160,7 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
 bool EqDisplay::updateAnalyzer (double seconds)
 {
     analyzer = processor.analyzerSettings();
-    const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
+    const double sampleRate = sampleRateOrAssumed (processor);
 
     // Peak Hold starts afresh on a spectrum it wasn't held for last frame: switched to, or turned on.
     // The spectrum forgets it too when prepared again for a new Resolution or sample rate.
@@ -577,8 +579,8 @@ display::DisplayFrame EqDisplay::frame() const
                                    .dragging = dragging,
                                    .marquee = marquee,
                                    .allInUseMessage = allInUseMessageUntil != 0,
-                                   // Before the host has prepared the plugin, the curves are drawn as at 48 kHz.
-                                   .sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                                   // Before the host has prepared the plugin, the curves are drawn as at assumedSampleRate.
+                                   .sampleRate = sampleRateOrAssumed (processor),
                                    .mono = ! processor.isStereoPlacementAvailable(),
                                    .hover = hoverFades,
                                    .globalBypass = globalBypassFade };
@@ -624,6 +626,8 @@ void EqDisplay::paint (juce::Graphics& g)
 {
     const auto shape = geometry();
     const auto frame = this->frame();
+    // The grid stays drawn as lines: a few dozen rectangles, which cost less than drawing an image of
+    // the display's size over it (docs/performance.md, "Paint time").
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
     curves.update (shape, frame);
@@ -633,11 +637,14 @@ void EqDisplay::paint (juce::Graphics& g)
         display::paintGhostCurve (g, shape, *shownGhost, frame.sampleRate, ghostFade);
     // The handles, the labels and the ghost's line, glow and readout go over the edge fades, unfaded.
     display::paintEdgeFades (g, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
-    display::paintLabels (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
-    display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
+    // Where the display starts in the window, whose top left is on a whole device pixel: the cached
+    // layers draw from their images only where this is one too.
+    const auto origin = getPosition().toFloat();
+    gridLabelImages.paint (g, origin, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
+    analyzerLabelImages.paint (g, origin, display::analyzerScaleLabels (shape, analyzer));
     if (shownGhost)
         display::paintGhostMarker (g, shape, *shownGhost, ghostFade);
-    display::paintHandles (g, shape, frame);
+    display::paintHandles (g, shape, frame, handleShadows, origin);
 }
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)
@@ -852,11 +859,7 @@ void EqDisplay::showMenu (const juce::MouseEvent& e)
                           },
                           juce::SystemClipboard::getTextFromClipboard(),
                           [] (const juce::String& text) { juce::SystemClipboard::copyTextToClipboard (text); } };
-    // Closed unchosen if the display goes, so the Band actions never outlive the editing they use. A
-    // menu is a window of its own: it draws with the editor's look only when given it.
-    auto popup = menu.build();
-    popup.setLookAndFeel (&getLookAndFeel());
-    popup.showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withTargetComponent (this).withMousePosition());
+    eq1::showMenu (menu.build(), *this, juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
 }
 
 void EqDisplay::selectAll()
