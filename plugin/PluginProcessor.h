@@ -155,6 +155,8 @@ public:
 
     // The Engine's analysis taps, for the Analyzer: from one reader thread, the message thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return engine.readAnalysis (tap, destination, maxSamples); }
+    // Drops what a tap kept while nothing read it, so the next read is current audio.
+    void skipAnalysis (AnalysisTap tap) { engine.skipAnalysis (tap); }
     int analysisCapacity() const { return engine.analysisCapacity(); }
 
     // The Output Meter. The Engine's Output Level of a channel (0 to outputLevelChannels() - 1), from

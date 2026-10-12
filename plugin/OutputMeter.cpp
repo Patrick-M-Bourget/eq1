@@ -69,6 +69,10 @@ OutputMeter::OutputMeter (PluginProcessor& p) : EditorTick::Client (static_cast<
     // Tab reaches the Clip Lights, which Space or Return puts out; a click leaves focus where it was.
     setWantsKeyboardFocus (true);
     setMouseClickGrabsKeyboardFocus (false);
+    // The peak held since the last editor closed is old: it is dropped, but an over in it still
+    // lights its Clip Light. The RMS is the last 300 ms whenever it is read.
+    for (int ch = 0; ch < processor.outputLevelChannels(); ++ch)
+        processor.readOutputLevel (ch);
     tick (1.0 / EditorTick::activeHz);
 }
 
