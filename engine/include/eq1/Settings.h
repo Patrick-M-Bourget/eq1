@@ -103,6 +103,28 @@ struct BandSettings
     bool operator== (const BandSettings&) const = default;
 };
 
+// A host parameter's range, lowest to highest, in the units the host shows.
+struct ParameterRange
+{
+    double low, high;
+};
+
+// Every range the host parameters span, as in Pro-Q 4. Settings holds the same values, except Gain
+// Scale (0 to 2), Output Pan (-1 to 1) and Output Gain's bottom (-infinity).
+namespace parameterRanges
+{
+inline constexpr ParameterRange frequency { 10.0, 30000.0 }; // Hz; also the Free Detection Range's limits
+inline constexpr ParameterRange q { 0.025, 40.0 };
+inline constexpr ParameterRange gain { -30.0, 30.0 };         // dB
+inline constexpr ParameterRange slope { 0.0, 96.0 };          // dB/oct
+inline constexpr ParameterRange dynamicRange { -30.0, 30.0 }; // dB
+inline constexpr ParameterRange threshold { -60.0, 0.0 };     // dB
+inline constexpr ParameterRange timing { 0.0, 100.0 };        // %: Attack and Release
+inline constexpr ParameterRange gainScale { 0.0, 200.0 };     // %
+inline constexpr ParameterRange outputGain { -80.0, 36.0 };   // dB; the bottom is silence (-infinity)
+inline constexpr ParameterRange outputPan { -100.0, 100.0 };  // %
+} // namespace parameterRanges
+
 // Live Gain never goes beyond +/- this many dB, whatever Gain and Dynamic Range are.
 inline constexpr double liveGainLimitDb = 30.0;
 

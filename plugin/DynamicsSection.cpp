@@ -19,7 +19,7 @@ namespace colour = tokens::colour;
 namespace layout = tokens::layout;
 
 // Threshold's top in dB; the fader's position above it is Auto.
-constexpr double thresholdTopDb = 0.0;
+constexpr double thresholdTopDb = parameterRanges::threshold.high;
 
 // The meter's colours up a track of this height, from its bottom.
 juce::ColourGradient meterGradient (juce::Rectangle<float> track)
@@ -38,7 +38,7 @@ ThresholdFader::ThresholdFader (PluginProcessor& p)
     setSliderStyle (juce::Slider::LinearVertical);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setHasFocusOutline (true);
-    setRange (-60.0, autoPosition, 0.1);
+    setRange (parameterRanges::threshold.low, autoPosition, 0.1);
     setDoubleClickReturnValue (true, autoPosition);
     textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB"; };
     valueFromTextFunction = [] (const juce::String& text) {

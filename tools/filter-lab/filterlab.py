@@ -30,7 +30,7 @@ from dataclasses import dataclass
 
 PI = math.pi
 
-# A Band's parameter ranges, as plugin/Parameters.cpp declares them (scripts/check.sh docs keeps the two equal).
+# A Band's parameter ranges, as engine/include/eq1/Settings.h names them (scripts/check.sh docs keeps the two equal).
 FREQUENCY_RANGE = (10, 30000)
 GAIN_RANGE = (-30, 30)
 Q_RANGE = (0.025, 40)

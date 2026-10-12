@@ -45,7 +45,7 @@ inline const juce::String phaseInvertId { "phase_invert" };
 inline const juce::String globalBypassId { "global_bypass" };
 
 // Output Gain's bottom, in dB: silence, shown as -inf.
-inline constexpr float outputGainSilentDb = -80.0f;
+inline constexpr float outputGainSilentDb = static_cast<float> (parameterRanges::outputGain.low);
 
 // The Shape choices, in the order of the Shape enum: Pro-Q 4's order, frozen by ADR 0003.
 const juce::StringArray& shapeNames();
