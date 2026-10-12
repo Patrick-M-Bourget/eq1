@@ -225,6 +225,54 @@ TEST_CASE ("Low Shelf, High Shelf and Tilt Shelf match their analog targets up t
     }
 }
 
+// The test above reads shelves at a few Frequencies; a resonant shelf's error can peak sharply
+// between them, where a section's zeros or poles sit near Nyquist (#195: 25.7% at 12 dB/oct, +12 dB,
+// Q 40, 15.61 kHz at 44.1 kHz). This one moves Frequency in small steps through that region, and reads
+// the response at 201 points, as the filter lab does (docs/dsp/filter-design.md, "Test tolerances").
+TEST_CASE ("Resonant shelves match their analog targets wherever a section's zeros or poles near Nyquist", "[response]")
+{
+    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
+    const double gain = GENERATE (-30.0, -12.0, 18.0);
+    const int order = GENERATE (2, 3);
+    const double q = 40.0;
+    const Shape s = GENERATE (Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf);
+
+    // The second-order section's zeros and poles sit at rz and 1 / rz times Frequency (Low Shelf; a
+    // High Shelf's are the reciprocals): place each from 0.9 to 1.1 x Nyquist.
+    const double rz = std::pow (10.0, std::abs (gain) / 20.0 / (2.0 * order));
+    const auto natural = GENERATE_COPY (rz, 1.0 / rz);
+    const auto atNyquist = GENERATE (range (0.9, 1.1, 0.005));
+    const double frequency = atNyquist * sampleRate / 2.0 / natural;
+    if (frequency > std::min (30000.0, 0.91 * sampleRate / 2.0) || frequency < 10.0)
+        return;
+
+    const auto target = [&] (double f) {
+        switch (s)
+        {
+            case Shape::LowShelf: return lowShelfDb (f, frequency, gain, order, q);
+            case Shape::HighShelf: return highShelfDb (f, frequency, gain, order, q);
+            default: return tiltShelfDb (f, frequency, gain, order, q);
+        }
+    };
+
+    const auto response = responseOf (sampleRate, shape (s, frequency, gain, q, 6.0 * order));
+    const auto frequencies = test::frequenciesUpToNyquist (sampleRate, 201);
+
+    double span = std::abs (gain);
+    for (double f : frequencies)
+        span = std::max (span, std::abs (target (f) - target (frequencies.front())));
+
+    double worst = 0.0, at = 0.0;
+    for (double f : frequencies)
+    {
+        const double error = std::abs (test::magnitudeDb (response, f, sampleRate) - target (f));
+        if (error > worst)
+            worst = error, at = f;
+    }
+    CAPTURE (sampleRate, frequency, atNyquist, gain, order, static_cast<int> (s), at, worst / span);
+    REQUIRE (worst <= shelfToleranceDb (sampleRate, frequency, q, span));
+}
+
 TEST_CASE ("Butterworth shelves reach half their Gain at Frequency and their full Gain away from it")
 {
     const double sampleRate = GENERATE (44100.0, 96000.0);
