@@ -77,12 +77,24 @@ private:
             const Cascade* from = nullptr;
         };
 
-        // Runs samples through the cascade.
-        void run (size_t channel, float* samples, const Piece& piece);
+        // The channels a cascade runs on together: each one's samples, and which channel's section
+        // states it keeps. The chain's Stereo Placement fills it.
+        struct Lines
+        {
+            std::vector<float*> samples;
+            std::vector<size_t> states;
+            int count = 0;
+
+            void prepare (int numChannels);
+        };
+
+        // Runs the lines' samples through the cascade, in place: over a gliding run, with the
+        // coefficients interpolated once per position, for every line at once.
+        void run (Lines& lines, const Piece& piece);
         // Runs the part of the signal the chain's Stereo Placement selects, in place.
-        void runPlaced (float* const* channels, int numChannels, const Piece& piece);
+        void runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
         // On stereo: encodes Mid and Side, runs the Mid (mid) or the Side, and decodes.
-        void runMidSide (float* const* channels, const Piece& piece, bool mid);
+        void runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid);
     };
 
     // Once per run, at its start: a waiting crossfade starts, and a glide moves on by the whole run
@@ -100,6 +112,7 @@ private:
     Smoother mix;   // 0 = no effect, 1 = full effect
     Smoother shapeCrossfade; // 0 = previous chain, 1 = current chain
     Chain current, previous;
+    Chain::Lines lines; // sized at prepare(), for either chain's run
     double dynamicOffset = 0.0, designedOffset = 0.0; // dB
 
     // The run in progress: the last one whose start the Band saw; whether the coefficients move over
