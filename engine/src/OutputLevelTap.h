@@ -1,5 +1,6 @@
 #pragma once
 
+#include "RunGrid.h"
 #include "Units.h"
 #include "eq1/Engine.h"
 
@@ -17,13 +18,12 @@ namespace eq1
 //
 // Peak is the largest absolute sample since the last read. RMS is over a rectangular window of the
 // last 300 ms, defined in samples, so it doesn't depend on how the audio is cut into blocks. The
-// window is kept as per-run sums of squares (16 samples each, in double), rounded up to whole runs,
+// window is kept as per-run sums of squares (a run of the Engine's grid each, in double), rounded up to whole runs,
 // and the reading moves on at each run's end.
 class OutputLevelTap
 {
 public:
     static constexpr double windowSeconds = 0.3;
-    static constexpr int runSamples = 16;
 
     // Allocates, unless the window is as long as before. Starts with a silent window and no peak.
     void prepare (double sampleRate)
