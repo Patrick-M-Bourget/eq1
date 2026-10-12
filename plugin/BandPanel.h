@@ -2,6 +2,7 @@
 
 #include "DynamicRangeRing.h"
 #include "DynamicsSection.h"
+#include "EditorTick.h"
 #include "KeyboardSlider.h"
 #include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
@@ -40,8 +41,9 @@ class BandEditing;
 // dynamics section between Gain and Q (DynamicsSection) with a slide, the panel widening by the
 // section's width about its centre and its slab growing upwards to hold it; nothing else changes its size. The section is open unless closed
 // by », for as long as the editor is open, and absent on a Band that isn't dynamic. The Band shown is
-// the Metered Band while its Shape has dynamics.
-class BandPanel final : public juce::Component, private juce::Timer
+// the Metered Band while its Shape has dynamics. The panel follows its Band on the editor's tick
+// (EditorTick), and changes what it offers and shows only when the Band does.
+class BandPanel final : public juce::Component, private EditorTick::Client
 {
 public:
     // The panel's size at 100 % UI Scale: the slab and the bell above it; wider by the section and
@@ -79,9 +81,18 @@ public:
     bool hitTest (int x, int y) override;
 
 private:
-    void timerCallback() override;
+    void tick (double seconds) override;
     // Which controls are available, the Band's colour, and the Bypassed fade.
     void updateAvailability();
+    // What updateAvailability() follows of the Band and the track: it runs again only when this changes.
+    struct Followed
+    {
+        bool inUse = false, bypass = false, dynamic = false, brickwallCut = false, stereo = false;
+        Shape shape = Shape::Bell;
+        bool operator== (const Followed&) const = default;
+    };
+    Followed followed() const;
+    Followed shownBand;
     // Each control's accessible title, from its parameter's name ("Band 4 Gain"), and its spoken value.
     void describe();
     void releaseSolo();

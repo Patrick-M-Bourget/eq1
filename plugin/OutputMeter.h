@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorTick.h"
 #include "LevelBallistics.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -34,11 +35,11 @@ private:
 };
 
 // The Output Meter: a bar per channel of the Output Level, with a Clip Light above each. Clicking
-// either Clip Light, or Space or Return while the meter has keyboard focus, puts out both. Read and
-// repainted at 60 Hz, like the EQ display. A screen reader reads each Clip Light as a button, "Clip
-// Light Left" and "Clip Light Right" ("Clip Light" on mono), "Lit" or "Off"; pressing either puts out
-// both.
-class OutputMeter final : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
+// either Clip Light, or Space or Return while the meter has keyboard focus, puts out both. Read on the
+// editor's tick, which it keeps at 60 Hz while its bars move, and repainted only when a bar or a Clip
+// Light changes: not on silence. A screen reader reads each Clip Light as a button, "Clip Light Left"
+// and "Clip Light Right" ("Clip Light" on mono), "Lit" or "Off"; pressing either puts out both.
+class OutputMeter final : public juce::Component, public juce::SettableTooltipClient, private EditorTick::Client
 {
 public:
     explicit OutputMeter (PluginProcessor& processor);
@@ -53,7 +54,8 @@ public:
     void resized() override;
 
 private:
-    void timerCallback() override;
+    void tick (double seconds) override;
+    bool isActive() const override { return moving; }
     // Where clicks put out the Clip Lights: over both, at least 10 px tall.
     juce::Rectangle<float> clipLightArea() const;
     // Where the bars run, from -60 dBFS at the bottom to +6 dBFS at the top, across the rail.
@@ -68,7 +70,16 @@ private:
     PluginProcessor& processor;
     std::array<OutputMeterChannel, 2> channels;
     int numChannels = 0;
-    juce::uint32 lastFrame = 0;
+    // What the last tick drew: each channel's levels and Clip Light, compared to repaint on a change.
+    struct Drawn
+    {
+        std::array<OutputMeterChannel, 2> channels;
+        std::array<bool, 2> clipLit {};
+        int numChannels = 0;
+        bool operator== (const Drawn& other) const;
+    };
+    Drawn drawn;
+    bool moving = false; // the last tick changed what is drawn
 };
 
 } // namespace eq1

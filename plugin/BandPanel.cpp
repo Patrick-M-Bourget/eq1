@@ -204,7 +204,8 @@ void BandPanel::SlopeButton::stoppedDragging()
 }
 
 //==============================================================================
-BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editing (e), ring (p, gain), section (p)
+BandPanel::BandPanel (PluginProcessor& p, BandEditing& e)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), ring (p, gain), section (p)
 {
     slope = std::make_unique<SlopeButton> (*this);
 
@@ -319,7 +320,6 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e) : processor (p), editi
     };
 
     show (0);
-    startTimerHz (10);
 }
 
 BandPanel::~BandPanel()
@@ -426,11 +426,23 @@ void BandPanel::describe()
     clearDynamics.setTitle (band + "Clear Dynamics");
 }
 
+BandPanel::Followed BandPanel::followed() const
+{
+    const auto band = editing.band (slot);
+    return { .inUse = band.inUse,
+             .bypass = band.bypass,
+             .dynamic = isDynamic (band),
+             .brickwallCut = isCut (band.shape) && band.brickwall,
+             .stereo = processor.isStereoPlacementAvailable(),
+             .shape = band.shape };
+}
+
 void BandPanel::updateAvailability()
 {
     if (slot == 0)
         return;
     const auto band = editing.band (slot);
+    shownBand = followed();
     if (! band.inUse)
     {
         show (0);
@@ -521,9 +533,10 @@ void BandPanel::placeAtSize()
         setSize (w, h);
 }
 
-void BandPanel::timerCallback()
+void BandPanel::tick (double)
 {
-    updateAvailability();
+    if (slot != 0 && followed() != shownBand)
+        updateAvailability();
 }
 
 //==============================================================================

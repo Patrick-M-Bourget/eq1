@@ -50,6 +50,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/DisplayRangeTest.cpp
         plugin/EditHistoryTest.cpp
         plugin/EditorLayoutTest.cpp
+        plugin/EditorTickTest.cpp
         plugin/EqDisplayTest.cpp
         plugin/FactoryPresetsTest.cpp
         plugin/HoverCardTest.cpp

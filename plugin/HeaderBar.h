@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ABCompare.h"
+#include "EditorTick.h"
 #include "PresetBar.h"
 #include "staple/Wordmark.h"
 #include "staple/controls/IconButton.h"
@@ -39,8 +40,9 @@ private:
 // The window's header (HANDOFF.md §4, §5.6, §9B): the wordmark on the left; ‹, the Presets button and
 // › in the centre (PresetBar); Undo, Redo, A/B Compare and Copy on the right. The side groups share
 // the leftover width equally, so the Preset group stays centred in the window. Copy copies the side
-// you're on to the other side, its tooltip naming the direction, and reads "Copied" for 1 s.
-class HeaderBar final : public juce::Component, private juce::MultiTimer
+// you're on to the other side, its tooltip naming the direction, and reads "Copied" for 1 s. It follows
+// the side and what can be undone on the editor's tick (EditorTick).
+class HeaderBar final : public juce::Component, private EditorTick::Client
 {
 public:
     explicit HeaderBar (PluginProcessor& processor);
@@ -58,12 +60,9 @@ public:
     void showUndoState();
 
 private:
-    enum TimerId
-    {
-        followTimer,
-        copiedTimer
-    };
-    void timerCallback (int id) override;
+    void tick (double seconds) override;
+    // While Copy reads "Copied", so the second it reads it for is kept to the frame.
+    bool isActive() const override { return copiedUntil != 0; }
     // Follows the side, which edits, undo and restoring a session change too.
     void showSide();
     void copyToOther();
@@ -76,6 +75,7 @@ private:
     CompareButton compareButton;
     staple::TextChip copyButton { "Copy", staple::TextChip::Look::plain, staple::tokens::size::fs4 };
     int copyWidth = 0;
+    juce::uint32 copiedUntil = 0; // while Copy reads "Copied": when it reads "Copy" again
     juce::Rectangle<int> wordmark;
 };
 

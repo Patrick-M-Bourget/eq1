@@ -143,7 +143,8 @@ private:
     juce::String spoken;
 };
 
-EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editing (e), card (p, e)
+EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), output (parameters::OutputValues::of (p.parameterState())), card (p, e)
 {
     setName ("EQ Display");
     setTitle ("EQ display");
@@ -161,16 +162,12 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e) : processor (p), editi
     // An editor opened under Global Bypass shows it at once.
     globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
     lastFadeStep = juce::Time::getMillisecondCounter();
-    startTimerHz (60);
 }
 
-bool EqDisplay::updateAnalyzer()
+bool EqDisplay::updateAnalyzer (double seconds)
 {
     analyzer = processor.analyzerSettings();
     const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
-    const auto now = juce::Time::getMillisecondCounter();
-    const double seconds = lastFrame == 0 ? 1.0 / 60.0 : juce::jlimit (0.001, 0.25, (now - lastFrame) / 1000.0);
-    lastFrame = now;
 
     // Peak Hold starts afresh on a spectrum it wasn't held for last frame: switched to, or turned on.
     // The spectrum forgets it too when prepared again for a new Resolution or sample rate.
@@ -340,7 +337,7 @@ void EqDisplay::showSolo()
     repaint();
 }
 
-void EqDisplay::timerCallback()
+void EqDisplay::tick (double seconds)
 {
     if (heldSlot != 0 && juce::Time::getMillisecondCounter() - heldSince >= soloHoldMilliseconds)
     {
@@ -357,16 +354,7 @@ void EqDisplay::timerCallback()
     // A Heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
     const bool fading = stepFades();
-
-    if (updateAnalyzer())
-    {
-        // The spectra move every frame.
-        shown = heardSettings();
-        shownRangeDb = processor.displayRangeDb();
-        placeHandles();
-        repaint();
-        return;
-    }
+    const bool analyzing = updateAnalyzer (seconds);
 
     const bool messageExpired = allInUseMessageUntil != 0 && juce::Time::getMillisecondCounter() > allInUseMessageUntil;
     if (messageExpired)
@@ -381,6 +369,19 @@ void EqDisplay::timerCallback()
         const double live = drawnGain (slot, latest.bands[static_cast<size_t> (slot - 1)]);
         liveGainsMoved = liveGainsMoved || ! juce::exactlyEqual (live, shownLiveGains[static_cast<size_t> (slot - 1)]);
         shownLiveGains[static_cast<size_t> (slot - 1)] = live;
+    }
+    // What needs the next frame soon: a spectrum, a fade or a Live Gain moving, a wait on the pointer
+    // (a held handle's Solo, the Hover Card's rest and hide) or the message's end.
+    wantsFrames = analyzing || fading || liveGainsMoved || heldSlot != 0 || restingSlot != 0 || card.shownSlot() != 0 || allInUseMessageUntil != 0;
+
+    if (analyzing)
+    {
+        // The spectra move every frame.
+        shown = latest;
+        shownRangeDb = range;
+        placeHandles();
+        repaint();
+        return;
     }
     if (fading)
         repaint();
@@ -400,7 +401,7 @@ void EqDisplay::timerCallback()
 
 bool EqDisplay::isGlobalBypassOn() const
 {
-    return processor.parameterState().getRawParameterValue (parameters::globalBypassId)->load() >= 0.5f;
+    return output.globalBypass->load() >= 0.5f;
 }
 
 bool EqDisplay::stepFades()
@@ -506,6 +507,7 @@ void EqDisplay::updateCard()
 
 void EqDisplay::mouseMove (const juce::MouseEvent& e)
 {
+    wake(); // the hover and ghost fades, and the rest, start on the next frame
     // The pointer resting on a handle shows its card; moving on or off starts the rest afresh.
     if (const int handle = slotAt (e.position); handle != restingSlot || pointer != e.position)
     {
@@ -526,6 +528,7 @@ void EqDisplay::mouseMove (const juce::MouseEvent& e)
 
 void EqDisplay::mouseExit (const juce::MouseEvent&)
 {
+    wake();
     hoveredSlot = 0;
     restingSlot = 0;
     pointer.reset();
@@ -640,6 +643,7 @@ void EqDisplay::paint (juce::Graphics& g)
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)
 {
+    wake(); // a held handle's Solo waits from here
     // Any press here hides the card; a press on a handle then selects and drags it.
     hideCard();
     // Right-click, or Ctrl-click on macOS: never a Solo, a drag or a marquee.

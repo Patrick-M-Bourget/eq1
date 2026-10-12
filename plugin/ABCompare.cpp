@@ -134,7 +134,11 @@ bool ABCompare::isModified() const
 {
     const auto s = current();
     const auto& loaded = s.loadedOn (s.active);
-    return loaded.isValid() && ! holdsPresetSettings (parameters, loaded);
+    if (! loaded.isValid())
+        return false;
+    if (loaded != loadedIndex.tree)
+        loadedIndex = { loaded, presetSettingValues (parameters, loaded) };
+    return ! parametersHold (loadedIndex.values);
 }
 
 juce::ValueTree ABCompare::treeOf (const State& s)
