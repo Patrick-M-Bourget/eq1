@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PresetLibrary.h"
+#include "PresetSettings.h"
 #include "SavedState.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -7,6 +8,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
+#include <limits>
 #include <random>
 
 using Catch::Matchers::WithinAbs;
@@ -411,9 +413,9 @@ TEST_CASE ("A state with nan, inf and out-of-range values restores to finite, in
     CHECK_THAT (value (restored, "band1_q"), WithinAbs (1.0, 1.0e-4));
     CHECK_THAT (value (restored, "band1_threshold"), WithinAbs (-30.0, 1.0e-4));
     // Finite and outside the range: the range's end.
-    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (30.0, 1.0e-4));
-    CHECK_THAT (value (restored, "band2_frequency"), WithinAbs (10.0, 1.0e-3));
-    CHECK_THAT (value (restored, "band2_q"), WithinAbs (40.0, 1.0e-3));
+    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (eq1::parameterRanges::gain.high, 1.0e-4));
+    CHECK_THAT (value (restored, "band2_frequency"), WithinAbs (eq1::parameterRanges::frequency.low, 1.0e-3));
+    CHECK_THAT (value (restored, "band2_q"), WithinAbs (eq1::parameterRanges::q.high, 1.0e-3));
     CHECK (value (restored, "band3_shape") == static_cast<float> (eq1::parameters::shapeNames().size() - 1));
     CHECK (value (restored, "band3_slope") == 0.0f);
     CHECK_THAT (value (restored, "output_gain"), WithinAbs (eq1::parameters::outputGainSilentDb, 1.0e-3));
@@ -421,6 +423,23 @@ TEST_CASE ("A state with nan, inf and out-of-range values restores to finite, in
     CHECK (value (restored, "gain_scale") == 0.0f);
     // The rest restored as saved.
     CHECK (value (restored, "band1_in_use") == 1.0f);
+}
+
+TEST_CASE ("A restored number is itself within its range, the nearer end outside it, and the default when it isn't a finite number")
+{
+    using eq1::restoredNumber;
+    CHECK (restoredNumber (juce::var (2.5), 1.0, 0.0, 6.0) == 2.5);
+    CHECK (restoredNumber (juce::var (0.0), 1.0, 0.0, 6.0) == 0.0);
+    CHECK (restoredNumber (juce::var (6.0), 1.0, 0.0, 6.0) == 6.0);
+    CHECK (restoredNumber (juce::var (99.0), 1.0, 0.0, 6.0) == 6.0);
+    CHECK (restoredNumber (juce::var (-7.0), 1.0, 0.0, 6.0) == 0.0);
+    CHECK (restoredNumber (juce::var ("1e39"), 1.0, 0.0, 6.0) == 6.0);
+    CHECK (restoredNumber (juce::var (std::numeric_limits<double>::quiet_NaN()), 1.0, 0.0, 6.0) == 1.0);
+    CHECK (restoredNumber (juce::var ("nan"), 1.0, 0.0, 6.0) == 1.0);
+    CHECK (restoredNumber (juce::var (std::numeric_limits<double>::infinity()), 1.0, 0.0, 6.0) == 1.0);
+    CHECK (restoredNumber (juce::var (-std::numeric_limits<double>::infinity()), 1.0, 0.0, 6.0) == 1.0);
+    CHECK (restoredNumber (juce::var ("inf"), 1.0, 0.0, 6.0) == 1.0);
+    CHECK (restoredNumber (juce::var(), 1.0, 0.0, 6.0) == 0.0); // no value reads as 0, which is in range
 }
 
 TEST_CASE ("A state whose Display Range, editor size or Analyzer settings aren't finite numbers restores their defaults; finite ones outside their range, the range's end")
