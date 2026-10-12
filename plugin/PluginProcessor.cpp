@@ -25,6 +25,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
 {
     engine.prepare (sampleRate, maximumExpectedSamplesPerBlock, getTotalNumOutputChannels());
     processedAudio.store (false, std::memory_order_relaxed);
+    publishedSincePrepare = false;
 }
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -39,8 +40,8 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    juce::ScopedNoDenormals noDenormals;
-
+    // The Engine flushes subnormal numbers for its own duration (engine/src/NoSubnormals.h); nothing
+    // here computes on the audio.
     // Host Automation arrives on the audio thread, so the snapshot is taken here, once per block.
     Settings settings;
     for (size_t slot = 0; slot < slots.size(); ++slot)
@@ -49,7 +50,14 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     settings.auditionSlot = heldAuditionSlot.load();
     settings.meteredSlot = heldMeteredSlot.load();
     output.readInto (settings);
-    engine.setSettings (settings);
+    // Published only when it differs from the last one: a block with no edits does no settings work.
+    if (! publishedSincePrepare || settings != publishedSettings)
+    {
+        publishedSettings = settings;
+        publishedSincePrepare = true;
+        engine.setSettings (settings);
+        publications.fetch_add (1, std::memory_order_relaxed);
+    }
 
     auto main = getBusBuffer (buffer, false, 0);
     const auto sidechainBuffer = getBusBuffer (buffer, true, 1);
