@@ -57,11 +57,11 @@ private:
 // What the tick drives: a component that reads the processor each tick and repaints only on a
 // change. It joins the Host nearest at or above its component whenever the component's place in the
 // hierarchy changes, and leaves when the component goes.
-class EditorTick::Client : private juce::ComponentListener
+class EditorTick::Client
 {
 public:
     explicit Client (juce::Component& component);
-    ~Client() override;
+    virtual ~Client();
 
     // Each tick, with the seconds since the one before: 1/60 s on the first, and at most 0.25 s after
     // a stall, so a meter's fall doesn't jump.
@@ -71,10 +71,19 @@ public:
 
 private:
     friend class EditorTick;
-    void componentParentHierarchyChanged (juce::Component&) override;
+    // Joins the Host the component is under now, if any.
+    void follow();
     void join (EditorTick* tick);
+    // Watches the component's place in the hierarchy, apart from any listener the component is itself.
+    struct Watch final : juce::ComponentListener
+    {
+        explicit Watch (Client& c) : client (c) {}
+        void componentParentHierarchyChanged (juce::Component&) override { client.follow(); }
+        Client& client;
+    };
 
     juce::Component& component;
+    Watch watch { *this };
     EditorTick* source = nullptr; // the tick it is on, while under a Host
 };
 

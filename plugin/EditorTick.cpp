@@ -63,16 +63,16 @@ void EditorTick::timerCallback()
 //==============================================================================
 EditorTick::Client::Client (juce::Component& c) : component (c)
 {
-    component.addComponentListener (this);
+    component.addComponentListener (&watch);
 }
 
 EditorTick::Client::~Client()
 {
-    component.removeComponentListener (this);
+    component.removeComponentListener (&watch);
     join (nullptr);
 }
 
-void EditorTick::Client::componentParentHierarchyChanged (juce::Component&)
+void EditorTick::Client::follow()
 {
     auto* host = dynamic_cast<Host*> (&component);
     if (host == nullptr)

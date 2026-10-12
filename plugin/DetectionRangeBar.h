@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorTick.h"
 #include "KeyboardSlider.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -24,8 +25,9 @@ class BandPanel;
 // Dragging a handle sets Detection Low or Detection High; dragging the segment moves both by the same
 // Frequency ratio; left and right on a focused handle nudge it 1/6 octave. Each drag, press or held key
 // is one undo step, and keeps Detection Low at most Detection High / 1.25, both within 20 Hz to 20 kHz.
-// Typed values and Host Automation aren't held to that: the Engine takes the limits in any order.
-class DetectionRangeBar final : public juce::Component, private juce::Timer, private juce::ComponentListener
+// Typed values and Host Automation aren't held to that: the Engine takes the limits in any order. It
+// follows the Band on the editor's tick (EditorTick), and the panel as it moves.
+class DetectionRangeBar final : public juce::Component, private EditorTick::Client, private juce::ComponentListener
 {
 public:
     static constexpr double lowestLimit = 20.0, highestLimit = 20000.0, minimumRatio = 1.25;
@@ -56,7 +58,7 @@ public:
     void resized() override;
 
 private:
-    void timerCallback() override;
+    void tick (double seconds) override { update(); }
     void componentMovedOrResized (juce::Component&, bool, bool) override;
     void componentVisibilityChanged (juce::Component&) override;
     void update();

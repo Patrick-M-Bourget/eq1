@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Accessibility.h"
+#include "EditorTick.h"
 #include "PresetBrowser.h"
 #include "PresetLibrary.h"
 #include "staple/controls/IconButton.h"
@@ -49,8 +50,9 @@ private:
 // The header's Preset group (HeaderBar): ‹, the Presets button, which opens and closes the Preset
 // browser (PresetBrowser), and › stepping to the previous and next Preset in browser order over the
 // whole library. Each load and save is one undo step; a load replaces a Modified side's settings
-// without asking, as undo brings them back.
-class PresetBar final : public juce::Component, private juce::Timer
+// without asking, as undo brings them back. It follows the side's Loaded Preset and Modified on the
+// editor's tick (EditorTick).
+class PresetBar final : public juce::Component, private EditorTick::Client
 {
 public:
     // Its User Presets kept in userFolder (PresetLibrary).
@@ -72,7 +74,7 @@ public:
 
 private:
     // Follows the side's Loaded Preset, which edits, undo, A/B Compare and restoring a session change too.
-    void timerCallback() override;
+    void tick (double seconds) override;
     void showLoadedPreset();
     void edited();
     // Loads a Preset, the side remembering the folder it is listed in (none for a file from anywhere).
