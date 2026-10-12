@@ -89,8 +89,12 @@ private:
         };
 
         // Runs the lines' samples through the cascade, in place: over a gliding run, with the
-        // coefficients interpolated once per position, for every line at once.
+        // coefficients interpolated once per position, for every line at once. Two lines (a Stereo
+        // Band on a stereo track) run in two lanes.
         void run (Lines& lines, const Piece& piece);
+        // Two lines through the cascade together, one per lane of a Double2: the same operations in
+        // the same order as one line on its own, so each comes out bit for bit as it would alone.
+        void runLanes (Lines& lines, const Piece& piece);
         // Runs the part of the signal the chain's Stereo Placement selects, in place.
         void runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
         // On stereo: encodes Mid and Side, runs the Mid (mid) or the Side, and decodes.
