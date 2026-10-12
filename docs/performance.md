@@ -38,6 +38,15 @@ The test is tagged `[.paint]`, hidden from the normal run so its timing never fl
 
 Measured 2026-10-10. On a machine busy with other builds the median reached 125 to 160 ms at a load average above 80: the ceiling allows for some load, but not that much.
 
+**Idle frame, Analyzer on.** The same file's `Idle frame, Analyzer on` test, run with the paint time, measures what a frame costs when nothing changes but the spectra, which is every frame with the Analyzer on: the display alone at 2× with 24 Bells, one selected, the Analyzer showing Pre and Post on silence. It prints the median of 20 paints of the display and the message thread's CPU per tick over 2 s of ticks (a test window never paints on its own, so that is the tick's own work: the Settings read, the spectra updated, and whatever the frame places). The display keeps its Band curves, fills, wash and sum as paths (`display::CurveCache`) and places its handles, reading out what changed, only when the Bands shown or the Display Range change, so an Analyzer frame draws the spectra and strokes the paths it has.
+
+| Machine | Display paint | Tick CPU |
+| --- | --- | --- |
+| Apple M3, load average about 65 from parallel builds, before the curve cache (`7f175d4`) | 34 to 43 ms | 0.63 to 0.66 ms |
+| Apple M3, the same load, with it (`8ccf0bc`) | 15 to 28 ms | 0.11 to 0.40 ms |
+
+Measured 2026-10-12, three runs each, back to back; the whole editor's busy frame above went from 171 to 196 ms to 69 to 113 ms in the same runs. Quiet-machine figures are still to be taken.
+
 ## Footprint
 
 `scripts/check.sh size` measures what ships. It builds the shipping configuration (Release, `EQ1_LTO=ON`, Universal) in `build-size` and prints three reports; local only, CI doesn't run it. On Windows it prints the Engine heap only.

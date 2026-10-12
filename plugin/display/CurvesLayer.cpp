@@ -3,6 +3,7 @@
 #include "eq1/Response.h"
 #include "../staple/Tokens.h"
 
+#include <algorithm>
 #include <vector>
 
 namespace eq1::display
@@ -148,47 +149,128 @@ int bandAreaAt (const DisplayGeometry& geometry, const DisplayFrame& frame, juce
     return found;
 }
 
-void paintCurves (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame)
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
+bool CurveCache::BandKey::operator== (const BandKey& other) const
+{
+    return sameBand (designed, other.designed) && geometry == other.geometry && sampleRate == other.sampleRate;
+}
+
+bool CurveCache::WashKey::operator== (const WashKey& other) const
+{
+    return slot == other.slot && sameBand (band, other.band) && geometry == other.geometry && sampleRate == other.sampleRate;
+}
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+
+void CurveCache::update (const DisplayGeometry& geometry, const DisplayFrame& frame)
 {
     const double sampleRate = frame.sampleRate;
-    std::vector<double> frequencies;
-    for (float x = 0.0f; x <= static_cast<float> (geometry.width); x += DisplayGeometry::pixelStep)
-        frequencies.push_back (std::min (geometry.frequencyAt (x), 0.4999 * sampleRate));
+    bool changed = false;
+    if (frequenciesWidth != geometry.width || ! juce::exactlyEqual (frequenciesSampleRate, sampleRate))
+    {
+        frequencies.clear();
+        for (float x = 0.0f; x <= static_cast<float> (geometry.width); x += DisplayGeometry::pixelStep)
+            frequencies.push_back (std::min (geometry.frequencyAt (x), 0.4999 * sampleRate));
+        frequenciesWidth = geometry.width;
+        frequenciesSampleRate = sampleRate;
+    }
     const auto response = [&] (const BandSettings& band, std::vector<double>& db) {
+        db.resize (frequencies.size());
         bandResponseDb (band, frequencies.data(), db.data(), static_cast<int> (db.size()), sampleRate);
     };
+
+    // Each Band in use, at its drawn Gain.
+    bool anyBuilt = false;
+    std::array<bool, numBandSlots> inUse {}, playing {};
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+    {
+        const auto index = static_cast<size_t> (slot - 1);
+        const auto& band = frame.bands.bands[index];
+        if (! band.inUse)
+            continue;
+        inUse[index] = true;
+        // On mono a Side Band has nothing to process: it plays no part in the whole EQ's curve.
+        playing[index] = ! (band.bypass || (frame.mono && band.placement == StereoPlacement::Side));
+        auto live = band;
+        live.gain = frame.drawnGains[index];
+        const BandKey key { live, geometry, sampleRate };
+        auto& entry = bands[index];
+        if (entry.key == key)
+            continue;
+        response (live, entry.db);
+        entry.line = curve (geometry, entry.db);
+        entry.fill = fillTo0dB (geometry, entry.line);
+        entry.key = key;
+        ++entry.builds;
+        anyBuilt = true;
+    }
+
+    // The sum of the Bands that play.
+    if (anyBuilt || ! sum.built || sum.geometry != geometry || sum.playing != playing)
+    {
+        std::vector<double> total (frequencies.size(), 0.0);
+        for (size_t index = 0; index < numBandSlots; ++index)
+            if (playing[index])
+                for (size_t i = 0; i < total.size(); ++i)
+                    total[i] += bands[index].db[i];
+        sum.path = curve (geometry, total);
+        sum.built = true;
+        sum.geometry = geometry;
+        sum.playing = playing;
+        ++sum.builds;
+        changed = true;
+    }
+    if (sum.inUse != inUse)
+    {
+        sum.inUse = inUse;
+        changed = true;
+    }
+
+    // The wash of the one selected Dynamic Band, between its curves at Gain and at Gain + Dynamic Range,
+    // both as heard.
+    const int washed = frame.selected.size() == 1 ? *frame.selected.begin() : 0;
+    if (washed != 0)
+    {
+        const auto& band = frame.bands.bands[static_cast<size_t> (washed - 1)];
+        if (band.inUse && isDynamic (band) && ! band.dynamicsBypass)
+        {
+            const WashKey key { washed, band, geometry, sampleRate };
+            if (washKey != key)
+            {
+                std::vector<double> atGain, atReach;
+                response (band, atGain);
+                auto reach = band;
+                reach.gain = band.gain + band.dynamicRange;
+                response (reach, atReach);
+                wash = between (geometry, atGain, atReach);
+                washKey = key;
+                changed = true;
+            }
+        }
+    }
+    if (changed)
+        ++changes;
+}
+
+void CurveCache::paint (juce::Graphics& g, const DisplayFrame& frame) const
+{
     // The selected Band is drawn last, on top of the others, and alone has the Dynamic Range wash.
     const int washed = frame.selected.size() == 1 ? *frame.selected.begin() : 0;
-    std::vector<double> total (frequencies.size(), 0.0), bandDb (frequencies.size());
     std::vector<int> selectedInUse;
     const auto drawBand = [&] (int slot) {
-        const auto& band = frame.bands.bands[static_cast<size_t> (slot - 1)];
-        // On mono a Side Band has nothing to process: it plays no part in the whole EQ's curve.
+        const auto index = static_cast<size_t> (slot - 1);
+        const auto& band = frame.bands.bands[index];
         const bool silent = band.bypass || (frame.mono && band.placement == StereoPlacement::Side);
-        auto live = band;
-        live.gain = frame.drawnGains[static_cast<size_t> (slot - 1)];
-        response (live, bandDb);
-        if (! silent)
-            for (size_t i = 0; i < total.size(); ++i)
-                total[i] += bandDb[i];
         const auto style = bandCurveStyle ({ .slot = slot,
                                              .selected = frame.selected.contains (slot),
                                              .bypassed = silent,
-                                             .hover = frame.hover[static_cast<size_t> (slot - 1)],
+                                             .hover = frame.hover[index],
                                              .globalBypass = frame.globalBypass });
-        const auto line = curve (geometry, bandDb);
         if (slot == washed && isDynamic (band) && ! band.dynamicsBypass)
         {
-            // Between the curves at Gain and at Gain + Dynamic Range, both as heard.
-            std::vector<double> atGain (frequencies.size()), atReach (frequencies.size());
-            response (band, atGain);
-            auto reach = band;
-            reach.gain = band.gain + band.dynamicRange;
-            response (reach, atReach);
             g.setColour (tokens::colour::dynRange.withAlpha (dynamicRangeWashAlpha (silent, frame.globalBypass)));
-            g.fillPath (between (geometry, atGain, atReach));
+            g.fillPath (wash);
         }
-        paintCurve (g, line, fillTo0dB (geometry, line), style);
+        paintCurve (g, bands[index].line, bands[index].fill, style);
     };
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
@@ -202,11 +284,10 @@ void paintCurves (juce::Graphics& g, const DisplayGeometry& geometry, const Disp
     for (int slot : selectedInUse)
         drawBand (slot);
 
-    const auto sum = curve (geometry, total);
     const float alpha = sumCurveAlpha (frame.globalBypass);
     const auto stroke = [&] (juce::Colour colour, float width) {
         g.setColour (colour.withMultipliedAlpha (alpha));
-        g.strokePath (sum, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.strokePath (sum.path, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     };
     stroke (tokens::colour::curveMainHalo.withMultipliedAlpha (curveStyle::sumOuterHaloAlpha), curveStyle::sumOuterHalo);
     stroke (tokens::colour::curveMainHalo, curveStyle::sumHalo);

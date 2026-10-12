@@ -25,6 +25,8 @@ struct DisplayGeometry
     // A Shape without Gain sits on the 0 dB line; one beyond the Display Range sits at its edge.
     juce::Point<float> handleOf (const BandSettings& band) const;
     juce::Rectangle<float> bounds() const { return juce::Rectangle<int> (width, height).toFloat(); }
+
+    bool operator== (const DisplayGeometry&) const = default;
 };
 
 } // namespace eq1::display
