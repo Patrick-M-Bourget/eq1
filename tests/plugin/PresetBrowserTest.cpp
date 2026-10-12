@@ -214,9 +214,14 @@ TEST_CASE ("Save as opens an inline name field: Enter saves into the User folder
     CHECK (host.rows() == juce::StringArray ({ "A", "Warm, Loaded Preset" }));
     CHECK (host.valueOf (host.button ("User")) == "2");
 
-    // No name, no save.
+    // No name, no save; a name of only characters a file name can't hold, the same.
     click (host.button (saveAs));
     field()->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+    CHECK (host.saves.size() == 1u);
+    click (host.button (saveAs));
+    field()->setText (" :/?* ");
+    field()->keyPressed (juce::KeyPress (juce::KeyPress::returnKey));
+    CHECK_FALSE (field()->isVisible());
     CHECK (host.saves.size() == 1u);
 }
 

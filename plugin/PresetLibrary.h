@@ -31,9 +31,13 @@ public:
     // paths as Entry::folder names them ("User/Drums"). None when the folder doesn't exist yet.
     std::vector<juce::String> userSubfolders() const;
 
-    // Saves a Preset as name in the User folder, creating the folder if need be and replacing a
-    // Preset of the same name. A name a file can't hold is made safe. Returns the file, or nothing
-    // when it can't be written.
+    // The name a Preset is saved under for name: trimmed, with the characters a file name can't hold
+    // taken out. Empty when nothing is left, which save() refuses, as the editor refuses an empty
+    // name, instead of writing a hidden file named by the extension alone.
+    static juce::String legalName (const juce::String& name);
+    // Saves a Preset as legalName (name) in the User folder, creating the folder if need be and
+    // replacing a Preset of the same name. Returns the file, or nothing when the name has no legal
+    // characters or the file can't be written.
     std::optional<juce::File> save (const juce::String& name, const juce::ValueTree& preset) const;
 
     // A Preset file's contents, or an invalid tree when it isn't one (not XML, or not eq1's state).

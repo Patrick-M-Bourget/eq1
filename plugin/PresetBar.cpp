@@ -171,7 +171,7 @@ void PresetBar::step (int by)
 // SafePointer and does nothing once it is gone.
 void PresetBar::saveAs (const juce::String& name)
 {
-    if (name.isEmpty())
+    if (PresetLibrary::legalName (name).isEmpty())
         return;
     const auto preset = processor.presetState();
     if (const auto file = library.save (name, preset))

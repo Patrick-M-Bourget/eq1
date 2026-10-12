@@ -81,8 +81,8 @@ private:
     void load (const juce::ValueTree& preset, const juce::String& name, const juce::String& folder);
     // Loads the Preset by places after (or before, when negative) the Loaded Preset's entry (PresetLibrary::step).
     void step (int by);
-    // Saves the settings as a User Preset named name, when it isn't empty, making it the side's Loaded
-    // Preset (the browser's inline "Save as…" field).
+    // Saves the settings as a User Preset named name, when a file name can hold some of it
+    // (PresetLibrary::legalName), making it the side's Loaded Preset (the browser's inline "Save as…" field).
     void saveAs (const juce::String& name);
     // The listing entry the side last loaded or saved, through the browser, ‹ › or saving, which ‹ ›
     // step from while its name is still the Loaded Preset's: a name can be listed more than once.
