@@ -16,8 +16,8 @@ namespace
 // What one stereo Engine may hold after prepare(): the measured figure plus about 5%, which covers
 // the allocators' different rounding across platforms, so growth shows up here before it reaches a
 // user. The figures are in docs/performance.md, "Footprint".
-constexpr std::size_t heapCeilingBytes48k = 1'450'000;
-constexpr std::size_t heapCeilingBytes192k = 2'170'000;
+constexpr std::size_t heapCeilingBytes48k = 466'000;
+constexpr std::size_t heapCeilingBytes192k = 827'000;
 // What the Analyzer's three taps and the Output Level's two channels may hold together at 48 kHz,
 // sized to what the editor can show and the 300 ms window (#177).
 constexpr std::size_t tapsCeilingBytes48k = 200'000;
