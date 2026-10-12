@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <numbers>
 #include <random>
 #include <vector>
@@ -23,6 +24,7 @@ struct Player
     double sampleRate;
     int numChannels;
     long long position = 0;
+    std::vector<float>* played = nullptr; // every sample played, when wanted
 
     void sine (double seconds, double amplitude, double frequency = 997.0)
     {
@@ -60,6 +62,8 @@ private:
                 const float s = sampleAt (position + i);
                 for (auto& block : blocks)
                     block[static_cast<size_t> (i)] = s;
+                if (played != nullptr)
+                    played->push_back (s);
             }
             engine.process ({ channels.data(), numChannels, count });
             position += count;
@@ -181,4 +185,36 @@ TEST_CASE ("Output Level RMS covers only the last 300 ms, and silence reads exac
         const double first = engine.readOutputLevel (0).rmsDb;
         CHECK (engine.readOutputLevel (0).rmsDb == first);
     }
+}
+
+TEST_CASE ("Output Level RMS is the RMS of the last 300 ms of what was played, on a sine and on noise")
+{
+    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
+    CAPTURE (sampleRate);
+    Engine engine;
+    engine.prepare (sampleRate, 512, 1);
+    engine.setSettings ({});
+    std::vector<float> played;
+    Player player { engine, sampleRate, 1, 0, &played };
+
+    SECTION ("sine")
+    {
+        player.sine (0.5, 0.7, 1234.5);
+    }
+    SECTION ("noise")
+    {
+        player.noise (0.5, 0.5, 7);
+    }
+    SECTION ("noise after a louder passage, so the window has to forget it")
+    {
+        player.noise (0.4, 0.9, 3);
+        player.noise (0.35, 0.2, 4);
+    }
+
+    // A rectangular window of the last 300 ms, summed the plain way.
+    const auto window = static_cast<size_t> (std::lround (0.3 * sampleRate));
+    REQUIRE (played.size() >= window);
+    const double meanSquare = std::accumulate (played.end() - static_cast<long> (window), played.end(), 0.0, [] (double sum, float s) { return sum + static_cast<double> (s) * s; })
+                              / static_cast<double> (window);
+    CHECK_THAT (engine.readOutputLevel (0).rmsDb, WithinAbs (10.0 * std::log10 (meanSquare), 0.01));
 }
