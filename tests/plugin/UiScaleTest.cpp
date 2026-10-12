@@ -1,7 +1,6 @@
 #include "EditorHarness.h"
 #include "FooterBar.h"
 #include "PluginProcessor.h"
-#include "SavedState.h"
 #include "UserSettings.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -122,7 +121,7 @@ TEST_CASE ("The window's size and UI Scale are saved with the session, not in a 
     CHECK_FALSE (saved.isLoadedPresetModified());
     CHECK (saved.editHistory().undoSteps() == steps);
     CHECK (saved.presetState().createXml()->toString() == preset);
-    CHECK (eq1::test::savedState (saved).getProperty ("version") == juce::var (eq1::PluginProcessor::stateVersion));
+    CHECK (harness::savedState (saved).getProperty ("version") == juce::var (eq1::PluginProcessor::stateVersion));
 
     eq1::PluginProcessor restored;
     reload (restored, saved);

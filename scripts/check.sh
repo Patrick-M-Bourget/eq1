@@ -109,7 +109,7 @@ docs() {
         broken=1
     fi
     # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
-    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h. Flagged:
+    # searches them passes whatever was saved. Tests decode it with harness::savedState (tests/plugin/EditorHarness.h). Flagged:
     # toString on any block a file fills with getStateInformation, whatever the block is called.
     local raw file block
     raw=$(git grep -lE 'get(CurrentProgram)?StateInformation *\(' -- tests | while IFS= read -r file; do
@@ -119,7 +119,7 @@ docs() {
             done
     done || true)
     if [ -n "$raw" ]; then
-        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
+        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with harness::savedState (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
     # A test waits for the editor's timers with harness::settle (tests/plugin/EditorHarness.h): a loop of
