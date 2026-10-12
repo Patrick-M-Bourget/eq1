@@ -68,6 +68,7 @@ target_sources(eq1 PRIVATE
     AnalyzerPopover.cpp
     FooterBar.cpp
     OutputMeter.cpp
+    EditorTick.cpp
     PluginEditor.cpp
     AnalyzerSpectrum.cpp
     staple/Accessibility.cpp
