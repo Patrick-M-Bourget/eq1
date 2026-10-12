@@ -3,6 +3,7 @@
 #include "AnalysisFifo.h"
 #include "AutoGain.h"
 #include "Band.h"
+#include "Crossfade.h"
 #include "DetectionLevelTap.h"
 #include "Dynamics.h"
 #include "LatestValue.h"
@@ -373,36 +374,16 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
         {
             if (partChannels > 0)
                 impl->soloRegion.process (impl->soloPartChannels.data(), partChannels, impl->gridRun, position, count);
-            std::array<double, Band::maxSubBlock> mixes;
-            for (size_t i = 0; i < static_cast<size_t> (count); ++i)
-                mixes[i] = impl->heldMix.next();
-            for (int ch = 0; ch < channels; ++ch)
-            {
-                float* samples = impl->subBlock[static_cast<size_t> (ch)];
-                for (int i = 0; i < count; ++i)
-                {
-                    // In double, so a full mix plays the region exactly.
-                    const double dry = samples[i];
-                    samples[i] = static_cast<float> (dry + mixes[static_cast<size_t> (i)] * (impl->heldSample (partChannels, ch, i) - dry));
-                }
-            }
+            // In double, so a full mix plays the region exactly.
+            crossfade<double> (impl->heldMix, impl->subBlock.data(), channels, count,
+                               [&] (int ch, int i) { return impl->heldSample (partChannels, ch, i); });
         }
 
         impl->output.process (impl->subBlock.data(), channels, count);
 
         if (bypassing)
-        {
-            std::array<double, Band::maxSubBlock> mixes;
-            for (size_t i = 0; i < static_cast<size_t> (count); ++i)
-                mixes[i] = impl->bypassMix.next();
-            for (int ch = 0; ch < channels; ++ch)
-            {
-                float* samples = impl->subBlock[static_cast<size_t> (ch)];
-                const auto& input = impl->dry[static_cast<size_t> (ch)];
-                for (size_t i = 0; i < static_cast<size_t> (count); ++i)
-                    samples[i] = static_cast<float> (samples[i] + mixes[i] * (input[i] - samples[i]));
-            }
-        }
+            crossfade<float> (impl->bypassMix, impl->subBlock.data(), channels, count,
+                              [&] (int ch, int i) { return impl->dry[static_cast<size_t> (ch)][static_cast<size_t> (i)]; });
 
         // A non-finite input sample never reaches the output (docs/adr/0008-performance-never-costs-sound.md,
         // "Non-finite input"): whatever the input or a Band's state made of it plays as 0. The Bands

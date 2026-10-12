@@ -1,5 +1,7 @@
 #include "Band.h"
 
+#include "Crossfade.h"
+
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -262,37 +264,27 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
         return;
     }
 
-    std::array<double, maxSubBlock> mixes, crossfades;
-    for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
-    {
-        mixes[i] = fading ? mix.next() : mix.value();
-        crossfades[i] = crossfading ? shapeCrossfade.next() : shapeCrossfade.value();
-    }
-
     // A channel the chains leave alone comes out of the mix exactly as it went in.
     const auto copyInput = [&] (std::vector<float*>& to) {
         for (int ch = 0; ch < numChannels; ++ch)
             std::copy (channels[ch], channels[ch] + numSamples, to[static_cast<size_t> (ch)]);
     };
+    const auto sampleOf = [] (const std::vector<std::array<float, maxSubBlock>>& buffers, int ch, int i) {
+        return buffers[static_cast<size_t> (ch)][static_cast<size_t> (i)];
+    };
     copyInput (wetChannels);
     current.runPlaced (wetChannels.data(), numChannels, piece);
+    // The filtered signal the dry one mixes with: the current chain's, or while crossfading, the
+    // previous chain's moving to it (left in previousWet).
+    const auto* filtered = &wet;
     if (crossfading)
     {
         copyInput (previousWetChannels);
         previous.runPlaced (previousWetChannels.data(), numChannels, { position, numSamples });
+        crossfade<float> (shapeCrossfade, previousWetChannels.data(), numChannels, numSamples, [&] (int ch, int i) { return sampleOf (wet, ch, i); });
+        filtered = &previousWet;
     }
-    for (int ch = 0; ch < numChannels; ++ch)
-    {
-        float* samples = channels[ch];
-        auto& wetSamples = wet[static_cast<size_t> (ch)];
-        const auto& previousSamples = previousWet[static_cast<size_t> (ch)];
-        for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
-        {
-            if (crossfading)
-                wetSamples[i] = static_cast<float> (previousSamples[i] + crossfades[i] * (wetSamples[i] - previousSamples[i]));
-            samples[i] = static_cast<float> (samples[i] + mixes[i] * (wetSamples[i] - samples[i]));
-        }
-    }
+    crossfade<float> (mix, channels, numChannels, numSamples, [&] (int ch, int i) { return sampleOf (*filtered, ch, i); });
 
     // Faded out: start clean when the Band next fades in.
     if (isSilent())
