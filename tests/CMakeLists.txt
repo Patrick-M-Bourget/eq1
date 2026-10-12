@@ -27,6 +27,7 @@ add_executable(eq1_engine_tests
     engine/SampleRateAndBlockSizeTest.cpp
     engine/SettingsHandoffTest.cpp
     engine/ShapeResponseTest.cpp
+    engine/SmootherTest.cpp
     engine/SoloTest.cpp
     engine/StereoPlacementTest.cpp
 )

@@ -24,7 +24,7 @@ class Band
 {
 public:
     // The grid's run length; coefficients follow glides at this rate.
-    static constexpr int maxSubBlock = 16;
+    static constexpr int maxSubBlock = glideRunSamples;
 
     void prepare (double sampleRate, int numChannels);
 
