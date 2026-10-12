@@ -449,3 +449,58 @@ TEST_CASE ("A state with nan, inf and out-of-range values restores to finite, in
     // The rest restored as saved.
     CHECK (value (restored, "band1_in_use") == 1.0f);
 }
+
+TEST_CASE ("A state whose Display Range, editor size or Analyzer settings aren't finite numbers restores their defaults; finite ones outside their range, the range's end")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor maker;
+    maker.setDisplayRangeDb (30);
+    maker.setEditorSize ({ 1400, 900 });
+    auto analyzer = maker.analyzerSettings();
+    analyzer.rangeDb = 120;
+    analyzer.tiltDbPerOctave = 2.5;
+    maker.setAnalyzerSettings (analyzer);
+    const auto xml = eq1::test::savedXml (maker);
+    REQUIRE (xml != nullptr);
+    struct Junk
+    {
+        const char* text;
+        juce::Point<int> editorSize;
+        eq1::AnalyzerSpeed speed;
+        eq1::AnalyzerResolution resolution;
+        double tilt;
+    };
+    using eq1::AnalyzerSpeed, eq1::AnalyzerResolution;
+    using namespace staple::tokens::layout;
+    const eq1::AnalyzerSettings defaults;
+    // Not finite: the defaults. Finite but outside the range: its end. Text that isn't a number reads as 0.
+    const auto junk = GENERATE_COPY (Junk { "nan", { windowWidth, windowHeight }, defaults.speed, defaults.resolution, defaults.tiltDbPerOctave },
+                                     Junk { "inf", { windowWidth, windowHeight }, defaults.speed, defaults.resolution, defaults.tiltDbPerOctave },
+                                     Junk { "-inf", { windowWidth, windowHeight }, defaults.speed, defaults.resolution, defaults.tiltDbPerOctave },
+                                     Junk { "1e30", { maximumWidth, maximumHeight }, AnalyzerSpeed::veryFast, AnalyzerResolution::maximum, 6.0 },
+                                     Junk { "-5", { minimumWidth, minimumHeight }, AnalyzerSpeed::verySlow, AnalyzerResolution::low, 0.0 },
+                                     Junk { "text", { minimumWidth, minimumHeight }, AnalyzerSpeed::verySlow, AnalyzerResolution::low, 0.0 });
+    CAPTURE (junk.text);
+    xml->setAttribute ("displayRangeDb", junk.text);
+    xml->setAttribute ("editorWidth", junk.text);
+    xml->setAttribute ("editorHeight", junk.text);
+    auto* saved = xml->getChildByName ("Analyzer");
+    REQUIRE (saved != nullptr);
+    saved->setAttribute ("rangeDb", junk.text);
+    saved->setAttribute ("speed", junk.text);
+    saved->setAttribute ("resolution", junk.text);
+    saved->setAttribute ("tiltDbPerOctave", junk.text);
+
+    eq1::PluginProcessor restored;
+    restored.setDisplayRangeDb (6);
+    restored.setEditorSize ({ 1000, 700 });
+    load (restored, *xml);
+    // The Display Range and the Analyzer's range are one of a few choices: anything else is the default.
+    CHECK (restored.displayRangeDb() == 12);
+    CHECK (restored.analyzerSettings().rangeDb == defaults.rangeDb);
+    CHECK (restored.editorSize() == junk.editorSize);
+    CHECK (restored.analyzerSettings().speed == junk.speed);
+    CHECK (restored.analyzerSettings().resolution == junk.resolution);
+    CHECK (std::isfinite (restored.analyzerSettings().tiltDbPerOctave));
+    CHECK (restored.analyzerSettings().tiltDbPerOctave == junk.tilt);
+}

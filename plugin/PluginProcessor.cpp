@@ -4,6 +4,8 @@
 #include "PluginEditor.h"
 #include "PresetSettings.h"
 
+#include <cmath>
+
 namespace eq1
 {
 
@@ -112,6 +114,21 @@ juce::ValueTree toTree (const AnalyzerSettings& a)
         .setProperty (peakHoldProperty, a.peakHold, nullptr);
 }
 
+// A saved number as a session restores it, like a parameter's value (restoredPlainValue): itself within
+// minimum to maximum, the nearer end outside, and defaultValue when it isn't a finite number.
+double restoredNumber (const juce::var& saved, double defaultValue, double minimum, double maximum)
+{
+    const double value = static_cast<double> (saved);
+    return std::isfinite (value) ? juce::jlimit (minimum, maximum, value) : defaultValue;
+}
+
+template <typename Enum>
+Enum restoredChoice (const juce::var& saved, Enum defaultValue, Enum first, Enum last)
+{
+    return static_cast<Enum> (
+        juce::roundToInt (restoredNumber (saved, static_cast<double> (defaultValue), static_cast<double> (first), static_cast<double> (last))));
+}
+
 AnalyzerSettings fromTree (const juce::ValueTree& tree)
 {
     const AnalyzerSettings defaults;
@@ -120,12 +137,12 @@ AnalyzerSettings fromTree (const juce::ValueTree& tree)
              .showPostEq = tree.getProperty (showPostEqProperty, defaults.showPostEq),
              .showSidechain = tree.getProperty (showSidechainProperty, defaults.showSidechain),
              .rangeDb = range == 60 || range == 120 ? range : 90,
-             .speed = static_cast<AnalyzerSpeed> (juce::jlimit (static_cast<int> (AnalyzerSpeed::verySlow), static_cast<int> (AnalyzerSpeed::veryFast),
-                                                                static_cast<int> (tree.getProperty (speedProperty, static_cast<int> (defaults.speed))))),
-             .resolution = static_cast<AnalyzerResolution> (
-                 juce::jlimit (static_cast<int> (AnalyzerResolution::low), static_cast<int> (AnalyzerResolution::maximum),
-                               static_cast<int> (tree.getProperty (resolutionProperty, static_cast<int> (defaults.resolution))))),
-             .tiltDbPerOctave = juce::jlimit (0.0, 6.0, static_cast<double> (tree.getProperty (analyzerTiltProperty, defaults.tiltDbPerOctave))),
+             .speed = restoredChoice (tree.getProperty (speedProperty, static_cast<int> (defaults.speed)), defaults.speed, AnalyzerSpeed::verySlow, AnalyzerSpeed::veryFast),
+             .resolution = restoredChoice (tree.getProperty (resolutionProperty, static_cast<int> (defaults.resolution)),
+                                           defaults.resolution,
+                                           AnalyzerResolution::low,
+                                           AnalyzerResolution::maximum),
+             .tiltDbPerOctave = restoredNumber (tree.getProperty (analyzerTiltProperty, defaults.tiltDbPerOctave), defaults.tiltDbPerOctave, 0.0, 6.0),
              .peakHold = tree.getProperty (peakHoldProperty, defaults.peakHold) };
 }
 } // namespace
@@ -264,9 +281,13 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         // Shown in a session saved before the Output Meter.
         setOutputMeterShown (state.getProperty (outputMeterShownProperty, true));
         state.removeProperty (outputMeterShownProperty, nullptr);
-        // A session saved before them opens like a new instance.
-        setEditorSize ({ state.getProperty (editorWidthProperty, staple::tokens::layout::windowWidth),
-                         state.getProperty (editorHeightProperty, staple::tokens::layout::windowHeight) });
+        // A session saved before them opens like a new instance; a size that isn't a finite number too,
+        // and one outside the editor's limits opens at the nearer limit.
+        {
+            using namespace staple::tokens::layout;
+            setEditorSize ({ juce::roundToInt (restoredNumber (state.getProperty (editorWidthProperty, windowWidth), windowWidth, minimumWidth, maximumWidth)),
+                             juce::roundToInt (restoredNumber (state.getProperty (editorHeightProperty, windowHeight), windowHeight, minimumHeight, maximumHeight)) });
+        }
         const int percent = state.getProperty (uiScaleProperty, 0);
         uiScale = uiScale::isOffered (percent) ? percent : 0;
         for (const auto& property : { editorWidthProperty, editorHeightProperty, uiScaleProperty })
