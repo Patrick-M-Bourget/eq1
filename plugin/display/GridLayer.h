@@ -49,7 +49,7 @@ void paintLabels (juce::Graphics& g, const std::vector<Label>& labels);
 class CachedLabels
 {
 public:
-    void paint (juce::Graphics& g, const std::vector<Label>& labels);
+    void paint (juce::Graphics& g, juce::Point<float> origin, const std::vector<Label>& labels);
 
 private:
     std::vector<staple::CachedLayer<Label>> layers; // by the label's place in the list

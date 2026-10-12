@@ -100,12 +100,12 @@ void paintDynamicRangeHandle (juce::Graphics& g, const DynamicRangeHandle& dynam
     g.fillPath (triangles);
 }
 
-void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyle& style, juce::Colour bandColour, staple::SoftShadowCache& shadows)
+void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyle& style, juce::Colour bandColour, staple::SoftShadowCache& shadows, juce::Point<float> origin)
 {
     const float r = style.diameter / 2.0f;
     const auto circle = juce::Rectangle<float> (style.diameter, style.diameter).withCentre (centre);
     // The shadow and the glow are stacked translucent circles, with no blur.
-    shadows.draw (g, circle, r, style.shadow);
+    shadows.draw (g, origin, circle, r, style.shadow);
     // The glow, on the selected handles only, is drawn directly: from an image, its faint layers of
     // colour round off past what the screens allow (docs/performance.md, "Paint time").
     if (style.glowAlpha > 0.0f)
@@ -159,7 +159,7 @@ void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)
 }
 } // namespace
 
-void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame, staple::SoftShadowCache& shadows)
+void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame, staple::SoftShadowCache& shadows, juce::Point<float> origin)
 {
     for (const auto& dynamicRangeHandle : dynamicRangeHandles (geometry, frame))
         paintDynamicRangeHandle (g, dynamicRangeHandle, bandColour (dynamicRangeHandle.slot));
@@ -175,7 +175,7 @@ void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const Dis
                                           .dragged = frame.dragging && selected,
                                           .globalBypass = frame.globalBypass });
         const auto centre = geometry.handleOf (band);
-        paintHandle (g, centre, style, bandColour (slot), shadows);
+        paintHandle (g, centre, style, bandColour (slot), shadows, origin);
         if (slot == frame.soloedSlot)
             paintSoloCue (g, centre, style.diameter);
     };

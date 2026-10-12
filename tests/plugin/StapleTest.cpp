@@ -216,12 +216,49 @@ TEST_CASE ("A cached layer and a cached soft shadow draw as their drawing does, 
     staple::CachedLayer<int> layer;
     staple::SoftShadowCache shadows;
     const auto cached = [&] (juce::Graphics& g) {
-        layer.draw (g, { 10.0f, 25.0f, 70.0f, 25.0f }, 0, juce::Image::ARGB, text);
-        shadows.draw (g, handle, 11.0f, staple::tokens::shadow::selectedHandle);
-        shadows.draw (g, handle.expanded (1.0f), 12.0f, glow);
+        layer.draw (g, {}, { 10.0f, 25.0f, 70.0f, 25.0f }, 0, juce::Image::ARGB, text);
+        shadows.draw (g, {}, handle, 11.0f, staple::tokens::shadow::selectedHandle);
+        shadows.draw (g, {}, handle.expanded (1.0f), 12.0f, glow);
     };
     CHECK (largestColourDifference (direct, frame (cached)) <= 2);
     // Drawn again, from the images.
+    CHECK (largestColourDifference (direct, frame (cached)) <= 2);
+}
+
+// An image is drawn back pixel for pixel only where its drawing starts on a whole device pixel. The EQ
+// display starts 78 px down the window: at 75% or 125% on a 1x screen that is half a device pixel, where
+// an image would be drawn back resampled, softer. There the layers draw directly, as sharp as ever.
+TEST_CASE ("Starting half a device pixel in, at 75% and 125% on a 1x screen, a cached layer and a cached soft shadow draw directly")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const float scale = GENERATE (0.75f, 1.25f);
+    INFO ("scale " << scale);
+    const juce::Point<float> origin { 0.0f, 78.0f }; // where the drawing starts in the window
+    const auto text = [&] (juce::Graphics& g) {
+        g.setFont (staple::font (staple::tokens::size::fs2));
+        g.setColour (staple::tokens::colour::text2);
+        g.drawText ("20k", juce::Rectangle<float> (20.0f, 30.0f, 48.0f, 14.0f), juce::Justification::centred, false);
+    };
+    const auto handle = juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ 50.0f, 20.0f });
+    const auto frame = [&] (auto&& draw) {
+        return harness::paintImage (juce::roundToInt (100 * scale), juce::roundToInt (160 * scale), [&] (juce::Graphics& g) {
+            g.fillAll (juce::Colour (0xffc08020));
+            g.addTransform (juce::AffineTransform::translation (origin).scaled (scale));
+            draw (g);
+        }, juce::NativeImageType());
+    };
+
+    const auto direct = frame ([&] (juce::Graphics& g) {
+        text (g);
+        staple::drawSoftShadow (g, handle, 8.0f, staple::tokens::shadow::handle);
+    });
+    staple::CachedLayer<int> layer;
+    staple::SoftShadowCache shadows;
+    const auto cached = [&] (juce::Graphics& g) {
+        layer.draw (g, origin, { 10.0f, 25.0f, 70.0f, 25.0f }, 0, juce::Image::ARGB, text);
+        shadows.draw (g, origin, handle, 8.0f, staple::tokens::shadow::handle);
+    };
+    CHECK (largestColourDifference (direct, frame (cached)) <= 2);
     CHECK (largestColourDifference (direct, frame (cached)) <= 2);
 }
 

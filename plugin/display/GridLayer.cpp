@@ -155,11 +155,11 @@ void paintLabels (juce::Graphics& g, const std::vector<Label>& labels)
         paintLabel (g, label);
 }
 
-void CachedLabels::paint (juce::Graphics& g, const std::vector<Label>& labels)
+void CachedLabels::paint (juce::Graphics& g, juce::Point<float> origin, const std::vector<Label>& labels)
 {
     layers.resize (labels.size());
     for (size_t i = 0; i < labels.size(); ++i)
-        layers[i].draw (g, labels[i].area.expanded (labelImageMargin), labels[i], juce::Image::ARGB, [&] (juce::Graphics& into) { paintLabel (into, labels[i]); });
+        layers[i].draw (g, origin, labels[i].area.expanded (labelImageMargin), labels[i], juce::Image::ARGB, [&] (juce::Graphics& into) { paintLabel (into, labels[i]); });
 }
 
 } // namespace eq1::display

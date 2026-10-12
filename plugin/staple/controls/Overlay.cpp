@@ -1,5 +1,6 @@
 #include "Overlay.h"
 
+#include "../CachedLayer.h"
 #include "../Tokens.h"
 
 #include <algorithm>
@@ -56,9 +57,14 @@ void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float corn
     }
 }
 
-void SoftShadowCache::draw (juce::Graphics& g, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow)
+void SoftShadowCache::draw (juce::Graphics& g, juce::Point<float> origin, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow)
 {
     const float scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (! startsOnWholeDevicePixel (origin, scale))
+    {
+        drawSoftShadow (g, shape, cornerRadius, shadow);
+        return;
+    }
     // drawSoftShadow's widest layer reaches half the blur past the offset shape; a pixel more for its
     // anti-aliased edge.
     const auto reach = shape.translated (static_cast<float> (shadow.offset.x), static_cast<float> (shadow.offset.y))

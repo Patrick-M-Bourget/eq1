@@ -635,11 +635,14 @@ void EqDisplay::paint (juce::Graphics& g)
         display::paintGhostCurve (g, shape, *shownGhost, frame.sampleRate, ghostFade);
     // The handles, the labels and the ghost's line, glow and readout go over the edge fades, unfaded.
     display::paintEdgeFades (g, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
-    gridLabelImages.paint (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
-    analyzerLabelImages.paint (g, display::analyzerScaleLabels (shape, analyzer));
+    // Where the display starts in the window, whose top left is on a whole device pixel: the cached
+    // layers draw from their images only where this is one too.
+    const auto origin = getPosition().toFloat();
+    gridLabelImages.paint (g, origin, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
+    analyzerLabelImages.paint (g, origin, display::analyzerScaleLabels (shape, analyzer));
     if (shownGhost)
         display::paintGhostMarker (g, shape, *shownGhost, ghostFade);
-    display::paintHandles (g, shape, frame, handleShadows);
+    display::paintHandles (g, shape, frame, handleShadows, origin);
 }
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)

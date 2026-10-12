@@ -20,12 +20,13 @@ void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float corn
 
 // drawSoftShadow from images, for shadows drawn on every frame (the EQ display's handles): each shadow
 // is drawn once per shape size, corner, shadow, scale and place within a device pixel, and drawn back
-// from its image pixel for pixel. That holds where g's logical pixels start on a whole device pixel (a
-// component's do at a UI Scale and display scale whose product is whole); elsewhere it is resampled.
+// from its image pixel for pixel. origin is where g's logical (0, 0) lies from a whole device pixel (the
+// component's place in the window); where that isn't one at g's scale (startsOnWholeDevicePixel), the
+// shadow is drawn directly.
 class SoftShadowCache
 {
 public:
-    void draw (juce::Graphics& g, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow);
+    void draw (juce::Graphics& g, juce::Point<float> origin, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow);
 
 private:
     struct Entry
