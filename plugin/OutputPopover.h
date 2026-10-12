@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorTick.h"
 #include "KeyboardSlider.h"
 #include "staple/Icons.h"
 #include "staple/controls/Knob.h"
@@ -56,7 +57,9 @@ private:
 // Pan Mode chip at its bottom right, the Output Pan slider with its readout, then Phase Invert, Auto Gain
 // and the Output Meter's toggle. Every control but the Output Meter's is attached to its host
 // parameter; Pan Mode and Output Pan are dimmed and disabled on mono tracks, where they have no effect.
-class OutputPopover final : public staple::Popover
+// While open it follows the processor on the editor's tick (EditorTick); it shows the processor's state
+// again as it opens.
+class OutputPopover final : public staple::Popover, private EditorTick::Client
 {
 public:
     explicit OutputPopover (PluginProcessor& processor);
@@ -78,6 +81,7 @@ private:
     // Follows the processor: the track between mono and stereo, and whether the Output Meter is
     // shown, which a restored session changes too.
     void followProcessor();
+    void tick (double seconds) override;
     juce::Rectangle<int> panLabelsArea() const;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -93,7 +97,6 @@ private:
 
     std::unique_ptr<SliderAttachment> outputGainAttachment, outputPanAttachment;
     std::unique_ptr<ButtonAttachment> panModeAttachment, phaseInvertAttachment, autoGainAttachment;
-    juce::TimedCallback follow { [this] { followProcessor(); } };
 };
 
 } // namespace eq1
