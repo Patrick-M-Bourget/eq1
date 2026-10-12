@@ -366,29 +366,25 @@ void EqDisplay::tick (double seconds)
     // (a held handle's Solo, the Hover Card's rest and hide) or the message's end.
     wantsFrames = analyzing || fading || liveGainsMoved || heldSlot != 0 || restingSlot != 0 || card.shownSlot() != 0 || allInUseMessageUntil != 0;
 
-    if (analyzing)
+    // The handles move, and their values are read out, only when the Bands or the range shown change:
+    // an Analyzer frame, a fade or a Live Gain moves only what is painted.
+    if (! same (latest, shown) || range != shownRangeDb)
     {
-        // The spectra move every frame.
         shown = latest;
         shownRangeDb = range;
-        placeHandles();
+        // A Band deleted from elsewhere is no longer selected.
+        auto stillInUse = selected;
+        std::erase_if (stillInUse, [this] (int slot) { return ! shown.bands[static_cast<size_t> (slot - 1)].inUse; });
+        if (stillInUse != selected)
+            select (stillInUse); // places the handles
+        else
+            placeHandles();
         repaint();
-        return;
     }
-    if (fading)
+    else if (analyzing || fading || liveGainsMoved || messageExpired)
+    {
         repaint();
-    if (same (latest, shown) && range == shownRangeDb && ! messageExpired && ! liveGainsMoved)
-        return;
-    shown = latest;
-    shownRangeDb = range;
-
-    // A Band deleted from elsewhere is no longer selected.
-    auto stillInUse = selected;
-    std::erase_if (stillInUse, [this] (int slot) { return ! shown.bands[static_cast<size_t> (slot - 1)].inUse; });
-    if (stillInUse != selected)
-        select (stillInUse);
-    placeHandles();
-    repaint();
+    }
 }
 
 bool EqDisplay::isGlobalBypassOn() const
