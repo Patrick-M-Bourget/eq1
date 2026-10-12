@@ -127,6 +127,18 @@ inline std::vector<RenderScene> renderScenes()
         auto band = dynamicBell();
         band.detectionSource = DetectionSource::External;
         scenes.push_back ({ .name = "dynamic-external-sidechain", .settings = oneBand (band), .sidechain = true });
+        // The same Band with no Sidechain connected: its detector has nothing to listen to.
+        scenes.push_back ({ .name = "dynamic-external-no-sidechain", .settings = oneBand (band) });
+    }
+
+    // The Metered Band: a Dynamic Bell moving its Band, and one whose dynamics are idle (Dynamic Range
+    // 0), only metered. The Detection Level readings are rendered with the output.
+    {
+        auto settings = oneBand (dynamicBell());
+        settings.meteredSlot = 1;
+        scenes.push_back ({ .name = "metered-moving-band", .settings = settings });
+        settings.bands[0].dynamicRange = 0.0;
+        scenes.push_back ({ .name = "metered-idle-band", .settings = settings });
     }
 
     scenes.push_back ({ .name = "24-bells", .settings = bells() });
@@ -183,8 +195,17 @@ inline std::vector<RenderScene> renderScenes()
 // one, and quiet in between, so Dynamic Bands move.
 inline float renderBurst (double seconds, float noise) { return std::fmod (seconds, 0.2) < 0.1 ? noise : 0.02f * noise; }
 
-// Renders a scene at a sample rate: interleaved stereo samples, renderSeconds long.
-inline std::vector<float> render (const RenderScene& scene, double sampleRate)
+// What rendering a scene produces: the output and what the Engine reported while rendering it.
+struct Render
+{
+    std::vector<float> samples;          // interleaved stereo, renderSeconds long
+    std::vector<double> detectionLevels; // the Metered Band's Detection Level, read after each block (levelFloorDb without one)
+
+    bool operator== (const Render&) const = default;
+};
+
+// Renders a scene at a sample rate.
+inline Render render (const RenderScene& scene, double sampleRate)
 {
     const auto length = static_cast<long> (renderSeconds * sampleRate);
     const auto changeAt = static_cast<long> (renderChangeSeconds * sampleRate);
@@ -193,7 +214,8 @@ inline std::vector<float> render (const RenderScene& scene, double sampleRate)
     engine.setSettings (scene.settings);
 
     Noise mainNoise (1), sidechainNoise (2);
-    std::vector<float> out;
+    Render render;
+    auto& out = render.samples;
     out.reserve (static_cast<size_t> (length) * renderChannels);
     std::array<std::vector<float>, renderChannels> main, sidechain;
     std::array<float*, renderChannels> mainChannels {};
@@ -227,11 +249,12 @@ inline std::vector<float> render (const RenderScene& scene, double sampleRate)
         }
         const ConstAudioBlock sidechainBlock { sidechainChannels.data(), renderChannels, numSamples };
         engine.process ({ mainChannels.data(), renderChannels, numSamples }, scene.sidechain ? &sidechainBlock : nullptr);
+        render.detectionLevels.push_back (engine.readDetectionLevel());
         for (int i = 0; i < numSamples; ++i)
             for (int c = 0; c < renderChannels; ++c)
                 out.push_back (main[c][i]);
     }
-    return out;
+    return render;
 }
 
 } // namespace eq1::test

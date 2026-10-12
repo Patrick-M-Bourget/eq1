@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <string>
 
@@ -52,6 +53,26 @@ TEST_CASE ("Render scenes cover Dynamic Bands with each Detection Range, Thresho
     CHECK (someScene ([] (const test::RenderScene& s) { return s.sidechain; }));
 }
 
+TEST_CASE ("Render scenes meter a moving Band and an idle one, and hear an External Band with no Sidechain", "[render]")
+{
+    // The Metered Band's detector, as the Detection Level shows it: one moving its Band, one only metered.
+    const auto meteredBand = [] (const test::RenderScene& s) -> const BandSettings* {
+        return s.settings.meteredSlot != 0 ? &s.settings.bands[static_cast<size_t> (s.settings.meteredSlot - 1)] : nullptr;
+    };
+    CHECK (someScene ([&] (const test::RenderScene& s) {
+        const auto* band = meteredBand (s);
+        return band != nullptr && band->inUse && isDynamic (*band) && ! band->dynamicsBypass;
+    }));
+    CHECK (someScene ([&] (const test::RenderScene& s) {
+        const auto* band = meteredBand (s);
+        return band != nullptr && band->inUse && hasDynamics (band->shape) && ! isDynamic (*band);
+    }));
+    // A detector with nothing to listen to.
+    CHECK (someScene ([] (const test::RenderScene& s) {
+        return ! s.sidechain && isDynamic (s.settings.bands[0]) && s.settings.bands[0].detectionSource == DetectionSource::External;
+    }));
+}
+
 TEST_CASE ("Render scenes cover a glide, a structure crossfade, Solo, Detection Audition, Global Bypass and the Output", "[render]")
 {
     // A change of Frequency or Gain glides; a change of Shape crossfades between structures.
@@ -82,13 +103,22 @@ TEST_CASE ("Render scene names are distinct file names, and the block size isn't
     CHECK (test::renderSampleRates == std::array { 44100.0, 96000.0, 192000.0 });
 }
 
-TEST_CASE ("A render scene renders the same samples twice, and not silence", "[render]")
+TEST_CASE ("A render scene renders the same samples and Detection Level readings twice, and not silence", "[render]")
 {
+    const auto blocks = static_cast<size_t> (std::ceil (test::renderSeconds * 44100.0 / test::renderBlockSize));
     for (const auto& scene : test::renderScenes())
     {
+        CAPTURE (scene.name);
         const auto first = test::render (scene, 44100.0);
-        REQUIRE (first.size() == static_cast<size_t> (test::renderSeconds * 44100.0) * test::renderChannels);
-        CHECK (*std::max_element (first.begin(), first.end()) > 0.1f);
+        REQUIRE (first.samples.size() == static_cast<size_t> (test::renderSeconds * 44100.0) * test::renderChannels);
+        CHECK (*std::max_element (first.samples.begin(), first.samples.end()) > 0.1f);
+        // One reading per block: above the floor on a Metered Band's loud bursts, the floor without one.
+        REQUIRE (first.detectionLevels.size() == blocks);
+        const double loudest = *std::max_element (first.detectionLevels.begin(), first.detectionLevels.end());
+        if (scene.settings.meteredSlot != 0)
+            CHECK (loudest > -30.0);
+        else
+            CHECK (loudest == levelFloorDb);
         CHECK (test::render (scene, 44100.0) == first);
     }
 }
