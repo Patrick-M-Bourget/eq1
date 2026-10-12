@@ -26,6 +26,19 @@ The test is tagged `[.paint]`, hidden from the normal run so its timing never fl
 
 Measured 2026-10-10. On a machine busy with other builds the median reached 125 to 160 ms at a load average above 80: the ceiling allows for some load, but not that much.
 
+## Footprint
+
+What ships, measured. `scripts/check.sh size` prints these reports; the Engine heap comes from a test in the normal run.
+
+**Engine heap.** `tests/engine/FootprintTest.cpp` (tagged `[footprint]`, in the normal test run) constructs one `Engine`, prepares it stereo, and reads from `eq1::test::AllocationGuard` what the heap holds: the bytes the allocator gave out, less what was freed meanwhile, in the allocator's own block sizes (`malloc_size`, `_msize`). It fails above its ceilings, `heapCeilingBytes48k` and `heapCeilingBytes192k`, set about 5% above the figures measured here; a change that shrinks the Engine lowers them (#177).
+
+| Sample rate | Heap per stereo Engine | Ceiling |
+| --- | --- | --- |
+| 48 kHz | 1,377,632 bytes | 1,450,000 |
+| 192 kHz | 2,065,760 bytes | 2,170,000 |
+
+Measured 2026-10-11 on an Apple M3 (`perf-integration`, `749fc3a`).
+
 ## Subnormal numbers
 
 `Engine::process()` flushes subnormal numbers to zero for its own duration (`engine/src/NoSubnormals.h`), whatever the host's floating-point mode, and restores that mode afterwards. Without it, a filter ringing down after the input stops outputs subnormal floats for seconds, and its double-precision state passes through the subnormal range after that.
