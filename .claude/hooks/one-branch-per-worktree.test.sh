@@ -29,6 +29,16 @@ expect() {
     fi
 }
 
+# says <text> <session dir> <command>: the hook blocks it and its message contains text.
+says() {
+    local text=$1 cwd=$2 command=$3 message
+    message=$(jq -n --arg c "$command" --arg d "$cwd" '{tool_input: {command: $c}, cwd: $d}' | "$hook" 2>&1 > /dev/null)
+    if ! grep -qF -- "$text" <<< "$message"; then
+        echo "FAIL: expected a block saying '$text': (in ${cwd#"$tmp"/}) $command" >&2
+        failures=$((failures + 1))
+    fi
+}
+
 expect block "$main" "git checkout -b topic origin/main"
 expect block "$main" "git switch topic"
 expect block "$main" "gh pr checkout 12"
@@ -45,6 +55,9 @@ expect allow "$main" "cd $linked && git checkout -q -b topic origin/main"
 expect allow "$main" "cd $linked && git checkout -q --detach origin/main; cd $main && git pull -q --ff-only"
 expect allow "$main" "git -C $linked switch -q --detach origin/main && git -C $main branch -D topic"
 expect allow "$main" "cd ../linked && git switch topic"
+says "Write tool" "$main" "cat > notes.md <<'EOF'
+Then git checkout topic.
+EOF"
 
 if [ "$failures" = 0 ]; then
     echo "The worktree hook blocks branch changes in the main checkout only"
