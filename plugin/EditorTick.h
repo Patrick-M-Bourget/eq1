@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <atomic>
+
 namespace eq1
 {
 
@@ -11,11 +13,12 @@ namespace eq1
 // Client, rather than on a timer of its own, and repaints only what changed. It runs at activeHz
 // while anything animates or meters (a Client says it is active, or a Tween is easing) and at idleHz
 // otherwise. A parameter change, from an edit, Host Automation or a restored session, wakes it to
-// activeHz at once: on the message thread the timer is restarted there and then; from another thread
-// (the audio thread's automation) the change is only flagged and posted, as JUCE's ParameterAttachment
-// posts its own, so nothing is drawn or allocated there. The Tweens (staple/controls/Tween.h) keep
-// their own frames: they belong to the Staple kit, which has no editor, and run only while easing.
-class EditorTick final : private juce::Timer, private juce::AsyncUpdater, private juce::AudioProcessorListener
+// activeHz: on the message thread at once, the timer restarted there and then. From another thread
+// (the audio thread's automation) the change only sets a lock-free flag, with no message, lock or
+// allocation; the next tick, within one idle interval, clears it, shows the change and comes again at
+// activeHz. The Tweens (staple/controls/Tween.h) keep their own frames: they belong to the Staple
+// kit, which has no editor, and run only while easing.
+class EditorTick final : private juce::Timer, private juce::AudioProcessorListener
 {
 public:
     static constexpr int activeHz = 60, idleHz = 10;
@@ -42,7 +45,6 @@ public:
 
 private:
     void timerCallback() override;
-    void handleAsyncUpdate() override { wake(); }
     void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override;
     void audioProcessorChanged (juce::AudioProcessor*, const juce::AudioProcessorListener::ChangeDetails&) override {}
     void runAt (int hz);
@@ -51,6 +53,8 @@ private:
     juce::ListenerList<Client> clients;
     int rate = 0, ticks = 0;
     bool woken = false;    // a parameter changed since the last tick
+    std::atomic<bool> changedOffThread { false }; // what another thread's change sets; the tick clears it
+    static_assert (std::atomic<bool>::is_always_lock_free);
     double lastTickMs = 0.0; // 0 before the first
 };
 
