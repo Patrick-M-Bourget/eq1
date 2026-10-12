@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include <cmath>
 
@@ -22,9 +23,8 @@ std::vector<float> measured (double sampleRate, const Settings& settings)
 
 TEST_CASE ("The display's response is the Engine's: every Shape, Slope and Q matches what the Engine plays", "[sweep]")
 {
-    const double sampleRate = GENERATE (44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0);
-    const auto shape = GENERATE (Shape::Bell, Shape::LowShelf, Shape::LowCut, Shape::HighShelf, Shape::HighCut, Shape::Notch,
-                                 Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt, Shape::AllPass);
+    const double sampleRate = test::anySampleRate();
+    const auto shape = GENERATE (from_range (test::allShapes));
     const double slope = GENERATE (0.0, 12.0, 48.0);
     const double q = GENERATE (0.3, 4.0);
     const bool brickwall = GENERATE (false, true);

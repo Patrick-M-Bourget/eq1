@@ -2,14 +2,13 @@
 // (docs/performance.md, "CPU budget"). Run by scripts/check.sh cpu, on its own: timings taken while
 // other tests run are meaningless.
 
-#include "eq1/Engine.h"
+#include "../engine/Measure.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <functional>
-#include <random>
 #include <vector>
 
 using namespace eq1;
@@ -25,19 +24,17 @@ constexpr double secondsPerRun = 4.0;
 // Threshold kind, so every Band's filter is redesigned as its Live Gain moves.
 Settings dynamicBands()
 {
-    Settings settings;
-    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
-        settings.bands[slot] = { .inUse = true,
-                                 .shape = Shape::Bell,
-                                 .frequency = 30.0 * std::pow (1.33, static_cast<double> (slot)),
-                                 .gain = 3.0,
-                                 .q = 1.0,
-                                 .detectionRange = slot % 2 == 0 ? DetectionRange::Band : DetectionRange::Free,
-                                 .detectionLow = 100.0,
-                                 .detectionHigh = 5000.0,
-                                 .dynamicRange = slot % 2 == 0 ? -12.0 : 6.0,
-                                 .threshold = -30.0,
-                                 .thresholdAuto = slot % 3 == 0 };
+    auto settings = test::spreadBands ([] (size_t slot) {
+        return BandSettings { .shape = Shape::Bell,
+                              .gain = 3.0,
+                              .q = 1.0,
+                              .detectionRange = slot % 2 == 0 ? DetectionRange::Band : DetectionRange::Free,
+                              .detectionLow = 100.0,
+                              .detectionHigh = 5000.0,
+                              .dynamicRange = slot % 2 == 0 ? -12.0 : 6.0,
+                              .threshold = -30.0,
+                              .thresholdAuto = slot % 3 == 0 };
+    });
     settings.meteredSlot = 1;
     return settings;
 }
@@ -52,8 +49,7 @@ float bursts (double seconds, float noise) { return std::fmod (seconds, 0.2) < 0
 double loadPercent (double sampleRate, const Signal& signal, double startSeconds = 0.0)
 {
     std::vector<double> loads;
-    std::mt19937 random (1);
-    std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
+    test::Noise noise (1);
     std::vector<float> left (blockSize), right (blockSize);
     float* main[] = { left.data(), right.data() };
     for (int run = 0; run < runs; ++run)
@@ -69,8 +65,8 @@ double loadPercent (double sampleRate, const Signal& signal, double startSeconds
             for (size_t i = 0; i < left.size(); ++i)
             {
                 const double seconds = static_cast<double> (block * blockSize + static_cast<long> (i)) / sampleRate;
-                left[i] = signal (seconds, noise (random));
-                right[i] = signal (seconds, noise (random));
+                left[i] = signal (seconds, noise());
+                right[i] = signal (seconds, noise());
             }
             const auto start = std::chrono::steady_clock::now();
             engine.process ({ main, 2, blockSize });

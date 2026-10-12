@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 
 #include <cmath>
 #include <random>
@@ -114,8 +115,7 @@ TEST_CASE ("A Mid or Side Band processes only its part of the signal and leaves 
 
 TEST_CASE ("On a mono track, a Side Band has no effect and every other Stereo Placement processes the signal")
 {
-    const auto placement = GENERATE (StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right, StereoPlacement::Mid,
-                                     StereoPlacement::Side);
+    const auto placement = GENERATE (from_range (test::allPlacements));
     CAPTURE (static_cast<int> (placement));
     const auto input = noise (3);
     std::vector<std::vector<float>> signal { input };
