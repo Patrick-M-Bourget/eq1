@@ -221,11 +221,27 @@ def _analog_db(sections, f, frequency):
 RESONANT_SHELF_Q = 2.0  # above this Q, a shelf section's extra resonance goes into a second biquad
 SPLIT_IN = 2.5  # the split eases in from Q 2 to this Q
 SPLIT_FULL, SPLIT_NONE = 0.8, 1.1  # zeros' natural frequency, as a share of Nyquist, where the split fades out
+RESONANCE_MATCH = 0.97  # where a sharp zeros' extra resonance is matched once it reaches Nyquist, as a share of Nyquist
+SHARP_FROM, SHARP_TO = 4.0, 16.0  # zeros' Q over which the match point's slide grows in
 
 
 def _smoothstep(x):
     x = min(max(x, 0.0), 1.0)
     return x * x * (3 - 2 * x)
+
+
+def _resonance_match(natural_hz, zeros_q, fs):
+    """Where the zeros' extra resonance is matched (#195): at its natural frequency, sliding (in log
+    frequency, smoothly) towards RESONANCE_MATCH x Nyquist as the natural frequency goes from SPLIT_FULL
+    to 1 x Nyquist. The slide grows in, smoothly, as the zeros' Q goes from SHARP_FROM to SHARP_TO.
+    Matched right at a sharp resonance near Nyquist, the match point and Nyquist crowd together and the
+    fit swings: up to 26% of the span at Q 40. A broad resonance fits best at its natural frequency."""
+    x = natural_hz / (fs / 2)
+    if x <= SPLIT_FULL:
+        return natural_hz
+    slide = (_smoothstep(math.log(x / SPLIT_FULL) / math.log(1 / SPLIT_FULL))
+             * _smoothstep(math.log(zeros_q / SHARP_FROM) / math.log(SHARP_TO / SHARP_FROM)))
+    return natural_hz ** (1 - slide) * (RESONANCE_MATCH * fs / 2) ** slide
 
 
 def _resonant_split(a: Analog, frequency, fs, q, pairs):
@@ -234,15 +250,17 @@ def _resonant_split(a: Analog, frequency, fs, q, pairs):
     resonance, (zeros at their Q) / (zeros at that Q), designed as its inverse and inverted back. The
     split eases in from Q 2 to SPLIT_IN and fades out, geometrically in the zeros' Q, as the zeros'
     natural frequency goes from SPLIT_FULL to SPLIT_NONE x Nyquist, where the inverse's poles would be
-    held; both fades are smoothsteps, so the coefficients' path has no corner. Unsplit, the second is its
-    matched poles over equal zeros: exactly the identity, and the limit of the split."""
+    held; both fades are smoothsteps, so the coefficients' path has no corner. The resonance is matched
+    at _resonance_match. Unsplit, the second is its matched poles over equal zeros: exactly the identity,
+    and the limit of the split."""
     natural = math.sqrt(a.n0 / a.n2)
     zeros_q = math.sqrt(a.n0 * a.n2) / a.n1
     x = natural * frequency / (fs / 2)
     t = math.log(SPLIT_NONE / x) / math.log(SPLIT_NONE / SPLIT_FULL)
     t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
     split_q = zeros_q * (RESONANT_SHELF_Q / q) ** (t / pairs)
-    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs)
+    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs,
+                              _resonance_match(frequency * natural, zeros_q, fs))
     if split_q >= zeros_q:
         resonance.b0, resonance.b1, resonance.b2 = 1, resonance.a1, resonance.a2
         return [match_section(a, frequency, fs), resonance]

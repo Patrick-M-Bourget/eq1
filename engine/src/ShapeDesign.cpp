@@ -82,6 +82,22 @@ constexpr double splitFull = 0.8, splitNone = 1.1; // the zeros' natural frequen
 // Both fades are smoothsteps, so the split eases in and out without a corner in the coefficients'
 // path: a corner sounds as one in a section with large coefficients.
 
+// Where the zeros' extra resonance is matched (#195): at its natural frequency, sliding (in log
+// frequency, smoothly) towards 0.97 x Nyquist as the natural frequency goes from 0.8 to 1 x Nyquist.
+// The slide grows in, smoothly, as the zeros' Q goes from 4 to 16. Matched right at a sharp resonance
+// near Nyquist, the match point and Nyquist crowd together and the fit swings: up to 26% of the span at
+// Q 40. A broad resonance fits best at its natural frequency.
+constexpr double resonanceMatch = 0.97, sharpFrom = 4.0, sharpTo = 16.0;
+double resonanceMatchFrequency (double natural, double zerosQ, double sampleRate)
+{
+    const double atNyquist = natural / (sampleRate / 2.0);
+    if (atNyquist <= splitFull)
+        return natural;
+    const double slide = smoothstep (std::log (atNyquist / splitFull) / std::log (1.0 / splitFull))
+                         * smoothstep (std::log (zerosQ / sharpFrom) / std::log (sharpTo / sharpFrom));
+    return std::pow (natural, 1.0 - slide) * std::pow (resonanceMatch * sampleRate / 2.0, slide);
+}
+
 // Adds a shelf section, designed with its poles at or below Frequency, as matched biquads, inverted
 // when invert is set. Of a split's two biquads, the one with the sharp zeros comes first and the one
 // with the sharp poles second, so what a moving resonance stirs up near Nyquist isn't amplified by
@@ -105,7 +121,10 @@ void addShelfSection (Cascade& cascade, const AnalogSection& a, const ShapeParam
     const double splitQ = zerosQ * std::pow (resonantShelfQ / p.q, split / sections);
 
     // The zeros' extra resonance, designed as its inverse: sharp poles over the zeros at splitQ.
-    auto resonance = matchSection ({ 1.0, 1.0 / splitQ, 1.0, 1.0, 1.0 / zerosQ, 1.0 }, p.frequency * natural, sampleRate);
+    auto resonance = matchSection ({ 1.0, 1.0 / splitQ, 1.0, 1.0, 1.0 / zerosQ, 1.0 },
+                                   p.frequency * natural,
+                                   sampleRate,
+                                   resonanceMatchFrequency (p.frequency * natural, zerosQ, sampleRate));
     BiquadCoefficients poles; // the section's own poles
     if (splitQ < zerosQ)
     {
