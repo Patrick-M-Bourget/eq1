@@ -21,9 +21,9 @@ The same run fails if the 24 Dynamic Bells on silence (timed after 10 s of nothi
 
 ## Null check
 
-`scripts/check.sh null <ref>` shows what a change did to the Engine's output, sample for sample, against any git ref (`origin/main` for a PR). It builds `<ref>`'s render tool (`tests/render/RenderTool.cpp`, built with the tests and linked against the Engine only) in a temporary worktree under `build/null`, with the same compiler and flags as this tree and without the Plugin Shell, renders the render scenes through both Engines, and prints each scene's worst sample deviation in dBFS at each sample rate, or `exact` when the two renders are bit-identical. It fails above −120 dBFS, when a scene's two renders differ in length, or when `<ref>` has a scene this tree hasn't; a scene only this tree has is `new` and passes. A change that only skips or caches work is held to `exact` by review (ADR 0008). The worktree and its build are removed on exit; the renders stay in `build/null/current` and `build/null/ref`.
+`scripts/check.sh null <ref>` shows what a change did to the Engine's output, sample for sample, against any git ref (`origin/main` for a PR). It builds `<ref>`'s render tool (`tests/render/RenderTool.cpp`, built with the tests and linked against the Engine only) in a temporary worktree under `build/null`, with the same compiler and flags as this tree and without the Plugin Shell, renders the render scenes through both Engines, and prints each scene's worst sample deviation in dBFS at each sample rate, or `exact` when the two renders are bit-identical. A scene with a Metered Band also renders its Detection Level readings (one per block, read as the editor reads them) and prints their worst deviation in dB on a line of its own, so a change to the detector shows in what the meter reports, not only in the output. It fails above −120 dBFS, when a scene's two renders differ in length, or when `<ref>` has a scene this tree hasn't; a scene only this tree has is `new` and passes. A change that only skips or caches work is held to `exact` by review (ADR 0008). The worktree and its build are removed on exit; the renders stay in `build/null/current` and `build/null/ref`.
 
-The render scenes (`tests/render/RenderScenes.h`) are data the tool and the comparison share, so a scene added there is rendered and compared on both sides. Each is stereo, one second of full-scale noise bursts (100 ms loud, 100 ms at −34 dB, seeded, so every run renders the same input) through 97-sample blocks, not a multiple of the Engine's 16-sample run, at 44.1, 96 and 192 kHz: one Band of every Shape, Low Cut and High Cut with Brickwall too; a Bell in every Stereo Placement; a Dynamic Bell with the Band Detection Range and Auto Threshold, with the Free Detection Range and a manual Threshold, and with the Sidechain as Detection Source (fed bursts offset from the main input's); 24 Bells and the CPU budget's 24 Dynamic Bells; a glide of Frequency and Gain, a crossfade from a Bell to a Low Cut, Solo, Detection Audition and Global Bypass switched on a quarter of a second in; Output Gain with Pan and Phase Invert, Pan in Mid/Side, Auto Gain and Gain Scale. `tests/engine/RenderScenesTest.cpp` keeps the list covering all of this and every render repeatable.
+The render scenes (`tests/render/RenderScenes.h`) are data the tool and the comparison share, so a scene added there is rendered and compared on both sides. Each is stereo, one second of full-scale noise bursts (100 ms loud, 100 ms at −34 dB, seeded, so every run renders the same input) through 97-sample blocks, not a multiple of the Engine's 16-sample run, at 44.1, 96 and 192 kHz: one Band of every Shape, Low Cut and High Cut with Brickwall too; a Bell in every Stereo Placement; a Dynamic Bell with the Band Detection Range and Auto Threshold, with the Free Detection Range and a manual Threshold, with the Sidechain as Detection Source (fed bursts offset from the main input's) and with the Sidechain as Detection Source but none connected, from the start and switched to mid-movement; a Metered Band moving and one idle (Dynamic Range 0), only metered; 24 Bells and the CPU budget's 24 Dynamic Bells; a glide of Frequency and Gain, a crossfade from a Bell to a Low Cut, Solo, Detection Audition and Global Bypass switched on a quarter of a second in; Output Gain with Pan and Phase Invert, Pan in Mid/Side, Auto Gain and Gain Scale. `tests/engine/RenderScenesTest.cpp` keeps the list covering all of this and every render repeatable.
 
 ## Paint time
 
@@ -49,51 +49,52 @@ Measured 2026-10-12, three runs each, back to back; the whole editor's busy fram
 
 ## Footprint
 
-`scripts/check.sh size` measures what ships. It builds the shipping configuration (Release, `EQ1_LTO=ON`, Universal) in `build-size` and prints three reports; local only, CI doesn't run it. On Windows it prints the Engine heap only.
+`scripts/check.sh size` measures what ships. It builds the shipping configuration (Release, `EQ1_LTO=ON`, `EQ1_STRIP=ON`, Universal) in `build-size` and prints four reports; local only, CI doesn't run it. On Windows it prints the Engine heap only.
 
-**Binary size.** Each format's binary per architecture, unstripped and as `strip -x` leaves it, and the universal file as built. Measured 2026-10-11 on `perf-integration` (`749fc3a`), Apple clang 17:
+**The shipping build.** Every format's binary is linked with `-dead_strip` (`/OPT:REF /OPT:ICF` on Windows), and the JUCE codecs eq1 never uses (FLAC, Ogg Vorbis, Opus, MP3, Windows Media, WebP) are compiled out (`plugin/CMakeLists.txt`). With `EQ1_STRIP` (on by default; `scripts/check.sh` configures its test build with it off, like `EQ1_LTO`) the build compiles with debug information, writes it to a `.dSYM` beside each bundle (`eq1.vst3.dSYM` next to `eq1.vst3`, about 140 MB each), strips the binary of its local symbols and signs it ad hoc again. A crash log is symbolicated with `atos -o eq1.vst3.dSYM/Contents/Resources/DWARF/eq1 -arch arm64 -l <load address> <address>`; `dwarfdump --uuid` on the binary and the `.dSYM` agree. The report's "Debug symbols" step checks that for every format and architecture, and that the entry function resolves to a source line; it fails otherwise. Archiving the `.dSYM`s and the release signature are #16's.
 
-| Format | arm64 | arm64 stripped | x86_64 | x86_64 stripped | Universal |
+**Binary size.** Each format's binary per architecture, before (`perf-integration` `cbff7b7`: no dead-stripping, every codec in, unstripped) and as it ships now, and the universal file. Apple clang 17, 2026-10-12:
+
+| Format | arm64 before | arm64 now | x86_64 before | x86_64 now | Universal now |
 | --- | --- | --- | --- | --- | --- |
-| VST3 | 8,374,080 | 6,663,360 | 9,100,272 | 7,395,232 | 17,499,968 |
-| AU | 8,392,224 | 6,715,408 | 9,002,808 | 7,344,544 | 17,403,424 |
-| AAX | 8,400,496 | 6,698,624 | 9,000,120 | 7,317,072 | 17,411,696 |
-| CLAP | 8,395,728 | 6,664,496 | 8,987,216 | 7,275,344 | 17,390,544 |
-| Standalone | 8,279,728 | 6,439,208 | 8,856,640 | 7,037,640 | 17,143,472 |
+| VST3 | 8,394,976 | 5,634,000 (−32.9%) | 9,125,424 | 6,110,048 (−33.0%) | 11,761,616 |
+| AU | 8,413,264 | 5,652,496 (−32.8%) | 9,031,848 | 6,136,416 (−32.1%) | 11,812,880 |
+| AAX | 8,421,360 | 5,635,456 (−33.1%) | 9,029,000 | 6,108,368 (−32.3%) | 11,763,072 |
+| CLAP | 8,416,672 | 5,602,720 (−33.4%) | 9,020,296 | 6,063,392 (−32.8%) | 11,697,568 |
+| Standalone | 8,300,544 | 5,967,120 (−28.1%) | 8,881,408 | 6,436,336 (−27.5%) | 12,422,416 |
 
-**Code by library.** The VST3's `__text` attributed by `scripts/code-by-library.py`: each symbol is looked up in the normal build's objects (the LTO link's own map attributes everything to one `lto.o`), and one no object or several define (template instances, LTO-renamed functions) goes by the namespace in its name. Same build; the arm64 `__text` is 5,078,020 bytes, the x86_64 one 5,752,032:
+Of the arm64 VST3's 2.76 MB saved, `strip -x` alone would have taken 1.71 MB (the "stripped" column `check.sh size` printed before this build stripped itself); the codecs and dead code are the other 1.05 MB, 0.91 MB of it `__text`.
+
+**Code by library.** The VST3's `__text` attributed by `scripts/code-by-library.py`: each symbol of the `.dSYM`'s symbol table (the stripped binary keeps its exports only) is looked up in the normal build's objects (the LTO link's own map attributes everything to one `lto.o`), and one no object or several define (template instances, LTO-renamed functions) goes by the namespace in its name. Same build; the arm64 `__text` is 4,180,180 bytes, the x86_64 one 4,616,160:
 
 | Library | arm64 | x86_64 |
 | --- | --- | --- |
-| juce_gui_basics | 894,248 | 979,168 |
-| eq1 Plugin Shell | 870,604 | 923,904 |
-| juce_graphics | 853,384 | 989,664 |
-| harfbuzz | 670,456 | 746,640 |
-| codec: opus | 455,544 | 486,224 |
-| codec: libwebp | 442,372 | 651,216 |
-| juce_core | 197,804 | 214,288 |
-| juce_audio_plugin_client | 108,088 | 117,648 |
+| juce_gui_basics | 893,092 | 977,840 |
+| eq1 Plugin Shell | 879,864 | 938,016 |
+| juce_graphics | 850,208 | 986,064 |
+| harfbuzz | 668,692 | 744,496 |
+| juce_core | 198,088 | 214,624 |
+| juce_audio_plugin_client | 107,984 | 117,456 |
 | lunasvg | 98,424 | 114,464 |
-| codec: libjpg | 94,200 | 108,256 |
-| static initialisers | 72,660 | 56,160 |
-| eq1 Engine | 43,708 | 62,256 |
-| JUCE templates (by namespace) | 36,040 | 39,216 |
-| juce_data_structures | 35,964 | 36,336 |
-| juce_audio_processors_headless | 35,452 | 45,232 |
+| codec: libjpg | 94,196 | 108,256 |
+| static initialisers | 79,408 | 62,768 |
+| eq1 Engine | 46,276 | 66,240 |
+| juce_data_structures | 35,848 | 36,400 |
+| JUCE templates (by namespace) | 35,844 | 39,040 |
+| juce_audio_processors_headless | 35,460 | 45,264 |
 | juce_audio_processors | 28,836 | 27,552 |
 | codec: zlib | 27,172 | 30,720 |
 | codec: libpng | 24,892 | 28,688 |
-| juce_audio_formats | 22,788 | 28,944 |
-| juce_events | 18,324 | 19,024 |
-| libc++ templates | 16,932 | 17,888 |
+| juce_events | 17,464 | 18,112 |
+| libc++ templates | 16,724 | 17,888 |
+| juce_audio_formats | 12,260 | 14,000 |
 | juce_dsp | 9,656 | 9,504 |
 | juce_audio_basics | 9,236 | 10,496 |
-| other | 5,660 | 3,648 |
-| codec: ogg | 2,760 | 2,704 |
+| other | 7,424 | 5,792 |
 | juce_gui_extra | 2,084 | 1,456 |
 | sheenbidi | 732 | 736 |
 
-The codecs eq1 never decodes (opus, libwebp, libjpg, libpng, zlib, ogg) and lunasvg are about 1.1 MB of the arm64 code; harfbuzz another 0.67 MB.
+What remains of code eq1 never runs: libjpg (94 KB; JUCE has no flag for it, `JUCE_INCLUDE_JPEGLIB_CODE=0` wants an external libjpeg instead), and lunasvg (98 KB), JUCE's SVG parser. libpng and zlib stay on purpose: the screens tests write PNGs. harfbuzz (0.67 MB) shapes every string the editor draws.
 
 **Engine heap.** `tests/engine/FootprintTest.cpp` (tagged `[footprint]`, in the normal test run) constructs one `Engine`, prepares it stereo, and reads from `eq1::test::AllocationGuard` what the heap holds: the bytes the allocator gave out, less what was freed meanwhile, in the allocator's own block sizes (`malloc_size`, `_msize`). It fails above its ceilings, `heapCeilingBytes48k` and `heapCeilingBytes192k`, set about 5% above the figures measured here; a change that shrinks the Engine lowers them.
 
@@ -110,10 +111,6 @@ Measured 2026-10-12 on an Apple M3 (`177-buffers-sized-to-need`). Most of it is 
 ## Subnormal numbers
 
 `Engine::process()` flushes subnormal numbers to zero for its own duration (`engine/src/NoSubnormals.h`), whatever the host's floating-point mode, and restores that mode afterwards. Without it, a filter ringing down after the input stops outputs subnormal floats for seconds, and its double-precision state passes through the subnormal range after that.
-
-## Identity sections
-
-A Band's cascade keeps a fixed number of biquads per structure, so glides can interpolate; some of them are exactly the identity: an unsplit resonant shelf's second biquad (`docs/dsp/filter-design.md`, "Resonant shelves"), whose matched poles are cancelled by equal zeros. A section that is exactly the identity (`b0 = 1`, `b1 = a1`, `b2 = a2`, `engine/src/Biquad.h`) at both ends of a run, so at every interpolated position in it, and whose state is clear on every line it runs on, is skipped for the piece: its samples and state stay exactly what running it would leave, so the output is bit-identical (`docs/adr/0008-performance-never-costs-sound.md`), and the section count doesn't change. One whose state still holds what it filtered before it became the identity runs until that has drained: the plain identity drains in two samples; cancelled poles ring down at their own rate, and on arm64, where clang fuses the step's multiply-adds, the drain completes only in digital silence, since `a1 * x - a1 * y` fused leaves a rounding residual (about 1e-17) while a signal plays. A Bell at 0 dB is designed as a matched section whose numerator equals its denominator in the analog domain, which the three-point match reproduces only to about 1e-14, so it is not an exact identity and is not skipped. `Engine::sectionsSkipped()` counts the skipped passes, for tests (`tests/engine/IdentitySectionsTest.cpp`).
 
 ## Non-finite input
 

@@ -28,9 +28,10 @@
 #   scripts/check.sh paint      the editor's paint time against its ceiling (docs/performance.md, "Paint time"); local
 #                               only, not in CI; on a Mac busy with other work it measures nothing and exits 3
 #   scripts/check.sh size       the shipping build's footprint (docs/performance.md, "Footprint"): each format's
-#                               binary per architecture, unstripped and stripped; the VST3's code by library; and the
-#                               heap one Engine holds, whose test fails above its ceiling. Not in CI. On Windows, the
-#                               heap only
+#                               binary per architecture, as built and after strip -x; that the .dSYM beside each
+#                               bundle carries the binary's UUIDs and resolves its entry point (fails otherwise);
+#                               the VST3's code by library; and the heap one Engine holds, whose test fails above
+#                               its ceiling. Not in CI. On Windows, the heap only
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
@@ -235,22 +236,24 @@ match_generator() {
 }
 
 # Configures a source tree into a build folder the way CI builds: Release, without link-time
-# optimisation, sharing the dependencies. The main build is build(); the null check configures <ref>'s.
+# optimisation or stripping (its binaries keep their symbols), sharing the dependencies. The main build
+# is build(); the null check configures <ref>'s.
 configure() {
     local source=$1 build=$2
     shift 2
     if [ "$os" = macos ]; then
         match_generator Ninja
         cmake -S "$source" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
-            -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
+            -DEQ1_LTO=OFF -DEQ1_STRIP=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     elif command -v cl > /dev/null; then
         # In an MSVC developer environment (CI sets one up), Ninja compiles every file in parallel.
         match_generator Ninja
-        cmake -S "$source" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
+        cmake -S "$source" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF -DEQ1_STRIP=OFF \
+            "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     else
         # Without one, Visual Studio finds the compiler itself.
         match_generator "Visual Studio"
-        cmake -S "$source" -B "$build" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
+        cmake -S "$source" -B "$build" -A x64 -DEQ1_LTO=OFF -DEQ1_STRIP=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     fi
 }
 
@@ -380,6 +383,20 @@ paint() {
     "$(test_exe eq1_plugin_tests)" "[paint]"
 }
 
+# A sanitizer build compiles the dependencies with its own flags, so it builds them in its own folder,
+# <dependencies>/<sanitizer>: a dependency build folder that builds with two sets of flags (Catch2's,
+# shared by every worktree) leaves the other builds' links failing. The sources already fetched stay
+# shared. A sanitizer stage configures with "${sanitizer_deps[@]}" in place of -DFETCHCONTENT_BASE_DIR.
+sanitizer_deps() {
+    local src name
+    sanitizer_deps=(--no-warn-unused-cli "-DFETCHCONTENT_BASE_DIR=$DEPS/$1")
+    for src in "$DEPS"/*-src; do
+        [ -d "$src" ] || continue
+        name=$(basename "$src" -src | tr '[:lower:]' '[:upper:]')
+        sanitizer_deps+=("-DFETCHCONTENT_SOURCE_DIR_$name=$src")
+    done
+}
+
 # The heap one stereo Engine holds after prepare(), at 48 and 192 kHz, from the [footprint] tests
 # (tests/engine/FootprintTest.cpp), which fail above their ceilings.
 engine_heap() {
@@ -407,7 +424,51 @@ shipping_binary() {
     printf '%s\n' "$BUILD_DIR-size/plugin/eq1_artefacts/Release/$1/$bundle/Contents/MacOS/eq1"
 }
 
-# What ships, measured (docs/performance.md, "Footprint"): a report, not a check, except the heap.
+# The debug information of each shipping bundle is a .dSYM beside it, which must carry the binary's UUID
+# for each architecture and resolve the binary's entry function to a source line (what symbolicating a
+# crash log needs): a plugin's factory (the CLAP's is the init function its exported entry table points
+# at), the Standalone's main. The stripped binary keeps its exported symbols only; the .dSYM keeps them
+# all, at the binary's addresses, so the function's address comes from there.
+shipping_symbols() {
+    step "Debug symbols: the .dSYM beside each bundle has the binary's UUIDs and resolves its entry function"
+    local format arch binary dsym dwarf entry name address resolved
+    for format in VST3 AU AAX CLAP Standalone; do
+        binary=$(shipping_binary "$format")
+        dsym=${binary%/Contents/MacOS/eq1}.dSYM
+        dwarf=$dsym/Contents/Resources/DWARF/eq1
+        if [ ! -f "$dwarf" ]; then
+            echo "$format: no debug symbols at $dsym" >&2
+            return 1
+        fi
+        # Stripping after the link invalidates the linker's ad hoc signature, without which macOS loads no
+        # arm64 code; the build signs the stripped binary again.
+        codesign --verify "$binary" || { echo "$format: the stripped binary's signature is invalid" >&2; return 1; }
+        # The symbol as the symbol table spells it, and as atos prints it (demangled).
+        case "$format" in
+            VST3) entry=_GetPluginFactory name=GetPluginFactory ;;
+            AU) entry=_JuceAUFactory name=JuceAUFactory ;;
+            AAX) entry=_ACFRegisterPlugin name=ACFRegisterPlugin ;;
+            CLAP) entry=__ZN11ClapAdapterL9clap_initEPKc name='ClapAdapter::clap_init(char const*)' ;;
+            Standalone) entry=_main name=main ;;
+        esac
+        for arch in arm64 x86_64; do
+            if [ "$(dwarfdump --uuid --arch="$arch" "$binary" | cut -d' ' -f2)" != "$(dwarfdump --uuid --arch="$arch" "$dwarf" | cut -d' ' -f2)" ]; then
+                echo "$format $arch: the .dSYM's UUID is not the binary's" >&2
+                return 1
+            fi
+            address=0x$(nm -arch "$arch" --defined-only "$dwarf" | awk -v s="$entry" '$3 == s { print $1 }')
+            resolved=$(atos -arch "$arch" -o "$dwarf" "$address")
+            # With the DWARF, atos adds the source line: "GetPluginFactory (in eq1) (juce_VST3_Wrapper.cpp:123)".
+            case "$resolved" in
+                "$name (in eq1) ("*:[0-9]*")") printf '%-11s %-7s %s\n' "$format" "$arch" "$resolved" ;;
+                *) echo "$format $arch: $address resolves to '$resolved', not $name with a source line" >&2; return 1 ;;
+            esac
+        done
+    done
+}
+
+# What ships, measured (docs/performance.md, "Footprint"): a report, not a check, except the heap and the
+# debug symbols.
 # The shipping configuration (Release, EQ1_LTO=ON, Universal) is built in its own folder, BUILD_DIR-size,
 # without the tests. Code is attributed by scripts/code-by-library.py from the normal build's objects, so
 # BUILD_DIR is built first if it isn't. lipo, strip and nm make the binary reports macOS-only.
@@ -425,10 +486,10 @@ size() {
         -DEQ1_LTO=ON -DEQ1_BUILD_TESTS=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
     cmake --build "$BUILD_DIR-size" --config Release --parallel
 
-    step "Binary size (bytes): unstripped, and as strip -x leaves it"
+    step "Binary size (bytes): as built, and as strip -x leaves it (the same once the build strips)"
     local scratch=$BUILD_DIR-size/size-report format arch binary thin
     mkdir -p "$scratch"
-    printf '%-11s %-10s %12s %12s\n' Format Arch Unstripped Stripped
+    printf '%-11s %-10s %12s %12s\n' Format Arch "As built" Stripped
     for format in VST3 AU AAX CLAP Standalone; do
         binary=$(shipping_binary "$format")
         for arch in arm64 x86_64; do
@@ -441,10 +502,14 @@ size() {
         printf '%-11s %-10s %12s\n' "$format" universal "$(stat -f %z "$binary")"
     done
 
+    shipping_symbols
+
+    # The stripped binary keeps its exported symbols only; its .dSYM carries the whole symbol table at the
+    # binary's addresses.
     step "Code by library (bytes of the VST3's __text)"
     for arch in arm64 x86_64; do
         echo "-- $arch"
-        python3 scripts/code-by-library.py "$(shipping_binary VST3)" "$arch" \
+        python3 scripts/code-by-library.py "$(shipping_binary VST3 | sed 's|/Contents/MacOS/eq1$|.dSYM/Contents/Resources/DWARF/eq1|')" "$arch" \
             "$BUILD_DIR/plugin/CMakeFiles/eq1.dir" "$BUILD_DIR/plugin/CMakeFiles/eq1_VST3.dir" \
             "$BUILD_DIR/engine/CMakeFiles/eq1_engine.dir" "$DEPS/clap-juce-extensions-build/libclap_juce_extensions.a"
     done
@@ -461,8 +526,9 @@ tsan() {
     # response grids ([response]) and the sweeps across sample rates and settings ([sweep]) run
     # single-threaded, so they are left to the normal run.
     step "Engine tests under ThreadSanitizer"
+    sanitizer_deps tsan
     cmake -S . -B "$BUILD_DIR-tsan" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_BUILD_PLUGIN=OFF \
-        "-DFETCHCONTENT_BASE_DIR=$DEPS" -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+        "${sanitizer_deps[@]}" -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
     cmake --build "$BUILD_DIR-tsan" --parallel
     TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE 'response|sweep'
 }

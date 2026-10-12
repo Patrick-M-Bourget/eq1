@@ -1,7 +1,8 @@
 #pragma once
 
 // How the null check compares two renders of a scene (docs/performance.md, "Null check"): bit-identical
-// is "exact"; otherwise the worst sample deviation, in dBFS, is held to the quality bar.
+// is "exact"; otherwise the worst sample deviation, in dBFS, is held to the quality bar. The Detection
+// Level readings compare the same way, their deviation in dB read as the quality bar's dBFS.
 
 #include <algorithm>
 #include <cmath>
@@ -24,7 +25,8 @@ struct Comparison
     bool operator== (const Comparison&) const = default;
 };
 
-inline Comparison compare (const std::vector<float>& a, const std::vector<float>& b)
+template <typename Sample>
+Comparison compare (const std::vector<Sample>& a, const std::vector<Sample>& b)
 {
     if (a.size() != b.size())
         return { .exact = false, .sameLength = false, .worstDb = std::numeric_limits<double>::infinity() };

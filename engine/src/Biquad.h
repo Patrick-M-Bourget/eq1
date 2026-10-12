@@ -17,14 +17,6 @@ inline BiquadCoefficients interpolate (const BiquadCoefficients& from, const Biq
     return { mix (from.b0, to.b0), mix (from.b1, to.b1), mix (from.b2, to.b2), mix (from.a1, to.a1), mix (from.a2, to.a2) };
 }
 
-// A section that passes the signal unchanged: the plain identity, or poles cancelled by equal zeros
-// (an unsplit resonant shelf's second biquad, ShapeDesign.cpp). Exactly, coefficient for coefficient:
-// interpolating two such sections gives one at every amount, since each b is worked out as its a is.
-inline bool isIdentity (const BiquadCoefficients& c)
-{
-    return c.b0 == 1.0 && c.b1 == c.a1 && c.b2 == c.a2;
-}
-
 // One step of a biquad in transposed direct form II: x in, with the section's state s1 and s2, in
 // Sample arithmetic. Sample is double for one channel, or Double2 for a Stereo Band's two channels in
 // one step, a lane each. The one place the arithmetic is written: the compiler sees the same
@@ -51,10 +43,6 @@ inline ScalarDouble2 biquadStep (ScalarDouble2 b0, ScalarDouble2 b1, ScalarDoubl
 struct BiquadState
 {
     double s1 = 0.0, s2 = 0.0;
-
-    // Nothing left of what the section filtered: an identity section with a clear state leaves its
-    // input exactly as it is, and its state clear.
-    bool isClear() const { return s1 == 0.0 && s2 == 0.0; }
 
     float process (const BiquadCoefficients& c, float input)
     {

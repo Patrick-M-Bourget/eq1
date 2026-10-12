@@ -45,6 +45,12 @@ constexpr double movementRest = 1.0e-9;
 // A Free Detection Range's limits roll off at this Slope, steep enough to pick out a kick alone.
 constexpr double freeRangeSlope = 24.0;
 
+// A sample's level from the louder detection channel's smoothed power, where a full-scale sine reads
+// 0 dB; the floor keeps silence finite.
+double levelOf (double peakPower) { return powerToDecibels (2.0 * peakPower + 1.0e-30); }
+// What a detector with nothing to listen to hears: the level of no power at all.
+const double nothingToHearDb = levelOf (0.0);
+
 double coefficientFor (double seconds, double sampleRate) { return onePoleCoefficient (seconds * sampleRate); }
 
 double timingScale (double percent) { return std::pow (timingSpread, (std::clamp (percent, 0.0, 100.0) - 50.0) / 50.0); }
@@ -199,16 +205,28 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         return;
 
     const int detectionCount = detectionChannelCount = takeDetectionSignal (input, numChannels, sidechain, sidechainChannels, numSamples);
-    if (detectionCount > 0)
+    // A run is at most maxSubBlock samples, and finishRun() empties the levels at its end.
+    assert (runLevelCount + numSamples <= Band::maxSubBlock);
+    if (detectionCount == 0)
     {
-        rangeFilter.process (detectionChannels.data(), detectionCount, run, position, numSamples);
-        highLimit.process (detectionChannels.data(), detectionCount, run, position, numSamples);
-    }
-    else
         power = {}; // nothing heard: a Sidechain connected again starts afresh
+        // The gain computer hears silence, so the Band returns to its Gain over the run.
+        if (moving)
+        {
+            const auto count = static_cast<size_t> (std::min (numSamples, Band::maxSubBlock - runLevelCount));
+            std::fill_n (runLevels.begin() + runLevelCount, count, nothingToHearDb);
+            runLevelCount += static_cast<int> (count);
+        }
+        return;
+    }
+    rangeFilter.process (detectionChannels.data(), detectionCount, run, position, numSamples);
+    highLimit.process (detectionChannels.data(), detectionCount, run, position, numSamples);
 
-    // The level of each sample: the louder detection channel's power, where a full-scale sine reads 0 dB.
-    double loudest = nothingHeardDb;
+    // The level of each sample: the louder detection channel's power. Metered only, the detector
+    // keeps the piece's loudest power and converts it once at the end: the level is monotonic in
+    // the power, so it is the loudest level, and whatever comes next starts afresh, as if never
+    // metered.
+    double loudest = nothingHeardDb, loudestPower = 0.0;
     for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
     {
         double peakPower = 0.0;
@@ -218,13 +236,13 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
             power[c] += powerCoefficient * (x * x - power[c]);
             peakPower = std::max (peakPower, power[c]);
         }
-        const double level = powerToDecibels (2.0 * peakPower + 1.0e-30);
-        loudest = std::max (loudest, level);
-        // Metered only: whatever comes next starts afresh, as if never metered.
         if (! moving)
+        {
+            loudestPower = std::max (loudestPower, peakPower);
             continue;
-        // A run is at most maxSubBlock samples, and finishRun() empties the levels at its end.
-        assert (runLevelCount < Band::maxSubBlock);
+        }
+        const double level = levelOf (peakPower);
+        loudest = std::max (loudest, level);
         if (runLevelCount < Band::maxSubBlock)
             runLevels[static_cast<size_t> (runLevelCount++)] = level;
         // The mean and variance of every level heard, until a rise time's worth has been: then
@@ -232,14 +250,14 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         if (level > autoThresholdGateDb)
         {
             samplesHeard = std::min (samplesHeard + 1.0, 1.0 / riseCoefficient);
-            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, 1.0 / samplesHeard); };
+            const double meanWeight = 1.0 / samplesHeard;
+            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, meanWeight); };
             averageLevel += weight (level > averageLevel) * (level - averageLevel);
             const double deviation = (level - averageLevel) * (level - averageLevel);
             levelVariance += weight (deviation > levelVariance) * (deviation - levelVariance);
         }
     }
-    if (detectionCount > 0)
-        loudestLevel = loudest;
+    loudestLevel = moving ? loudest : levelOf (loudestPower);
 }
 
 double Dynamics::finishRun()
