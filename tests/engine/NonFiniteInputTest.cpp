@@ -1,4 +1,4 @@
-#include "eq1/Engine.h"
+#include "Measure.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <random>
 #include <vector>
 
 using namespace eq1;
@@ -21,25 +20,17 @@ namespace
 // Range; the first one metered; Auto Gain and Output Pan on.
 Settings everyShapeAndPlacement()
 {
-    constexpr Shape shapes[] = { Shape::Bell,  Shape::LowShelf, Shape::LowCut,    Shape::HighShelf, Shape::HighCut,
-                                 Shape::Notch, Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt,  Shape::AllPass };
-    constexpr StereoPlacement placements[] = { StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right,
-                                               StereoPlacement::Mid, StereoPlacement::Side };
-    Settings settings;
-    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
-    {
-        const Shape shape = shapes[slot % 10];
-        settings.bands[slot] = { .inUse = true,
-                                 .shape = shape,
-                                 .frequency = 30.0 * std::pow (1.3, static_cast<double> (slot)),
-                                 .gain = slot % 2 == 0 ? -6.0 : 6.0,
-                                 .q = 1.5,
-                                 .slope = 24.0,
-                                 .placement = placements[(slot + slot / 10) % 5],
-                                 .dynamicRange = hasDynamics (shape) ? (slot % 2 == 0 ? -9.0 : 9.0) : 0.0,
-                                 .threshold = -30.0,
-                                 .thresholdAuto = slot % 4 < 2 };
-    }
+    auto settings = test::spreadBands ([] (size_t slot) {
+        const Shape shape = test::allShapes[slot % test::allShapes.size()];
+        return BandSettings { .shape = shape,
+                              .gain = slot % 2 == 0 ? -6.0 : 6.0,
+                              .q = 1.5,
+                              .slope = 24.0,
+                              .placement = test::allPlacements[(slot + slot / test::allShapes.size()) % test::allPlacements.size()],
+                              .dynamicRange = hasDynamics (shape) ? (slot % 2 == 0 ? -9.0 : 9.0) : 0.0,
+                              .threshold = -30.0,
+                              .thresholdAuto = slot % 4 < 2 };
+    });
     settings.bands[3].detectionSource = DetectionSource::External;
     settings.bands[18].detectionRange = DetectionRange::Free;
     settings.bands[18].detectionLow = 200.0;
@@ -76,16 +67,15 @@ struct Material
     explicit Material (size_t length)
         : left (length), right (length), sidechainLeft (length), sidechainRight (length)
     {
-        std::mt19937 random (3);
-        std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
+        test::Noise noise (3);
         for (size_t i = 0; i < length; ++i)
         {
             const float level = i / 4800 % 2 == 0 ? 0.05f : 0.5f;
-            left[i] = level * noise (random);
-            right[i] = level * noise (random);
+            left[i] = level * noise();
+            right[i] = level * noise();
             const float sidechainLevel = i / 3360 % 2 == 0 ? 0.5f : 0.02f;
-            sidechainLeft[i] = sidechainLevel * noise (random);
-            sidechainRight[i] = sidechainLevel * noise (random);
+            sidechainLeft[i] = sidechainLevel * noise();
+            sidechainRight[i] = sidechainLevel * noise();
         }
     }
 
