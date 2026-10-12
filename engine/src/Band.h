@@ -5,6 +5,7 @@
 #include "eq1/Settings.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -45,6 +46,10 @@ public:
     // listen to for a while) plays at the filter last designed until the next run; one that saw the
     // start and misses a piece in the middle keeps gliding by position.
     void process (float* const* channels, int numChannels, std::uint64_t run, int position, int numSamples);
+
+    // How many sections' passes over a piece of a run the Band has skipped since prepare(), each one
+    // exactly the identity with nothing in its state (Chain::run). Safe to call from any thread, for tests.
+    std::uint64_t sectionsSkipped() const { return skipped.load (std::memory_order_relaxed); }
 
 private:
     // What a chain is: its filter's structure and the part of the signal it plays on. A Band crossfades
@@ -88,17 +93,23 @@ private:
             void prepare (int numChannels);
         };
 
+        // Whether section s is skipped over the piece: exactly the identity at both ends of the run, so
+        // at every position in it, with every line's state clear. Its samples and state stay as they
+        // are, which is what running it would leave (the plain identity's recursion drains its state
+        // in two samples; one with cancelled poles rings down first, and runs until it has). So
+        // skipping changes no bit of the output (ADR 0008), and the section count stays fixed for glides.
+        bool skips (size_t s, const Lines& lines, const Piece& piece) const;
         // Runs the lines' samples through the cascade, in place: over a gliding run, with the
         // coefficients interpolated once per position, for every line at once. Two lines (a Stereo
-        // Band on a stereo track) run in two lanes.
-        void run (Lines& lines, const Piece& piece);
+        // Band on a stereo track) run in two lanes. Returns how many sections it skipped.
+        int run (Lines& lines, const Piece& piece);
         // Two lines through the cascade together, one per lane of a Double2: the same operations in
         // the same order as one line on its own, so each comes out bit for bit as it would alone.
-        void runLanes (Lines& lines, const Piece& piece);
+        int runLanes (Lines& lines, const Piece& piece);
         // Runs the part of the signal the chain's Stereo Placement selects, in place.
-        void runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
+        int runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
         // On stereo: encodes Mid and Side, runs the Mid (mid) or the Side, and decodes.
-        void runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid);
+        int runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid);
     };
 
     // Once per run, at its start: a waiting crossfade starts, and a glide moves on by the whole run
@@ -110,6 +121,11 @@ private:
     void designNow();
     void crossfadeTo (const Setup& setup);
     bool isSilent() const { return mix.value() == 0.0 && ! mix.isMoving(); }
+    void countSkipped (int sections)
+    {
+        if (sections > 0)
+            skipped.fetch_add (static_cast<std::uint64_t> (sections), std::memory_order_relaxed);
+    }
 
     double sampleRate = 44100.0;
     Smoother logFrequency, gain, logQ;
@@ -118,6 +134,7 @@ private:
     Chain current, previous;
     Chain::Lines lines; // sized at prepare(), for either chain's run
     double dynamicOffset = 0.0, designedOffset = 0.0; // dB
+    std::atomic<std::uint64_t> skipped { 0 };         // sections skipped, for sectionsSkipped()
 
     // The run in progress: the last one whose start the Band saw; whether the coefficients move over
     // it, and from what; where the last piece ended; and the Live Gain at its start and its end, for

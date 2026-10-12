@@ -98,6 +98,12 @@ public:
     // so a block with no edits does no settings work. Safe to call from any thread, for tests.
     std::uint64_t settingsApplied() const;
 
+    // How many sections' passes over a piece of a run the Bands have skipped since prepare(), each one
+    // exactly the identity (an unsplit resonant shelf's second biquad) with nothing in its state, so
+    // skipping it changes no sample (docs/performance.md, "Identity sections"). Safe to call from any
+    // thread, for tests.
+    std::uint64_t sectionsSkipped() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl;

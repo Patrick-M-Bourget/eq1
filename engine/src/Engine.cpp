@@ -417,6 +417,14 @@ std::uint64_t Engine::settingsApplied() const
     return impl->settingsApplications.load (std::memory_order_relaxed);
 }
 
+std::uint64_t Engine::sectionsSkipped() const
+{
+    std::uint64_t total = 0;
+    for (const auto& band : impl->bands)
+        total += band.sectionsSkipped();
+    return total;
+}
+
 int Engine::analysisCapacity() const
 {
     return impl->preEq.capacity();
