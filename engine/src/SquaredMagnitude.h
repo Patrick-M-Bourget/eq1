@@ -15,13 +15,27 @@ struct Phi
 {
     double phi0, phi1, phi2;
 
-    explicit Phi (double w)
+    // At w radians per sample.
+    explicit Phi (double w) : Phi (fromSineSquared (sineSquaredHalf (w))) {}
+
+    // sin^2(w/2), all a table of frequency points needs to hold for fromSineSquared.
+    static double sineSquaredHalf (double w)
     {
         const double s = std::sin (w / 2.0);
-        phi1 = s * s;
-        phi0 = 1.0 - phi1;
-        phi2 = 4.0 * phi0 * phi1;
+        return s * s;
     }
+
+    static Phi fromSineSquared (double sineSquared)
+    {
+        Phi phi;
+        phi.phi1 = sineSquared;
+        phi.phi0 = 1.0 - phi.phi1;
+        phi.phi2 = 4.0 * phi.phi0 * phi.phi1;
+        return phi;
+    }
+
+private:
+    Phi() = default;
 };
 
 struct SquaredMagnitude
