@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <numbers>
 #include <random>
 #include <vector>
@@ -727,6 +728,57 @@ TEST_CASE ("An External Band whose Sidechain drops out for exactly one run start
     REQUIRE (rejoinedWhereItLeftOff.size() == rejoinedLate.size());
     CHECK (std::any_of (rejoinedLate.begin(), rejoinedLate.end(), [] (float x) { return x != 0.0f; }));
     CHECK (rejoinedWhereItLeftOff == rejoinedLate);
+}
+
+TEST_CASE ("An External Band's Detection Range filter that a non-finite Sidechain sample got into recovers when it rejoins a run late")
+{
+    // The Sidechain is silent but for one bad sample in the grid's second run (sample 20), drops out
+    // halfway through that run (24) and over the third run's start, and comes back halfway through
+    // the third (40) with a tone. Having heard nothing at the second run's end, the detector has
+    // nothing non-finite left to start afresh from; its Detection Range filter, poisoned, missed the
+    // third run's start and rejoins it late. It starts afresh there, so Detection Audition plays
+    // what it plays when the bad sample was silence, and the Band's Live Gain stays finite.
+    const float bad = GENERATE (std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity());
+    CAPTURE (bad);
+    const auto auditionAfterDropout = [] (float sample20) {
+        auto band = externalBell();
+        band.detectionRange = DetectionRange::Free;
+        band.detectionLow = 200.0;
+        band.detectionHigh = 2000.0;
+        auto settings = withBand (band);
+        settings.auditionSlot = 1;
+        Engine engine;
+        engine.prepare (sampleRate, 64, 1);
+        engine.setSettings (settings);
+        std::vector<float> output, mainSamples (64), sidechainSamples (64);
+        float* main[] = { mainSamples.data() };
+        const float* sidechainChannels[] = { sidechainSamples.data() };
+        int n = 0;
+        const auto playBlock = [&] (int numSamples, bool connected) {
+            std::fill (mainSamples.begin(), mainSamples.end(), 0.0f);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const int at = n + i;
+                sidechainSamples[static_cast<size_t> (i)] = at == 20 ? sample20 : at < 40 ? 0.0f : static_cast<float> (sine (1000.0, -6.0, at));
+            }
+            const ConstAudioBlock sidechain { sidechainChannels, 1, numSamples };
+            engine.process ({ main, 1, numSamples }, connected ? &sidechain : nullptr);
+            output.insert (output.end(), mainSamples.begin(), mainSamples.begin() + numSamples);
+            n += numSamples;
+        };
+        playBlock (24, true);
+        playBlock (16, false);
+        playBlock (8, true);
+        for (int b = 0; b < 8; ++b)
+        {
+            playBlock (16, true);
+            CHECK (std::isfinite (engine.liveGainDb (1)));
+        }
+        return std::vector<float> (output.begin() + 40, output.end());
+    };
+    const auto poisoned = auditionAfterDropout (bad), clean = auditionAfterDropout (0.0f);
+    CHECK (std::any_of (clean.begin(), clean.begin() + 8, [] (float x) { return x != 0.0f; }));
+    CHECK (poisoned == clean);
 }
 
 TEST_CASE ("Detection Audition plays what a Dynamic Band's detector hears instead of the output")
