@@ -65,6 +65,9 @@ private:
         std::vector<std::array<BiquadState, maxSections>> states;
 
         void clear();
+        // Clears every section whose state isn't finite, and says whether any was: a NaN or infinite
+        // input sample would otherwise stay in the state, and so in the output, until the next prepare.
+        bool clearNonFinite();
         // The samples of a run from position on, and how the coefficients move over the run: with from,
         // from it to the cascade's, reaching it at the run's end.
         struct Piece

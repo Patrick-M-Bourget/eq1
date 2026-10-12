@@ -261,6 +261,16 @@ double Dynamics::finishRun()
 {
     const auto levels = std::span (runLevels).first (static_cast<size_t> (runLevelCount));
     runLevelCount = 0;
+    // A NaN or infinite sample the detector heard would stay in its level and its statistics for
+    // good, and so in the Band's Live Gain. The detector starts afresh instead, Auto Threshold
+    // included, as it does when the Band becomes active, and the Band rests at its Gain over the
+    // next run. (A sum of finite numbers is finite, and one non-finite term makes it not.)
+    if (! std::isfinite (power[0] + power[1] + movement + sustain + averageLevel + levelVariance))
+    {
+        startAfresh();
+        averageLevel = levelVariance = 0.0;
+        return 0.0;
+    }
     if (! running())
         return 0.0;
 
