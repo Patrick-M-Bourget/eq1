@@ -38,9 +38,8 @@ public:
 
     // At the end of a run: moves the gain computer over the levels the run heard, with its Auto
     // Attack and Auto Threshold taken over the whole run. Returns the offset in dB to add to the
-    // Band's Gain over the next run: the same value as last time while it has moved by under a
-    // millionth of a dB, so a Band whose detector has gone quiet comes to rest at its Gain instead
-    // of redesigning its filter every run.
+    // Band's Gain over the next run: exactly 0 once the detector has come to rest, so a Band whose
+    // detector has gone quiet rests at its Gain instead of redesigning its filter every run.
     double finishRun();
 
     // The detection signal of the last hear() on output channel ch at sample i: the one detection
@@ -94,7 +93,6 @@ private:
     double movement = 0.0; // 0 = at Gain, 1 = the full Dynamic Range
     double sustain = 0.0;  // how long the detection has kept the Band moving, 0 to 1
     double sustainCoefficient = 1.0;
-    double givenOffset = 0.0; // what the last finishRun() returned, in dB
     // For Auto Threshold: the mean level in dB and its variance in dB squared.
     double averageLevel = 0.0, levelVariance = 0.0;
     double samplesHeard = 0.0; // above the gate, up to the rise time's worth
