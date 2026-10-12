@@ -56,6 +56,15 @@ Measured 2026-10-10. On a machine busy with other builds the median reached 125 
 
 Measured 2026-10-12, three runs each, back to back; the whole editor's busy frame above went from 171 to 196 ms to 69 to 113 ms in the same runs. Quiet-machine figures are still to be taken.
 
+**Static layers.** What doesn't change from frame to frame is drawn once into an image at the device scale it is drawn at and drawn back from it pixel for pixel (`staple::CachedLayer`, `staple::SoftShadowCache`): the window's background, drawn again on a new window size or scale, so a display or Output Meter repaint no longer renders its three full-window gradients; each grid and Analyzer scale label, drawn again when it changes; and each handle's soft shadow, per size, scale and place within a device pixel. `staple::font` makes each weight and size once. Two things stay drawn directly, measured: the grid's lines, a few dozen rectangles that cost less than drawing a display-sized image over them, and the selected handle's glow, whose faint layers of colour round off by 3 levels from an image, past the screens' 2. Drawn back pixel for pixel wherever the display starts on a whole device pixel: always at 100% and 200%; at 75% and 125% on a 1× screen the labels and shadows are drawn back resampled, half a pixel softer, as the edge fades are.
+
+| Machine | Display paint (idle frame) | Busy frame |
+| --- | --- | --- |
+| Apple M3, load average 46 to 61 from parallel builds, before the static layers (`fa94139`) | 69 to 79 ms | 333 to 338 ms |
+| Apple M3, the same load, with them (`8e3d290`) | 72 to 73 ms | 169 to 193 ms |
+
+Measured 2026-10-12, three runs each, alternating. The busy frame, the whole editor with its background, about halves; the idle frame, the display alone, shows no clear change at that load. Drawn 200 times at 2× (load about 100), the labels went from 10 to 33 ms to 0.2 to 1.0 ms a paint, the 24 handles' shadows from 7.7 to 13 ms to 0.5 ms. Quiet-machine figures are still to be taken.
+
 ## Footprint
 
 `scripts/check.sh size` measures what ships. It builds the shipping configuration (Release, `EQ1_LTO=ON`, `EQ1_STRIP=ON`, Universal) in `build-size` and prints four reports; local only, CI doesn't run it. On Windows it prints the Engine heap only.
