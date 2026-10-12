@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Units.h"
+
 #include <cmath>
 
 namespace eq1
@@ -13,7 +15,7 @@ public:
     // timeConstant is in samples; tolerance is how close counts as arrived.
     void configure (double timeConstant, double arrivalTolerance)
     {
-        coefficient = 1.0 - std::exp (-1.0 / timeConstant);
+        coefficient = onePoleCoefficient (timeConstant);
         tolerance = arrivalTolerance;
     }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Units.h"
 #include "eq1/Engine.h"
 
 #include <algorithm>
@@ -71,7 +72,7 @@ private:
     // In dB of amplitude, at least the floor; the floor too for NaN.
     static double toDb (double amplitude)
     {
-        const double db = 20.0 * std::log10 (amplitude);
+        const double db = gainToDecibels (amplitude);
         return db > levelFloorDb ? db : levelFloorDb;
     }
 

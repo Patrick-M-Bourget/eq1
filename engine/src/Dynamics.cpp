@@ -2,6 +2,7 @@
 
 #include "Smoothstep.h"
 #include "Solo.h"
+#include "Units.h"
 
 #include <algorithm>
 #include <cassert>
@@ -41,7 +42,7 @@ constexpr double glideTimeConstantSeconds = 0.007;
 // A Free Detection Range's limits roll off at this Slope, steep enough to pick out a kick alone.
 constexpr double freeRangeSlope = 24.0;
 
-double coefficientFor (double seconds, double sampleRate) { return 1.0 - std::exp (-1.0 / (seconds * sampleRate)); }
+double coefficientFor (double seconds, double sampleRate) { return onePoleCoefficient (seconds * sampleRate); }
 
 double timingScale (double percent) { return std::pow (timingSpread, (std::clamp (percent, 0.0, 100.0) - 50.0) / 50.0); }
 // A Free Detection Range's limit: a Butterworth Cut at frequency.
@@ -233,7 +234,7 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
             power[c] += powerCoefficient * (x * x - power[c]);
             peakPower = std::max (peakPower, power[c]);
         }
-        const double level = 10.0 * std::log10 (2.0 * peakPower + 1.0e-30);
+        const double level = powerToDecibels (2.0 * peakPower + 1.0e-30);
         loudest = std::max (loudest, level);
         // Metered only: whatever comes next starts afresh, as if never metered.
         if (! moving)
