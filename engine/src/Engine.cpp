@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -396,6 +397,16 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
                 for (size_t i = 0; i < static_cast<size_t> (count); ++i)
                     samples[i] = static_cast<float> (samples[i] + mixes[i] * (input[i] - samples[i]));
             }
+        }
+
+        // A non-finite input sample never reaches the output (docs/adr/0008-performance-never-costs-sound.md,
+        // "Non-finite input"): whatever the input or a Band's state made of it plays as 0. The Bands
+        // and detectors it got into start afresh at the next run.
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            float* samples = impl->subBlock[static_cast<size_t> (ch)];
+            for (int i = 0; i < count; ++i)
+                samples[i] = std::isfinite (samples[i]) ? samples[i] : 0.0f;
         }
 
         // At the run's end, each detector moves its Band over the next run.
