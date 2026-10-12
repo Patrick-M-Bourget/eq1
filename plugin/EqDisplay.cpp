@@ -6,6 +6,7 @@
 #include "BandMenu.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ShowMenu.h"
 #include "display/AnalyzerLayer.h"
 #include "display/CurvesLayer.h"
 #include "display/EdgeFadeLayer.h"
@@ -858,11 +859,7 @@ void EqDisplay::showMenu (const juce::MouseEvent& e)
                           },
                           juce::SystemClipboard::getTextFromClipboard(),
                           [] (const juce::String& text) { juce::SystemClipboard::copyTextToClipboard (text); } };
-    // Closed unchosen if the display goes, so the Band actions never outlive the editing they use. A
-    // menu is a window of its own: it draws with the editor's look only when given it.
-    auto popup = menu.build();
-    popup.setLookAndFeel (&getLookAndFeel());
-    popup.showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withTargetComponent (this).withMousePosition());
+    eq1::showMenu (menu.build(), *this, juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
 }
 
 void EqDisplay::selectAll()
