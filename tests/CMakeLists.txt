@@ -15,6 +15,7 @@ add_executable(eq1_engine_tests
     engine/BellResponseTest.cpp
     engine/BellStabilityTest.cpp
     engine/ClickFreeTest.cpp
+    engine/Double2Test.cpp
     engine/DynamicsTest.cpp
     engine/FootprintTest.cpp
     engine/NonFiniteInputTest.cpp
