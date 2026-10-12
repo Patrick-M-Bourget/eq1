@@ -308,25 +308,24 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
     if (isSilent())
         return;
 
-    if (position == 0)
+    if (position == 0 || joinedLate)
     {
         // A chain a non-finite sample got into starts afresh at this run's filter, with no glide from
-        // the one it lost: the output is finite again from here, and its detector's offset, which
-        // starts afresh too, applies at once.
+        // the one it lost, whether it saw the run's start or joins it late (a detector whose Sidechain
+        // dropped out with a bad sample in it): the output is finite again from here, and its
+        // detector's offset, which starts afresh too, applies at once. A cleared section is clear, so
+        // it may be skipped (Chain::skips).
         bool recovering = current.clearNonFinite();
         if (shapeCrossfade.isMoving() && previous.clearNonFinite())
             recovering = true;
-        startRun();
-        if (recovering)
+        if (position == 0)
+            startRun();
+        // One that joins late plays the filter last designed until the next run, as if snapped.
+        if (recovering || joinedLate)
         {
             runGliding = false;
             runStartGainDb = runEndGainDb;
         }
-    }
-    else if (joinedLate)
-    {
-        runGliding = false;
-        runStartGainDb = runEndGainDb;
     }
 
     const bool fading = mix.isMoving();
