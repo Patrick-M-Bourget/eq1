@@ -222,8 +222,11 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
     rangeFilter.process (detectionChannels.data(), detectionCount, run, position, numSamples);
     highLimit.process (detectionChannels.data(), detectionCount, run, position, numSamples);
 
-    // The level of each sample: the louder detection channel's power.
-    double loudest = nothingHeardDb;
+    // The level of each sample: the louder detection channel's power. Metered only, the detector
+    // keeps the piece's loudest power and converts it once at the end: the level is monotonic in
+    // the power, so it is the loudest level, and whatever comes next starts afresh, as if never
+    // metered.
+    double loudest = nothingHeardDb, loudestPower = 0.0;
     for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
     {
         double peakPower = 0.0;
@@ -233,11 +236,13 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
             power[c] += powerCoefficient * (x * x - power[c]);
             peakPower = std::max (peakPower, power[c]);
         }
+        if (! moving)
+        {
+            loudestPower = std::max (loudestPower, peakPower);
+            continue;
+        }
         const double level = levelOf (peakPower);
         loudest = std::max (loudest, level);
-        // Metered only: whatever comes next starts afresh, as if never metered.
-        if (! moving)
-            continue;
         if (runLevelCount < Band::maxSubBlock)
             runLevels[static_cast<size_t> (runLevelCount++)] = level;
         // The mean and variance of every level heard, until a rise time's worth has been: then
@@ -252,7 +257,7 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
             levelVariance += weight (deviation > levelVariance) * (deviation - levelVariance);
         }
     }
-    loudestLevel = loudest;
+    loudestLevel = moving ? loudest : levelOf (loudestPower);
 }
 
 double Dynamics::finishRun()
