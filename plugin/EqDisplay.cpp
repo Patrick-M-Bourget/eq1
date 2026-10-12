@@ -389,7 +389,7 @@ void EqDisplay::tick (double seconds)
 
 bool EqDisplay::isGlobalBypassOn() const
 {
-    return output.globalBypass->load() >= 0.5f;
+    return parameters::isOn (output.globalBypass);
 }
 
 bool EqDisplay::stepFades()

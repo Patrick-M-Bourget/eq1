@@ -346,7 +346,7 @@ void DynamicsSection::showChoices()
     if (slot == 0)
         return;
     auto& state = processor.parameterState();
-    const auto chosen = [&state] (const juce::String& id) { return state.getParameter (id)->getValue() >= 0.5f; };
+    const auto chosen = [&state] (const juce::String& id) { return parameters::isOn (*state.getParameter (id)); };
     detectionSource.setToggleState (chosen (parameters::detectionSourceId (slot)), juce::dontSendNotification);
     detectionRange->setFree (chosen (parameters::detectionRangeId (slot)));
 }
@@ -359,7 +359,7 @@ void DynamicsSection::showThreshold()
     // not have caught up yet.
     auto& state = processor.parameterState();
     const auto& level = *state.getParameter (parameters::thresholdId (slot));
-    const bool automatic = state.getParameter (parameters::thresholdAutoId (slot))->getValue() >= 0.5f;
+    const bool automatic = parameters::isOn (*state.getParameter (parameters::thresholdAutoId (slot)));
     threshold.setValue (automatic ? ThresholdFader::autoPosition : level.convertFrom0to1 (level.getValue()), juce::dontSendNotification);
 }
 

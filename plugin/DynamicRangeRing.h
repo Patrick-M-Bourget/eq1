@@ -64,7 +64,6 @@ private:
     void tick (double seconds) override;
     bool isActive() const override { return moving; }
     double valueDraggedBy (double from, float pixels, bool fine) override;
-    static bool isOn (const std::atomic<float>* parameter) { return parameter->load() >= 0.5f; }
 
     PluginProcessor& processor;
     staple::Knob& gain;

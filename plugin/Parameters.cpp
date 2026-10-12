@@ -276,14 +276,14 @@ SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int s
 
 BandSettings SlotValues::read() const
 {
-    return { .inUse = inUse->load() >= 0.5f,
-             .bypass = bypass->load() >= 0.5f,
+    return { .inUse = isOn (inUse),
+             .bypass = isOn (bypass),
              .shape = static_cast<Shape> (juce::roundToInt (shape->load())),
              .frequency = frequency->load(),
              .gain = gain->load(),
              .q = q->load(),
              .slope = slope->load(),
-             .brickwall = brickwall->load() >= 0.5f,
+             .brickwall = isOn (brickwall),
              .placement = static_cast<StereoPlacement> (juce::roundToInt (placement->load())),
              .detectionSource = static_cast<DetectionSource> (juce::roundToInt (detectionSource->load())),
              .detectionRange = static_cast<DetectionRange> (juce::roundToInt (detectionRange->load())),
@@ -291,10 +291,10 @@ BandSettings SlotValues::read() const
              .detectionHigh = detectionHigh->load(),
              .dynamicRange = dynamicRange->load(),
              .threshold = threshold->load(),
-             .thresholdAuto = thresholdAuto->load() >= 0.5f,
+             .thresholdAuto = isOn (thresholdAuto),
              .attack = attack->load(),
              .release = release->load(),
-             .dynamicsBypass = dynamicsBypass->load() >= 0.5f };
+             .dynamicsBypass = isOn (dynamicsBypass) };
 }
 
 OutputValues OutputValues::of (juce::AudioProcessorValueTreeState& parameters)
@@ -309,12 +309,12 @@ void OutputValues::readInto (Settings& settings) const
 {
     const float outputGainDb = outputGain->load();
     settings.gainScale = gainScale->load() / 100.0;
-    settings.autoGain = autoGain->load() >= 0.5f;
+    settings.autoGain = isOn (autoGain);
     settings.outputGainDb = outputGainDb <= outputGainSilentDb ? -std::numeric_limits<double>::infinity() : outputGainDb;
     settings.outputPan = outputPan->load() / 100.0;
     settings.panMode = static_cast<PanMode> (juce::roundToInt (panMode->load()));
-    settings.phaseInvert = phaseInvert->load() >= 0.5f;
-    settings.globalBypass = globalBypass->load() >= 0.5f;
+    settings.phaseInvert = isOn (phaseInvert);
+    settings.globalBypass = isOn (globalBypass);
 }
 
 } // namespace eq1::parameters
