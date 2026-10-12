@@ -46,6 +46,11 @@ void Band::Chain::Lines::prepare (int numChannels)
 
 void Band::Chain::run (Lines& lines, const Piece& piece)
 {
+    if (lines.count == 2)
+    {
+        runLanes (lines, piece);
+        return;
+    }
     const auto numLines = static_cast<size_t> (lines.count);
     const auto numSamples = static_cast<size_t> (piece.numSamples);
     for (size_t s = 0; s < static_cast<size_t> (cascade.count); ++s)
@@ -69,6 +74,41 @@ void Band::Chain::run (Lines& lines, const Piece& piece)
             for (size_t line = 0; line < numLines; ++line)
                 lines.samples[line][i] = states[lines.states[line]][s].process (coefficients, lines.samples[line][i]);
         }
+    }
+}
+
+void Band::Chain::runLanes (Lines& lines, const Piece& piece)
+{
+    float* line0 = lines.samples[0];
+    float* line1 = lines.samples[1];
+    const auto numSamples = static_cast<size_t> (piece.numSamples);
+    for (size_t s = 0; s < static_cast<size_t> (cascade.count); ++s)
+    {
+        auto& state0 = states[lines.states[0]][s];
+        auto& state1 = states[lines.states[1]][s];
+        Double2 s1 = make2<Double2> (state0.s1, state1.s1), s2 = make2<Double2> (state0.s2, state1.s2);
+        // As BiquadState::process: a float in and out of each section, the state in double.
+        const auto step = [&] (const BiquadCoefficients& c, size_t i) {
+            const Double2 y = biquadStep (fill2<Double2> (c.b0), fill2<Double2> (c.b1), fill2<Double2> (c.b2), fill2<Double2> (c.a1),
+                                          fill2<Double2> (c.a2), make2<Double2> (line0[i], line1[i]), s1, s2);
+            line0[i] = static_cast<float> (lane0 (y));
+            line1[i] = static_cast<float> (lane1 (y));
+        };
+        const auto& to = cascade.sections[s];
+        if (piece.from == nullptr)
+        {
+            for (size_t i = 0; i < numSamples; ++i)
+                step (to, i);
+        }
+        else
+        {
+            // Designed once per run and interpolated by position in it, as run() does for its lines.
+            const auto& start = piece.from->sections[s];
+            for (size_t i = 0; i < numSamples; ++i)
+                step (interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / maxSubBlock), i);
+        }
+        state0 = { lane0 (s1), lane0 (s2) };
+        state1 = { lane1 (s1), lane1 (s2) };
     }
 }
 
