@@ -5,10 +5,12 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
-#include <numeric>
 #include <numbers>
+#include <numeric>
 #include <random>
+#include <thread>
 #include <vector>
 
 using namespace eq1;
@@ -217,4 +219,30 @@ TEST_CASE ("Output Level RMS is the RMS of the last 300 ms of what was played, o
     const double meanSquare = std::accumulate (played.end() - static_cast<long> (window), played.end(), 0.0, [] (double sum, float s) { return sum + static_cast<double> (s) * s; })
                               / static_cast<double> (window);
     CHECK_THAT (engine.readOutputLevel (0).rmsDb, WithinAbs (10.0 * std::log10 (meanSquare), 0.01));
+}
+
+TEST_CASE ("The Output Meter can keep reading the Output Level while the host prepares the Engine mono and stereo in turn")
+{
+    // A host re-prepares when the track's layout changes, while the editor's meter goes on reading.
+    Engine engine;
+    engine.prepare (48000.0, 256, 1);
+    std::atomic<bool> done { false };
+    std::thread reader ([&] {
+        while (! done)
+            for (int ch = 0; ch < engine.outputLevelChannels(); ++ch)
+                engine.readOutputLevel (ch);
+    });
+
+    std::vector<float> left (256, 0.25f), right (256, -0.25f);
+    float* main[] = { left.data(), right.data() };
+    for (int round = 0; round < 200; ++round)
+    {
+        const int channels = 1 + round % 2;
+        engine.prepare (48000.0, 256, channels);
+        for (int block = 0; block < 4; ++block)
+            engine.process ({ main, channels, 256 });
+    }
+    done = true;
+    reader.join();
+    SUCCEED();
 }

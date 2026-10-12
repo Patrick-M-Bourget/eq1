@@ -47,7 +47,8 @@ struct OutputLevel
 // Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
 // one thread at a time may call it; the newest settings are taken at the start of each process().
 // readAnalysis() may run on one reader thread, and readOutputLevel() and readDetectionLevel() each on
-// one reader thread, but not while prepare() changes the channel count.
+// one reader thread, through any prepare(): a re-prepare at another sample rate or channel count
+// never frees or moves what a reader touches.
 class Engine
 {
 public:

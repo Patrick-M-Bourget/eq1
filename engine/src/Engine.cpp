@@ -142,9 +142,12 @@ struct Engine::Impl
 
     AnalysisFifo preEq, postEq, sidechain;
 
-    // The Output Level, per channel prepared.
-    std::unique_ptr<OutputLevelTap[]> outputLevels;
-    int outputLevelChannels = 0;
+    // The Output Level: one tap per channel the Engine was prepared with, in an array for the most
+    // channels any layout allows, so a re-prepare to another channel count never frees or moves a
+    // tap while the editor's meter reads it.
+    static constexpr int maxOutputLevelChannels = 2;
+    std::array<OutputLevelTap, maxOutputLevelChannels> outputLevels;
+    std::atomic<int> outputLevelChannels { 0 };
 
     // A non-finite input sample reaches the Analyzer as 0, as it does the output.
     static void pushMonoMix (AnalysisFifo& fifo, const float* const* channels, int numChannels, int numSamples)
@@ -307,13 +310,10 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     impl->preEq.prepare (sampleRate);
     impl->postEq.prepare (sampleRate);
     impl->sidechain.prepare (sampleRate);
-    if (numChannels != impl->outputLevelChannels)
-    {
-        impl->outputLevels = std::make_unique<OutputLevelTap[]> (static_cast<size_t> (std::max (numChannels, 0)));
-        impl->outputLevelChannels = std::max (numChannels, 0);
-    }
-    for (int ch = 0; ch < impl->outputLevelChannels; ++ch)
+    const int outputLevelChannels = std::clamp (numChannels, 0, Impl::maxOutputLevelChannels);
+    for (int ch = 0; ch < outputLevelChannels; ++ch)
         impl->outputLevels[static_cast<size_t> (ch)].prepare (sampleRate);
+    impl->outputLevelChannels.store (outputLevelChannels, std::memory_order_release);
 }
 
 void Engine::setSettings (const Settings& settings)
@@ -426,7 +426,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
     }
 
     Impl::pushMonoMix (impl->postEq, main.channels, channels, main.numSamples);
-    for (int ch = 0; ch < channels; ++ch)
+    for (int ch = 0; ch < std::min (channels, Impl::maxOutputLevelChannels); ++ch)
         impl->outputLevels[static_cast<size_t> (ch)].process (main.channels[ch], main.numSamples);
     impl->detectionLevel.hold (loudestDetection);
     for (size_t band = 0; band < impl->bands.size(); ++band)
@@ -440,12 +440,12 @@ double Engine::liveGainDb (int slot) const
 
 int Engine::outputLevelChannels() const
 {
-    return impl->outputLevelChannels;
+    return impl->outputLevelChannels.load (std::memory_order_acquire);
 }
 
 OutputLevel Engine::readOutputLevel (int channel)
 {
-    return channel >= 0 && channel < impl->outputLevelChannels ? impl->outputLevels[static_cast<size_t> (channel)].read() : OutputLevel {};
+    return channel >= 0 && channel < outputLevelChannels() ? impl->outputLevels[static_cast<size_t> (channel)].read() : OutputLevel {};
 }
 
 double Engine::readDetectionLevel()
