@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <vector>
+
 namespace staple
 {
 
@@ -15,6 +17,27 @@ void markOverlayLayer (juce::Component& layer);
 // A shadow drawn without blur (HANDOFF.md §4): stacked translucent rounded rectangles, each a step
 // wider, that add up to the shadow's colour inside the shape and fade out over its blur radius.
 void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow);
+
+// drawSoftShadow from images, for shadows drawn on every frame (the EQ display's handles): each shadow
+// is drawn once per shape size, corner, shadow, scale and place within a device pixel, and drawn back
+// from its image pixel for pixel. That holds where g's logical pixels start on a whole device pixel (a
+// component's do at a UI Scale and display scale whose product is whole); elsewhere it is resampled.
+class SoftShadowCache
+{
+public:
+    void draw (juce::Graphics& g, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow);
+
+private:
+    struct Entry
+    {
+        juce::Rectangle<float> shape; // from the image's top left, in logical pixels
+        float cornerRadius = 0.0f;
+        juce::DropShadow shadow;
+        float scale = 0.0f;
+        juce::Image image;
+    };
+    std::vector<Entry> entries;
+};
 
 // The handoff's one easing curve, cubic-bezier (0.2, 0.7, 0.2, 1): progress for a time from 0 to 1.
 float ease (float time);

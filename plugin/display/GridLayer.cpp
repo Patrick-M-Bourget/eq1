@@ -24,6 +24,8 @@ constexpr float gainLabelFromRight = 42.0f, analyzerLabelFromRight = 10.0f;
 // the bottom.
 constexpr float analyzerLabelClearTop = 40.0f, analyzerLabelClearBottom = 30.0f;
 constexpr float labelWidth = 48.0f, labelHeight = 14.0f;
+// How far a label's image reaches past its area, for glyphs that overhang it.
+constexpr float labelImageMargin = 4.0f;
 
 bool narrow (const DisplayGeometry& geometry)
 {
@@ -137,14 +139,27 @@ void paintGrid (juce::Graphics& g, const DisplayGeometry& geometry)
     g.drawHorizontalLine (juce::roundToInt (lines.zeroY), 0.0f, width);
 }
 
+namespace
+{
+void paintLabel (juce::Graphics& g, const Label& label)
+{
+    g.setFont (staple::font (label.fontSize));
+    g.setColour (label.colour);
+    g.drawText (label.text, label.area, label.justification, false);
+}
+} // namespace
+
 void paintLabels (juce::Graphics& g, const std::vector<Label>& labels)
 {
     for (const auto& label : labels)
-    {
-        g.setFont (staple::font (label.fontSize));
-        g.setColour (label.colour);
-        g.drawText (label.text, label.area, label.justification, false);
-    }
+        paintLabel (g, label);
+}
+
+void CachedLabels::paint (juce::Graphics& g, const std::vector<Label>& labels)
+{
+    layers.resize (labels.size());
+    for (size_t i = 0; i < labels.size(); ++i)
+        layers[i].draw (g, labels[i].area.expanded (labelImageMargin), labels[i], juce::Image::ARGB, [&] (juce::Graphics& into) { paintLabel (into, labels[i]); });
 }
 
 } // namespace eq1::display

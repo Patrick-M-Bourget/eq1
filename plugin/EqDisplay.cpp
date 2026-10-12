@@ -624,6 +624,8 @@ void EqDisplay::paint (juce::Graphics& g)
 {
     const auto shape = geometry();
     const auto frame = this->frame();
+    // The grid stays drawn as lines: a few dozen rectangles, which cost less than drawing an image of
+    // the display's size over it (docs/performance.md, "Paint time").
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
     curves.update (shape, frame);
@@ -633,11 +635,11 @@ void EqDisplay::paint (juce::Graphics& g)
         display::paintGhostCurve (g, shape, *shownGhost, frame.sampleRate, ghostFade);
     // The handles, the labels and the ghost's line, glow and readout go over the edge fades, unfaded.
     display::paintEdgeFades (g, edgeFadeAt (g.getInternalContext().getPhysicalPixelScaleFactor()));
-    display::paintLabels (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
-    display::paintLabels (g, display::analyzerScaleLabels (shape, analyzer));
+    gridLabelImages.paint (g, shownGhost ? display::fadedForGhost (display::gridLabels (shape), shape, *shownGhost) : display::gridLabels (shape));
+    analyzerLabelImages.paint (g, display::analyzerScaleLabels (shape, analyzer));
     if (shownGhost)
         display::paintGhostMarker (g, shape, *shownGhost, ghostFade);
-    display::paintHandles (g, shape, frame);
+    display::paintHandles (g, shape, frame, handleShadows);
 }
 
 void EqDisplay::mouseDown (const juce::MouseEvent& e)

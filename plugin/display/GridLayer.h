@@ -2,6 +2,7 @@
 
 #include "../AnalyzerSettings.h"
 #include "DisplayGeometry.h"
+#include "../staple/CachedLayer.h"
 
 #include <vector>
 
@@ -27,6 +28,8 @@ struct Label
     juce::Justification justification = juce::Justification::centred;
     juce::Colour colour;
     float fontSize = 0.0f;
+
+    bool operator== (const Label&) const = default;
 };
 
 // The Frequency labels along the bottom, then the Gain labels at the right, from the top down, signed,
@@ -40,5 +43,16 @@ std::vector<Label> analyzerScaleLabels (const DisplayGeometry& geometry, const A
 
 void paintGrid (juce::Graphics& g, const DisplayGeometry& geometry);
 void paintLabels (juce::Graphics& g, const std::vector<Label>& labels);
+
+// paintLabels with each label drawn once into an image of its own (staple::CachedLayer), and drawn from
+// it on every frame until the label, or the scale it is drawn at, changes.
+class CachedLabels
+{
+public:
+    void paint (juce::Graphics& g, const std::vector<Label>& labels);
+
+private:
+    std::vector<staple::CachedLayer<Label>> layers; // by the label's place in the list
+};
 
 } // namespace eq1::display

@@ -130,7 +130,8 @@ void PluginEditor::tick (double)
 void PluginEditor::paint (juce::Graphics& g)
 {
     g.addTransform (juce::AffineTransform::scale (scale));
-    staple::paintWindowBackground (g, content.getLocalBounds().toFloat());
+    const auto window = content.getLocalBounds().toFloat();
+    background.draw (g, window, 0, juce::Image::RGB, [&] (juce::Graphics& into) { staple::paintWindowBackground (into, window); });
 }
 
 void PluginEditor::resized()
