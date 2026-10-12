@@ -5,9 +5,12 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <numbers>
+#include <numeric>
 #include <random>
+#include <thread>
 #include <vector>
 
 using namespace eq1;
@@ -23,6 +26,7 @@ struct Player
     double sampleRate;
     int numChannels;
     long long position = 0;
+    std::vector<float>* played = nullptr; // every sample played, when wanted
 
     void sine (double seconds, double amplitude, double frequency = 997.0)
     {
@@ -60,6 +64,8 @@ private:
                 const float s = sampleAt (position + i);
                 for (auto& block : blocks)
                     block[static_cast<size_t> (i)] = s;
+                if (played != nullptr)
+                    played->push_back (s);
             }
             engine.process ({ channels.data(), numChannels, count });
             position += count;
@@ -181,4 +187,62 @@ TEST_CASE ("Output Level RMS covers only the last 300 ms, and silence reads exac
         const double first = engine.readOutputLevel (0).rmsDb;
         CHECK (engine.readOutputLevel (0).rmsDb == first);
     }
+}
+
+TEST_CASE ("Output Level RMS is the RMS of the last 300 ms of what was played, on a sine and on noise")
+{
+    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
+    CAPTURE (sampleRate);
+    Engine engine;
+    engine.prepare (sampleRate, 512, 1);
+    engine.setSettings ({});
+    std::vector<float> played;
+    Player player { engine, sampleRate, 1, 0, &played };
+
+    SECTION ("sine")
+    {
+        player.sine (0.5, 0.7, 1234.5);
+    }
+    SECTION ("noise")
+    {
+        player.noise (0.5, 0.5, 7);
+    }
+    SECTION ("noise after a louder passage, so the window has to forget it")
+    {
+        player.noise (0.4, 0.9, 3);
+        player.noise (0.35, 0.2, 4);
+    }
+
+    // A rectangular window of the last 300 ms, summed the plain way.
+    const auto window = static_cast<size_t> (std::lround (0.3 * sampleRate));
+    REQUIRE (played.size() >= window);
+    const double meanSquare = std::accumulate (played.end() - static_cast<long> (window), played.end(), 0.0, [] (double sum, float s) { return sum + static_cast<double> (s) * s; })
+                              / static_cast<double> (window);
+    CHECK_THAT (engine.readOutputLevel (0).rmsDb, WithinAbs (10.0 * std::log10 (meanSquare), 0.01));
+}
+
+TEST_CASE ("The Output Meter can keep reading the Output Level while the host prepares the Engine mono and stereo in turn")
+{
+    // A host re-prepares when the track's layout changes, while the editor's meter goes on reading.
+    Engine engine;
+    engine.prepare (48000.0, 256, 1);
+    std::atomic<bool> done { false };
+    std::thread reader ([&] {
+        while (! done)
+            for (int ch = 0; ch < engine.outputLevelChannels(); ++ch)
+                engine.readOutputLevel (ch);
+    });
+
+    std::vector<float> left (256, 0.25f), right (256, -0.25f);
+    float* main[] = { left.data(), right.data() };
+    for (int round = 0; round < 200; ++round)
+    {
+        const int channels = 1 + round % 2;
+        engine.prepare (48000.0, 256, channels);
+        for (int block = 0; block < 4; ++block)
+            engine.process ({ main, channels, 256 });
+    }
+    done = true;
+    reader.join();
+    SUCCEED();
 }
