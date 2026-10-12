@@ -34,9 +34,13 @@ struct RenderScene
 
 namespace detail
 {
+    // One Band of a Shape at 1 kHz. Its Gain is high so that its part of the output is loud: a change of
+    // 1e-5 dB to a Band's Gain alone moves the output by about 1e-6 of that part, the bar's -120 dBFS.
+    inline constexpr double shapeGainDb = 12.0;
+
     inline BandSettings shapeBand (Shape shape, bool brickwall = false)
     {
-        return { .inUse = true, .shape = shape, .frequency = 1000.0, .gain = 6.0, .q = 1.0, .slope = 24.0, .brickwall = brickwall };
+        return { .inUse = true, .shape = shape, .frequency = 1000.0, .gain = shapeGainDb, .q = 1.0, .slope = 24.0, .brickwall = brickwall };
     }
 
     inline Settings oneBand (const BandSettings& band)
@@ -122,7 +126,7 @@ inline std::vector<RenderScene> renderScenes()
 
     for (auto placement : allPlacements)
     {
-        auto band = bellBand (1000.0, 6.0, 1.0);
+        auto band = bellBand (1000.0, shapeGainDb, 1.0);
         band.placement = placement;
         scenes.push_back ({ .name = std::string ("placement-") + placementName (placement), .settings = oneBand (band) });
     }
