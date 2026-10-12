@@ -2,6 +2,7 @@
 
 #include "eq1/Settings.h"
 
+#include <cstdint>
 #include <memory>
 
 namespace eq1
@@ -91,6 +92,11 @@ public:
     // when it hears two. Reading resets it. The floor when no Band is metered, or the metered Band has
     // nothing to listen to. Called from one reader thread while process() runs on the audio thread.
     double readDetectionLevel();
+
+    // How many times process() has applied settings: once at the first block after prepare(), then
+    // once per snapshot that differs from the settings it plays. A snapshot equal to them is skipped,
+    // so a block with no edits does no settings work. Safe to call from any thread, for tests.
+    std::uint64_t settingsApplied() const;
 
 private:
     struct Impl;

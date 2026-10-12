@@ -65,3 +65,43 @@ TEST_CASE ("Settings set on another thread while audio is processing reach the E
         CHECK_THAT (test::magnitudeDb (impulse, f, sampleRate), WithinAbs (test::magnitudeDb (expected, f, sampleRate), 0.01));
     }
 }
+
+TEST_CASE ("A snapshot equal to the settings playing is not re-applied; a different one is")
+{
+    Engine engine;
+    engine.prepare (48000.0, 64, 2);
+    std::vector<float> left (64, 0.1f), right (64, -0.1f);
+    float* channels[] = { left.data(), right.data() };
+    const auto block = [&] { engine.process ({ channels, 2, 64 }); };
+
+    Settings settings;
+    settings.bands[0] = { .inUse = true, .shape = Shape::Bell, .frequency = 1000.0, .gain = 6.0, .q = 1.0 };
+    engine.setSettings (settings);
+    block();
+    CHECK (engine.settingsApplied() == 1);
+
+    // A host automating nothing: the same values, block after block.
+    for (int i = 0; i < 4; ++i)
+    {
+        engine.setSettings (settings);
+        block();
+    }
+    block();
+    CHECK (engine.settingsApplied() == 1);
+
+    settings.bands[0].gain = 3.0;
+    engine.setSettings (settings);
+    block();
+    CHECK (engine.settingsApplied() == 2);
+    engine.setSettings (settings);
+    block();
+    CHECK (engine.settingsApplied() == 2);
+
+    // After a re-prepare the settings kept apply afresh, and a snapshot equal to them is still no work.
+    engine.prepare (96000.0, 64, 2);
+    block();
+    CHECK (engine.settingsApplied() == 3);
+    engine.setSettings (settings);
+    block();
+    CHECK (engine.settingsApplied() == 3);
+}

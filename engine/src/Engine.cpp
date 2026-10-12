@@ -32,6 +32,7 @@ struct Engine::Impl
     Settings settings;          // the newest settings the audio thread has taken
     bool settingsChanged = false;
     bool snapToSettings = true; // after prepare, settings apply at once instead of gliding
+    std::atomic<std::uint64_t> settingsApplications { 0 };
 
     std::array<Band, numBandSlots> bands;
     std::array<Dynamics, numBandSlots> dynamics;
@@ -140,13 +141,16 @@ struct Engine::Impl
 
     void applySettings()
     {
-        if (const auto* latest = handoff.takeLatest())
+        // A snapshot equal to the settings playing is no work: a host automating nothing sends the
+        // same values block after block.
+        if (const auto* latest = handoff.takeLatest(); latest != nullptr && *latest != settings)
         {
             settings = *latest;
             settingsChanged = true;
         }
         if (! settingsChanged)
             return;
+        settingsApplications.fetch_add (1, std::memory_order_relaxed);
         for (size_t band = 0; band < bands.size(); ++band)
         {
             const auto playing = scaledByGainScale (settings.bands[band], settings.gainScale);
@@ -405,6 +409,11 @@ OutputLevel Engine::readOutputLevel (int channel)
 double Engine::readDetectionLevel()
 {
     return impl->detectionLevel.read();
+}
+
+std::uint64_t Engine::settingsApplied() const
+{
+    return impl->settingsApplications.load (std::memory_order_relaxed);
 }
 
 int Engine::analysisCapacity() const
