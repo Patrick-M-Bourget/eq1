@@ -1,6 +1,7 @@
 #include "EqDisplay.h"
 
 #include "Accessibility.h"
+#include "AssumedSampleRate.h"
 #include "BandClipboard.h"
 #include "BandMenu.h"
 #include "Parameters.h"
@@ -158,7 +159,7 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
 bool EqDisplay::updateAnalyzer (double seconds)
 {
     analyzer = processor.analyzerSettings();
-    const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
+    const double sampleRate = sampleRateOrAssumed (processor);
 
     // Peak Hold starts afresh on a spectrum it wasn't held for last frame: switched to, or turned on.
     // The spectrum forgets it too when prepared again for a new Resolution or sample rate.
@@ -577,8 +578,8 @@ display::DisplayFrame EqDisplay::frame() const
                                    .dragging = dragging,
                                    .marquee = marquee,
                                    .allInUseMessage = allInUseMessageUntil != 0,
-                                   // Before the host has prepared the plugin, the curves are drawn as at 48 kHz.
-                                   .sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                                   // Before the host has prepared the plugin, the curves are drawn as at assumedSampleRate.
+                                   .sampleRate = sampleRateOrAssumed (processor),
                                    .mono = ! processor.isStereoPlacementAvailable(),
                                    .hover = hoverFades,
                                    .globalBypass = globalBypassFade };
