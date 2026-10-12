@@ -25,24 +25,6 @@ constexpr int readoutHeight = 28, gainScaleWidth = 54, outputWidth = 70, readout
 constexpr int footerGap = 18, bypassedOverlap = 10, analyzerLabelGap = 8;
 const juce::String bypassedText { "Bypassed" };
 
-// Whether Auto Gain's estimate holds for both: the same Bands, exactly, and Gain Scale. (Settings' own ==
-// would do, but its float comparison warns where it is defined.)
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
-bool sameEstimate (const Settings& a, const Settings& b)
-{
-    for (size_t i = 0; i < a.bands.size(); ++i)
-    {
-        const auto &x = a.bands[i], &y = b.bands[i];
-        if (x.inUse != y.inUse || x.bypass != y.bypass || x.shape != y.shape || x.frequency != y.frequency || x.gain != y.gain
-            || x.q != y.q || x.slope != y.slope || x.brickwall != y.brickwall || x.placement != y.placement
-            || x.dynamicRange != y.dynamicRange || x.threshold != y.threshold || x.thresholdAuto != y.thresholdAuto
-            || x.attack != y.attack || x.release != y.release || x.dynamicsBypass != y.dynamicsBypass)
-            return false;
-    }
-    return a.gainScale == b.gainScale;
-}
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-
 juce::Font readoutFont() { return staple::font (size::fs3); }
 juce::Font bypassedFont() { return staple::font (size::fs3, staple::Weight::medium); }
 } // namespace
@@ -287,11 +269,11 @@ void FooterBar::showOutputLevel()
     if (settings.autoGain && std::isfinite (db))
     {
         // Worked out again only when the Bands or Gain Scale change, at the rate the curve is drawn at.
-        if (! estimated || ! sameEstimate (settings, estimatedFor))
+        if (const auto inputs = autoGainInputs (settings); ! estimated || inputs != estimatedFor)
         {
             const double sampleRate = sampleRateOrAssumed (processor);
             estimateDb = autoGainDb (settings, sampleRate);
-            estimatedFor = settings;
+            estimatedFor = inputs;
             estimated = true;
         }
         db += estimateDb;

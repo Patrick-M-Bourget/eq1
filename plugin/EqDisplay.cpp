@@ -24,15 +24,6 @@ namespace eq1
 namespace
 {
 constexpr float handleRadius = display::DisplayGeometry::handleRadius;
-
-// Exactly the same, Band by Band (display::sameBand): any change at all counts.
-bool same (const Settings& a, const Settings& b)
-{
-    for (size_t i = 0; i < a.bands.size(); ++i)
-        if (! display::sameBand (a.bands[i], b.bands[i]))
-            return false;
-    return true;
-}
 } // namespace
 
 class EqDisplay::BandHandle final : public juce::Component
@@ -370,7 +361,7 @@ void EqDisplay::tick (double seconds)
 
     // The handles move, and their values are read out, only when the Bands or the range shown change:
     // an Analyzer frame, a fade or a Live Gain moves only what is painted.
-    if (! same (latest, shown) || range != shownRangeDb)
+    if (latest != shown || range != shownRangeDb)
     {
         shown = latest;
         shownRangeDb = range;
