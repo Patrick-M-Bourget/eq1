@@ -11,10 +11,10 @@ namespace eq1
 // mix their wet signal with the dry one and the previous chain's with the current one this way; the
 // Engine mixes the held output (Solo, Detection Audition) and Global Bypass in.
 //
-// The difference to - from is taken in Difference, and the rest in double: float where the Bands
-// mix, double where a full mix must play to exactly, as the held output does (a float difference
-// rounds, so from + 1.0 * (to - from) can miss to by an ulp). Each site keeps the choice it had, so
-// its output is the same bit for bit.
+// The difference to - from is taken in Difference, and the rest in double. A float difference rounds,
+// so a full mix, from + 1.0 * (to - from), can miss to by an ulp: where a full mix must play to
+// exactly, as the held output does, the difference is in double. The Bands and Global Bypass take it
+// in float, which their output is defined by: double would move their samples by an ulp.
 template <typename Difference, typename To>
 void crossfade (Smoother& glide, float* const* channels, int numChannels, int numSamples, To to)
 {

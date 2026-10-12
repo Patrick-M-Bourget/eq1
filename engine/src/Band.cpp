@@ -83,7 +83,7 @@ int Band::Chain::run (Lines& lines, const Piece& piece)
         const auto& start = piece.from->sections[s];
         for (size_t i = 0; i < numSamples; ++i)
         {
-            const auto coefficients = interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / maxSubBlock);
+            const auto coefficients = interpolate (start, to, piece.reached (i));
             for (size_t line = 0; line < numLines; ++line)
                 lines.samples[line][i] = states[lines.states[line]][s].process (coefficients, lines.samples[line][i]);
         }
@@ -125,7 +125,7 @@ int Band::Chain::runLanes (Lines& lines, const Piece& piece)
             // Designed once per run and interpolated by position in it, as run() does for its lines.
             const auto& start = piece.from->sections[s];
             for (size_t i = 0; i < numSamples; ++i)
-                step (interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / maxSubBlock), i);
+                step (interpolate (start, to, piece.reached (i)), i);
         }
         state0 = { lane0 (s1), lane0 (s2) };
         state1 = { lane1 (s1), lane1 (s2) };
@@ -154,7 +154,7 @@ int Band::Chain::runPlaced (float* const* channels, int numChannels, Lines& line
 
 int Band::Chain::runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid)
 {
-    std::array<float, maxSubBlock> midSamples, sideSamples;
+    std::array<float, runSamples> midSamples, sideSamples;
     float* left = channels[0];
     float* right = channels[1];
     const auto numSamples = static_cast<size_t> (piece.numSamples);
@@ -254,7 +254,7 @@ void Band::crossfadeTo (const Setup& setup)
 // Between the run's start and end as the coefficients are: near enough, for the display.
 double Band::liveGainDb() const
 {
-    return runStartGainDb + (runEndGainDb - runStartGainDb) * runPosition / maxSubBlock;
+    return runStartGainDb + (runEndGainDb - runStartGainDb) * runPosition / runSamples;
 }
 
 double Band::targetGainDb() const
@@ -291,9 +291,9 @@ void Band::startRun()
     if (runGliding)
     {
         runFrom = current.cascade;
-        logFrequency.skip (maxSubBlock);
-        gain.skip (maxSubBlock);
-        logQ.skip (maxSubBlock);
+        logFrequency.skip (runSamples);
+        gain.skip (runSamples);
+        logQ.skip (runSamples);
         design();
     }
 }
@@ -343,7 +343,7 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
         for (int ch = 0; ch < numChannels; ++ch)
             std::copy (channels[ch], channels[ch] + numSamples, to[static_cast<size_t> (ch)]);
     };
-    const auto sampleOf = [] (const std::vector<std::array<float, maxSubBlock>>& buffers, int ch, int i) {
+    const auto sampleOf = [] (const std::vector<std::array<float, runSamples>>& buffers, int ch, int i) {
         return buffers[static_cast<size_t> (ch)][static_cast<size_t> (i)];
     };
     copyInput (wetChannels);
