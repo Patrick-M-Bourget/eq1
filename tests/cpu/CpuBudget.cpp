@@ -2,7 +2,8 @@
 // (docs/performance.md, "CPU budget"). Run by scripts/check.sh cpu, on its own: timings taken while
 // other tests run are meaningless.
 //
-// It can also run one scene at a time, for comparing two builds:
+// scripts/check.sh cpu <ref> (docs/performance.md, "CPU A/B") runs it scene by scene instead, alternating
+// with <ref>'s build of this same file:
 //   eq1_cpu_budget scenes                          the CPU scenes' names, one per line, in order
 //   eq1_cpu_budget run <scene> <rate> <seconds>    the load of scene number <scene> (from 0) at <rate> Hz,
 //                                                  timed for about <seconds> of wall-clock time, as one number
