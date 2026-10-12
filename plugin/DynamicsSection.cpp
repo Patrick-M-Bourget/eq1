@@ -19,7 +19,7 @@ namespace colour = tokens::colour;
 namespace layout = tokens::layout;
 
 // Threshold's top in dB; the fader's position above it is Auto.
-constexpr double thresholdTopDb = 0.0;
+constexpr double thresholdTopDb = parameterRanges::threshold.high;
 
 // The meter's colours up a track of this height, from its bottom.
 juce::ColourGradient meterGradient (juce::Rectangle<float> track)
@@ -38,7 +38,7 @@ ThresholdFader::ThresholdFader (PluginProcessor& p)
     setSliderStyle (juce::Slider::LinearVertical);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setHasFocusOutline (true);
-    setRange (-60.0, autoPosition, 0.1);
+    setRange (parameterRanges::threshold.low, autoPosition, 0.1);
     setDoubleClickReturnValue (true, autoPosition);
     textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB"; };
     valueFromTextFunction = [] (const juce::String& text) {
@@ -346,7 +346,7 @@ void DynamicsSection::showChoices()
     if (slot == 0)
         return;
     auto& state = processor.parameterState();
-    const auto chosen = [&state] (const juce::String& id) { return state.getParameter (id)->getValue() >= 0.5f; };
+    const auto chosen = [&state] (const juce::String& id) { return parameters::isOn (*state.getParameter (id)); };
     detectionSource.setToggleState (chosen (parameters::detectionSourceId (slot)), juce::dontSendNotification);
     detectionRange->setFree (chosen (parameters::detectionRangeId (slot)));
 }
@@ -359,7 +359,7 @@ void DynamicsSection::showThreshold()
     // not have caught up yet.
     auto& state = processor.parameterState();
     const auto& level = *state.getParameter (parameters::thresholdId (slot));
-    const bool automatic = state.getParameter (parameters::thresholdAutoId (slot))->getValue() >= 0.5f;
+    const bool automatic = parameters::isOn (*state.getParameter (parameters::thresholdAutoId (slot)));
     threshold.setValue (automatic ? ThresholdFader::autoPosition : level.convertFrom0to1 (level.getValue()), juce::dontSendNotification);
 }
 

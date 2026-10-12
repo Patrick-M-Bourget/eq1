@@ -1,5 +1,5 @@
+#include "EditorHarness.h"
 #include "PluginProcessor.h"
-#include "SavedState.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -42,7 +42,7 @@ juce::MemoryBlock richSession()
     analyzer.rangeDb = 120;
     analyzer.tiltDbPerOctave = 2.5;
     maker.setAnalyzerSettings (analyzer);
-    return eq1::test::savedBlock (maker);
+    return harness::savedBlock (maker);
 }
 
 // A value a file could hold where a number belongs.
@@ -87,7 +87,7 @@ TEST_CASE ("Truncated, bit-flipped and random bytes, and random values for every
     const auto started = std::chrono::steady_clock::now();
     std::mt19937 random (182);
     const auto valid = richSession();
-    const auto validXml = eq1::test::savedXml (valid);
+    const auto validXml = harness::savedXml (valid);
     REQUIRE (validXml != nullptr);
 
     eq1::PluginProcessor processor;
@@ -96,11 +96,11 @@ TEST_CASE ("Truncated, bit-flipped and random bytes, and random values for every
     juce::MidiBuffer midi;
     const auto checkRestored = [&] (const std::string& what) {
         CAPTURE (what);
-        REQUIRE (eq1::test::firstParameterOutOfRange (processor).isEmpty());
+        REQUIRE (harness::firstParameterOutOfRange (processor).isEmpty());
         REQUIRE (std::isfinite (processor.analyzerSettings().tiltDbPerOctave));
         // Both A/B sides and the Loaded Preset, through what applies them.
         processor.selectCompareSide (processor.compareSide() == eq1::CompareSide::A ? eq1::CompareSide::B : eq1::CompareSide::A);
-        REQUIRE (eq1::test::firstParameterOutOfRange (processor).isEmpty());
+        REQUIRE (harness::firstParameterOutOfRange (processor).isEmpty());
         processor.isLoadedPresetModified();
         // And a block of audio through the restored Settings.
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
@@ -119,7 +119,7 @@ TEST_CASE ("Truncated, bit-flipped and random bytes, and random values for every
         {
             // Truncated: the saved block cut short anywhere, header included.
             const auto length = std::uniform_int_distribution<std::size_t> (0, valid.getSize() - 1) (random);
-            eq1::test::restoreState (processor, juce::MemoryBlock (valid.getData(), length));
+            harness::restoreState (processor, juce::MemoryBlock (valid.getData(), length));
             checkRestored ("truncated to " + std::to_string (length) + " bytes");
             ++cases;
         }
@@ -134,7 +134,7 @@ TEST_CASE ("Truncated, bit-flipped and random bytes, and random values for every
                 flipped.setBitRange (bit, 1, flipped.getBitRange (bit, 1) ^ 1);
                 where += std::to_string (bit) + " ";
             }
-            eq1::test::restoreState (processor, flipped);
+            harness::restoreState (processor, flipped);
             checkRestored ("bits flipped at " + where);
             ++cases;
         }
@@ -143,7 +143,7 @@ TEST_CASE ("Truncated, bit-flipped and random bytes, and random values for every
             juce::MemoryBlock bytes (std::uniform_int_distribution<std::size_t> (0, 4096) (random), true);
             for (std::size_t i = 0; i < bytes.getSize(); ++i)
                 bytes[static_cast<int> (i)] = static_cast<char> (std::uniform_int_distribution<int> (0, 255) (random));
-            eq1::test::restoreState (processor, bytes);
+            harness::restoreState (processor, bytes);
             checkRestored (std::to_string (bytes.getSize()) + " random bytes");
             ++cases;
         }
@@ -151,7 +151,7 @@ TEST_CASE ("Truncated, bit-flipped and random bytes, and random values for every
             // Random values: a well-formed state whose numbers, every setting's included, are junk.
             juce::XmlElement xml (*validXml);
             junkNumbers (xml, random, n % 2 == 0 ? 1 : 4);
-            eq1::test::restoreState (processor, xml);
+            harness::restoreState (processor, xml);
             checkRestored ("random values, case " + std::to_string (n));
             ++cases;
         }

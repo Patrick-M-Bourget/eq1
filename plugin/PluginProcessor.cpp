@@ -114,14 +114,6 @@ juce::ValueTree toTree (const AnalyzerSettings& a)
         .setProperty (peakHoldProperty, a.peakHold, nullptr);
 }
 
-// A saved number as a session restores it, like a parameter's value (restoredPlainValue): itself within
-// minimum to maximum, the nearer end outside, and defaultValue when it isn't a finite number.
-double restoredNumber (const juce::var& saved, double defaultValue, double minimum, double maximum)
-{
-    const double value = static_cast<double> (saved);
-    return std::isfinite (value) ? juce::jlimit (minimum, maximum, value) : defaultValue;
-}
-
 template <typename Enum>
 Enum restoredChoice (const juce::var& saved, Enum defaultValue, Enum first, Enum last)
 {
