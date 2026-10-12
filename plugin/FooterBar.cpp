@@ -1,6 +1,7 @@
 #include "FooterBar.h"
 
 #include "Accessibility.h"
+#include "AssumedSampleRate.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "UiScale.h"
@@ -293,7 +294,7 @@ void FooterBar::showOutputLevel()
         // Worked out again only when the Bands or Gain Scale change, at the rate the curve is drawn at.
         if (! estimated || ! sameEstimate (settings, estimatedFor))
         {
-            const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
+            const double sampleRate = sampleRateOrAssumed (processor);
             estimateDb = autoGainDb (settings, sampleRate);
             estimatedFor = settings;
             estimated = true;

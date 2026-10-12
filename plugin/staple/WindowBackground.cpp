@@ -1,5 +1,6 @@
 #include "WindowBackground.h"
 
+#include "Painting.h"
 #include "Tokens.h"
 
 namespace staple
@@ -12,12 +13,7 @@ namespace
 void paintHighlight (juce::Graphics& g, juce::Rectangle<float> window, juce::Point<float> at, float rx, float ry, juce::Colour colour, float fadeOut)
 {
     const juce::Point<float> centre { window.getX() + window.getWidth() * at.x, window.getY() + window.getHeight() * at.y };
-    const juce::Graphics::ScopedSaveState saved (g);
-    // A circle of radius rx, squashed to ry vertically.
-    const auto squash = juce::AffineTransform::scale (1.0f, ry / rx, centre.x, centre.y);
-    g.addTransform (squash);
-    g.setGradientFill (juce::ColourGradient (colour, centre, colour.withAlpha (0.0f), centre.translated (rx * fadeOut, 0.0f), true));
-    g.fillRect (window.transformedBy (squash.inverted()));
+    fillSquashedRadial (g, window, centre, rx * fadeOut, ry / rx, colour);
 }
 } // namespace
 

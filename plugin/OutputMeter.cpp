@@ -2,6 +2,7 @@
 
 #include "Accessibility.h"
 #include "PluginProcessor.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
 
 namespace eq1
@@ -152,10 +153,8 @@ void OutputMeter::paint (juce::Graphics& g)
 
     // The gradient is fixed to the scale, not to the bar's height: meter1 at the bottom, meter2 at
     // -16 dBFS, meter3 at -6 dBFS and meterClip from 0 dBFS up.
-    juce::ColourGradient gradient (colour::meter1, 0.0f, yOf (bottomDb), colour::meterClip, 0.0f, yOf (0.0), false);
     const auto stop = [] (double db) { return (db - bottomDb) / (0.0 - bottomDb); };
-    gradient.addColour (stop (-16.0), colour::meter2);
-    gradient.addColour (stop (-6.0), colour::meter3);
+    const auto gradient = staple::meterGradient (yOf (bottomDb), yOf (0.0), stop (-16.0), stop (-6.0));
 
     for (int ch = 0; ch < numChannels; ++ch)
     {

@@ -5,6 +5,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "ShapeIcon.h"
+#include "ShowMenu.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
 #include "staple/Tokens.h"
@@ -447,11 +448,8 @@ void HoverCard::openMenu()
     if (slot == 0)
         return;
     menuOpen = true;
-    auto popup = menu();
-    // A menu is a window of its own: it draws with the editor's look only when given it.
-    popup.setLookAndFeel (&getLookAndFeel());
     const juce::Component::SafePointer<HoverCard> safe (this);
-    popup.showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withTargetComponent (&more), [safe] (int) {
+    showMenu (menu(), *this, juce::PopupMenu::Options().withTargetComponent (&more), [safe] (int) {
         if (safe != nullptr)
             safe->menuOpen = false;
     });

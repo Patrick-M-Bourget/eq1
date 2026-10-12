@@ -1,6 +1,7 @@
 #include "DisplayRangeChip.h"
 
 #include "PluginProcessor.h"
+#include "ShowMenu.h"
 
 namespace eq1
 {
@@ -48,14 +49,8 @@ juce::PopupMenu DisplayRangeChip::menu()
 
 void DisplayRangeChip::clicked()
 {
-    auto popup = menu();
-    // A menu is a window of its own: it draws with the editor's look only when given it.
-    popup.setLookAndFeel (&getLookAndFeel());
-    popup.showMenuAsync (juce::PopupMenu::Options()
-                             .withTargetComponent (this)
-                             .withDeletionCheck (*this)
-                             .withMinimumWidth (menuWidth)
-                             .withStandardItemHeight (menuRowHeight));
+    showMenu (menu(), *this,
+              juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (menuWidth).withStandardItemHeight (menuRowHeight));
 }
 
 void DisplayRangeChip::follow()
