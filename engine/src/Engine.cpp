@@ -148,6 +148,7 @@ struct Engine::Impl
     std::unique_ptr<OutputLevelTap[]> outputLevels;
     int outputLevelChannels = 0;
 
+    // A non-finite input sample reaches the Analyzer as 0, as it does the output.
     static void pushMonoMix (AnalysisFifo& fifo, const float* const* channels, int numChannels, int numSamples)
     {
         if (numChannels <= 0)
@@ -157,7 +158,8 @@ struct Engine::Impl
             float sum = 0.0f;
             for (int ch = 0; ch < numChannels; ++ch)
                 sum += channels[ch][i];
-            return sum * scale;
+            const float mix = sum * scale;
+            return std::isfinite (mix) ? mix : 0.0f;
         });
     }
 
@@ -360,7 +362,12 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
         for (auto& dynamics : impl->dynamics)
             dynamics.hear (impl->subBlock.data(), channels, impl->sidechainSubBlock.data(), sidechainChannels, impl->gridRun, position, count);
         if (impl->meteredSlot != 0)
-            loudestDetection = std::max (loudestDetection, impl->dynamics[static_cast<size_t> (impl->meteredSlot - 1)].detectionLevelDb());
+        {
+            // An infinite input's level isn't held for the Detection Level: the detector starts afresh at the next run.
+            const double heard = impl->dynamics[static_cast<size_t> (impl->meteredSlot - 1)].detectionLevelDb();
+            if (std::isfinite (heard))
+                loudestDetection = std::max (loudestDetection, heard);
+        }
         for (auto& band : impl->bands)
             band.process (impl->subBlock.data(), channels, impl->gridRun, position, count);
 

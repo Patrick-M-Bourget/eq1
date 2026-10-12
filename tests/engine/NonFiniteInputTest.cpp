@@ -187,3 +187,18 @@ TEST_CASE ("A non-finite input sample never reaches the output, and every Band r
     CHECK (firstDifference (leftAfter, reference.left) == reference.left.size());
     CHECK (firstDifference (rightAfter, reference.right) == reference.right.size());
 }
+
+TEST_CASE ("The Output Level, the Detection Level and the Analyzer taps never read a non-finite value, burst or not")
+{
+    const float bad = GENERATE (std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity());
+    CAPTURE (bad);
+    Material material (24000);
+    material.burst (12007, 5, bad);
+
+    const auto played = play (material, everyShapeAndPlacement(), 0, 512);
+    CHECK (nonFiniteIn (played.outputLevels) == 0);
+    CHECK (nonFiniteIn (played.detectionLevels) == 0);
+    CHECK (nonFiniteIn (played.analysis) == 0);
+    // The metered Band's detector heard the burst's run and listens again from the next.
+    CHECK (std::count (played.detectionLevels.begin(), played.detectionLevels.end(), levelFloorDb) == 0);
+}
