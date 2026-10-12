@@ -1,5 +1,7 @@
 #include "MatchedDesign.h"
 
+#include "SquaredMagnitude.h"
+
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -10,35 +12,6 @@ namespace eq1
 
 namespace
 {
-
-// Squared magnitude of a biquad polynomial p0 + p1 z^-1 + p2 z^-2 is a linear combination of
-// phi0 = cos^2(w/2), phi1 = sin^2(w/2), phi2 = 4 phi0 phi1 with weights
-// P0 = (p0 + p1 + p2)^2, P1 = (p0 - p1 + p2)^2, P2 = -4 p0 p2.
-struct Phi
-{
-    double phi0, phi1, phi2;
-
-    explicit Phi (double w)
-    {
-        const double s = std::sin (w / 2.0);
-        phi1 = s * s;
-        phi0 = 1.0 - phi1;
-        phi2 = 4.0 * phi0 * phi1;
-    }
-};
-
-struct SquaredMagnitude
-{
-    double p0, p1, p2;
-
-    explicit SquaredMagnitude (double c0, double c1, double c2)
-        : p0 ((c0 + c1 + c2) * (c0 + c1 + c2)), p1 ((c0 - c1 + c2) * (c0 - c1 + c2)), p2 (-4.0 * c0 * c2)
-    {
-    }
-    SquaredMagnitude() = default;
-
-    double at (const Phi& phi) const { return p0 * phi.phi0 + p1 * phi.phi1 + p2 * phi.phi2; }
-};
 
 // The positive-root, minimum-phase factorisation back to polynomial coefficients. A cut is the
 // inverse of a boost, so these roots may become poles: they are kept inside the unit circle.
