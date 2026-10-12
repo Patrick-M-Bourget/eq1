@@ -37,7 +37,7 @@ inline constexpr double levelFloorDb = -150.0;
 struct OutputLevel
 {
     double peakDb = levelFloorDb; // sample peak since the last read
-    double rmsDb = levelFloorDb;  // over the last 300 ms
+    double rmsDb = levelFloorDb;  // over the last 300 ms, rounded up to whole 16-sample runs
 };
 
 // The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis(), skipAnalysis(), liveGainDb(),

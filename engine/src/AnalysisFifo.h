@@ -17,7 +17,7 @@ namespace eq1
 // time between two editor frames with margin, which is all the Analyzer needs to bridge. The reader
 // may go on popping while the host prepares the Engine again, so a ring is never freed or moved
 // while the Engine lives: a prepare that needs more replaces it with a bigger one and keeps the old
-// one, and a prepare that needs less keeps the ring it has.
+// one, and a prepare that needs less keeps the ring it has (the cost: docs/performance.md, "Footprint").
 class AnalysisFifo
 {
 public:
