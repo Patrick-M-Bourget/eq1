@@ -129,6 +129,9 @@ inline std::vector<RenderScene> renderScenes()
         scenes.push_back ({ .name = "dynamic-external-sidechain", .settings = oneBand (band), .sidechain = true });
         // The same Band with no Sidechain connected: its detector has nothing to listen to.
         scenes.push_back ({ .name = "dynamic-external-no-sidechain", .settings = oneBand (band) });
+        // A Band moving on the main input, switched to the Sidechain with none connected: it
+        // returns to its Gain over what the detector hears of nothing.
+        scenes.push_back ({ .name = "dynamic-sidechain-disconnected", .settings = oneBand (dynamicBell()), .change = oneBand (band) });
     }
 
     // The Metered Band: a Dynamic Bell moving its Band, and one whose dynamics are idle (Dynamic Range

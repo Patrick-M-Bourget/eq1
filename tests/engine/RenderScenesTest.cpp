@@ -67,9 +67,13 @@ TEST_CASE ("Render scenes meter a moving Band and an idle one, and hear an Exter
         const auto* band = meteredBand (s);
         return band != nullptr && band->inUse && hasDynamics (band->shape) && ! isDynamic (*band);
     }));
-    // A detector with nothing to listen to.
+    // A detector with nothing to listen to, from the start and from mid-movement on.
     CHECK (someScene ([] (const test::RenderScene& s) {
-        return ! s.sidechain && isDynamic (s.settings.bands[0]) && s.settings.bands[0].detectionSource == DetectionSource::External;
+        return ! s.sidechain && ! s.change && isDynamic (s.settings.bands[0]) && s.settings.bands[0].detectionSource == DetectionSource::External;
+    }));
+    CHECK (someScene ([] (const test::RenderScene& s) {
+        return ! s.sidechain && s.change && isDynamic (s.settings.bands[0]) && s.settings.bands[0].detectionSource == DetectionSource::Internal
+               && s.change->bands[0].detectionSource == DetectionSource::External;
     }));
 }
 
