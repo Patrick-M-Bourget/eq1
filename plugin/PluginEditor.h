@@ -4,6 +4,7 @@
 #include "BandPanel.h"
 #include "DetectionRangeBar.h"
 #include "DisplayRangeChip.h"
+#include "EditorTick.h"
 #include "EqDisplay.h"
 #include "FooterBar.h"
 #include "HeaderBar.h"
@@ -24,8 +25,9 @@ class PluginProcessor;
 // Display Range sits at its top right, and the Preset browser opens as a modal over everything. The
 // header and footer keep their height and the rail its width; the display takes the rest. Resizable,
 // and drawn at the instance's UI Scale through one transform; everything is drawn as vectors, so it
-// stays sharp at any UI Scale and display scale.
-class PluginEditor final : public juce::AudioProcessorEditor, private juce::Timer
+// stays sharp at any UI Scale and display scale. It owns the one tick its components follow the
+// processor on (EditorTick), and follows the window's size and UI Scale on it itself.
+class PluginEditor final : public juce::AudioProcessorEditor, public EditorTick::Host, private EditorTick::Client
 {
 public:
     explicit PluginEditor (PluginProcessor& processor);
@@ -40,11 +42,16 @@ public:
     // it is on the card.
     void mouseDown (const juce::MouseEvent& e) override;
 
+    EditorTick& editorTick() override { return ticker; }
+
 private:
-    // Follows the window's size and UI Scale, restored with the plugin's state, and what can be undone.
-    void timerCallback() override;
+    // Follows the window's size and UI Scale, and whether the Output Meter is shown, restored with the
+    // plugin's state.
+    void tick (double seconds) override;
 
     PluginProcessor& eqProcessor;
+    // First, so it outlives every Client below.
+    EditorTick ticker;
     // Every component below draws with it, so it outlives them all.
     staple::LookAndFeel lookAndFeel;
     // Everything the editor shows, laid out in logical pixels (as at 100%) and drawn at the UI Scale

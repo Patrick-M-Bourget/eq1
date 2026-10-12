@@ -81,7 +81,7 @@ std::unique_ptr<juce::AccessibilityHandler> CompareButton::createAccessibilityHa
         *this, juce::AccessibilityRole::button, [this] { return letter (side); }, [this] { triggerClick(); });
 }
 
-HeaderBar::HeaderBar (PluginProcessor& p) : processor (p), presetBar (p)
+HeaderBar::HeaderBar (PluginProcessor& p) : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), presetBar (p)
 {
     presetBar.onEdit = [this] { edited(); };
     presetBar.onIdealWidthChange = [this] { resized(); };
@@ -122,16 +122,14 @@ HeaderBar::HeaderBar (PluginProcessor& p) : processor (p), presetBar (p)
         child->setExplicitFocusOrder (++order);
     showSide();
     showUndoState();
-    startTimer (followTimer, 250);
 }
 
-void HeaderBar::timerCallback (int id)
+void HeaderBar::tick (double)
 {
-    if (id == copiedTimer)
+    if (copiedUntil != 0 && juce::Time::getMillisecondCounter() >= copiedUntil)
     {
-        stopTimer (copiedTimer);
+        copiedUntil = 0;
         copyButton.setButtonText ("Copy");
-        return;
     }
     showSide();
     showUndoState();
@@ -142,6 +140,8 @@ void HeaderBar::showSide()
     const auto side = processor.compareSide();
     compareButton.showSide (side);
     const auto direction = "Copy " + letter (side) + " to " + letter (otherSide (side));
+    if (copyButton.getTitle() == direction)
+        return;
     copyButton.setTooltip (direction);
     copyButton.setTitle (direction);
 }
@@ -150,7 +150,7 @@ void HeaderBar::copyToOther()
 {
     processor.copyToOther();
     copyButton.setButtonText ("Copied");
-    startTimer (copiedTimer, 1000);
+    copiedUntil = juce::Time::getMillisecondCounter() + 1000;
     edited();
 }
 

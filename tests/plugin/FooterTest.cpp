@@ -236,6 +236,23 @@ TEST_CASE ("The output popover opens above the Output readout, right-aligned to 
     host.openPopover();
 }
 
+TEST_CASE ("The output popover follows the processor only while it is open, and shows the processor's state as it opens")
+{
+    Footer host;
+    host.openPopover();
+    auto& toggle = host.titled<juce::Button> ("Output Meter");
+    REQUIRE (toggle.getToggleState());
+    host.output.onClick();
+    REQUIRE_FALSE (host.popover.isOpen());
+    // A restored session hides the Output Meter while the popover is closed: nothing follows it until
+    // the popover opens.
+    host.processor.setOutputMeterShown (false);
+    host.settle (300);
+    CHECK (toggle.getToggleState());
+    host.openPopover();
+    CHECK_FALSE (toggle.getToggleState());
+}
+
 TEST_CASE ("The output popover's card is the prototype's 176 x 188.5 px, within 1 px")
 {
     Footer host;

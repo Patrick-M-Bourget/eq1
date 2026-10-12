@@ -13,7 +13,7 @@ namespace eq1
 namespace layout = staple::tokens::layout;
 
 PluginEditor::PluginEditor (PluginProcessor& p)
-    : AudioProcessorEditor (p), eqProcessor (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), detectionRange (p, editing, panel), header (p),
+    : AudioProcessorEditor (p), EditorTick::Client (static_cast<juce::Component&> (*this)), eqProcessor (p), ticker (p), editing (p.parameterState(), p.editHistory()), display (p, editing), panel (p, editing), detectionRange (p, editing, panel), header (p),
       footer (p), displayRange (p), meter (p), keyboard (p.editHistory())
 {
     display.onSelectionChanged = [this] (int slot) { panel.show (slot); };
@@ -28,7 +28,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
     content.addAndMakeVisible (header);
     content.addAndMakeVisible (footer);
 
-    // The display's Gain range, saved with the plugin; the display follows it on its timer.
+    // The display's Gain range, saved with the plugin; the display follows it on the tick.
     content.addAndMakeVisible (displayRange);
     content.addChildComponent (header.presetBrowser());
 
@@ -45,7 +45,7 @@ PluginEditor::PluginEditor (PluginProcessor& p)
                                                                              &meter, &panel, &detectionRange, &footer })
         child->setExplicitFocusOrder (++order);
 
-    startTimerHz (4);
+    ticker.add (*this);
 
     // Once every component is in place: each one that keeps something from its look (a Slider's
     // text box, a ComboBox's label colours) takes it again from this.
@@ -119,9 +119,8 @@ bool PluginEditor::keyPressed (const juce::KeyPress& key)
     return false;
 }
 
-void PluginEditor::timerCallback()
+void PluginEditor::tick (double)
 {
-    header.showUndoState();
     if (meter.isVisible() != eqProcessor.isOutputMeterShown())
         resized();
     if (eqProcessor.uiScalePercent() != shownScalePercent || eqProcessor.editorSize() != shownSize)
