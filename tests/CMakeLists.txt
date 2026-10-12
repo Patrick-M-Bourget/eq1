@@ -18,6 +18,7 @@ add_executable(eq1_engine_tests
     engine/Double2Test.cpp
     engine/DynamicsTest.cpp
     engine/FootprintTest.cpp
+    engine/IdentitySectionsTest.cpp
     engine/NonFiniteInputTest.cpp
     engine/OutputLevelTest.cpp
     engine/OutputTest.cpp
