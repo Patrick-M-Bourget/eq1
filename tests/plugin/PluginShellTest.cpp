@@ -216,6 +216,32 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         check (control, control.suffix, control.name);
 }
 
+TEST_CASE ("Looking up a missing parameter id fails safely, in a release build too: an inert parameter that reaches nothing")
+{
+    eq1::PluginProcessor processor;
+    auto& state = processor.parameterState();
+    const auto before = state.copyState().toXmlString();
+    std::vector<float> values;
+    for (auto* p : processor.getParameters())
+        values.push_back (p->getValue());
+
+    auto& missing = eq1::parameters::lookUp (state, "no_such_parameter");
+    CHECK (missing.getName (100).isEmpty());
+    missing.beginChangeGesture();
+    missing.setValueNotifyingHost (1.0f);
+    missing.endChangeGesture();
+    CHECK (missing.getText (missing.getValue(), 10).isNotEmpty());
+
+    // No host parameter moved, and the state is as it was.
+    std::vector<float> after;
+    for (auto* p : processor.getParameters())
+        after.push_back (p->getValue());
+    CHECK (after == values);
+    CHECK (state.copyState().toXmlString() == before);
+    // A parameter that is there is found.
+    CHECK (&eq1::parameters::lookUp (state, eq1::parameters::gainId (3)) == state.getParameter (eq1::parameters::gainId (3)));
+}
+
 TEST_CASE ("A Band slot shapes the sound only when in use and not Bypassed")
 {
     juce::ScopedJuceInitialiser_GUI juce;

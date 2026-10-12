@@ -81,6 +81,12 @@ inline bool isOn (float value) { return value >= 0.5f; }
 inline bool isOn (const std::atomic<float>* parameter) { return isOn (parameter->load()); }
 inline bool isOn (const juce::AudioProcessorParameter& parameter) { return isOn (parameter.getValue()); }
 
+// The parameter with this id: the one lookup the editor uses, so a missing id fails safely in a
+// release build too. A missing id asserts in a debug build and, in any build, gives an inert parameter:
+// one no processor holds, with no name, which no host, Engine, undo history or saved state ever sees,
+// so reading, describing, attaching to or setting it is harmless. Message thread only.
+juce::RangedAudioParameter& lookUp (juce::AudioProcessorValueTreeState& parameters, const juce::String& id);
+
 // The host parameters of one Band slot, readable from any thread.
 struct SlotValues
 {

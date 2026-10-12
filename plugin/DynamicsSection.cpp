@@ -311,16 +311,16 @@ void DynamicsSection::show (int newSlot)
     attackAttachment = std::make_unique<SliderAttachment> (state, parameters::attackId (slot), attack);
     releaseAttachment = std::make_unique<SliderAttachment> (state, parameters::releaseId (slot), release);
     const auto attach = [&] (const juce::String& id, std::function<void()> shown) {
-        return std::make_unique<juce::ParameterAttachment> (*state.getParameter (id), [shown] (float) { shown(); });
+        return std::make_unique<juce::ParameterAttachment> (parameters::lookUp (state, id), [shown] (float) { shown(); });
     };
     thresholdAttachment = attach (parameters::thresholdId (slot), [this] { showThreshold(); });
     thresholdAutoAttachment = attach (parameters::thresholdAutoId (slot), [this] { showThreshold(); });
     detectionSourceAttachment = attach (parameters::detectionSourceId (slot), [this] { showChoices(); });
     detectionRangeAttachment = attach (parameters::detectionRangeId (slot), [this] { showChoices(); });
 
-    const auto name = [&state] (const juce::String& id) { return state.getParameter (id)->getName (100); };
-    attack.describe (*state.getParameter (parameters::attackId (slot)));
-    release.describe (*state.getParameter (parameters::releaseId (slot)));
+    const auto name = [&state] (const juce::String& id) { return parameters::lookUp (state, id).getName (100); };
+    attack.describe (parameters::lookUp (state, parameters::attackId (slot)));
+    release.describe (parameters::lookUp (state, parameters::releaseId (slot)));
     threshold.setTitle (name (parameters::thresholdId (slot)));
     detectionSource.setTitle (name (parameters::detectionSourceId (slot)));
     detectionRange->setTitle (name (parameters::detectionRangeId (slot)));
@@ -334,7 +334,7 @@ void DynamicsSection::showChoices()
     if (slot == 0)
         return;
     auto& state = processor.parameterState();
-    const auto chosen = [&state] (const juce::String& id) { return parameters::isOn (*state.getParameter (id)); };
+    const auto chosen = [&state] (const juce::String& id) { return parameters::isOn (parameters::lookUp (state, id)); };
     detectionSource.setToggleState (chosen (parameters::detectionSourceId (slot)), juce::dontSendNotification);
     detectionRange->setFree (chosen (parameters::detectionRangeId (slot)));
 }
@@ -346,8 +346,8 @@ void DynamicsSection::showThreshold()
     // From the parameters themselves: while their listeners are told of a change, the raw values may
     // not have caught up yet.
     auto& state = processor.parameterState();
-    const auto& level = *state.getParameter (parameters::thresholdId (slot));
-    const bool automatic = parameters::isOn (*state.getParameter (parameters::thresholdAutoId (slot)));
+    const auto& level = parameters::lookUp (state, parameters::thresholdId (slot));
+    const bool automatic = parameters::isOn (parameters::lookUp (state, parameters::thresholdAutoId (slot)));
     threshold.setValue (automatic ? ThresholdFader::autoPosition : level.convertFrom0to1 (level.getValue()), juce::dontSendNotification);
 }
 

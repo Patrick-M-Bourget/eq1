@@ -179,7 +179,7 @@ FooterBar::FooterBar (PluginProcessor& p)
     globalBypass.setOffLook (true);
     globalBypass.setIconSize (14.0f);
     globalBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::globalBypassId, globalBypass);
-    globalBypass.setTitle (state.getParameter (parameters::globalBypassId)->getName (100));
+    globalBypass.setTitle (parameters::lookUp (state, parameters::globalBypassId).getName (100));
     globalBypass.setTooltip ("Global Bypass (Cmd/Ctrl+B)");
     globalBypass.onStateChange = [this] { showBypass(); };
     addAndMakeVisible (globalBypass);
@@ -204,7 +204,7 @@ FooterBar::FooterBar (PluginProcessor& p)
     addChildComponent (analyzerPopover);
 
     gainScaleAttachment = std::make_unique<SliderAttachment> (state, parameters::gainScaleId, gainScale);
-    gainScale.describe (*state.getParameter (parameters::gainScaleId));
+    gainScale.describe (parameters::lookUp (state, parameters::gainScaleId));
     addAndMakeVisible (gainScale);
 
     output.onClick = [this] {

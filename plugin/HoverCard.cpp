@@ -388,7 +388,7 @@ void HoverCard::attach (int newSlot)
     {
         // No reset gesture: a double-click types a value.
         value->setDoubleClickReturnValue (false, 0.0);
-        value->describe (*state.getParameter (id));
+        value->describe (parameters::lookUp (state, id));
     }
 
     const auto band = "Band " + juce::String (slot);

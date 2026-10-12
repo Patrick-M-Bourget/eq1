@@ -65,7 +65,7 @@ void DynamicRangeRing::show (int newSlot)
     auto& state = processor.parameterState();
     band = parameters::SlotValues::of (state, slot);
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, parameters::dynamicRangeId (slot), *this);
-    describe (*state.getParameter (parameters::dynamicRangeId (slot)));
+    describe (parameters::lookUp (state, parameters::dynamicRangeId (slot)));
     gain.ringChanged();
 }
 

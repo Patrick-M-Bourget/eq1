@@ -125,7 +125,7 @@ public:
 private:
     juce::String value() const
     {
-        const auto& parameter = *display.processor.parameterState().getParameter (parameters::dynamicRangeId (slot));
+        const auto& parameter = parameters::lookUp (display.processor.parameterState(), parameters::dynamicRangeId (slot));
         return accessibility::spokenValue (parameter, parameter.getValue());
     }
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
@@ -287,7 +287,7 @@ juce::String EqDisplay::spokenBand (int slot) const
     auto& state = processor.parameterState();
     const auto band = editing.band (slot);
     const auto value = [&state] (const juce::String& id) {
-        const auto& parameter = *state.getParameter (id);
+        const auto& parameter = parameters::lookUp (state, id);
         return accessibility::spokenValue (parameter, parameter.getValue());
     };
     juce::StringArray parts { parameters::shapeNames()[static_cast<int> (band.shape)], value (parameters::frequencyId (slot)) };

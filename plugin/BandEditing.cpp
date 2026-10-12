@@ -26,9 +26,7 @@ BandEditing::~BandEditing()
 
 juce::RangedAudioParameter& BandEditing::parameter (const juce::String& id) const
 {
-    auto* found = parameters.getParameter (id);
-    jassert (found != nullptr);
-    return *found;
+    return parameters::lookUp (parameters, id);
 }
 
 void BandEditing::setWithinGesture (const juce::String& id, double value)

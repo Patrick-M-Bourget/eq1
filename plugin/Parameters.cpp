@@ -255,6 +255,15 @@ void setTogether (const std::vector<NewValue>& values)
         parameter->endChangeGesture();
 }
 
+juce::RangedAudioParameter& lookUp (juce::AudioProcessorValueTreeState& parameters, const juce::String& id)
+{
+    if (auto* found = parameters.getParameter (id))
+        return *found;
+    jassertfalse; // an id the layout doesn't have
+    static juce::AudioParameterFloat inert { juce::ParameterID { "inert", 1 }, {}, juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.0f };
+    return inert;
+}
+
 SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int slot)
 {
     return { parameters.getRawParameterValue (frequencyId (slot)), parameters.getRawParameterValue (gainId (slot)),

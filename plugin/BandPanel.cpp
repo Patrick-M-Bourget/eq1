@@ -192,7 +192,7 @@ void BandPanel::SlopeButton::startedDragging()
 {
     if (panel.slot == 0 || ! isCut (panel.editing.band (panel.slot).shape) || ! panel.editing.band (panel.slot).brickwall)
         return;
-    brickwall = panel.processor.parameterState().getParameter (parameters::brickwallId (panel.slot));
+    brickwall = &parameters::lookUp (panel.processor.parameterState(), parameters::brickwallId (panel.slot));
     brickwall->beginChangeGesture();
     brickwall->setValueNotifyingHost (0.0f);
 }
@@ -403,13 +403,13 @@ void BandPanel::show (int newSlot)
 void BandPanel::describe()
 {
     auto& state = processor.parameterState();
-    const auto name = [&state] (const juce::String& id) { return state.getParameter (id)->getName (100); };
+    const auto name = [&state] (const juce::String& id) { return parameters::lookUp (state, id).getName (100); };
     const std::pair<KeyboardSlider*, juce::String> sliders[] = { { &frequency, parameters::frequencyId (slot) },
                                                                  { &gain, parameters::gainId (slot) },
                                                                  { &q, parameters::qId (slot) },
                                                                  { slope.get(), parameters::slopeId (slot) } };
     for (const auto& [slider, id] : sliders)
-        slider->describe (*state.getParameter (id));
+        slider->describe (parameters::lookUp (state, id));
     // Read as it shows: Brickwall on a Brickwall Cut.
     slope->spokenValue = [this, spoken = slope->spokenValue] (double value) {
         const auto text = slope->text();
