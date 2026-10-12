@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_adapters.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 
 #include <algorithm>
@@ -330,8 +331,8 @@ TEST_CASE ("A Cut or Band Pass at a Slope of 0 passes the signal unchanged")
 
 TEST_CASE ("Brickwall has no effect on Shapes other than the Cuts")
 {
-    const Shape s = GENERATE (Shape::Bell, Shape::LowShelf, Shape::HighShelf, Shape::Notch, Shape::BandPass, Shape::TiltShelf,
-                              Shape::FlatTilt, Shape::AllPass);
+    const Shape s = GENERATE (filter ([] (Shape shape) { return shape != Shape::LowCut && shape != Shape::HighCut; },
+                                      from_range (test::allShapes)));
     auto brickwall = shape (s, 1000.0, 9.0, 1.0, 24.0);
     brickwall.bands[0].brickwall = true;
 

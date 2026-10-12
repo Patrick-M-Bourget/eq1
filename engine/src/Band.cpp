@@ -19,6 +19,24 @@ void Band::Chain::clear()
         channel = {};
 }
 
+bool Band::Chain::clearNonFinite()
+{
+    bool cleared = false;
+    for (auto& channel : states)
+    {
+        for (size_t s = 0; s < static_cast<size_t> (cascade.count); ++s)
+        {
+            // One check a section: a sum of two finite numbers is finite, and one NaN or infinity makes it not.
+            auto& state = channel[s];
+            if (std::isfinite (state.s1 + state.s2))
+                continue;
+            state = {};
+            cleared = true;
+        }
+    }
+    return cleared;
+}
+
 void Band::Chain::run (size_t channel, float* samples, const Piece& piece)
 {
     auto& channelStates = states[channel];
@@ -220,7 +238,20 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
         return;
 
     if (position == 0)
+    {
+        // A chain a non-finite sample got into starts afresh at this run's filter, with no glide from
+        // the one it lost: the output is finite again from here, and its detector's offset, which
+        // starts afresh too, applies at once.
+        bool recovering = current.clearNonFinite();
+        if (shapeCrossfade.isMoving() && previous.clearNonFinite())
+            recovering = true;
         startRun();
+        if (recovering)
+        {
+            runGliding = false;
+            runStartGainDb = runEndGainDb;
+        }
+    }
     else if (joinedLate)
     {
         runGliding = false;

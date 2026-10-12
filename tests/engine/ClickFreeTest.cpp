@@ -191,10 +191,10 @@ TEST_CASE ("Changing Shape does not click")
     const bool brickwall = GENERATE (false, true);
     CAPTURE (host.sampleRate, host.blockSize, brickwall);
     const auto output = playTone (host, [brickwall] (double time, Settings& s) {
-        constexpr Shape shapes[] = { Shape::LowShelf, Shape::LowCut,   Shape::HighShelf, Shape::HighCut, Shape::Notch,
-                                     Shape::BandPass, Shape::TiltShelf, Shape::FlatTilt, Shape::AllPass, Shape::Bell };
+        // A Bell through the onset, then every Shape in turn from the one after Bell, Bell last.
+        const auto step = static_cast<size_t> (std::max (time - onsetSeconds, 0.0) / 0.05);
         s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
-        s.bands[0].shape = time < onsetSeconds ? Shape::Bell : shapes[static_cast<int> ((time - onsetSeconds) / 0.05) % 10];
+        s.bands[0].shape = time < onsetSeconds ? Shape::Bell : test::allShapes[(1 + step) % test::allShapes.size()];
         s.bands[0].brickwall = brickwall;
     });
     CHECK (discontinuity (output, host.sampleRate) < threshold);
@@ -285,10 +285,10 @@ TEST_CASE ("Changing Stereo Placement does not click")
     const auto host = anyHost();
     CAPTURE (host.sampleRate, host.blockSize);
     const auto output = playStereoTone (host, [] (double time, Settings& s) {
-        constexpr StereoPlacement placements[] = { StereoPlacement::Left, StereoPlacement::Right, StereoPlacement::Mid,
-                                                   StereoPlacement::Side, StereoPlacement::Stereo };
+        // Stereo through the onset, then every Stereo Placement in turn from the one after Stereo, Stereo last.
+        const auto step = static_cast<size_t> (std::max (time - onsetSeconds, 0.0) / 0.05);
         s.bands[0] = bellBand (toneFrequency, 12.0, 1.0);
-        s.bands[0].placement = time < onsetSeconds ? StereoPlacement::Stereo : placements[static_cast<int> ((time - onsetSeconds) / 0.05) % 5];
+        s.bands[0].placement = time < onsetSeconds ? StereoPlacement::Stereo : test::allPlacements[(1 + step) % test::allPlacements.size()];
     });
     CHECK (discontinuity (output[0], host.sampleRate) < threshold);
     CHECK (discontinuity (output[1], host.sampleRate) < threshold);

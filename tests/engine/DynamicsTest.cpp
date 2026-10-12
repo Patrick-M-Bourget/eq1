@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
@@ -565,8 +566,7 @@ TEST_CASE ("With a stereo Sidechain, a Mid or Side External Band listens to the 
 
 TEST_CASE ("With a mono Sidechain, an External Band moves with it whatever its Stereo Placement, Side included")
 {
-    const auto placement = GENERATE (StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right, StereoPlacement::Mid,
-                                     StereoPlacement::Side);
+    const auto placement = GENERATE (from_range (test::allPlacements));
     CAPTURE (static_cast<int> (placement));
     // A kick: a 60 Hz thump on the Sidechain, ducking a Low Shelf on the bass.
     auto band = externalBell();

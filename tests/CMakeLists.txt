@@ -17,6 +17,7 @@ add_executable(eq1_engine_tests
     engine/ClickFreeTest.cpp
     engine/DynamicsTest.cpp
     engine/FootprintTest.cpp
+    engine/NonFiniteInputTest.cpp
     engine/OutputLevelTest.cpp
     engine/OutputTest.cpp
     engine/RealtimeSafetyTest.cpp
@@ -92,6 +93,7 @@ if(EQ1_BUILD_PLUGIN)
 endif()
 
 # Measures the Engine's CPU load against its budget (scripts/check.sh cpu). Not a ctest test: it
-# needs the machine to itself.
+# needs the machine to itself. It shares the Engine tests' helpers (engine/Measure.h), whose
+# generators are Catch2's, so it links Catch2 without its main.
 add_executable(eq1_cpu_budget cpu/CpuBudget.cpp)
-target_link_libraries(eq1_cpu_budget PRIVATE eq1::engine)
+target_link_libraries(eq1_cpu_budget PRIVATE eq1::engine Catch2::Catch2)
