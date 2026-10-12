@@ -23,6 +23,10 @@
 #                               Mac busy with other work it measures nothing and exits 3
 #   scripts/check.sh paint      the editor's paint time against its ceiling (docs/performance.md, "Paint time"); local
 #                               only, not in CI; on a Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh size       the shipping build's footprint (docs/performance.md, "Footprint"): each format's
+#                               binary per architecture, unstripped and stripped; the VST3's code by library; and the
+#                               heap one Engine holds, whose test fails above its ceiling. Not in CI. On Windows, the
+#                               heap only
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
@@ -335,6 +339,78 @@ paint() {
     "$(test_exe eq1_plugin_tests)" "[paint]"
 }
 
+# The heap one stereo Engine holds after prepare(), at 48 and 192 kHz, from the [footprint] tests
+# (tests/engine/FootprintTest.cpp), which fail above their ceilings.
+engine_heap() {
+    step "Engine heap"
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_engine_tests
+    local out status=0
+    out=$("$(test_exe eq1_engine_tests)" "[footprint]") || status=$?
+    if [ "$status" != 0 ]; then
+        printf '%s\n' "$out"
+        return "$status"
+    fi
+    grep 'Engine heap' <<< "$out"
+}
+
+# The binary of one format in the shipping build.
+shipping_binary() {
+    local bundle
+    case "$1" in
+        VST3) bundle=eq1.vst3 ;;
+        AU) bundle=eq1.component ;;
+        AAX) bundle=eq1.aaxplugin ;;
+        CLAP) bundle=eq1.clap ;;
+        Standalone) bundle=eq1.app ;;
+    esac
+    printf '%s\n' "$BUILD_DIR-size/plugin/eq1_artefacts/Release/$1/$bundle/Contents/MacOS/eq1"
+}
+
+# What ships, measured (docs/performance.md, "Footprint"): a report, not a check, except the heap.
+# The shipping configuration (Release, EQ1_LTO=ON, Universal) is built in its own folder, BUILD_DIR-size,
+# without the tests. Code is attributed by scripts/code-by-library.py from the normal build's objects, so
+# BUILD_DIR is built first if it isn't. lipo, strip and nm make the binary reports macOS-only.
+size() {
+    if [ "$os" != macos ]; then
+        step "Footprint"
+        echo "Binary size and code by library are measured on macOS only; the Engine heap follows"
+        engine_heap
+        return
+    fi
+    [ -f "$BUILD_DIR/CMakeCache.txt" ] || build
+    step "Shipping build (Release, EQ1_LTO=ON, Universal) in $BUILD_DIR-size"
+    match_generator Ninja
+    cmake -S . -B "$BUILD_DIR-size" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+        -DEQ1_LTO=ON -DEQ1_BUILD_TESTS=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+    cmake --build "$BUILD_DIR-size" --config Release --parallel
+
+    step "Binary size (bytes): unstripped, and as strip -x leaves it"
+    local scratch=$BUILD_DIR-size/size-report format arch binary thin
+    mkdir -p "$scratch"
+    printf '%-11s %-10s %12s %12s\n' Format Arch Unstripped Stripped
+    for format in VST3 AU AAX CLAP Standalone; do
+        binary=$(shipping_binary "$format")
+        for arch in arm64 x86_64; do
+            thin=$scratch/$format-$arch
+            lipo -thin "$arch" -output "$thin" "$binary"
+            cp "$thin" "$thin-stripped"
+            strip -x -no_code_signature_warning "$thin-stripped"
+            printf '%-11s %-10s %12s %12s\n' "$format" "$arch" "$(stat -f %z "$thin")" "$(stat -f %z "$thin-stripped")"
+        done
+        printf '%-11s %-10s %12s\n' "$format" universal "$(stat -f %z "$binary")"
+    done
+
+    step "Code by library (bytes of the VST3's __text)"
+    for arch in arm64 x86_64; do
+        echo "-- $arch"
+        python3 scripts/code-by-library.py "$(shipping_binary VST3)" "$arch" \
+            "$BUILD_DIR/plugin/CMakeFiles/eq1.dir" "$BUILD_DIR/plugin/CMakeFiles/eq1_VST3.dir" \
+            "$BUILD_DIR/engine/CMakeFiles/eq1_engine.dir" "$DEPS/clap-juce-extensions-build/libclap_juce_extensions.a"
+    done
+
+    engine_heap
+}
+
 tsan() {
     if [ "$os" != macos ]; then
         echo "ThreadSanitizer runs on macOS only; skipped"
@@ -426,6 +502,7 @@ case "${1:-all}" in
     test) run_tests ;;
     cpu) cpu ;;
     paint) paint ;;
+    size) size ;;
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     screens) screens "${2:?usage: scripts/check.sh screens <dir>}" ;;
     tsan) tsan ;;
@@ -435,5 +512,5 @@ case "${1:-all}" in
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,26p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,30p' "$0" >&2; exit 2 ;;
 esac

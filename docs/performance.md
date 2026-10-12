@@ -28,7 +28,51 @@ Measured 2026-10-10. On a machine busy with other builds the median reached 125 
 
 ## Footprint
 
-What ships, measured. `scripts/check.sh size` prints these reports; the Engine heap comes from a test in the normal run.
+`scripts/check.sh size` measures what ships. It builds the shipping configuration (Release, `EQ1_LTO=ON`, Universal) in `build-size` and prints three reports; local only, CI doesn't run it. On Windows it prints the Engine heap only.
+
+**Binary size.** Each format's binary per architecture, unstripped and as `strip -x` leaves it, and the universal file as built. Measured 2026-10-11 on `perf-integration` (`749fc3a`), Apple clang 17:
+
+| Format | arm64 | arm64 stripped | x86_64 | x86_64 stripped | Universal |
+| --- | --- | --- | --- | --- | --- |
+| VST3 | 8,374,080 | 6,663,360 | 9,100,272 | 7,395,232 | 17,499,968 |
+| AU | 8,392,224 | 6,715,408 | 9,002,808 | 7,344,544 | 17,403,424 |
+| AAX | 8,400,496 | 6,698,624 | 9,000,120 | 7,317,072 | 17,411,696 |
+| CLAP | 8,395,728 | 6,664,496 | 8,987,216 | 7,275,344 | 17,390,544 |
+| Standalone | 8,279,728 | 6,439,208 | 8,856,640 | 7,037,640 | 17,143,472 |
+
+**Code by library.** The VST3's `__text` attributed by `scripts/code-by-library.py`: each symbol is looked up in the normal build's objects (the LTO link's own map attributes everything to one `lto.o`), and one no object or several define (template instances, LTO-renamed functions) goes by the namespace in its name. Same build; the arm64 `__text` is 5,078,020 bytes, the x86_64 one 5,752,032:
+
+| Library | arm64 | x86_64 |
+| --- | --- | --- |
+| juce_gui_basics | 894,248 | 979,168 |
+| eq1 Plugin Shell | 870,604 | 923,904 |
+| juce_graphics | 853,384 | 989,664 |
+| harfbuzz | 670,456 | 746,640 |
+| codec: opus | 455,544 | 486,224 |
+| codec: libwebp | 442,372 | 651,216 |
+| juce_core | 197,804 | 214,288 |
+| juce_audio_plugin_client | 108,088 | 117,648 |
+| lunasvg | 98,424 | 114,464 |
+| codec: libjpg | 94,200 | 108,256 |
+| static initialisers | 72,660 | 56,160 |
+| eq1 Engine | 43,708 | 62,256 |
+| JUCE templates (by namespace) | 36,040 | 39,216 |
+| juce_data_structures | 35,964 | 36,336 |
+| juce_audio_processors_headless | 35,452 | 45,232 |
+| juce_audio_processors | 28,836 | 27,552 |
+| codec: zlib | 27,172 | 30,720 |
+| codec: libpng | 24,892 | 28,688 |
+| juce_audio_formats | 22,788 | 28,944 |
+| juce_events | 18,324 | 19,024 |
+| libc++ templates | 16,932 | 17,888 |
+| juce_dsp | 9,656 | 9,504 |
+| juce_audio_basics | 9,236 | 10,496 |
+| other | 5,660 | 3,648 |
+| codec: ogg | 2,760 | 2,704 |
+| juce_gui_extra | 2,084 | 1,456 |
+| sheenbidi | 732 | 736 |
+
+The codecs eq1 never decodes (opus, libwebp, libjpg, libpng, zlib, ogg) and lunasvg are about 1.1 MB of the arm64 code; harfbuzz another 0.67 MB.
 
 **Engine heap.** `tests/engine/FootprintTest.cpp` (tagged `[footprint]`, in the normal test run) constructs one `Engine`, prepares it stereo, and reads from `eq1::test::AllocationGuard` what the heap holds: the bytes the allocator gave out, less what was freed meanwhile, in the allocator's own block sizes (`malloc_size`, `_msize`). It fails above its ceilings, `heapCeilingBytes48k` and `heapCeilingBytes192k`, set about 5% above the figures measured here; a change that shrinks the Engine lowers them (#177).
 
