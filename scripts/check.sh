@@ -383,6 +383,20 @@ paint() {
     "$(test_exe eq1_plugin_tests)" "[paint]"
 }
 
+# A sanitizer build compiles the dependencies with its own flags, so it builds them in its own folder,
+# <dependencies>/<sanitizer>: a dependency build folder that builds with two sets of flags (Catch2's,
+# shared by every worktree) leaves the other builds' links failing. The sources already fetched stay
+# shared. A sanitizer stage configures with "${sanitizer_deps[@]}" in place of -DFETCHCONTENT_BASE_DIR.
+sanitizer_deps() {
+    local src name
+    sanitizer_deps=(--no-warn-unused-cli "-DFETCHCONTENT_BASE_DIR=$DEPS/$1")
+    for src in "$DEPS"/*-src; do
+        [ -d "$src" ] || continue
+        name=$(basename "$src" -src | tr '[:lower:]' '[:upper:]')
+        sanitizer_deps+=("-DFETCHCONTENT_SOURCE_DIR_$name=$src")
+    done
+}
+
 # The heap one stereo Engine holds after prepare(), at 48 and 192 kHz, from the [footprint] tests
 # (tests/engine/FootprintTest.cpp), which fail above their ceilings.
 engine_heap() {
@@ -512,8 +526,9 @@ tsan() {
     # response grids ([response]) and the sweeps across sample rates and settings ([sweep]) run
     # single-threaded, so they are left to the normal run.
     step "Engine tests under ThreadSanitizer"
+    sanitizer_deps tsan
     cmake -S . -B "$BUILD_DIR-tsan" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_BUILD_PLUGIN=OFF \
-        "-DFETCHCONTENT_BASE_DIR=$DEPS" -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+        "${sanitizer_deps[@]}" -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
     cmake --build "$BUILD_DIR-tsan" --parallel
     TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE 'response|sweep'
 }

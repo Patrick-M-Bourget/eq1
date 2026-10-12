@@ -60,7 +60,9 @@ done < <(sed -E 's/(&&|\|\||;|\|)/\n/g' <<< "$command")
 
 if [ "$blocked" = 1 ]; then
     echo "BLOCKED: the main checkout stays on main. Work on a branch in its own worktree:" \
-        "git worktree add ../eq1-<ticket> -b <branch> origin/main (it gets its own build/)." >&2
+        "git worktree add ../eq1-<ticket> -b <branch> origin/main (it gets its own build/)." \
+        "A command that only quotes git checkout or git switch (a heredoc writing a file, say) is judged as if it ran it;" \
+        "write that file with the Write tool instead." >&2
     exit 2
 fi
 exit 0

@@ -19,7 +19,7 @@ namespace
 constexpr std::size_t heapCeilingBytes48k = 466'000;
 constexpr std::size_t heapCeilingBytes192k = 827'000;
 // What the Analyzer's three taps and the Output Level's two channels may hold together at 48 kHz,
-// sized to what the editor can show and the 300 ms window (#177).
+// sized to what the editor can show and the 300 ms window.
 constexpr std::size_t tapsCeilingBytes48k = 200'000;
 
 std::size_t heapHeldByEngine (double sampleRate)
