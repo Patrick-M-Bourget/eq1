@@ -1,6 +1,7 @@
 #include "HandlesLayer.h"
 
 #include "../staple/Fonts.h"
+#include "../staple/Painting.h"
 #include "../staple/Tokens.h"
 #include "../staple/controls/Overlay.h"
 
@@ -19,9 +20,8 @@ juce::String frequencyText (double frequency)
     return frequency >= 1000.0 ? juce::String (frequency / 1000.0, 2) + " kHz" : juce::String (juce::roundToInt (frequency)) + " Hz";
 }
 
-// The readout's card, as the knob tooltip's (KnobTooltip.cpp).
-constexpr float readoutPaddingTop = 5.0f, readoutPaddingSide = 10.0f, readoutPaddingBottom = 6.0f;
-constexpr float readoutTitleLine = 14.0f, readoutValueLine = 18.0f, readoutOffset = 12.0f;
+// How far up and right of its handle the readout's card sits.
+constexpr float readoutOffset = 12.0f;
 } // namespace
 
 HandleStyle handleStyle (const HandleState& state)
@@ -122,24 +122,11 @@ void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyl
 
 void paintReadout (juce::Graphics& g, const DisplayGeometry& geometry, juce::Point<float> handleCentre, const Readout& readout)
 {
-    const auto titleFont = staple::font (size::fs2), valueFont = staple::font (size::fs4);
-    const int textWidth = std::max (staple::textWidth (titleFont, readout.title), staple::textWidth (valueFont, readout.value));
-    const float height = readoutPaddingTop + readoutTitleLine + readoutValueLine + readoutPaddingBottom;
-    auto box = juce::Rectangle<float> (static_cast<float> (textWidth) + 2.0f * readoutPaddingSide, height)
-                   .withPosition (handleCentre.x + readoutOffset, handleCentre.y - readoutOffset - height)
-                   .constrainedWithin (geometry.bounds());
-    staple::drawSoftShadow (g, box, size::r2, tokens::shadow::shadow1);
-    g.setColour (colour::menu);
-    g.fillRoundedRectangle (box, size::r2);
-    g.setColour (colour::line2);
-    g.drawRoundedRectangle (box.reduced (0.5f), size::r2, 1.0f);
-    auto text = box.withTrimmedTop (readoutPaddingTop).reduced (readoutPaddingSide, 0.0f);
-    g.setFont (titleFont);
-    g.setColour (colour::text3);
-    g.drawText (readout.title, text.removeFromTop (readoutTitleLine), juce::Justification::centred, false);
-    g.setFont (valueFont);
-    g.setColour (colour::text1);
-    g.drawText (readout.value, text.removeFromTop (readoutValueLine), juce::Justification::centred, false);
+    constexpr auto height = static_cast<float> (staple::readoutCard::height);
+    const auto box = juce::Rectangle<float> (staple::readoutCardWidth (readout.title, readout.value), height)
+                         .withPosition (handleCentre.x + readoutOffset, handleCentre.y - readoutOffset - height)
+                         .constrainedWithin (geometry.bounds());
+    staple::drawReadoutCard (g, box, readout.title, readout.value);
 }
 
 void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)

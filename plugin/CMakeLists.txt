@@ -73,6 +73,7 @@ target_sources(eq1 PRIVATE
     AnalyzerSpectrum.cpp
     staple/Accessibility.cpp
     staple/Fonts.cpp
+    staple/Painting.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
     staple/WindowBackground.cpp

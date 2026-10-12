@@ -1,5 +1,6 @@
 #include "Knob.h"
 
+#include "../Painting.h"
 #include "KnobTooltip.h"
 #include "Overlay.h"
 
@@ -111,15 +112,8 @@ void Knob::paint (juce::Graphics& g)
 
     // The face, inset 1 px, on its shadow, lit from 12 % below its top.
     const auto face = juce::Rectangle<float> (diameter, diameter).withCentre (centre).reduced (1.0f);
-    drawSoftShadow (g, face, face.getWidth() / 2.0f, shadowFor (diameter));
-    juce::ColourGradient gradient (tokens::colour::knobFaceTop, face.getCentreX(), face.getY() + 0.12f * face.getHeight(),
-                                   tokens::colour::knobFaceEdge, face.getCentreX(), face.getY() + 1.32f * face.getHeight(), true);
-    gradient.addColour (0.45, tokens::colour::knobFaceMid);
-    g.setGradientFill (gradient);
-    g.fillEllipse (face);
-    const float rim = isSmall (diameter) ? knobs::rimSmall : knobs::rim;
-    g.setColour (isSmall (diameter) ? tokens::colour::knobRimSmall : tokens::colour::knobRim);
-    g.drawEllipse (face.reduced (rim / 2.0f), rim);
+    drawKnobFace (g, face, shadowFor (diameter), isSmall (diameter) ? knobs::rimSmall : knobs::rim,
+                  isSmall (diameter) ? tokens::colour::knobRimSmall : tokens::colour::knobRim);
 
     // The value arc, from its origin, on a wider translucent stroke as its glow.
     if (isEnabled())

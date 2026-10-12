@@ -6,8 +6,8 @@
 #include "PluginProcessor.h"
 #include "display/DisplayGeometry.h"
 #include "staple/Fonts.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
-#include "staple/controls/Overlay.h"
 
 #include <cmath>
 
@@ -59,11 +59,7 @@ void DetectionRangeBar::Handle::paint (juce::Graphics& g)
 {
     const auto pill = getLocalBounds().toFloat().reduced (static_cast<float> (handleMargin));
     const float radius = pill.getWidth() / 2.0f;
-    staple::drawSoftShadow (g, pill, radius, tokens::shadow::thumb);
-    g.setGradientFill (juce::ColourGradient::vertical (colour::pillTop, pill.getY(), colour::pillBottom, pill.getBottom()));
-    g.fillRoundedRectangle (pill, radius);
-    g.setColour (colour::thumbHighlight);
-    g.fillRect (pill.withHeight (1.0f).reduced (radius / 2.0f, 0.0f));
+    staple::drawPillThumb (g, pill, radius, colour::pillTop, colour::pillBottom, radius / 2.0f);
 }
 
 void DetectionRangeBar::Handle::mouseDown (const juce::MouseEvent& e)
