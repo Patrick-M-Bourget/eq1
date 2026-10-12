@@ -83,7 +83,7 @@ int Band::Chain::run (Lines& lines, const Piece& piece)
         const auto& start = piece.from->sections[s];
         for (size_t i = 0; i < numSamples; ++i)
         {
-            const auto coefficients = interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / runSamples);
+            const auto coefficients = interpolate (start, to, piece.reached (i));
             for (size_t line = 0; line < numLines; ++line)
                 lines.samples[line][i] = states[lines.states[line]][s].process (coefficients, lines.samples[line][i]);
         }
@@ -125,7 +125,7 @@ int Band::Chain::runLanes (Lines& lines, const Piece& piece)
             // Designed once per run and interpolated by position in it, as run() does for its lines.
             const auto& start = piece.from->sections[s];
             for (size_t i = 0; i < numSamples; ++i)
-                step (interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / runSamples), i);
+                step (interpolate (start, to, piece.reached (i)), i);
         }
         state0 = { lane0 (s1), lane0 (s2) };
         state1 = { lane1 (s1), lane1 (s2) };

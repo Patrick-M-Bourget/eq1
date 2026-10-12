@@ -78,6 +78,10 @@ private:
             int position = 0;
             int numSamples = 0;
             const Cascade* from = nullptr;
+
+            // How far the coefficients have moved from from to the cascade's at the piece's sample i:
+            // the fraction of the run done once it is processed, so the run's last sample reaches 1.
+            double reached (size_t i) const { return (position + static_cast<double> (i) + 1.0) / runSamples; }
         };
 
         // The channels a cascade runs on together: each one's samples, and which channel's section
