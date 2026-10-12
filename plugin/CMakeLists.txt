@@ -142,3 +142,50 @@ endif()
 clap_juce_extensions_plugin(TARGET eq1
     CLAP_ID "com.pbourget.eq1"
     CLAP_FEATURES audio-effect equalizer mono stereo)
+
+# Each format's binary is linked without the code nothing reaches from its entry points (a plugin's
+# exported factory, the Standalone's main, static initialisers and Objective-C classes are the roots
+# the linker keeps). A shipping build (EQ1_STRIP) compiles with debug information, keeps it beside
+# the bundle (a .dSYM on macOS, a PDB on Windows) and strips the binary of its local symbols; a
+# crash log is symbolicated against the .dSYM, whose UUID is the binary's (scripts/check.sh size
+# checks it). Test builds keep their symbols: scripts/check.sh configures with EQ1_STRIP=OFF.
+if(EQ1_STRIP AND APPLE)
+    target_compile_options(eq1 PUBLIC -g)
+endif()
+foreach(format VST3 AU AAX Standalone CLAP)
+    set(binary eq1_${format})
+    if(APPLE)
+        target_link_options(${binary} PRIVATE LINKER:-dead_strip)
+        if(EQ1_STRIP)
+            # With link-time optimisation the linker compiles everything into one temporary object,
+            # which it deletes after the link unless told where to keep it; dsymutil reads the debug
+            # information from there. A Universal link runs the linker once per architecture, each
+            # writing to the one path it is given, so each architecture gets its own.
+            list(LENGTH CMAKE_OSX_ARCHITECTURES arch_count)
+            if(arch_count GREATER 1)
+                foreach(arch IN LISTS CMAKE_OSX_ARCHITECTURES)
+                    target_link_options(${binary} PRIVATE
+                        "SHELL:-Xarch_${arch} -Wl,-object_path_lto,${CMAKE_CURRENT_BINARY_DIR}/${binary}-${arch}-lto.o")
+                endforeach()
+            else()
+                target_link_options(${binary} PRIVATE
+                    LINKER:-object_path_lto,${CMAKE_CURRENT_BINARY_DIR}/${binary}-lto.o)
+            endif()
+            # Stripping invalidates the linker's ad hoc signature, without which macOS loads no arm64
+            # code, so the binary is signed ad hoc again; the release signature is #16's.
+            add_custom_command(TARGET ${binary} POST_BUILD
+                COMMAND dsymutil "$<TARGET_FILE:${binary}>" -o "$<TARGET_BUNDLE_DIR:${binary}>.dSYM"
+                COMMAND strip -x -no_code_signature_warning "$<TARGET_FILE:${binary}>"
+                COMMAND codesign --force --sign - "$<TARGET_FILE:${binary}>"
+                VERBATIM)
+        endif()
+    elseif(MSVC)
+        # /OPT:REF and /OPT:ICF are the linker's defaults until /DEBUG turns them off, so they are
+        # spelled out; /DEBUG writes the PDB beside the binary from the objects' debug information.
+        target_link_options(${binary} PRIVATE $<$<NOT:$<CONFIG:Debug>>:/OPT:REF;/OPT:ICF>)
+        if(EQ1_STRIP)
+            set_property(TARGET eq1 ${binary} PROPERTY MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
+            target_link_options(${binary} PRIVATE /DEBUG)
+        endif()
+    endif()
+endforeach()

@@ -21,6 +21,9 @@ option(EQ1_BUILD_TESTS "Build the tests" ON)
 # Link-time optimisation is for what ships. scripts/check.sh turns it off: on MSVC it makes each
 # format's link several minutes long.
 option(EQ1_LTO "Build the Plugin Shell with link-time optimisation" ON)
+# So is stripping: shipping binaries keep their debug information beside the bundle, not in it
+# (plugin/CMakeLists.txt). scripts/check.sh turns it off too, so test builds keep their symbols.
+option(EQ1_STRIP "Strip the Plugin Shell's binaries, keeping a .dSYM or PDB beside each bundle" ON)
 
 include(FetchContent)
 
