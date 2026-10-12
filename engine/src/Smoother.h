@@ -51,6 +51,8 @@ public:
 
     double value() const { return stage2; }
     bool isMoving() const { return stage2 != goal; }
+    // At rest on its goal, both stages: next() returns the goal exactly and skip() leaves it there.
+    bool isSettled() const { return stage1 == goal && stage2 == goal; }
 
 private:
     void settleIfArrived()
