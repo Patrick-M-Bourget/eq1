@@ -1,9 +1,9 @@
 #pragma once
 
+#include "ShapeDesign.h"
 #include "eq1/Settings.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace eq1
 {
@@ -15,7 +15,7 @@ namespace eq1
 // region, not the Band's effect, so Gain plays no part.
 inline BandSettings soloRegionOf (const BandSettings& band)
 {
-    BandSettings region { .inUse = true, .frequency = band.frequency, .q = std::sqrt (0.5) };
+    BandSettings region { .inUse = true, .frequency = band.frequency, .q = butterworthQ };
     switch (band.shape)
     {
         case Shape::Bell:

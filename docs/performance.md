@@ -2,16 +2,28 @@
 
 ## CPU budget
 
-`tests/cpu/CpuBudget.cpp` (`scripts/check.sh cpu`, its own CI step) measures the Engine with 24 Dynamic Bands: Bells across the spectrum, stereo, 512-sample blocks, on noise that is loud for 100 ms of every 200 so every Band keeps moving and redesigning its filter. The load is the median of five 4-second runs, in percent of real time.
+`tests/cpu/CpuBudget.cpp` (`scripts/check.sh cpu`, its own CI step) measures the Engine's load in each CPU scene, stereo, at 48 and 96 kHz, on noise that is loud for 100 ms of every 200 so Dynamic Bands keep moving and redesigning their filters: the median of five 4-second runs, in percent of real time. The scenes are a list of `Scene`s in `CpuBudget.cpp`, built on the shared 24-Band scenes in `tests/engine/Measure.h`; each prints its load, so a change shows what it did to each. Only the 24 Dynamic Bells scene (Bells across the spectrum, every Detection Range and Threshold kind, one metered, 512-sample blocks) has a ceiling; the others have none yet.
 
-| Sample rate | Ceiling | CI Windows x64 | CI macOS (arm64) | Apple M3 |
-| --- | --- | --- | --- | --- |
-| 48 kHz | 35% | 9.6–11.0% | 5.9% | 3.7% |
-| 96 kHz | 60% | 18.1–19.1% | 14.6% | 7.4% |
+| CPU scene | Ceiling 48 / 96 kHz | Apple M3 48 kHz | 96 kHz | CI Windows x64 48 kHz | 96 kHz | CI macOS (arm64) 48 kHz | 96 kHz |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 24 Dynamic Bells | 35% / 60% | 3.8% | 7.4% | 9.6–11.0% | 18.1–19.1% | 5.9% | 14.6% |
+| 24 Bells | — | 0.5% | 0.9% | pending | pending | pending | pending |
+| 1 Bell | — | 0.1% | 0.2% | pending | pending | pending | pending |
+| 24 Brickwall Cuts | — | 5.3% | 10.5% | pending | pending | pending | pending |
+| 24 Bells, Output Gain and Pan | — | 0.5% | 1.0% | pending | pending | pending | pending |
+| 24 Dynamic Bells, 32-sample blocks | — | 3.8% | 7.5% | pending | pending | pending | pending |
+| 24 Dynamic Bells on silence | — | 3.3% | 6.6% | pending | pending | pending | pending |
+| 24 Dynamic Bells on subnormal input | — | 2.3% | 4.6–9.4% | pending | pending | pending | pending |
 
-Measured 2026-10-09; the CI columns are GitHub's `windows-latest` and `macos-latest` runners. The ceilings are about three times the slowest runner's worst run: high enough that runner noise doesn't fail the check, low enough to fail on a regression that multiplies the cost. They are absolute, not relative to a baseline.
+The 24 Dynamic Bells row was measured 2026-10-09, the other rows on this Mac 2026-10-11 with other builds running (the 24 Dynamic Bells scene read the same as on 2026-10-09, so the rest are taken as quiet too; the subnormal input number varied between runs). The CI columns are GitHub's `windows-latest` and `macos-latest` runners; the new scenes' CI numbers (pending) come from the first CI run's job summary, where `scripts/check.sh cpu` writes the scene lines. The ceilings are about three times the slowest runner's worst run: high enough that runner noise doesn't fail the check, low enough to fail on a regression that multiplies the cost. They are absolute, not relative to a baseline.
 
-The same run fails if silence (after every filter has rung down) or input made of subnormal numbers costs more than 1.5 times the music. That catches arithmetic on subnormal numbers, many times slower than normal on x64; on arm64 it runs at full speed, so the Windows x64 run is the one that would catch it.
+The same run fails if the 24 Dynamic Bells on silence (timed after 10 s of nothing, when every filter has rung down) or on input made of subnormal numbers cost more than 1.5 times the 24 Dynamic Bells on music. That catches arithmetic on subnormal numbers, many times slower than normal on x64; on arm64 it runs at full speed, so the Windows x64 run is the one that would catch it. Silence costing almost as much as music is the Dynamic Bands redesigning their filters after the sound has stopped (#164).
+
+## Null check
+
+`scripts/check.sh null <ref>` shows what a change did to the Engine's output, sample for sample, against any git ref (`origin/main` for a PR). It builds `<ref>`'s render tool (`tests/render/RenderTool.cpp`, built with the tests and linked against the Engine only) in a temporary worktree under `build/null`, with the same compiler and flags as this tree and without the Plugin Shell, renders the render scenes through both Engines, and prints each scene's worst sample deviation in dBFS at each sample rate, or `exact` when the two renders are bit-identical. It fails above −120 dBFS, when a scene's two renders differ in length, or when `<ref>` has a scene this tree hasn't; a scene only this tree has is `new` and passes. A change that only skips or caches work is held to `exact` by review (ADR 0008). The worktree and its build are removed on exit; the renders stay in `build/null/current` and `build/null/ref`.
+
+The render scenes (`tests/render/RenderScenes.h`) are data the tool and the comparison share, so a scene added there is rendered and compared on both sides. Each is stereo, one second of full-scale noise bursts (100 ms loud, 100 ms at −34 dB, seeded, so every run renders the same input) through 97-sample blocks, not a multiple of the Engine's 16-sample run, at 44.1, 96 and 192 kHz: one Band of every Shape, Low Cut and High Cut with Brickwall too; a Bell in every Stereo Placement; a Dynamic Bell with the Band Detection Range and Auto Threshold, with the Free Detection Range and a manual Threshold, and with the Sidechain as Detection Source (fed bursts offset from the main input's); 24 Bells and the CPU budget's 24 Dynamic Bells; a glide of Frequency and Gain, a crossfade from a Bell to a Low Cut, Solo, Detection Audition and Global Bypass switched on a quarter of a second in; Output Gain with Pan and Phase Invert, Pan in Mid/Side, Auto Gain and Gain Scale. `tests/engine/RenderScenesTest.cpp` keeps the list covering all of this and every render repeatable.
 
 ## Paint time
 

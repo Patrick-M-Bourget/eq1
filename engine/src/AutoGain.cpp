@@ -1,5 +1,7 @@
 #include "AutoGain.h"
 
+#include "Units.h"
+
 #include <algorithm>
 #include <cmath>
 #include <complex>
@@ -37,7 +39,7 @@ bool AutoGainEstimate::advance (int points)
     }
     if (running())
         return false;
-    const double db = numCascades == 0 ? 0.0 : -10.0 * std::log10 (sum / numPoints);
+    const double db = numCascades == 0 ? 0.0 : -powerToDecibels (sum / numPoints);
     // A degenerate curve (no power at all, or not a number) asks for no compensation it can't have.
     resultDb = std::isnan (db) ? 0.0 : std::clamp (db, -autoGainLimitDb, autoGainLimitDb);
     return true;

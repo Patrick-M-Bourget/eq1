@@ -2,6 +2,7 @@
 
 #include "AutoGain.h"
 #include "ShapeDesign.h"
+#include "Units.h"
 
 #include <cmath>
 
@@ -12,7 +13,7 @@ namespace
 {
 double magnitudeDb (const Cascade& cascade, double frequency, double sampleRate)
 {
-    return 20.0 * std::log10 (std::abs (responseAt (cascade, frequency, sampleRate)));
+    return gainToDecibels (std::abs (responseAt (cascade, frequency, sampleRate)));
 }
 } // namespace
 
