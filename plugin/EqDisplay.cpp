@@ -23,23 +23,14 @@ namespace
 {
 constexpr float handleRadius = display::DisplayGeometry::handleRadius;
 
-// Exactly the same, field by field: any change at all counts, so the comparison is exact. (Settings'
-// own == would do, but its float comparison warns where it is defined.)
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
+// Exactly the same, Band by Band (display::sameBand): any change at all counts.
 bool same (const Settings& a, const Settings& b)
 {
     for (size_t i = 0; i < a.bands.size(); ++i)
-    {
-        const auto &x = a.bands[i], &y = b.bands[i];
-        if (x.inUse != y.inUse || x.bypass != y.bypass || x.shape != y.shape || x.frequency != y.frequency || x.gain != y.gain
-            || x.q != y.q || x.slope != y.slope || x.brickwall != y.brickwall || x.placement != y.placement
-            || x.dynamicRange != y.dynamicRange || x.threshold != y.threshold || x.thresholdAuto != y.thresholdAuto
-            || x.attack != y.attack || x.release != y.release || x.dynamicsBypass != y.dynamicsBypass)
+        if (! display::sameBand (a.bands[i], b.bands[i]))
             return false;
-    }
     return true;
 }
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 } // namespace
 
 class EqDisplay::BandHandle final : public juce::Component
@@ -229,6 +220,7 @@ void EqDisplay::resized()
 
 void EqDisplay::placeHandles()
 {
+    ++placements;
     const bool reorder = focusedSlot() == 0;
     std::vector<int> inUse;
     for (int slot = 1; slot <= numBandSlots; ++slot)
@@ -440,7 +432,7 @@ std::optional<display::Ghost> EqDisplay::ghost() const
         return std::nullopt;
     if (pointer)
     {
-        if (slotAt (*pointer) != 0 || dynamicRangeHandleAt (*pointer) != 0 || bandAreaAt (*pointer) != 0)
+        if (slotAt (*pointer) != 0 || dynamicRangeHandleAt (*pointer) != 0 || areaUnderPointer() != 0)
             return std::nullopt;
         return display::ghostBell (geometry(), *pointer);
     }
@@ -604,6 +596,16 @@ int EqDisplay::bandAreaAt (juce::Point<float> position) const
     return display::bandAreaAt (geometry(), frame(), position);
 }
 
+int EqDisplay::areaUnderPointer() const
+{
+    jassert (pointer);
+    // Brought up to date first, so its generation stands for the curves as they are now.
+    curves.update (geometry(), frame());
+    if (! pointerArea || pointerArea->pointer != *pointer || pointerArea->generation != curves.generation())
+        pointerArea = PointerArea { *pointer, curves.generation(), bandAreaAt (*pointer) };
+    return pointerArea->slot;
+}
+
 const display::EdgeFadeOverlay& EqDisplay::edgeFadeAt (float scale)
 {
     const auto* window = getParentComponent();
@@ -628,7 +630,8 @@ void EqDisplay::paint (juce::Graphics& g)
     const auto frame = this->frame();
     display::paintGrid (g, shape);
     display::paintAnalyzer (g, shape, { .settings = analyzer, .preEq = preEq, .postEq = postEq, .sidechain = sidechain, .held = held });
-    display::paintCurves (g, shape, frame);
+    curves.update (shape, frame);
+    curves.paint (g, frame);
     const auto shownGhost = ghostFade > 0.0f ? ghost() : std::nullopt;
     if (shownGhost)
         display::paintGhostCurve (g, shape, *shownGhost, frame.sampleRate, ghostFade);

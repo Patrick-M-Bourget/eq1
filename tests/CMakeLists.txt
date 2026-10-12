@@ -48,6 +48,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/DisplayHandlesTest.cpp
         plugin/DisplayLayersTest.cpp
         plugin/DisplayRangeTest.cpp
+        plugin/DisplayRedrawTest.cpp
         plugin/EditHistoryTest.cpp
         plugin/EditorLayoutTest.cpp
         plugin/EditorTickTest.cpp
