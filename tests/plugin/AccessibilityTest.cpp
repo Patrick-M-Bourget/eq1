@@ -342,7 +342,7 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     host.set (4, "threshold", -20.0f);
     host.set (4, "threshold_auto", 0.0f);
     host.settle();
-    CHECK (host.element ("Band 4 Threshold").value == "-20.0 dB");
+    CHECK (host.element ("Band 4 Threshold").value == juce::String::charToString (0x2212) + "20.0 dB");
     // The Detection Range: Band or Free, and the bar's segment with its limits.
     auto* rangeButton = harness::findChild<juce::Button> (*host.editor, [] (juce::Button& b) { return b.getTitle() == "Band 4 Detection Range"; });
     REQUIRE (rangeButton != nullptr);
@@ -350,7 +350,7 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     auto* segment = harness::findChild<eq1::DetectionRangeBar::Segment> (*host.editor);
     REQUIRE (segment != nullptr);
     CHECK (segment->getAccessibilityHandler()->getTitle() == "Band 4 Detection Range");
-    CHECK (segment->getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == juce::String::fromUTF8 ("20 Hz \xe2\x80\x93 20.00 kHz"));
+    CHECK (segment->getAccessibilityHandler()->getValueInterface()->getCurrentValueAsString() == juce::String::fromUTF8 ("20 Hz \xe2\x80\x93 20.0 kHz"));
 
     // Output Gain: -inf dB at its bottom.
     host.parameter ("output_gain").setValueNotifyingHost (0.0f);

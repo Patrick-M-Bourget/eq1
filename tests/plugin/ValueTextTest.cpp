@@ -57,6 +57,8 @@ TEST_CASE ("Signed dB has a plus above zero, a true minus below, and no sign at 
     // Rounding: to the decimals shown, and a value that rounds to zero is zero.
     CHECK (valueText::signedDb (2.25, { .decimals = 2 }) == "+2.25 dB");
     CHECK (valueText::signedDb (-1.84) == minus + "1.8 dB");
+    CHECK (valueText::signedDb (2.25) == "+2.3 dB");
+    CHECK (valueText::signedDb (-2.25) == minus + "2.3 dB");
     CHECK (valueText::signedDb (0.04) == "0.0 dB");
     CHECK (valueText::signedDb (-0.004, { .decimals = 2 }) == "0.00 dB");
     CHECK (valueText::signedDb (-12.0, { .decimals = 2 }) == minus + "12.00 dB");

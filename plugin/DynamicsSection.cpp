@@ -2,6 +2,7 @@
 
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
 #include "staple/Painting.h"
@@ -31,7 +32,7 @@ ThresholdFader::ThresholdFader (PluginProcessor& p)
     setHasFocusOutline (true);
     setRange (parameterRanges::threshold.low, autoPosition, 0.1);
     setDoubleClickReturnValue (true, autoPosition);
-    textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB"; };
+    textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : valueText::signedDb (value); };
     valueFromTextFunction = [] (const juce::String& text) {
         return text.trim().equalsIgnoreCase ("Auto") ? autoPosition : juce::jmin (thresholdTopDb, text.getDoubleValue());
     };

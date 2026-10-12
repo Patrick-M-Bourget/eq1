@@ -1,5 +1,6 @@
 #include "HandlesLayer.h"
 
+#include "../ValueText.h"
 #include "../staple/Fonts.h"
 #include "../staple/Painting.h"
 #include "../staple/Tokens.h"
@@ -14,11 +15,6 @@ namespace tokens = staple::tokens;
 namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
 namespace handle = staple::tokens::handle;
-
-juce::String frequencyText (double frequency)
-{
-    return frequency >= 1000.0 ? juce::String (frequency / 1000.0, 2) + " kHz" : juce::String (juce::roundToInt (frequency)) + " Hz";
-}
 
 // How far up and right of its handle the readout's card sits.
 constexpr float readoutOffset = 12.0f;
@@ -79,9 +75,9 @@ juce::Rectangle<float> dynamicRangeHandleArea (juce::Point<float> centre)
 
 Readout dragReadout (int slot, const BandSettings& band)
 {
-    juce::String value = frequencyText (band.frequency);
+    juce::String value = valueText::frequency (band.frequency);
     if (hasGain (band.shape))
-        value << "  " << (band.gain > 0.0 ? "+" : "") << juce::String (band.gain, 1) << " dB";
+        value << "  " << valueText::signedDb (band.gain);
     value << "  Q " << juce::String (band.q, 2);
     return { "Band " + juce::String (slot), value };
 }

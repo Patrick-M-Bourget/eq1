@@ -5,6 +5,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "UiScale.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
 
@@ -49,10 +50,8 @@ juce::Font bypassedFont() { return staple::font (size::fs3, staple::Weight::medi
 
 juce::String outputReadoutText (double db)
 {
-    if (! std::isfinite (db) || db <= parameters::outputGainSilentDb)
-        return "-inf dB";
-    const double rounded = std::round (db * 10.0) / 10.0;
-    return (rounded >= 0.0 ? "+" : "-") + juce::String (std::abs (rounded), 1) + " dB";
+    const bool silent = ! std::isfinite (db) || db <= parameters::outputGainSilentDb;
+    return valueText::signedDb (silent ? -std::numeric_limits<double>::infinity() : db, { .plusAtZero = true });
 }
 
 GainScaleReadout::GainScaleReadout() : KeyboardSlider ("Gain Scale")
@@ -71,7 +70,7 @@ void GainScaleReadout::setNotApplied (bool n)
     repaint();
 }
 
-juce::String GainScaleReadout::text() const { return juce::String (juce::roundToInt (getValue())) + "%"; }
+juce::String GainScaleReadout::text() const { return valueText::percent (getValue()); }
 
 void GainScaleReadout::paint (juce::Graphics& g)
 {
@@ -151,7 +150,7 @@ juce::PopupMenu UiScaleMenu::menu() const
     juce::PopupMenu items;
     items.addSectionHeader ("UI Scale");
     for (int percent : uiScale::percents)
-        items.addItem (percent, juce::String (percent) + "%", true, percent == shown);
+        items.addItem (percent, valueText::percent (percent), true, percent == shown);
     return items;
 }
 
@@ -164,7 +163,7 @@ void UiScaleMenu::pick (int percent)
 
 std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHandler()
 {
-    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return juce::String (shown) + "%"; }, [this] { triggerClick(); });
+    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return valueText::percent (shown); }, [this] { triggerClick(); });
 }
 
 FooterBar::FooterBar (PluginProcessor& p)

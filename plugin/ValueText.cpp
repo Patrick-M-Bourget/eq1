@@ -7,10 +7,13 @@ namespace eq1::valueText
 
 namespace
 {
-// value to a fixed number of decimals. juce::String (value, 0) would write every digit it has.
+// value to a fixed number of decimals, a half rounded away from zero ("2.3" for 2.25 to 1 decimal).
+// juce::String (value, 0) would write every digit it has.
 juce::String fixed (double value, int decimals)
 {
-    return decimals > 0 ? juce::String (value, decimals) : juce::String (juce::roundToInt (value));
+    const double scale = std::pow (10.0, decimals);
+    const double rounded = std::round (value * scale) / scale;
+    return decimals > 0 ? juce::String (rounded, decimals) : juce::String (juce::roundToInt (rounded));
 }
 
 // value to decimals, as a number: what it reads as.
