@@ -60,28 +60,6 @@ namespace detail
         return band;
     }
 
-    // 24 static Bells across the spectrum.
-    inline Settings bells()
-    {
-        return spreadBands ([] (size_t) { return BandSettings { .shape = Shape::Bell, .gain = 3.0, .q = 1.0 }; });
-    }
-
-    // 24 Dynamic Bells across the spectrum, the CPU budget's scene: every Detection Range and Threshold kind.
-    inline Settings dynamicBells()
-    {
-        return spreadBands ([] (size_t slot) {
-            return BandSettings { .shape = Shape::Bell,
-                                  .gain = 3.0,
-                                  .q = 1.0,
-                                  .detectionRange = slot % 2 == 0 ? DetectionRange::Band : DetectionRange::Free,
-                                  .detectionLow = 100.0,
-                                  .detectionHigh = 5000.0,
-                                  .dynamicRange = slot % 2 == 0 ? -12.0 : 6.0,
-                                  .threshold = -30.0,
-                                  .thresholdAuto = slot % 3 == 0 };
-        });
-    }
-
     inline const char* shapeName (Shape shape)
     {
         switch (shape)
