@@ -12,8 +12,8 @@ namespace eq1
 {
 
 // Two doubles side by side, one per lane, for a Stereo Band's Left and Right through one loop: a NEON
-// float64x2_t on arm64, an SSE2 __m128d on x64 (every x64 CPU has SSE2: no AVX, FMA, -march or runtime
-// dispatch, ADR 0008), and ScalarDouble2, two plain doubles, where neither is available.
+// float64x2_t on arm64, an SSE2 __m128d on x64 (every x64 CPU has SSE2: no AVX, FMA intrinsics, -march or
+// runtime dispatch, ADR 0008), and ScalarDouble2, two plain doubles, where neither is available.
 //
 // The arithmetic on a vector Double2 is the compiler's own operators (*, + and -), not intrinsics, so
 // that a kernel written once as a template over its sample type (biquadStep in Biquad.h) is the same
@@ -24,7 +24,8 @@ namespace eq1
 // without AVX2, so neither path fuses there, and MSVC's /fp:precise fuses nothing. Arithmetic behind a
 // function call (an intrinsic, an overloaded operator on a wrapper struct) would not be fused, and
 // would round differently from the scalar path on arm64. The fallback has no operators for that
-// reason: biquadStep runs the scalar kernel on each of its lanes.
+// reason: biquadStep runs the scalar kernel on each of its lanes. So an arm64 build and an x64 build may
+// differ in the last bits, which ADR 0008 allows: its exact rule holds between builds on one platform.
 //
 // make2 (lane0, lane1) builds one, fill2 (value) puts the value in both lanes, lane0 and lane1 read them.
 
