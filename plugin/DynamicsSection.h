@@ -17,7 +17,7 @@ namespace eq1
 
 class PluginProcessor;
 
-// Threshold as a vertical fader over the Metered Band's Detection Level (HANDOFF.md §5.3): −60 to 0 dB
+// Threshold as a vertical fader over the Metered Band's Detection Level (HANDOFF.md §5.3): its range
 // up its travel, then one more step at the top for Auto Threshold, its own host parameter (ADR 0003).
 // Dragged only, with no jump on a click; a double-click sets Auto. The Detection Level fills the track
 // from the bottom up to the thumb position of the Threshold it equals, so Threshold is set against what

@@ -4,6 +4,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <atomic>
 #include <vector>
 
 namespace eq1::parameters
@@ -45,7 +46,7 @@ inline const juce::String phaseInvertId { "phase_invert" };
 inline const juce::String globalBypassId { "global_bypass" };
 
 // Output Gain's bottom, in dB: silence, shown as -inf.
-inline constexpr float outputGainSilentDb = -80.0f;
+inline constexpr float outputGainSilentDb = static_cast<float> (parameterRanges::outputGain.low);
 
 // The Shape choices, in the order of the Shape enum: Pro-Q 4's order, frozen by ADR 0003.
 const juce::StringArray& shapeNames();
@@ -73,6 +74,12 @@ struct NewValue
 // Sets several parameters as one edit the host sees: every gesture begins before the first value
 // changes, and ends after the last.
 void setTogether (const std::vector<NewValue>& values);
+
+// Whether a switch parameter (a bool, or a choice of two) is on: from its raw value, readable from any
+// thread, or from the parameter itself, whose value is current while its listeners are told of a change.
+inline bool isOn (float value) { return value >= 0.5f; }
+inline bool isOn (const std::atomic<float>* parameter) { return isOn (parameter->load()); }
+inline bool isOn (const juce::AudioProcessorParameter& parameter) { return isOn (parameter.getValue()); }
 
 // The host parameters of one Band slot, readable from any thread.
 struct SlotValues

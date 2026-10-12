@@ -10,8 +10,8 @@
 #                               Graphics on an image outside
 #                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh colours    only that last check: no colour is hard-coded in plugin/ outside plugin/staple/
-#   scripts/check.sh hooks      the Claude Code worktree hook's, merge-on-green.sh's, the git pre-push hook's and the
-#                               colours check's tests, against fakes and scratch repos (not run by git hooks, which run
+#   scripts/check.sh hooks      the Claude Code worktree hook's, merge-on-green.sh's, the git pre-push hook's, the
+#                               colours check's and the CPU A/B verdicts' tests, against fakes and scratch repos (not run by git hooks, which run
 #                               docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
@@ -21,6 +21,11 @@
 #                               compare with the rendered Staple prototype
 #   scripts/check.sh cpu        the Engine's CPU load in every CPU scene against its budget (docs/performance.md,
 #                               "CPU budget"); on a Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh cpu <ref>  the CPU A/B (docs/performance.md, "CPU A/B"): builds <ref>'s Engine with this tree's
+#                               CPU scenes in a temporary worktree, runs each scene through both builds in turn for 7
+#                               rounds, and prints per scene the median after/before load ratio (above 1: this tree
+#                               is slower), its min and max, and "slower", "faster" or "no clear change". Runs on a
+#                               busy machine too, printing its load; a report: exits 0 whatever the verdicts
 #   scripts/check.sh null <ref> the null check (docs/performance.md, "Null check"): builds <ref>'s render tool in a
 #                               temporary worktree (removed on exit) and this tree's, renders every render scene through
 #                               both Engines into BUILD_DIR/null, and prints each scene's worst deviation in dBFS, or
@@ -104,7 +109,7 @@ docs() {
         broken=1
     fi
     # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
-    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h. Flagged:
+    # searches them passes whatever was saved. Tests decode it with harness::savedState (tests/plugin/EditorHarness.h). Flagged:
     # toString on any block a file fills with getStateInformation, whatever the block is called.
     local raw file block
     raw=$(git grep -lE 'get(CurrentProgram)?StateInformation *\(' -- tests | while IFS= read -r file; do
@@ -114,7 +119,7 @@ docs() {
             done
     done || true)
     if [ -n "$raw" ]; then
-        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
+        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with harness::savedState (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
     # A test waits for the editor's timers with harness::settle (tests/plugin/EditorHarness.h): a loop of
@@ -150,15 +155,16 @@ docs() {
         broken=1
     fi
     # The filter lab measures over a Band's parameter ranges; a copy that drifts from the plugin's
-    # leaves part of the range unmeasured while the lab reports it covered.
+    # leaves part of the range unmeasured while the lab reports it covered. The plugin's are named once,
+    # in the Engine's settings header.
     local name lab plugin
-    for name in Frequency Gain Q Slope; do
+    for name in frequency gain q slope; do
         lab=$(grep -E "^$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_RANGE = \(" tools/filter-lab/filterlab.py |
             sed -E 's/.*\(([^,]+), *([^)]+)\).*/\1 \2/')
-        plugin=$(awk -v n="\"$name\"" 'found { gsub (/f/, ""); if (match ($0, /\(-?[0-9.]+, *-?[0-9.]+\)/)) { r = substr ($0, RSTART + 1, RLENGTH - 2); sub (/, */, " ", r); print r; exit } }
-                                       index ($0, "slotName (slot, " n ")") { found = 1 }' plugin/Parameters.cpp)
+        plugin=$(grep -E "^inline constexpr ParameterRange $name \{" engine/include/eq1/Settings.h |
+            sed -E 's/.*\{ *([^,]+), *([^ }]+) *\}.*/\1 \2/')
         if [ -z "$lab" ] || [ -z "$plugin" ] || ! awk -v a="$lab" -v b="$plugin" 'BEGIN { split (a, x, " "); split (b, y, " "); exit ! (x[1] == y[1] && x[2] == y[2]) }'; then
-            echo "tools/filter-lab/filterlab.py: ${name}'s range reads '${lab}', plugin/Parameters.cpp '${plugin}'; keep them equal" >&2
+            echo "tools/filter-lab/filterlab.py: ${name}'s range reads '${lab}', engine/include/eq1/Settings.h '${plugin}'; keep them equal" >&2
             broken=1
         fi
     done
@@ -194,6 +200,8 @@ hooks() {
     scripts/pre-push.test.sh
     step "Colours check"
     scripts/colours.test.sh
+    step "CPU A/B verdicts"
+    scripts/cpu-ab.test.sh
 }
 
 # Every colour in the editor comes from Staple's tokens (plugin/staple/Tokens.h): a colour written as a
@@ -344,34 +352,110 @@ cpu() {
     return "$status"
 }
 
+# <ref> checked out in a temporary worktree, work/src, and configured into work/build the way this tree is
+# built (same compiler and flags) with the Engine and the test tools only, no Plugin Shell, so a difference
+# between the two builds is the source's. Called in a subshell (null, cpu_ab): it sets an EXIT trap that
+# removes the worktree and its build. With a function name as third argument, that function is called
+# with the worktree's path before configuring, to change its sources.
+ref_tree() {
+    local ref=$1 work=$2 prepare=${3:-}
+    if ! git rev-parse --verify --quiet "$ref^{commit}" > /dev/null; then
+        echo "no such ref: $ref" >&2
+        exit 1
+    fi
+    git worktree remove --force "$work/src" 2> /dev/null || rm -rf "$work/src"
+    # shellcheck disable=SC2064 # work is expanded now, on purpose
+    trap "git worktree remove --force '$work/src' 2> /dev/null || true; rm -rf '$work/src' '$work/build'" EXIT
+    git worktree add --quiet --detach "$work/src" "$ref"
+    [ -z "$prepare" ] || "$prepare" "$work/src"
+    configure "$work/src" "$work/build" -DEQ1_BUILD_PLUGIN=OFF > "$work/configure.log" 2>&1 || { cat "$work/configure.log" >&2; exit 1; }
+}
+
 # Both trees' render tools (tests/render/RenderTool.cpp) render the same scenes; this tree's compares
-# them. <ref> is built in a worktree under BUILD_DIR/null, the Engine and the tool only (no Plugin Shell),
-# with the same compiler and flags as this tree, so a deviation is the source's. A subshell, so the EXIT
-# trap that removes the worktree stays local.
+# them. <ref> is built by ref_tree under BUILD_DIR/null.
 null() (
     local ref=$1 work=$BUILD_DIR/null
     step "Null check against $ref"
-    if ! git rev-parse --verify --quiet "$ref^{commit}" > /dev/null; then
-        echo "null: no such ref: $ref" >&2
-        exit 1
-    fi
     mkdir -p "$work"
     work=$(cd "$work" && pwd)
     rm -rf "$work/current" "$work/ref"
-    git worktree remove --force "$work/src" 2> /dev/null || rm -rf "$work/src"
-    trap 'git worktree remove --force "$work/src" 2> /dev/null || true; rm -rf "$work/src" "$work/build"' EXIT
-    git worktree add --quiet --detach "$work/src" "$ref"
-    if [ ! -f "$work/src/tests/render/RenderTool.cpp" ]; then
-        echo "null: $ref has no render tool (tests/render/RenderTool.cpp); compare against a ref that has one" >&2
-        exit 1
-    fi
-    configure "$work/src" "$work/build" -DEQ1_BUILD_PLUGIN=OFF > "$work/configure.log" 2>&1 || { cat "$work/configure.log" >&2; exit 1; }
+    ref_tree "$ref" "$work" null_needs_render_tool
     cmake --build "$work/build" --config Release --parallel --target eq1_render
     cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_render
     "$(BUILD_DIR=$work/build test_exe eq1_render)" render "$work/ref"
     "$(test_exe eq1_render)" render "$work/current"
     "$(test_exe eq1_render)" compare "$work/current" "$work/ref"
 )
+
+null_needs_render_tool() {
+    if [ ! -f "$1/tests/render/RenderTool.cpp" ]; then
+        echo "null: the ref has no render tool (tests/render/RenderTool.cpp); compare against a ref that has one" >&2
+        exit 1
+    fi
+}
+
+# The CPU A/B (docs/performance.md, "CPU A/B"): this tree's CPU budget executable against <ref>'s, scene by
+# scene, the two alternating so that a busy machine's load hits both alike. A report, not a gate: it runs
+# whatever the load and exits 0 whatever the verdicts.
+cpu_ab_rounds=7          # rounds; each runs every scene once on each side, the side going first swapped every round
+cpu_ab_seconds=1         # wall-clock seconds each run is timed for
+cpu_ab_rate=48000        # sample rate, Hz
+cpu_ab_min_change=0.03   # a verdict needs the median after/before ratio at least this far from 1 ...
+cpu_ab_min_agree=6       # ... and at least this many rounds going the same way
+
+# <ref> is built by ref_tree under BUILD_DIR/cpu-ab with this tree's CPU scenes (tests/cpu/ and
+# tests/engine/Measure.h copied over its own), so both sides run the same scenes and only the Engine differs.
+cpu_ab() (
+    local ref=$1 work=$BUILD_DIR/cpu-ab
+    step "CPU A/B against $ref"
+    mkdir -p "$work"
+    work=$(cd "$work" && pwd)
+    ref_tree "$ref" "$work" cpu_ab_scenes
+    cmake --build "$work/build" --config Release --parallel --target eq1_cpu_budget > "$work/build.log" 2>&1 || {
+        grep -E 'error|FAILED:' "$work/build.log" >&2
+        echo "cpu: this tree's CPU scenes don't build against $ref's Engine; log in $work/build.log" >&2
+        exit 1
+    }
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_cpu_budget
+    local after before scenes round scene name first second a b
+    after=$(test_exe eq1_cpu_budget)
+    before=$(BUILD_DIR=$work/build test_exe eq1_cpu_budget)
+    scenes=$("$after" scenes | tr -d '\r')
+    echo "Load before: $(load_average)"
+    : > "$work/loads.tsv"
+    for round in $(seq "$cpu_ab_rounds"); do
+        scene=0
+        while IFS= read -r name; do
+            if [ $((round % 2)) = 1 ]; then first=$after second=$before; else first=$before second=$after; fi
+            a=$("$first" run "$scene" "$cpu_ab_rate" "$cpu_ab_seconds" | tr -d '\r')
+            b=$("$second" run "$scene" "$cpu_ab_rate" "$cpu_ab_seconds" | tr -d '\r')
+            [ "$first" = "$after" ] || { local t=$a; a=$b; b=$t; }
+            printf '%s\t%s\t%s\n' "$name" "$a" "$b" >> "$work/loads.tsv"
+            scene=$((scene + 1))
+        done <<< "$scenes"
+        echo "Round $round of $cpu_ab_rounds done"
+    done
+    echo "Load after: $(load_average)"
+    printf '\nAfter/before CPU load ratio per scene, %s rounds of %s s at %s Hz (above 1: slower than %s)\n' \
+        "$cpu_ab_rounds" "$cpu_ab_seconds" "$cpu_ab_rate" "$ref"
+    awk -F '\t' -v min_change="$cpu_ab_min_change" -v min_agree="$cpu_ab_min_agree" -f scripts/cpu-ab.awk "$work/loads.tsv"
+    echo "Each run's loads: $work/loads.tsv (scene, after, before)"
+)
+
+cpu_ab_scenes() {
+    rm -rf "$1/tests/cpu"
+    cp -R tests/cpu "$1/tests/cpu"
+    cp tests/engine/Measure.h "$1/tests/engine/Measure.h"
+}
+
+# The 1-minute load average and the core count, where the system reports them.
+load_average() {
+    if [ "$os" = macos ]; then
+        echo "$(sysctl -n vm.loadavg | awk '{ print $2 }') on $(sysctl -n hw.ncpu) cores"
+    else
+        echo "not reported on $os"
+    fi
+}
 
 # The editor drawing a busy frame at 2x, from the hidden [paint] test, which fails above its ceiling.
 # Local only: CI has no step for it.
@@ -607,7 +691,7 @@ validate() {
 case "${1:-all}" in
     build) build ;;
     test) run_tests ;;
-    cpu) cpu ;;
+    cpu) if [ -n "${2:-}" ]; then cpu_ab "$2"; else cpu; fi ;;
     paint) paint ;;
     null) null "${2:?usage: scripts/check.sh null <ref>}" ;;
     size) size ;;
@@ -620,5 +704,5 @@ case "${1:-all}" in
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,35p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,42p' "$0" >&2; exit 2 ;;
 esac

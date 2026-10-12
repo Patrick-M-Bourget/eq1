@@ -460,8 +460,8 @@ TEST_CASE ("Arrow keys move the display's selection together, and it stops toget
 
     for (int i = 0; i < 12; ++i)
         host.press (right); // Band 2 reaches 30 kHz after seven
-    CHECK_THAT (host.value (2, "frequency"), WithinAbs (30000.0, 0.5));
-    CHECK_THAT (host.value (1, "frequency"), WithinAbs (30000.0 / 20000.0 * 1000.0, 0.5));
+    CHECK_THAT (host.value (2, "frequency"), WithinAbs (eq1::parameterRanges::frequency.high, 0.5));
+    CHECK_THAT (host.value (1, "frequency"), WithinAbs (eq1::parameterRanges::frequency.high / 20000.0 * 1000.0, 0.5));
     for (int i = 0; i < 4; ++i)
         host.press (up); // Band 2 reaches +30 dB after two
     CHECK_THAT (host.value (2, "gain"), WithinAbs (30.0, 1.0e-4));

@@ -428,8 +428,9 @@ TEST_CASE ("Dragging or typing a Slope is one undo step, and on a Brickwall Cut 
         slope.mouseDrag (event (at (-10.0f), left));
         slope.mouseDrag (event (at (-25.0f), left));
         slope.mouseUp (event (at (-25.0f), {}));
-        // 25 px of 200 for the whole 0 to 96 range, from 12.
-        CHECK_THAT (host.value (2, "slope"), WithinAbs (12.0 + 96.0 * 25.0 / 200.0, 0.01));
+        // 25 px of 200 for the whole range, from 12.
+        constexpr auto range = eq1::parameterRanges::slope;
+        CHECK_THAT (host.value (2, "slope"), WithinAbs (12.0 + (range.high - range.low) * 25.0 / 200.0, 0.01));
         CHECK_FALSE (juce::PopupMenu::dismissAllActiveMenus()); // a drag isn't a click
     }
     SECTION ("a typed value")
@@ -598,7 +599,7 @@ TEST_CASE ("The ring's range is faint under Dynamics Bypass, and its Live Gain a
     CHECK_THAT (ring.rangeAlpha(), WithinAbs (0.85, 1.0e-6));
     // Full-scale noise far above a -60 dB Threshold: Live Gain moves the whole range down.
     host.set (1, "threshold_auto", 0.0f);
-    host.set (1, "threshold", -60.0f);
+    host.set (1, "threshold", static_cast<float> (eq1::parameterRanges::threshold.low));
     juce::Random random (1);
     const auto play = [&] {
         juce::AudioBuffer<float> buffer (2, 512);
@@ -660,7 +661,7 @@ TEST_CASE ("The ring's Live Gain arc measures Live Gain's movement as Gain Scale
     }
     SECTION ("dynamics moving: the arc ends where the movement, unscaled, takes Gain")
     {
-        host.set (1, "threshold", -60.0f);
+        host.set (1, "threshold", static_cast<float> (eq1::parameterRanges::threshold.low));
         play (1.0f);
         const double movement = host.processor.liveGainDb (1) - 5.0;
         REQUIRE (movement < -1.0);

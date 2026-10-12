@@ -71,7 +71,7 @@ public:
     std::function<void (int)> onSelectBand;
 
     // The Slope: its value as "12 dB/oct", or "Brickwall" on a Brickwall Cut. A click, Space or Return
-    // lists the Slopes and "Type a value…"; a vertical drag changes it over 0 to 96 dB/oct (200 px, 800
+    // lists the Slopes and "Type a value…"; a vertical drag changes it over its range (200 px, 800
     // with Shift) and a typed value sets it, each one undo step that also turns a Cut's Brickwall off.
     class SlopeButton;
 

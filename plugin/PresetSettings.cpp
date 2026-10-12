@@ -47,14 +47,19 @@ bool isPresetSetting (const juce::RangedAudioParameter& parameter)
     return parameter.getParameterID() != parameters::globalBypassId;
 }
 
+double restoredNumber (const juce::var& saved, double defaultValue, double minimum, double maximum)
+{
+    const double value = static_cast<double> (saved);
+    return std::isfinite (value) ? juce::jlimit (minimum, maximum, value) : defaultValue;
+}
+
 float restoredPlainValue (const juce::RangedAudioParameter& parameter, const juce::var& saved)
 {
-    // Read in double, so a value a float can't hold ("1e39") is still a finite one to clamp.
-    const double value = static_cast<double> (saved);
     const auto& range = parameter.getNormalisableRange();
-    if (! std::isfinite (value))
-        return parameter.convertFrom0to1 (parameter.getDefaultValue());
-    return static_cast<float> (juce::jlimit (static_cast<double> (range.start), static_cast<double> (range.end), value));
+    return static_cast<float> (restoredNumber (saved,
+                                               static_cast<double> (parameter.convertFrom0to1 (parameter.getDefaultValue())),
+                                               static_cast<double> (range.start),
+                                               static_cast<double> (range.end)));
 }
 
 void sanitiseSavedSettings (juce::AudioProcessorValueTreeState& parameters, juce::ValueTree& tree)

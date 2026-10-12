@@ -23,7 +23,13 @@ juce::Typeface::Ptr typeface (Weight weight)
 
 juce::Font font (float size, Weight weight)
 {
-    return juce::FontOptions {}.withTypeface (typeface (weight)).withPointHeight (size).withFeatureEnabled ("tnum");
+    const juce::SharedResourcePointer<Typefaces> typefaces;
+    const std::scoped_lock held (typefaces->fontsLock);
+    const auto key = std::pair { weight, size };
+    if (const auto made = typefaces->fonts.find (key); made != typefaces->fonts.end())
+        return made->second;
+    const juce::Font made = juce::FontOptions {}.withTypeface (typefaces->weights[static_cast<size_t> (weight)]).withPointHeight (size).withFeatureEnabled ("tnum");
+    return typefaces->fonts.emplace (key, made).first->second;
 }
 
 int textWidth (const juce::Font& font, const juce::String& text)

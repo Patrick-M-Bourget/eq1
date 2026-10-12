@@ -8,10 +8,10 @@ namespace eq1::display
 {
 
 // Where the EQ display draws things, for a display of width x height pixels: Frequency on a log scale
-// from 10 Hz to 30 kHz, and dB over +/- the Display Range, a handle's radius in from the top and bottom.
+// over Frequency's range, and dB over +/- the Display Range, a handle's radius in from the top and bottom.
 struct DisplayGeometry
 {
-    static constexpr double lowestFrequency = 10.0, highestFrequency = 30000.0;
+    static constexpr double lowestFrequency = parameterRanges::frequency.low, highestFrequency = parameterRanges::frequency.high;
     static constexpr float handleRadius = 9.0f;
     static constexpr float pixelStep = 2.0f; // the curves and spectra are evaluated every this many pixels
 
