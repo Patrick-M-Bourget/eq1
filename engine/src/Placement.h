@@ -10,7 +10,8 @@ namespace eq1
 // selects, encodes or decodes a Placement (a Band's chains, a detector's detection signal, Solo's
 // region, the held output) comes here, so they can't drift apart.
 
-// Mid and Side from Left and Right, and back, in float as the Bands always have.
+// Mid and Side from Left and Right, and back, in float: a Band's Mid or Side chain runs on float
+// samples, and a detector or Solo encodes the same way, so they hear what the Band filters.
 inline float encodeMid (float left, float right) { return 0.5f * (left + right); }
 inline float encodeSide (float left, float right) { return 0.5f * (left - right); }
 inline float decodeLeft (float mid, float side) { return mid + side; }

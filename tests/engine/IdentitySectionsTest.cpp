@@ -1,3 +1,4 @@
+#include "../../engine/src/RunGrid.h"
 #include "Measure.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,7 +14,7 @@ using namespace eq1;
 namespace
 {
 constexpr double sampleRate = 48000.0;
-constexpr int blockSize = 16; // one run (Band::maxSubBlock) per block, one piece each, so pieces are counted exactly
+constexpr int blockSize = runSamples; // one run per block, one piece each, so pieces are counted exactly
 constexpr double toneFrequency = 200.0;
 constexpr double onsetSeconds = 0.1;
 

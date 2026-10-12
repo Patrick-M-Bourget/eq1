@@ -34,7 +34,7 @@ TEST_CASE ("Smoother::skip over a run, and over any other length, equals the clo
     const double timeConstant = GENERATE (glideTimeConstantSeconds * 44100.0, glideTimeConstantSeconds * 48000.0,
                                           glideTimeConstantSeconds * 192000.0, 3.0);
     const double tolerance = GENERATE (1.0e-6, 1.0e-4);
-    const int length = GENERATE (Band::maxSubBlock, 7);
+    const int length = GENERATE (runSamples, 7);
     CAPTURE (timeConstant, tolerance, length);
 
     Smoother smoother;

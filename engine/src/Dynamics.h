@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Band.h"
+#include "RunGrid.h"
 #include "Smoother.h"
 #include "eq1/Settings.h"
 
@@ -81,11 +82,11 @@ private:
     bool metered = false;
     double loudestLevel = nothingHeardDb;
     int detectionChannelCount = 0; // in the last hear()
-    std::vector<std::array<float, Band::maxSubBlock>> detection;
+    std::vector<std::array<float, runSamples>> detection;
     std::vector<float*> detectionChannels;
 
     // The levels the run in progress has heard while running, for the gain computer at its end.
-    std::array<double, Band::maxSubBlock> runLevels {};
+    std::array<double, runSamples> runLevels {};
     int runLevelCount = 0;
 
     std::array<double, 2> power {}; // per detection channel, smoothed
