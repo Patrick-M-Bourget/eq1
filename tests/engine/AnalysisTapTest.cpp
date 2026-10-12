@@ -156,3 +156,79 @@ TEST_CASE ("Analysis taps keep samples in order while the ring wraps around")
     }
     CHECK (popped == pushed);
 }
+
+TEST_CASE ("A reader that skips a tap first reads only what the Engine processed after the skip")
+{
+    // Nothing reads while the editor is closed, so the taps fill up and then drop new samples.
+    Engine engine;
+    engine.prepare (48000.0, 1000, 1);
+    std::vector<float> block (1000);
+    float* main[] = { block.data() };
+    const auto play = [&] (float from) {
+        for (size_t i = 0; i < block.size(); ++i)
+            block[i] = from + static_cast<float> (i);
+        engine.process ({ main, 1, static_cast<int> (block.size()) });
+    };
+    for (int n = 0; n < 2 * engine.analysisCapacity() / 1000; ++n)
+        play (static_cast<float> (n * 1000));
+
+    for (auto tap : { AnalysisTap::PreEq, AnalysisTap::PostEq })
+        engine.skipAnalysis (tap);
+    play (1.0e6f);
+
+    for (auto tap : { AnalysisTap::PreEq, AnalysisTap::PostEq })
+    {
+        const auto read = readAll (engine, tap);
+        REQUIRE (read.size() == block.size());
+        for (size_t i = 0; i < read.size(); ++i)
+            REQUIRE (read[i] == 1.0e6f + static_cast<float> (i));
+    }
+    // A tap with nothing in it skips nothing.
+    engine.skipAnalysis (AnalysisTap::Sidechain);
+    CHECK (readAll (engine, AnalysisTap::Sidechain).empty());
+}
+
+TEST_CASE ("A reader can skip a tap while the audio thread pushes to it")
+{
+    // Each sample is its index, so what the reader pops after a skip must have been pushed after it
+    // started, and in order. Under ThreadSanitizer, this also checks the skip races with nothing.
+    Engine engine;
+    constexpr int blockSize = 64;
+    engine.prepare (48000.0, blockSize, 1);
+    std::atomic<long long> pushed { 0 };
+    std::atomic<bool> done { false };
+    std::thread audio ([&] {
+        std::vector<float> block (blockSize);
+        float* main[] = { block.data() };
+        for (long long n = 0; n < (1LL << 20); n += blockSize)
+        {
+            for (int i = 0; i < blockSize; ++i)
+                block[static_cast<size_t> (i)] = static_cast<float> (n + i); // exact in float up to 2^24
+            engine.process ({ main, 1, blockSize });
+            pushed.store (n + blockSize, std::memory_order_release);
+        }
+        done = true;
+    });
+
+    std::vector<float> read (static_cast<size_t> (engine.analysisCapacity()));
+    int skips = 0;
+    while (! done)
+    {
+        const auto before = pushed.load (std::memory_order_acquire);
+        engine.skipAnalysis (AnalysisTap::PreEq);
+        ++skips;
+        float last = -1.0f;
+        for (int round = 0; round < 4; ++round)
+        {
+            const int count = engine.readAnalysis (AnalysisTap::PreEq, read.data(), static_cast<int> (read.size()));
+            for (int i = 0; i < count; ++i)
+            {
+                REQUIRE (read[static_cast<size_t> (i)] >= static_cast<float> (before));
+                REQUIRE (read[static_cast<size_t> (i)] > last);
+                last = read[static_cast<size_t> (i)];
+            }
+        }
+    }
+    audio.join();
+    CHECK (skips > 1);
+}

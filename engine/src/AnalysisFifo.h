@@ -78,6 +78,17 @@ public:
         return static_cast<int> (n);
     }
 
+    // Drops what the ring holds, so the next pop returns only samples pushed after this. Reader side
+    // only, like pop(): it moves the read index up to the write index, which the producer only ever
+    // sees grow, as after a pop.
+    void skip()
+    {
+        auto* ring = current.load (std::memory_order_acquire);
+        if (ring == nullptr)
+            return;
+        ring->readIndex.store (ring->writeIndex.load (std::memory_order_acquire), std::memory_order_release);
+    }
+
 private:
     // A ring's indices live with its samples, so a reader finishing a pop on an outgrown ring touches
     // nothing of the new one.
