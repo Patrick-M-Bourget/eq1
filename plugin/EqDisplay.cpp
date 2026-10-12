@@ -152,6 +152,9 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
         addChildComponent (*dynamicRangeHandle);
     }
     shown = heardSettings();
+    // The taps filled up while no editor read them: the first frame shows only audio from now on.
+    for (auto tap : { AnalysisTap::PreEq, AnalysisTap::PostEq, AnalysisTap::Sidechain })
+        processor.skipAnalysis (tap);
     // An editor opened under Global Bypass shows it at once.
     globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
     lastFadeStep = juce::Time::getMillisecondCounter();

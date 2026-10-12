@@ -442,4 +442,14 @@ int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples)
     return 0;
 }
 
+void Engine::skipAnalysis (AnalysisTap tap)
+{
+    switch (tap)
+    {
+        case AnalysisTap::PreEq: impl->preEq.skip(); return;
+        case AnalysisTap::PostEq: impl->postEq.skip(); return;
+        case AnalysisTap::Sidechain: impl->sidechain.skip(); return;
+    }
+}
+
 } // namespace eq1
