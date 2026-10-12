@@ -7,6 +7,8 @@
 #include <catch2/generators/catch_generators_range.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -488,4 +490,117 @@ TEST_CASE ("Auto Gain is held to +/-30 dB, however much the Bands take away or a
     for (size_t slot = 8; slot < 16; ++slot)
         loud.bands[slot] = band (Shape::Bell, 1000.0, 30.0, 0.1);
     CHECK (autoGainDb (loud, sampleRate) == -30.0);
+}
+
+namespace
+{
+// Auto Gain's estimate worked out the way the display draws the curve (eq1/Response.h,
+// bandResponseDb, the complex response): the mean power gain of the static curve at the middles of
+// 1024 equal steps in log frequency from 20 Hz to 20 kHz (0.49 x the sample rate when that is lower),
+// in dB, held to +/-30 dB. The Engine's estimate reads the same curve in real arithmetic, from a table
+// of points built in prepare(); the two must agree.
+double curveAutoGainDb (const Settings& settings, double rate)
+{
+    constexpr int numPoints = 1024;
+    const double lowest = 20.0, highest = std::min (20000.0, 0.49 * rate);
+    const double ratio = std::pow (highest / lowest, 1.0 / numPoints);
+    std::array<double, numPoints> frequencies, db, power;
+    for (int i = 0; i < numPoints; ++i)
+        frequencies[static_cast<size_t> (i)] = lowest * std::pow (ratio, i + 0.5);
+    power.fill (1.0);
+    int bandsInUse = 0;
+    for (const auto& band : settings.bands)
+    {
+        if (! band.inUse || band.bypass)
+            continue;
+        ++bandsInUse;
+        bandResponseDb (scaledByGainScale (band, settings.gainScale), frequencies.data(), db.data(), numPoints, rate);
+        for (size_t i = 0; i < numPoints; ++i)
+            power[i] *= std::pow (10.0, db[i] / 10.0);
+    }
+    if (bandsInUse == 0)
+        return 0.0;
+    double sum = 0.0;
+    for (double p : power)
+        sum += p;
+    const double estimate = -10.0 * std::log10 (sum / numPoints);
+    return std::isnan (estimate) ? 0.0 : std::clamp (estimate, -autoGainLimitDb, autoGainLimitDb);
+}
+
+// The sample rates the estimate's table of points is checked at: the lowest, where 20 kHz is above
+// the table's top, and two where it isn't.
+double anyTableRate() { return GENERATE (44100.0, 96000.0, 192000.0); }
+
+// 24 Bands of every Shape and Stereo Placement, Slopes from 6 to 96 dB/oct, boosts and cuts.
+Settings everyShapeAndPlacement()
+{
+    return test::spreadBands ([] (size_t slot) {
+        return BandSettings { .shape = test::allShapes[slot % test::allShapes.size()],
+                              .gain = slot % 2 == 0 ? -6.0 : 6.0,
+                              .q = 1.5,
+                              .slope = 6.0 * static_cast<double> (slot % 16 + 1),
+                              .placement = test::allPlacements[slot % test::allPlacements.size()] };
+    }, 30.0, 1.3);
+}
+
+// 24 Brickwall Cuts at the edges of the band, so their estimate stays within +/-30 dB and is checked
+// as a number, not as the limit.
+Settings brickwallEdges()
+{
+    Settings settings;
+    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
+    {
+        const bool low = slot % 2 == 0;
+        settings.bands[slot] = { .inUse = true,
+                                 .shape = low ? Shape::LowCut : Shape::HighCut,
+                                 .frequency = low ? 25.0 + static_cast<double> (slot) : 19000.0 - 100.0 * static_cast<double> (slot),
+                                 .brickwall = true };
+    }
+    return settings;
+}
+} // namespace
+
+TEST_CASE ("Auto Gain's estimate agrees with the curve the display draws within 1e-6 dB for a Band of every Shape, Slope and Stereo Placement",
+           "[response]")
+{
+    const auto shape = GENERATE (from_range (test::allShapes));
+    // 0 stands for Brickwall, which only the Cuts have.
+    const double slope = GENERATE (6.0, 12.0, 24.0, 48.0, 96.0, 0.0);
+    if (slope == 0.0 && ! isCut (shape))
+        return;
+    const auto placement = GENERATE (from_range (test::allPlacements));
+    const double rate = anyTableRate();
+    CAPTURE (static_cast<int> (shape), slope, static_cast<int> (placement), rate);
+
+    Settings settings;
+    settings.bands[0] = { .inUse = true,
+                          .shape = shape,
+                          .frequency = 1000.0,
+                          .gain = 7.5,
+                          .q = 2.0,
+                          .slope = slope == 0.0 ? 12.0 : slope,
+                          .brickwall = slope == 0.0,
+                          .placement = placement };
+    CHECK_THAT (autoGainDb (settings, rate), WithinAbs (curveAutoGainDb (settings, rate), 1.0e-6));
+}
+
+TEST_CASE ("Auto Gain's estimate agrees with the curve the display draws within 1e-6 dB for 24 Bands, Brickwall Cuts and Gain Scale included",
+           "[response]")
+{
+    const double rate = anyTableRate();
+    const int which = GENERATE (Catch::Generators::range (0, 5));
+    CAPTURE (rate, which);
+    Settings settings;
+    switch (which)
+    {
+        case 0: settings = test::bells(); break;
+        case 1: settings = everyShapeAndPlacement(); break;
+        case 2: settings = brickwallEdges(); break;
+        case 3: settings = test::brickwallCuts(); break; // leaves almost nothing: both estimates at the +30 dB limit
+        case 4:
+            settings = everyShapeAndPlacement();
+            settings.gainScale = 1.5;
+            break;
+    }
+    CHECK_THAT (autoGainDb (settings, rate), WithinAbs (curveAutoGainDb (settings, rate), 1.0e-6));
 }

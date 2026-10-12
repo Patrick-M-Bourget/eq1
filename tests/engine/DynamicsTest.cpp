@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
@@ -260,6 +261,29 @@ TEST_CASE ("Auto Release recovers faster after a short burst than after sustaine
     const double shortBurst = releaseSeconds (50.0, 0.05), sustained = releaseSeconds (50.0, 1.5);
     CAPTURE (shortBurst, sustained);
     CHECK (shortBurst < 0.5 * sustained);
+}
+
+TEST_CASE ("A Dynamic Band comes to rest after the music stops, so it stops redesigning its filter")
+{
+    // A loud second, then silence. Read after every run, Live Gain is the Gain the filter was
+    // designed at for that run, so it reads exactly Gain only once the detector's offset has come
+    // to rest at 0 and the Band has designed its filter there; from then on nothing is redesigned.
+    // The movement releases exponentially, so without a rest it would redesign every run for as
+    // long as the host plays. The slowest Release takes longest to get there: ten times Auto
+    // Release's 40 ms once the sustain has gone, and 21 of those to release a billionth of the way.
+    const auto [release, restSeconds] = GENERATE (std::pair { 50.0, 2.5 }, std::pair { 100.0, 10.0 });
+    CAPTURE (release);
+    auto band = dynamicBell (3.0, -9.0, -30.0);
+    band.release = release;
+    constexpr double burstEnd = 1.25;
+    const auto run = play (1, burstEnd + restSeconds + 1.0, withBand (band), burst (0.25, 1.0, -6.0), {}, timingBlock);
+    // Moved during the burst, as a check on the scene.
+    REQUIRE (run.liveGain[blockAt (burstEnd) - 1] < -5.0);
+    for (size_t b = blockAt (burstEnd + restSeconds); b < run.liveGain.size(); ++b)
+    {
+        CAPTURE (b * timingBlockSeconds);
+        REQUIRE (run.liveGain[b] == 3.0);
+    }
 }
 
 TEST_CASE ("Auto Threshold lets a Band rest on steady material and move on what stands out of it, at any level")
@@ -565,8 +589,7 @@ TEST_CASE ("With a stereo Sidechain, a Mid or Side External Band listens to the 
 
 TEST_CASE ("With a mono Sidechain, an External Band moves with it whatever its Stereo Placement, Side included")
 {
-    const auto placement = GENERATE (StereoPlacement::Stereo, StereoPlacement::Left, StereoPlacement::Right, StereoPlacement::Mid,
-                                     StereoPlacement::Side);
+    const auto placement = GENERATE (from_range (test::allPlacements));
     CAPTURE (static_cast<int> (placement));
     // A kick: a 60 Hz thump on the Sidechain, ducking a Low Shelf on the bass.
     auto band = externalBell();

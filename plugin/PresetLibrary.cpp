@@ -78,9 +78,17 @@ std::vector<juce::String> PresetLibrary::userSubfolders() const
     return paths;
 }
 
+juce::String PresetLibrary::legalName (const juce::String& name)
+{
+    return juce::File::createLegalFileName (name.trim()).trim();
+}
+
 std::optional<juce::File> PresetLibrary::save (const juce::String& name, const juce::ValueTree& preset) const
 {
-    const auto file = userFolder.getChildFile (juce::File::createLegalFileName (name.trim()) + fileExtension);
+    const auto fileName = legalName (name);
+    if (fileName.isEmpty())
+        return std::nullopt;
+    const auto file = userFolder.getChildFile (fileName + fileExtension);
     const auto xml = preset.createXml();
     if (xml == nullptr || ! userFolder.createDirectory() || ! xml->writeTo (file))
         return std::nullopt;

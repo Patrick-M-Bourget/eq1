@@ -33,7 +33,9 @@ juce::ColourGradient radial (juce::Point<float> centre, float inner, float outer
 constexpr double repaintStepDb = 0.01;
 } // namespace
 
-DynamicRangeRing::DynamicRangeRing (PluginProcessor& p, staple::Knob& g) : KeyboardSlider ("Dynamic Range"), processor (p), gain (g)
+DynamicRangeRing::DynamicRangeRing (PluginProcessor& p, staple::Knob& g)
+    : KeyboardSlider ("Dynamic Range"), EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), gain (g),
+      output (parameters::OutputValues::of (p.parameterState()))
 {
     setSliderStyle (juce::Slider::RotaryVerticalDrag);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -57,15 +59,13 @@ void DynamicRangeRing::show (int newSlot)
     slot = newSlot;
     attachment.reset();
     liveGain.reset();
+    moving = false;
     if (slot == 0)
-    {
-        stopTimer();
         return;
-    }
     auto& state = processor.parameterState();
+    band = parameters::SlotValues::of (state, slot);
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, parameters::dynamicRangeId (slot), *this);
     describe (*state.getParameter (parameters::dynamicRangeId (slot)));
-    startTimerHz (60);
     gain.ringChanged();
 }
 
@@ -79,14 +79,9 @@ void DynamicRangeRing::setAvailable (bool available)
     gain.setRing (available ? this : nullptr);
 }
 
-bool DynamicRangeRing::parameterIsOn (const juce::String& id) const
-{
-    return processor.parameterState().getRawParameterValue (id)->load() >= 0.5f;
-}
-
 float DynamicRangeRing::rangeAlpha() const
 {
-    return slot != 0 && parameterIsOn (parameters::dynamicsBypassId (slot)) ? tokens::knob::ringRangeBypassedAlpha : tokens::knob::ringRangeAlpha;
+    return slot != 0 && isOn (band.dynamicsBypass) ? tokens::knob::ringRangeBypassedAlpha : tokens::knob::ringRangeAlpha;
 }
 
 //==============================================================================
@@ -207,25 +202,26 @@ void DynamicRangeRing::valueChanged()
     gain.ringChanged();
 }
 
-void DynamicRangeRing::timerCallback()
+void DynamicRangeRing::tick (double)
 {
     // A held Alt+arrow on the Gain knob ends when the knob loses focus.
     if (! gain.hasKeyboardFocus (false) && ! hasKeyboardFocus (false))
         KeyboardSlider::keyStateChanged (false);
+    if (slot == 0)
+        return;
 
     std::optional<double> live;
-    if (slot != 0 && isVisible() && getValue() != 0.0 && ! parameterIsOn (parameters::dynamicsBypassId (slot))
-        && ! parameterIsOn (parameters::bypassId (slot)) && ! parameterIsOn (parameters::globalBypassId))
+    if (isVisible() && getValue() != 0.0 && ! isOn (band.dynamicsBypass) && ! isOn (band.bypass) && ! isOn (output.globalBypass))
     {
         // Live Gain is heard under Gain Scale, the ring shows stored dB: its movement from the heard
         // Gain, unscaled, is drawn from the stored Gain.
-        const double scale = processor.parameterState().getRawParameterValue (parameters::gainScaleId)->load() / 100.0;
+        const double scale = output.gainScale->load() / 100.0;
         const double movement = processor.liveGainDb (slot) - gain.getValue() * scale;
         if (processor.hasProcessedAudio() && scale > 0.0 && std::abs (movement) >= tokens::knob::liveGainMinimum)
             live = gain.getValue() + movement / scale;
     }
-    const bool changed = live.has_value() != liveGain.has_value() || (live.has_value() && std::abs (*live - *liveGain) > repaintStepDb);
-    if (changed)
+    moving = live.has_value() != liveGain.has_value() || (live.has_value() && std::abs (*live - *liveGain) > repaintStepDb);
+    if (moving)
     {
         liveGain = live;
         gain.repaint();

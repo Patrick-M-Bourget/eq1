@@ -1,7 +1,9 @@
 #include "Dynamics.h"
 
+#include "Placement.h"
 #include "Smoothstep.h"
 #include "Solo.h"
+#include "Units.h"
 
 #include <algorithm>
 #include <cassert>
@@ -35,19 +37,27 @@ constexpr double autoReleaseFastestSeconds = 0.040, autoReleaseSustainedSeconds 
 constexpr double sustainTimeConstantSeconds = 0.5;
 // Attack and Release at 0% and 100% are the Auto timing times 1/10 and 10.
 constexpr double timingSpread = 10.0;
-// Dynamic Range and Dynamics Bypass changes glide like a Band's settings: about 50 ms.
-constexpr double glideTimeConstantSeconds = 0.007;
+// Coming to rest after the music stops: the movement and sustain release exponentially, so they
+// snap to exactly 0 below this much (a billionth of the Dynamic Range: 3e-8 dB at its largest). The
+// Band's offset is then exactly 0 run after run, and it neither glides nor redesigns its filter.
+constexpr double movementRest = 1.0e-9;
 
 // A Free Detection Range's limits roll off at this Slope, steep enough to pick out a kick alone.
 constexpr double freeRangeSlope = 24.0;
 
-double coefficientFor (double seconds, double sampleRate) { return 1.0 - std::exp (-1.0 / (seconds * sampleRate)); }
+// A sample's level from the louder detection channel's smoothed power, where a full-scale sine reads
+// 0 dB; the floor keeps silence finite.
+double levelOf (double peakPower) { return powerToDecibels (2.0 * peakPower + 1.0e-30); }
+// What a detector with nothing to listen to hears: the level of no power at all.
+const double nothingToHearDb = levelOf (0.0);
+
+double coefficientFor (double seconds, double sampleRate) { return onePoleCoefficient (seconds * sampleRate); }
 
 double timingScale (double percent) { return std::pow (timingSpread, (std::clamp (percent, 0.0, 100.0) - 50.0) / 50.0); }
 // A Free Detection Range's limit: a Butterworth Cut at frequency.
 BandSettings freeLimit (Shape cut, double frequency)
 {
-    return { .inUse = true, .shape = cut, .frequency = frequency, .q = std::sqrt (0.5), .slope = freeRangeSlope };
+    return { .inUse = true, .shape = cut, .frequency = frequency, .q = butterworthQ, .slope = freeRangeSlope };
 }
 } // namespace
 
@@ -167,32 +177,13 @@ int Dynamics::takeDetectionSignal (const float* const* input, int numChannels, c
         input = sidechain;
         numChannels = sidechainChannels;
     }
-    if (numChannels < 2)
-    {
-        // On mono the signal is all Mid, and Left and Right are the same signal.
-        if (placement == StereoPlacement::Side)
-            return 0;
-        copy (0, input[0]);
-        return 1;
-    }
-    switch (placement)
-    {
-        case StereoPlacement::Stereo:
-            copy (0, input[0]);
-            copy (1, input[1]);
-            return 2;
-        case StereoPlacement::Left: copy (0, input[0]); return 1;
-        case StereoPlacement::Right: copy (0, input[1]); return 1;
-        case StereoPlacement::Mid:
-        case StereoPlacement::Side:
-        {
-            const float sign = placement == StereoPlacement::Mid ? 1.0f : -1.0f;
+    // The part the Band processes, of the first two channels.
+    return routePlacement (
+        placement, std::min (numChannels, 2), [&] (int part, int ch) { copy (static_cast<size_t> (part), input[ch]); },
+        [&] (bool mid) {
             for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
-                detection[0][i] = 0.5f * (input[0][i] + sign * input[1][i]);
-            return 1;
-        }
-    }
-    return 0;
+                detection[0][i] = mid ? encodeMid (input[0][i], input[1][i]) : encodeSide (input[0][i], input[1][i]);
+        });
 }
 
 double Dynamics::autoAttackSeconds (double overshootDb) const
@@ -214,16 +205,28 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         return;
 
     const int detectionCount = detectionChannelCount = takeDetectionSignal (input, numChannels, sidechain, sidechainChannels, numSamples);
-    if (detectionCount > 0)
+    // A run is at most maxSubBlock samples, and finishRun() empties the levels at its end.
+    assert (runLevelCount + numSamples <= Band::maxSubBlock);
+    if (detectionCount == 0)
     {
-        rangeFilter.process (detectionChannels.data(), detectionCount, run, position, numSamples);
-        highLimit.process (detectionChannels.data(), detectionCount, run, position, numSamples);
-    }
-    else
         power = {}; // nothing heard: a Sidechain connected again starts afresh
+        // The gain computer hears silence, so the Band returns to its Gain over the run.
+        if (moving)
+        {
+            const auto count = static_cast<size_t> (std::min (numSamples, Band::maxSubBlock - runLevelCount));
+            std::fill_n (runLevels.begin() + runLevelCount, count, nothingToHearDb);
+            runLevelCount += static_cast<int> (count);
+        }
+        return;
+    }
+    rangeFilter.process (detectionChannels.data(), detectionCount, run, position, numSamples);
+    highLimit.process (detectionChannels.data(), detectionCount, run, position, numSamples);
 
-    // The level of each sample: the louder detection channel's power, where a full-scale sine reads 0 dB.
-    double loudest = nothingHeardDb;
+    // The level of each sample: the louder detection channel's power. Metered only, the detector
+    // keeps the piece's loudest power and converts it once at the end: the level is monotonic in
+    // the power, so it is the loudest level, and whatever comes next starts afresh, as if never
+    // metered.
+    double loudest = nothingHeardDb, loudestPower = 0.0;
     for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
     {
         double peakPower = 0.0;
@@ -233,13 +236,13 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
             power[c] += powerCoefficient * (x * x - power[c]);
             peakPower = std::max (peakPower, power[c]);
         }
-        const double level = 10.0 * std::log10 (2.0 * peakPower + 1.0e-30);
-        loudest = std::max (loudest, level);
-        // Metered only: whatever comes next starts afresh, as if never metered.
         if (! moving)
+        {
+            loudestPower = std::max (loudestPower, peakPower);
             continue;
-        // A run is at most maxSubBlock samples, and finishRun() empties the levels at its end.
-        assert (runLevelCount < Band::maxSubBlock);
+        }
+        const double level = levelOf (peakPower);
+        loudest = std::max (loudest, level);
         if (runLevelCount < Band::maxSubBlock)
             runLevels[static_cast<size_t> (runLevelCount++)] = level;
         // The mean and variance of every level heard, until a rise time's worth has been: then
@@ -247,20 +250,30 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         if (level > autoThresholdGateDb)
         {
             samplesHeard = std::min (samplesHeard + 1.0, 1.0 / riseCoefficient);
-            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, 1.0 / samplesHeard); };
+            const double meanWeight = 1.0 / samplesHeard;
+            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, meanWeight); };
             averageLevel += weight (level > averageLevel) * (level - averageLevel);
             const double deviation = (level - averageLevel) * (level - averageLevel);
             levelVariance += weight (deviation > levelVariance) * (deviation - levelVariance);
         }
     }
-    if (detectionCount > 0)
-        loudestLevel = loudest;
+    loudestLevel = moving ? loudest : levelOf (loudestPower);
 }
 
 double Dynamics::finishRun()
 {
     const auto levels = std::span (runLevels).first (static_cast<size_t> (runLevelCount));
     runLevelCount = 0;
+    // A NaN or infinite sample the detector heard would stay in its level and its statistics for
+    // good, and so in the Band's Live Gain. The detector starts afresh instead, Auto Threshold
+    // included, as it does when the Band becomes active, and the Band rests at its Gain over the
+    // next run. (A sum of finite numbers is finite, and one non-finite term makes it not.)
+    if (! std::isfinite (power[0] + power[1] + movement + sustain + averageLevel + levelVariance))
+    {
+        startAfresh();
+        averageLevel = levelVariance = 0.0;
+        return 0.0;
+    }
     if (! running())
         return 0.0;
 
@@ -279,6 +292,10 @@ double Dynamics::finishRun()
         movement += (target > movement ? attackCoefficient : releaseCoefficient) * (target - movement);
         sustain += sustainCoefficient * (target - sustain);
     }
+    if (movement < movementRest)
+        movement = 0.0;
+    if (sustain < movementRest)
+        sustain = 0.0;
 
     dynamicRangeGlide.skip (Band::maxSubBlock);
     active.skip (Band::maxSubBlock);

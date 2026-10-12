@@ -122,6 +122,26 @@ TEST_CASE ("Saving under an existing name replaces that Preset; a name a file ca
     CHECK (loaded.value ("band1_in_use") == 1.0f);
 }
 
+TEST_CASE ("A Preset name of only characters a file name can't hold is refused: nothing is saved, no hidden file")
+{
+    Folder user;
+    const PresetLibrary library (user.folder);
+    Host host;
+    for (const auto* name : { ":/\\", "  ?*  ", "\"<>|", "" })
+    {
+        CAPTURE (name);
+        CHECK (PresetLibrary::legalName (name).isEmpty());
+        CHECK_FALSE (library.save (name, host.processor.presetState()).has_value());
+    }
+    CHECK (user.folder.getNumberOfChildFiles (juce::File::findFilesAndDirectories) == 0);
+    CHECK (library.userPresets().empty());
+    // One with any legal character left saves under what is left.
+    CHECK (PresetLibrary::legalName (" Bass: Low/High ") == "Bass LowHigh");
+    const auto odd = library.save (" Bass: Low/High ", host.processor.presetState());
+    REQUIRE (odd.has_value());
+    CHECK (odd->getFileNameWithoutExtension() == "Bass LowHigh");
+}
+
 TEST_CASE ("The User folder lists only Presets, by name; a missing folder lists none")
 {
     Folder user;

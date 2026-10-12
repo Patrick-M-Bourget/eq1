@@ -4,6 +4,8 @@
 #include "PluginEditor.h"
 #include "PresetSettings.h"
 
+#include <cmath>
+
 namespace eq1
 {
 
@@ -25,6 +27,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
 {
     engine.prepare (sampleRate, maximumExpectedSamplesPerBlock, getTotalNumOutputChannels());
     processedAudio.store (false, std::memory_order_relaxed);
+    publishedSincePrepare = false;
 }
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -39,8 +42,8 @@ bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
-    juce::ScopedNoDenormals noDenormals;
-
+    // The Engine flushes subnormal numbers for its own duration (engine/src/NoSubnormals.h); nothing
+    // here computes on the audio.
     // Host Automation arrives on the audio thread, so the snapshot is taken here, once per block.
     Settings settings;
     for (size_t slot = 0; slot < slots.size(); ++slot)
@@ -49,7 +52,14 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     settings.auditionSlot = heldAuditionSlot.load();
     settings.meteredSlot = heldMeteredSlot.load();
     output.readInto (settings);
-    engine.setSettings (settings);
+    // Published only when it differs from the last one: a block with no edits does no settings work.
+    if (! publishedSincePrepare || settings != publishedSettings)
+    {
+        publishedSettings = settings;
+        publishedSincePrepare = true;
+        engine.setSettings (settings);
+        publications.fetch_add (1, std::memory_order_relaxed);
+    }
 
     auto main = getBusBuffer (buffer, false, 0);
     const auto sidechainBuffer = getBusBuffer (buffer, true, 1);
@@ -104,6 +114,21 @@ juce::ValueTree toTree (const AnalyzerSettings& a)
         .setProperty (peakHoldProperty, a.peakHold, nullptr);
 }
 
+// A saved number as a session restores it, like a parameter's value (restoredPlainValue): itself within
+// minimum to maximum, the nearer end outside, and defaultValue when it isn't a finite number.
+double restoredNumber (const juce::var& saved, double defaultValue, double minimum, double maximum)
+{
+    const double value = static_cast<double> (saved);
+    return std::isfinite (value) ? juce::jlimit (minimum, maximum, value) : defaultValue;
+}
+
+template <typename Enum>
+Enum restoredChoice (const juce::var& saved, Enum defaultValue, Enum first, Enum last)
+{
+    return static_cast<Enum> (
+        juce::roundToInt (restoredNumber (saved, static_cast<double> (defaultValue), static_cast<double> (first), static_cast<double> (last))));
+}
+
 AnalyzerSettings fromTree (const juce::ValueTree& tree)
 {
     const AnalyzerSettings defaults;
@@ -112,12 +137,12 @@ AnalyzerSettings fromTree (const juce::ValueTree& tree)
              .showPostEq = tree.getProperty (showPostEqProperty, defaults.showPostEq),
              .showSidechain = tree.getProperty (showSidechainProperty, defaults.showSidechain),
              .rangeDb = range == 60 || range == 120 ? range : 90,
-             .speed = static_cast<AnalyzerSpeed> (juce::jlimit (static_cast<int> (AnalyzerSpeed::verySlow), static_cast<int> (AnalyzerSpeed::veryFast),
-                                                                static_cast<int> (tree.getProperty (speedProperty, static_cast<int> (defaults.speed))))),
-             .resolution = static_cast<AnalyzerResolution> (
-                 juce::jlimit (static_cast<int> (AnalyzerResolution::low), static_cast<int> (AnalyzerResolution::maximum),
-                               static_cast<int> (tree.getProperty (resolutionProperty, static_cast<int> (defaults.resolution))))),
-             .tiltDbPerOctave = juce::jlimit (0.0, 6.0, static_cast<double> (tree.getProperty (analyzerTiltProperty, defaults.tiltDbPerOctave))),
+             .speed = restoredChoice (tree.getProperty (speedProperty, static_cast<int> (defaults.speed)), defaults.speed, AnalyzerSpeed::verySlow, AnalyzerSpeed::veryFast),
+             .resolution = restoredChoice (tree.getProperty (resolutionProperty, static_cast<int> (defaults.resolution)),
+                                           defaults.resolution,
+                                           AnalyzerResolution::low,
+                                           AnalyzerResolution::maximum),
+             .tiltDbPerOctave = restoredNumber (tree.getProperty (analyzerTiltProperty, defaults.tiltDbPerOctave), defaults.tiltDbPerOctave, 0.0, 6.0),
              .peakHold = tree.getProperty (peakHoldProperty, defaults.peakHold) };
 }
 } // namespace
@@ -256,9 +281,13 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         // Shown in a session saved before the Output Meter.
         setOutputMeterShown (state.getProperty (outputMeterShownProperty, true));
         state.removeProperty (outputMeterShownProperty, nullptr);
-        // A session saved before them opens like a new instance.
-        setEditorSize ({ state.getProperty (editorWidthProperty, staple::tokens::layout::windowWidth),
-                         state.getProperty (editorHeightProperty, staple::tokens::layout::windowHeight) });
+        // A session saved before them opens like a new instance; a size that isn't a finite number too,
+        // and one outside the editor's limits opens at the nearer limit.
+        {
+            using namespace staple::tokens::layout;
+            setEditorSize ({ juce::roundToInt (restoredNumber (state.getProperty (editorWidthProperty, windowWidth), windowWidth, minimumWidth, maximumWidth)),
+                             juce::roundToInt (restoredNumber (state.getProperty (editorHeightProperty, windowHeight), windowHeight, minimumHeight, maximumHeight)) });
+        }
         const int percent = state.getProperty (uiScaleProperty, 0);
         uiScale = uiScale::isOffered (percent) ? percent : 0;
         for (const auto& property : { editorWidthProperty, editorHeightProperty, uiScaleProperty })
@@ -272,6 +301,8 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         const auto savedCompare = state.getChildWithName (ABCompare::stateType);
         compare.restore (savedCompare);
         state.removeChild (savedCompare, nullptr);
+        // A value a file holds reaches a parameter finite and in range, or not at all.
+        sanitiseSavedSettings (parameters, state);
         parameters.replaceState (state);
         history.sessionRestored();
         const auto restored = currentHeardGains();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditHistory.h"
+#include "PresetSettings.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -49,7 +50,7 @@ public:
     // memory only: neither saved with the session nor undone.
     juce::String loadedPresetFolder() const;
     // Whether the side you're on is Modified: its settings differ from its Loaded Preset's as loaded.
-    // Never, with no Loaded Preset.
+    // Never, with no Loaded Preset. Linear in the settings: the editor asks every tick.
     bool isModified() const;
 
     // Saving and restoring with the session, from any thread, as hosts do from theirs. savedState()
@@ -100,6 +101,15 @@ private:
     };
     std::array<LoadedFrom, 2> loadedFrom;
     static std::size_t indexOf (CompareSide side) { return side == CompareSide::A ? 0 : 1; }
+    // The Loaded Preset isModified() last checked, indexed by parameter (presetSettingValues): built
+    // again when the side's Loaded Preset is another tree, which a load, a save, a switch of side, undo
+    // or a restore makes it. Message thread only.
+    struct LoadedIndex
+    {
+        juce::ValueTree tree;
+        PresetSettingValues values;
+    };
+    mutable LoadedIndex loadedIndex;
     juce::ValueTree arriving; // the settings putOnParameters() is putting on the parameters, while it does
     int changes = 0;          // counts every change of the above, so a save can tell it raced one
 

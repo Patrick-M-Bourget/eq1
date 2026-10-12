@@ -18,13 +18,13 @@ juce::String rangeText (int rangeDb)
 } // namespace
 
 DisplayRangeChip::DisplayRangeChip (PluginProcessor& p)
-    : staple::TextChip (rangeText (p.displayRangeDb()), Look::filled, staple::tokens::size::fs2), processor (p)
+    : staple::TextChip (rangeText (p.displayRangeDb()), Look::filled, staple::tokens::size::fs2),
+      EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p)
 {
     setName ("Display Range");
     setTitle ("Display Range");
     setChevron (true);
     setTextIsValue (true);
-    startTimerHz (10);
 }
 
 juce::PopupMenu DisplayRangeChip::menu()
@@ -39,7 +39,7 @@ juce::PopupMenu DisplayRangeChip::menu()
             if (chip == nullptr)
                 return;
             chip->processor.setDisplayRangeDb (range);
-            chip->timerCallback();
+            chip->follow();
         });
         popup.addItem (std::move (item));
     }
@@ -58,7 +58,7 @@ void DisplayRangeChip::clicked()
                              .withStandardItemHeight (menuRowHeight));
 }
 
-void DisplayRangeChip::timerCallback()
+void DisplayRangeChip::follow()
 {
     const auto text = rangeText (processor.displayRangeDb());
     if (text == getButtonText())

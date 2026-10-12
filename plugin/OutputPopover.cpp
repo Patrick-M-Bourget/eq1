@@ -160,7 +160,7 @@ void OutputToggle::paintButton (juce::Graphics& g, bool highlighted, bool down)
 }
 
 OutputPopover::OutputPopover (PluginProcessor& p)
-    : processor (p), outputGain (static_cast<float> (knobDiameter), "Output Gain"), panMode (std::make_unique<PanModeChip>()),
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), outputGain (static_cast<float> (knobDiameter), "Output Gain"), panMode (std::make_unique<PanModeChip>()),
       phaseInvert ("Phase Invert", staple::Icon::phaseInvert), autoGain ("Auto Gain", std::nullopt, "A"),
       showMeter ("Output Meter", staple::Icon::meter)
 {
@@ -199,13 +199,13 @@ OutputPopover::OutputPopover (PluginProcessor& p)
 
     setCardSize (cardWidth, cardHeight);
     followProcessor();
-    follow.startTimerHz (4);
 }
 
 OutputPopover::~OutputPopover() = default;
 
 void OutputPopover::openFrom (juce::Component& readout)
 {
+    followProcessor();
     open (readout, Placement::above);
     if (auto* layer = getParentComponent(); layer != nullptr && isOpen())
     {
@@ -217,6 +217,12 @@ void OutputPopover::openFrom (juce::Component& readout)
 juce::String OutputPopover::panReadout() const
 {
     return outputPanText (outputPan.getValue(), panMode->getToggleState());
+}
+
+void OutputPopover::tick (double)
+{
+    if (isOpen())
+        followProcessor();
 }
 
 void OutputPopover::followProcessor()

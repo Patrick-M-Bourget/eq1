@@ -211,6 +211,42 @@ TEST_CASE ("An instance takes the per-user UI Scale when its editor first opens 
     }
 }
 
+TEST_CASE ("A user settings save that fails is reported, keeps this instance's UI Scale, and is retried on the next pick")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    // The settings file's folder is a file: nothing can be written there.
+    juce::TemporaryFile blocking;
+    REQUIRE (blocking.getFile().replaceWithText ("in the way"));
+    const auto file = blocking.getFile().getChildFile ("eq1.settings");
+    // Collects what the plugin logs while it lives, so a failed check leaves no dangling logger behind.
+    struct Log final : juce::Logger
+    {
+        juce::StringArray lines;
+        Log() { juce::Logger::setCurrentLogger (this); }
+        ~Log() override { juce::Logger::setCurrentLogger (nullptr); }
+        void logMessage (const juce::String& message) override { lines.add (message); }
+    } log;
+
+    eq1::UserSettings settings (file);
+    CHECK_FALSE (settings.setUiScalePercent (150));
+    REQUIRE (log.lines.size() == 1);
+    CHECK (log.lines[0].contains (file.getFullPathName()));
+    CHECK (eq1::UserSettings (file).uiScalePercent() == 100);
+
+    // The instance keeps the UI Scale it picked.
+    eq1::PluginProcessor processor (file);
+    pickUiScale (*openEditor (processor), 125);
+    CHECK (processor.uiScalePercent() == 125);
+    CHECK (log.lines.size() == 2);
+
+    // Writable now: the next pick saves.
+    REQUIRE (blocking.getFile().deleteFile());
+    CHECK (settings.setUiScalePercent (150));
+    CHECK (eq1::UserSettings (file).uiScalePercent() == 150);
+    CHECK (log.lines.size() == 2);
+    file.getParentDirectory().deleteRecursively();
+}
+
 TEST_CASE ("The per-user settings file is in Application Support/eq1 on macOS and %APPDATA%/eq1 on Windows")
 {
     const auto folder = eq1::UserSettings::defaultFile().getParentDirectory();

@@ -24,7 +24,7 @@ class Band
 {
 public:
     // The grid's run length; coefficients follow glides at this rate.
-    static constexpr int maxSubBlock = 16;
+    static constexpr int maxSubBlock = glideRunSamples;
 
     void prepare (double sampleRate, int numChannels);
 
@@ -65,6 +65,9 @@ private:
         std::vector<std::array<BiquadState, maxSections>> states;
 
         void clear();
+        // Clears every section whose state isn't finite, and says whether any was: a NaN or infinite
+        // input sample would otherwise stay in the state, and so in the output, until the next prepare.
+        bool clearNonFinite();
         // The samples of a run from position on, and how the coefficients move over the run: with from,
         // from it to the cascade's, reaching it at the run's end.
         struct Piece
@@ -74,12 +77,28 @@ private:
             const Cascade* from = nullptr;
         };
 
-        // Runs samples through the cascade.
-        void run (size_t channel, float* samples, const Piece& piece);
+        // The channels a cascade runs on together: each one's samples, and which channel's section
+        // states it keeps. The chain's Stereo Placement fills it.
+        struct Lines
+        {
+            std::vector<float*> samples;
+            std::vector<size_t> states;
+            int count = 0;
+
+            void prepare (int numChannels);
+        };
+
+        // Runs the lines' samples through the cascade, in place: over a gliding run, with the
+        // coefficients interpolated once per position, for every line at once. Two lines (a Stereo
+        // Band on a stereo track) run in two lanes.
+        void run (Lines& lines, const Piece& piece);
+        // Two lines through the cascade together, one per lane of a Double2: the same operations in
+        // the same order as one line on its own, so each comes out bit for bit as it would alone.
+        void runLanes (Lines& lines, const Piece& piece);
         // Runs the part of the signal the chain's Stereo Placement selects, in place.
-        void runPlaced (float* const* channels, int numChannels, const Piece& piece);
+        void runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
         // On stereo: encodes Mid and Side, runs the Mid (mid) or the Side, and decodes.
-        void runMidSide (float* const* channels, const Piece& piece, bool mid);
+        void runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid);
     };
 
     // Once per run, at its start: a waiting crossfade starts, and a glide moves on by the whole run
@@ -97,6 +116,7 @@ private:
     Smoother mix;   // 0 = no effect, 1 = full effect
     Smoother shapeCrossfade; // 0 = previous chain, 1 = current chain
     Chain current, previous;
+    Chain::Lines lines; // sized at prepare(), for either chain's run
     double dynamicOffset = 0.0, designedOffset = 0.0; // dB
 
     // The run in progress: the last one whose start the Band saw; whether the coefficients move over

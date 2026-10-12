@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AnalyzerSettings.h"
+#include "EditorTick.h"
 #include "staple/controls/Popover.h"
 #include "staple/controls/TextChip.h"
 
@@ -62,9 +63,9 @@ private:
 
 // The Analyzer popover the footer's Analyzer button opens (HANDOFF.md §5.7, §3 "Analyzer"): Pre, Post
 // and Sidechain as a segmented group, the Range, Resolution, Speed and Analyzer Tilt rows, then Peak
-// Hold. Every change goes to PluginProcessor::setAnalyzerSettings, never to the undo history; it follows
-// settings restored with the session.
-class AnalyzerPopover final : public staple::Popover
+// Hold. Every change goes to PluginProcessor::setAnalyzerSettings, never to the undo history; while open
+// it follows settings restored with the session on the editor's tick (EditorTick).
+class AnalyzerPopover final : public staple::Popover, private EditorTick::Client
 {
 public:
     explicit AnalyzerPopover (PluginProcessor& processor);
@@ -86,6 +87,7 @@ private:
 
     // Shows the settings the processor holds.
     void show();
+    void tick (double seconds) override;
     void store();
     juce::Rectangle<int> sourcesArea() const;
 
@@ -94,8 +96,6 @@ private:
     AnalyzerRow range, resolution, speed;
     std::unique_ptr<TiltRow> tilt;
     std::unique_ptr<PeakHoldButton> peakHold;
-    // Follows restored settings while it is open.
-    juce::TimedCallback follow { [this] { show(); } };
 };
 
 } // namespace eq1

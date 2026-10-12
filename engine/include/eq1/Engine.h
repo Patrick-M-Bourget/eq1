@@ -2,6 +2,7 @@
 
 #include "eq1/Settings.h"
 
+#include <cstdint>
 #include <memory>
 
 namespace eq1
@@ -47,7 +48,8 @@ struct OutputLevel
 // Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
 // one thread at a time may call it; the newest settings are taken at the start of each process().
 // readAnalysis() may run on one reader thread, and readOutputLevel() and readDetectionLevel() each on
-// one reader thread, but not while prepare() changes the channel count.
+// one reader thread, through any prepare(): a re-prepare at another sample rate or channel count
+// never frees or moves what a reader touches.
 class Engine
 {
 public:
@@ -68,6 +70,10 @@ public:
     // Called from one reader thread while process() runs on the audio thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples);
 
+    // How many samples a tap holds between reads: the reader's buffer is this big. Safe to call from
+    // any thread.
+    int analysisCapacity() const;
+
     // The Live Gain in dB a Band Slot (1 to 24) applied at the end of the last process(): its Gain,
     // moved by its dynamics, held to +/-30 dB. Safe to call from any thread, for the display.
     double liveGainDb (int slot) const;
@@ -86,6 +92,11 @@ public:
     // when it hears two. Reading resets it. The floor when no Band is metered, or the metered Band has
     // nothing to listen to. Called from one reader thread while process() runs on the audio thread.
     double readDetectionLevel();
+
+    // How many times process() has applied settings: once at the first block after prepare(), then
+    // once per snapshot that differs from the settings it plays. A snapshot equal to them is skipped,
+    // so a block with no edits does no settings work. Safe to call from any thread, for tests.
+    std::uint64_t settingsApplied() const;
 
 private:
     struct Impl;
