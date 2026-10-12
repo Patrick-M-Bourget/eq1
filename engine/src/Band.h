@@ -1,5 +1,6 @@
 #pragma once
 
+#include "RunGrid.h"
 #include "ShapeDesign.h"
 #include "Smoother.h"
 #include "eq1/Settings.h"
@@ -18,15 +19,12 @@ namespace eq1
 // crossfades in and out as it is put in use, taken out of use, Bypassed or un-Bypassed, and from
 // its old filter to its new one when its Shape, Slope or Stereo Placement changes.
 //
-// It runs on the Engine's grid of runs of maxSubBlock samples: its filter is re-designed once at the
+// It runs on the Engine's grid of runs of runSamples samples: its filter is re-designed once at the
 // start of each run, and its coefficients move to the new design over the run by position in it, so
 // a run cut into pieces sounds the same as a whole one.
 class Band
 {
 public:
-    // The grid's run length; coefficients follow glides at this rate.
-    static constexpr int maxSubBlock = glideRunSamples;
-
     void prepare (double sampleRate, int numChannels);
 
     // With snap, the new settings take effect at once instead of gliding.
@@ -41,7 +39,7 @@ public:
     double liveGainDb() const;
 
     // Processes the piece of the grid's run numbered run (counted by the Engine from prepare) from
-    // position (0 to maxSubBlock - 1) on, numSamples long, at most to the run's end. A run's first
+    // position (0 to runSamples - 1) on, numSamples long, at most to the run's end. A run's first
     // piece starts at position 0. A Band that missed the run's start (a detector with nothing to
     // listen to for a while) plays at the filter last designed until the next run; one that saw the
     // start and misses a piece in the middle keeps gliding by position.
@@ -148,7 +146,7 @@ private:
     double runStartGainDb = 0.0, runEndGainDb = 0.0;
 
     // Per channel, for mixing the filtered signal with the dry one, and the previous chain's with the current.
-    std::vector<std::array<float, maxSubBlock>> wet, previousWet;
+    std::vector<std::array<float, runSamples>> wet, previousWet;
     std::vector<float*> wetChannels, previousWetChannels;
 
     // A Shape, Slope or Stereo Placement change that arrived during a crossfade waits for it to
