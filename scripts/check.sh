@@ -109,7 +109,7 @@ docs() {
         broken=1
     fi
     # A saved state starts with a binary header, so its raw bytes never show the XML: a test that
-    # searches them passes whatever was saved. Tests decode it with tests/plugin/SavedState.h. Flagged:
+    # searches them passes whatever was saved. Tests decode it with harness::savedState (tests/plugin/EditorHarness.h). Flagged:
     # toString on any block a file fills with getStateInformation, whatever the block is called.
     local raw file block
     raw=$(git grep -lE 'get(CurrentProgram)?StateInformation *\(' -- tests | while IFS= read -r file; do
@@ -119,7 +119,7 @@ docs() {
             done
     done || true)
     if [ -n "$raw" ]; then
-        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with eq1::test::savedState (tests\/plugin\/SavedState.h)/' >&2
+        printf '%s\n' "$raw" | sed 's/$/: a saved state read as raw bytes; decode it with harness::savedState (tests\/plugin\/EditorHarness.h)/' >&2
         broken=1
     fi
     # A test waits for the editor's timers with harness::settle (tests/plugin/EditorHarness.h): a loop of
@@ -155,15 +155,16 @@ docs() {
         broken=1
     fi
     # The filter lab measures over a Band's parameter ranges; a copy that drifts from the plugin's
-    # leaves part of the range unmeasured while the lab reports it covered.
+    # leaves part of the range unmeasured while the lab reports it covered. The plugin's are named once,
+    # in the Engine's settings header.
     local name lab plugin
-    for name in Frequency Gain Q Slope; do
+    for name in frequency gain q slope; do
         lab=$(grep -E "^$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_RANGE = \(" tools/filter-lab/filterlab.py |
             sed -E 's/.*\(([^,]+), *([^)]+)\).*/\1 \2/')
-        plugin=$(awk -v n="\"$name\"" 'found { gsub (/f/, ""); if (match ($0, /\(-?[0-9.]+, *-?[0-9.]+\)/)) { r = substr ($0, RSTART + 1, RLENGTH - 2); sub (/, */, " ", r); print r; exit } }
-                                       index ($0, "slotName (slot, " n ")") { found = 1 }' plugin/Parameters.cpp)
+        plugin=$(grep -E "^inline constexpr ParameterRange $name \{" engine/include/eq1/Settings.h |
+            sed -E 's/.*\{ *([^,]+), *([^ }]+) *\}.*/\1 \2/')
         if [ -z "$lab" ] || [ -z "$plugin" ] || ! awk -v a="$lab" -v b="$plugin" 'BEGIN { split (a, x, " "); split (b, y, " "); exit ! (x[1] == y[1] && x[2] == y[2]) }'; then
-            echo "tools/filter-lab/filterlab.py: ${name}'s range reads '${lab}', plugin/Parameters.cpp '${plugin}'; keep them equal" >&2
+            echo "tools/filter-lab/filterlab.py: ${name}'s range reads '${lab}', engine/include/eq1/Settings.h '${plugin}'; keep them equal" >&2
             broken=1
         fi
     done

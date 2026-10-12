@@ -3,7 +3,6 @@
 #include "FooterBar.h"
 #include "OutputMeter.h"
 #include "PluginProcessor.h"
-#include "SavedState.h"
 
 #include "eq1/Response.h"
 
@@ -19,6 +18,7 @@
 #include <thread>
 
 using Catch::Matchers::WithinAbs;
+namespace parameterRanges = eq1::parameterRanges;
 
 namespace
 {
@@ -28,6 +28,10 @@ const juce::StringArray shapeNames { "Bell",      "Low Shelf", "Low Cut",    "Hi
                                      "Notch",     "Band Pass", "Tilt Shelf", "Flat Tilt",  "All Pass" };
 
 constexpr double sampleRate = 48000.0;
+
+// A range's ends as the host parameter holds them.
+float low (eq1::ParameterRange range) { return static_cast<float> (range.low); }
+float high (eq1::ParameterRange range) { return static_cast<float> (range.high); }
 constexpr int blockSize = 512;
 
 juce::RangedAudioParameter& parameterNamed (juce::AudioProcessor& processor, const juce::String& id)
@@ -130,27 +134,27 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         juce::StringArray choices;
     };
     const Control controls[] = {
-        { "frequency", "Frequency", "Hz", 10.0f, 30000.0f, 0.0f, 1000.0f, 547.7226f, {} },
-        { "gain", "Gain", "dB", -30.0f, 30.0f, 0.0f, 0.0f, 0.0f, {} },
-        { "q", "Q", "", 0.025f, 40.0f, 0.0f, 1.0f, 1.0f, {} },
+        { "frequency", "Frequency", "Hz", low (parameterRanges::frequency), high (parameterRanges::frequency), 0.0f, 1000.0f, 547.7226f, {} },
+        { "gain", "Gain", "dB", low (parameterRanges::gain), high (parameterRanges::gain), 0.0f, 0.0f, 0.0f, {} },
+        { "q", "Q", "", low (parameterRanges::q), high (parameterRanges::q), 0.0f, 1.0f, 1.0f, {} },
         { "in_use", "In Use", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
         { "bypass", "Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
         { "shape", "Shape", "", 0.0f, 9.0f, 1.0f, 0.0f, 4.0f, shapeNames },
-        { "slope", "Slope", "dB/oct", 0.0f, 96.0f, 0.0f, 12.0f, 48.0f, {} },
+        { "slope", "Slope", "dB/oct", low (parameterRanges::slope), high (parameterRanges::slope), 0.0f, 12.0f, 48.0f, {} },
         { "brickwall", "Brickwall", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
         { "placement", "Stereo Placement", "", 0.0f, 4.0f, 1.0f, 0.0f, 2.0f, { "Stereo", "Left", "Right", "Mid", "Side" } },
-        { "dynamic_range", "Dynamic Range", "dB", -30.0f, 30.0f, 0.0f, 0.0f, 0.0f, {} },
+        { "dynamic_range", "Dynamic Range", "dB", low (parameterRanges::dynamicRange), high (parameterRanges::dynamicRange), 0.0f, 0.0f, 0.0f, {} },
         // Auto Threshold is its own switch, not the top of Threshold (ADR 0003, Consequences).
-        { "threshold", "Threshold", "dB", -60.0f, 0.0f, 0.0f, -30.0f, -30.0f, {} },
+        { "threshold", "Threshold", "dB", low (parameterRanges::threshold), high (parameterRanges::threshold), 0.0f, -30.0f, -30.0f, {} },
         { "threshold_auto", "Auto Threshold", "", 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, {} },
         // 50% is Auto: the centre of the range, so not a special value at its end.
-        { "attack", "Attack", "%", 0.0f, 100.0f, 0.0f, 50.0f, 50.0f, {} },
-        { "release", "Release", "%", 0.0f, 100.0f, 0.0f, 50.0f, 50.0f, {} },
+        { "attack", "Attack", "%", low (parameterRanges::timing), high (parameterRanges::timing), 0.0f, 50.0f, 50.0f, {} },
+        { "release", "Release", "%", low (parameterRanges::timing), high (parameterRanges::timing), 0.0f, 50.0f, 50.0f, {} },
         { "dynamics_bypass", "Dynamics Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
         { "detection_source", "Detection Source", "", 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, { "Internal", "External" } },
         { "detection_range", "Detection Range", "", 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, { "Band", "Free" } },
-        { "detection_low", "Detection Low", "Hz", 10.0f, 30000.0f, 0.0f, 20.0f, 547.7226f, {} },
-        { "detection_high", "Detection High", "Hz", 10.0f, 30000.0f, 0.0f, 20000.0f, 547.7226f, {} },
+        { "detection_low", "Detection Low", "Hz", low (parameterRanges::frequency), high (parameterRanges::frequency), 0.0f, 20.0f, 547.7226f, {} },
+        { "detection_high", "Detection High", "Hz", low (parameterRanges::frequency), high (parameterRanges::frequency), 0.0f, 20000.0f, 547.7226f, {} },
     };
 
     juce::ScopedJuceInitialiser_GUI juce;
@@ -164,10 +168,10 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
     // The whole-plugin controls. Output Gain's bottom, -80 dB, is silence (-inf), and 0 dB is at the
     // centre of the range.
     const Control wholePlugin[] = {
-        { "gain_scale", "Gain Scale", "%", 0.0f, 200.0f, 0.0f, 100.0f, 100.0f, {} },
+        { "gain_scale", "Gain Scale", "%", low (parameterRanges::gainScale), high (parameterRanges::gainScale), 0.0f, 100.0f, 100.0f, {} },
         { "auto_gain", "Auto Gain", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
-        { "output_gain", "Output Gain", "dB", -80.0f, 36.0f, 0.0f, 0.0f, 0.0f, {} },
-        { "output_pan", "Output Pan", "%", -100.0f, 100.0f, 0.0f, 0.0f, 0.0f, {} },
+        { "output_gain", "Output Gain", "dB", low (parameterRanges::outputGain), high (parameterRanges::outputGain), 0.0f, 0.0f, 0.0f, {} },
+        { "output_pan", "Output Pan", "%", low (parameterRanges::outputPan), high (parameterRanges::outputPan), 0.0f, 0.0f, 0.0f, {} },
         { "pan_mode", "Pan Mode", "", 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, { "L/R", "M/S" } },
         { "phase_invert", "Phase Invert", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
         { "global_bypass", "Global Bypass", "", 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, {} },
@@ -202,7 +206,7 @@ TEST_CASE ("The host parameter layout is pinned: IDs, names, ranges, steps, defa
         if (juce::String (control.suffix) == "slope")
         {
             CHECK (parameter->convertTo0to1 (0.0f) == 0.0f);
-            CHECK (parameter->convertTo0to1 (96.0f) == 1.0f);
+            CHECK (parameter->convertTo0to1 (high (parameterRanges::slope)) == 1.0f);
         }
     };
     for (int slot = 1; slot <= 24; ++slot)
@@ -432,9 +436,9 @@ TEST_CASE ("Holding Detection Audition plays the detection signal; it is not a h
     processor.setDetectionAudition (3);
     juce::MemoryBlock state;
     processor.getStateInformation (state);
-    const auto tree = eq1::test::savedState (state);
+    const auto tree = harness::savedState (state);
     REQUIRE (tree.isValid());
-    CHECK (eq1::test::savedNamesContaining (tree, "audition").isEmpty());
+    CHECK (harness::savedNamesContaining (tree, "audition").isEmpty());
     eq1::PluginProcessor restored;
     restored.setDetectionAudition (2);
     restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
@@ -465,10 +469,10 @@ TEST_CASE ("The editor reads the Detection Level of the Band it meters; the mete
     processor.setMeteredBand (3);
     juce::MemoryBlock state;
     processor.getStateInformation (state);
-    const auto tree = eq1::test::savedState (state);
+    const auto tree = harness::savedState (state);
     REQUIRE (tree.isValid());
     // Whether the Output Meter is shown (outputMeterShown) is saved on purpose; the Metered Band isn't.
-    CHECK (eq1::test::savedNamesContaining (tree, "metered").isEmpty());
+    CHECK (harness::savedNamesContaining (tree, "metered").isEmpty());
     eq1::PluginProcessor restored;
     restored.setMeteredBand (2);
     restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
@@ -540,9 +544,9 @@ TEST_CASE ("Solo is not a host parameter and is not saved with the session")
     saved.setSolo (3);
     juce::MemoryBlock state;
     saved.getStateInformation (state);
-    const auto tree = eq1::test::savedState (state);
+    const auto tree = harness::savedState (state);
     REQUIRE (tree.isValid());
-    CHECK (eq1::test::savedNamesContaining (tree, "solo").isEmpty());
+    CHECK (harness::savedNamesContaining (tree, "solo").isEmpty());
 
     eq1::PluginProcessor restored;
     restored.setSolo (5);
@@ -624,7 +628,7 @@ TEST_CASE ("Gain Scale on the host parameters scales every Band's Gain")
 
     setParameter (processor, "gain_scale", 50.0f);
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (6.0, 0.1));
-    setParameter (processor, "gain_scale", 200.0f);
+    setParameter (processor, "gain_scale", high (parameterRanges::gainScale));
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (24.0, 0.1));
 }
 
@@ -636,9 +640,9 @@ TEST_CASE ("Output Gain on the host parameters sets the output level, its bottom
 
     setParameter (processor, "output_gain", -6.0f);
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (-6.0, 0.05));
-    setParameter (processor, "output_gain", 36.0f);
-    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (36.0, 0.05));
-    setParameter (processor, "output_gain", -80.0f);
+    setParameter (processor, "output_gain", high (parameterRanges::outputGain));
+    CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (parameterRanges::outputGain.high, 0.05));
+    setParameter (processor, "output_gain", low (parameterRanges::outputGain));
     CHECK (sineGainDb (processor, 1000.0) < -200.0);
 
     auto& outputGain = parameterNamed (processor, "output_gain");
@@ -756,14 +760,14 @@ TEST_CASE ("Output Pan and Pan Mode on the host parameters balance the output, o
     CHECK (processor.isOutputPanAvailable());
 
     // Fully right turns the left channel, where the level is measured, off.
-    setParameter (processor, "output_pan", 100.0f);
+    setParameter (processor, "output_pan", high (parameterRanges::outputPan));
     CHECK (sineGainDb (processor, 1000.0) < -200.0);
     setParameter (processor, "output_pan", -50.0f);
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 
     // In M/S, fully left keeps only the Mid: a Side signal goes silent, a Mid one passes.
     setParameter (processor, "pan_mode", 1.0f);
-    setParameter (processor, "output_pan", -100.0f);
+    setParameter (processor, "output_pan", low (parameterRanges::outputPan));
     CHECK (sineGainDb (processor, 1000.0, Content::side) < -200.0);
     CHECK_THAT (sineGainDb (processor, 1000.0), WithinAbs (0.0, 0.05));
 
