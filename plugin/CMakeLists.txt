@@ -110,10 +110,19 @@ juce_add_binary_data(eq1_staple_fonts
         ${PROJECT_SOURCE_DIR}/assets/fonts/manrope-semibold.ttf
         ${PROJECT_SOURCE_DIR}/assets/fonts/manrope-bold.ttf)
 
+# eq1 reads and writes no audio file and loads no image file: Presets are XML, the icons are SVG
+# paths, the font is a TTF, and the only image written is the screens tests' PNG. Every codec JUCE
+# would otherwise compile in is off; the PNG writer, libpng and zlib stay for the screens tests.
 target_compile_definitions(eq1 PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0)
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_USE_FLAC=0
+    JUCE_USE_OGGVORBIS=0
+    JUCE_USE_OPUS=0
+    JUCE_USE_MP3AUDIOFORMAT=0
+    JUCE_USE_WINDOWS_MEDIA_FORMAT=0
+    JUCE_USE_WEBP=0)
 
 target_link_libraries(eq1
     PRIVATE
