@@ -25,6 +25,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int maximumExpectedSampl
 {
     engine.prepare (sampleRate, maximumExpectedSamplesPerBlock, getTotalNumOutputChannels());
     processedAudio.store (false, std::memory_order_relaxed);
+    publishedSincePrepare = false;
 }
 
 bool PluginProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -49,7 +50,14 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     settings.auditionSlot = heldAuditionSlot.load();
     settings.meteredSlot = heldMeteredSlot.load();
     output.readInto (settings);
-    engine.setSettings (settings);
+    // Published only when it differs from the last one: a block with no edits does no settings work.
+    if (! publishedSincePrepare || settings != publishedSettings)
+    {
+        publishedSettings = settings;
+        publishedSincePrepare = true;
+        engine.setSettings (settings);
+        publications.fetch_add (1, std::memory_order_relaxed);
+    }
 
     auto main = getBusBuffer (buffer, false, 0);
     const auto sidechainBuffer = getBusBuffer (buffer, true, 1);
