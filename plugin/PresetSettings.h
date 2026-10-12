@@ -1,6 +1,10 @@
 #pragma once
 
+#include "Parameters.h"
+
 #include <juce_audio_processors/juce_audio_processors.h>
+
+#include <vector>
 
 namespace eq1
 {
@@ -22,7 +26,12 @@ void applyPresetSettings (juce::AudioProcessorValueTreeState& parameters, const 
 // gives them: every setting a Preset holds, those preset leaves out at their defaults.
 juce::ValueTree presetSettingsAsLoaded (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& preset, const juce::Identifier& type);
 
-// Whether the parameters hold the settings applyPresetSettings() puts on them from tree.
-bool holdsPresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree);
+// The settings applyPresetSettings() puts on the parameters from tree, each with its parameter and
+// normalised value, in parameter order: a tree indexed once, so the Modified check compares them
+// with the parameters each tick (parametersHold) without searching the tree for every setting.
+using PresetSettingValues = std::vector<parameters::NewValue>;
+PresetSettingValues presetSettingValues (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree);
+// Whether every parameter in values holds its value there. Linear in the settings.
+bool parametersHold (const PresetSettingValues& values);
 
 } // namespace eq1
