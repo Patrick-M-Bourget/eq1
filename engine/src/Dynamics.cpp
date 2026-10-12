@@ -232,7 +232,8 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         if (level > autoThresholdGateDb)
         {
             samplesHeard = std::min (samplesHeard + 1.0, 1.0 / riseCoefficient);
-            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, 1.0 / samplesHeard); };
+            const double meanWeight = 1.0 / samplesHeard;
+            const auto weight = [&] (bool rising) { return std::max (rising ? riseCoefficient : fallCoefficient, meanWeight); };
             averageLevel += weight (level > averageLevel) * (level - averageLevel);
             const double deviation = (level - averageLevel) * (level - averageLevel);
             levelVariance += weight (deviation > levelVariance) * (deviation - levelVariance);
