@@ -391,7 +391,7 @@ engine_heap() {
         printf '%s\n' "$out"
         return "$status"
     fi
-    grep 'Engine heap' <<< "$out"
+    grep -E 'Engine heap|Analyzer FIFOs' <<< "$out"
 }
 
 # The binary of one format in the shipping build.

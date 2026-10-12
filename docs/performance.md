@@ -86,14 +86,17 @@ Measured 2026-10-10. On a machine busy with other builds the median reached 125 
 
 The codecs eq1 never decodes (opus, libwebp, libjpg, libpng, zlib, ogg) and lunasvg are about 1.1 MB of the arm64 code; harfbuzz another 0.67 MB.
 
-**Engine heap.** `tests/engine/FootprintTest.cpp` (tagged `[footprint]`, in the normal test run) constructs one `Engine`, prepares it stereo, and reads from `eq1::test::AllocationGuard` what the heap holds: the bytes the allocator gave out, less what was freed meanwhile, in the allocator's own block sizes (`malloc_size`, `_msize`). It fails above its ceilings, `heapCeilingBytes48k` and `heapCeilingBytes192k`, set about 5% above the figures measured here; a change that shrinks the Engine lowers them (#177).
+**Engine heap.** `tests/engine/FootprintTest.cpp` (tagged `[footprint]`, in the normal test run) constructs one `Engine`, prepares it stereo, and reads from `eq1::test::AllocationGuard` what the heap holds: the bytes the allocator gave out, less what was freed meanwhile, in the allocator's own block sizes (`malloc_size`, `_msize`). It fails above its ceilings, `heapCeilingBytes48k` and `heapCeilingBytes192k`, set about 5% above the figures measured here; a change that shrinks the Engine lowers them.
 
 | Sample rate | Heap per stereo Engine | Ceiling |
 | --- | --- | --- |
-| 48 kHz | 1,377,632 bytes | 1,450,000 |
-| 192 kHz | 2,065,760 bytes | 2,170,000 |
+| 48 kHz | 443,776 bytes | 466,000 |
+| 192 kHz | 787,840 bytes | 827,000 |
 
-Measured 2026-10-11 on an Apple M3 (`perf-integration`, `749fc3a`).
+Measured 2026-10-12 on an Apple M3 (`177-buffers-sized-to-need`). Most of it is the Bands' and detectors' state. The Analyzer's three taps and the Output Level's two channels hold **114,880 bytes** together at 48 kHz stereo, against a ceiling of 200,000 in the same test (`tapsCeilingBytes48k`), which `scripts/check.sh size` prints beside the heap:
+
+- An Analyzer tap (`engine/src/AnalysisFifo.h`) is a ring of the smallest power of two covering 150 ms at the prepared sample rate: 8,192 samples at 44.1 and 48 kHz, 16,384 at 96 kHz, 32,768 at 192 kHz, indexed with a mask. A ring is never freed or moved while the Engine lives (a prepare that needs a bigger one adds it and keeps the old one), so the editor reads through any re-prepare. `Engine::analysisCapacity()` tells the editor how big its read buffer is.
+- An Output Level tap (`engine/src/OutputLevelTap.h`) keeps its 300 ms RMS window as per-run (16-sample) sums of squares in double, rounded up to whole runs: 900 doubles at 48 kHz. A second sum, started afresh each window, replaces the running one once it has covered a whole window, so rounding never builds up and the audio thread never resums the window. The two taps are allocated once, for stereo, and the live channel count is atomic, so a mono/stereo re-prepare frees nothing under the Output Meter's reads.
 
 ## Subnormal numbers
 

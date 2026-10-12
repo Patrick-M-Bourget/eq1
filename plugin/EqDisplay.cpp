@@ -159,7 +159,6 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
         addChildComponent (*dynamicRangeHandle);
     }
     shown = heardSettings();
-    tapSamples.resize (1 << 16);
     // An editor opened under Global Bypass shows it at once.
     globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
     lastFadeStep = juce::Time::getMillisecondCounter();
@@ -188,7 +187,9 @@ bool EqDisplay::updateAnalyzer (double seconds)
             || spectrum->getResolution() != analyzer.resolution)
             spectrum->prepare (sampleRate, analyzer.resolution);
         // Always drained, so the taps hold only the newest samples when a spectrum is shown again;
-        // analysed only when shown.
+        // analysed only when shown. The buffer takes a whole tap, so one read drains it.
+        if (const auto capacity = static_cast<size_t> (processor.analysisCapacity()); tapSamples.size() != capacity)
+            tapSamples = std::vector<float> (capacity);
         const int count = processor.readAnalysis (tap, tapSamples.data(), static_cast<int> (tapSamples.size()));
         spectrum->push (tapSamples.data(), count);
         if (showing[i])
