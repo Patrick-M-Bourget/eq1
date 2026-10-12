@@ -5,12 +5,18 @@
 
 #include <array>
 #include <complex>
+#include <numbers>
 
 namespace eq1
 {
 
 // A Band's filter: a cascade of biquads.
 inline constexpr int maxSections = 16;
+
+// The Q of a plain Butterworth section, 1 / sqrt 2 (0.71): -3 dB at its natural frequency, where the
+// Cuts, the shelves and the Detection Range filters are designed from. (sqrt 2 / 2 is the same double
+// as sqrt (0.5): halving is exact.)
+inline constexpr double butterworthQ = std::numbers::sqrt2 / 2.0;
 
 struct Cascade
 {

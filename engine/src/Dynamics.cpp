@@ -1,7 +1,9 @@
 #include "Dynamics.h"
 
+#include "Placement.h"
 #include "Smoothstep.h"
 #include "Solo.h"
+#include "Units.h"
 
 #include <algorithm>
 #include <cassert>
@@ -35,19 +37,17 @@ constexpr double autoReleaseFastestSeconds = 0.040, autoReleaseSustainedSeconds 
 constexpr double sustainTimeConstantSeconds = 0.5;
 // Attack and Release at 0% and 100% are the Auto timing times 1/10 and 10.
 constexpr double timingSpread = 10.0;
-// Dynamic Range and Dynamics Bypass changes glide like a Band's settings: about 50 ms.
-constexpr double glideTimeConstantSeconds = 0.007;
 
 // A Free Detection Range's limits roll off at this Slope, steep enough to pick out a kick alone.
 constexpr double freeRangeSlope = 24.0;
 
-double coefficientFor (double seconds, double sampleRate) { return 1.0 - std::exp (-1.0 / (seconds * sampleRate)); }
+double coefficientFor (double seconds, double sampleRate) { return onePoleCoefficient (seconds * sampleRate); }
 
 double timingScale (double percent) { return std::pow (timingSpread, (std::clamp (percent, 0.0, 100.0) - 50.0) / 50.0); }
 // A Free Detection Range's limit: a Butterworth Cut at frequency.
 BandSettings freeLimit (Shape cut, double frequency)
 {
-    return { .inUse = true, .shape = cut, .frequency = frequency, .q = std::sqrt (0.5), .slope = freeRangeSlope };
+    return { .inUse = true, .shape = cut, .frequency = frequency, .q = butterworthQ, .slope = freeRangeSlope };
 }
 } // namespace
 
@@ -167,32 +167,13 @@ int Dynamics::takeDetectionSignal (const float* const* input, int numChannels, c
         input = sidechain;
         numChannels = sidechainChannels;
     }
-    if (numChannels < 2)
-    {
-        // On mono the signal is all Mid, and Left and Right are the same signal.
-        if (placement == StereoPlacement::Side)
-            return 0;
-        copy (0, input[0]);
-        return 1;
-    }
-    switch (placement)
-    {
-        case StereoPlacement::Stereo:
-            copy (0, input[0]);
-            copy (1, input[1]);
-            return 2;
-        case StereoPlacement::Left: copy (0, input[0]); return 1;
-        case StereoPlacement::Right: copy (0, input[1]); return 1;
-        case StereoPlacement::Mid:
-        case StereoPlacement::Side:
-        {
-            const float sign = placement == StereoPlacement::Mid ? 1.0f : -1.0f;
+    // The part the Band processes, of the first two channels.
+    return routePlacement (
+        placement, std::min (numChannels, 2), [&] (int part, int ch) { copy (static_cast<size_t> (part), input[ch]); },
+        [&] (bool mid) {
             for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
-                detection[0][i] = 0.5f * (input[0][i] + sign * input[1][i]);
-            return 1;
-        }
-    }
-    return 0;
+                detection[0][i] = mid ? encodeMid (input[0][i], input[1][i]) : encodeSide (input[0][i], input[1][i]);
+        });
 }
 
 double Dynamics::autoAttackSeconds (double overshootDb) const
@@ -233,7 +214,7 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
             power[c] += powerCoefficient * (x * x - power[c]);
             peakPower = std::max (peakPower, power[c]);
         }
-        const double level = 10.0 * std::log10 (2.0 * peakPower + 1.0e-30);
+        const double level = powerToDecibels (2.0 * peakPower + 1.0e-30);
         loudest = std::max (loudest, level);
         // Metered only: whatever comes next starts afresh, as if never metered.
         if (! moving)

@@ -3,12 +3,14 @@
 #include "AnalysisFifo.h"
 #include "AutoGain.h"
 #include "Band.h"
+#include "Crossfade.h"
 #include "DetectionLevelTap.h"
 #include "Dynamics.h"
 #include "LatestValue.h"
 #include "NoSubnormals.h"
 #include "Output.h"
 #include "OutputLevelTap.h"
+#include "Placement.h"
 #include "Smoother.h"
 #include "Solo.h"
 
@@ -43,7 +45,6 @@ struct Engine::Impl
     Output output;
 
     // Global Bypass: bypassMix crossfades from the processed output (0) to the input (1), copied into dry.
-    static constexpr double bypassFadeTimeConstantSeconds = 0.007; // as a Band's crossfades: about 50 ms
     Smoother bypassMix;
     std::vector<std::array<float, Band::maxSubBlock>> dry; // per channel
 
@@ -72,7 +73,6 @@ struct Engine::Impl
     // Solo: the region filter, run on the part of the input the Soloed Band processes. Detection
     // Audition: the auditioned Band's detection signal. heldMix crossfades between the EQ's output
     // (0) and them (1).
-    static constexpr double heldFadeTimeConstantSeconds = 0.007; // as a Band's crossfades: about 50 ms
     Band soloRegion;
     Smoother heldMix;
     Held playing; // what heldMix fades in, and soloRegion is set up for
@@ -88,32 +88,14 @@ struct Engine::Impl
     // it has: all of them for Stereo, one for Left, Right, Mid and Side, none for Side on mono.
     int takeSoloPart (float* const* channels, int channelCount, int count)
     {
-        const auto copy = [&] (const float* from) { std::copy (from, from + count, soloPart[0].data()); };
-        if (channelCount < 2)
-        {
-            if (playing.placement == StereoPlacement::Side)
-                return 0;
-            copy (channels[0]);
-            return 1;
-        }
-        switch (playing.placement)
-        {
-            case StereoPlacement::Stereo:
-                for (int ch = 0; ch < channelCount; ++ch)
-                    std::copy (channels[ch], channels[ch] + count, soloPart[static_cast<size_t> (ch)].data());
-                return channelCount;
-            case StereoPlacement::Left: copy (channels[0]); return 1;
-            case StereoPlacement::Right: copy (channels[1]); return 1;
-            case StereoPlacement::Mid:
-            case StereoPlacement::Side:
-            {
-                const float sign = playing.placement == StereoPlacement::Mid ? 1.0f : -1.0f;
+        return routePlacement (
+            playing.placement, channelCount,
+            [&] (int part, int ch) { std::copy (channels[ch], channels[ch] + count, soloPart[static_cast<size_t> (part)].data()); },
+            [&] (bool mid) {
                 for (int i = 0; i < count; ++i)
-                    soloPart[0][static_cast<size_t> (i)] = 0.5f * (channels[0][i] + sign * channels[1][i]);
-                return 1;
-            }
-        }
-        return 0;
+                    soloPart[0][static_cast<size_t> (i)] = mid ? encodeMid (channels[0][i], channels[1][i])
+                                                                : encodeSide (channels[0][i], channels[1][i]);
+            });
     }
 
     // What plays on output channel ch at sample i: for Solo, the region, decoded back to where it came
@@ -122,18 +104,10 @@ struct Engine::Impl
     {
         if (playing.audition)
             return dynamics[static_cast<size_t> (playing.slot - 1)].auditionSample (numChannels, ch, i);
-        const auto at = [&] (int c) { return soloPart[static_cast<size_t> (c)][static_cast<size_t> (i)]; };
         if (partChannels == 0)
             return 0.0f;
-        switch (playing.placement)
-        {
-            case StereoPlacement::Stereo: return at (ch);
-            case StereoPlacement::Left: return numChannels < 2 || ch == 0 ? at (0) : 0.0f;
-            case StereoPlacement::Right: return numChannels < 2 || ch == 1 ? at (0) : 0.0f;
-            case StereoPlacement::Mid: return ch < 2 ? at (0) : 0.0f;
-            case StereoPlacement::Side: return ch == 0 ? at (0) : ch == 1 ? -at (0) : 0.0f;
-        }
-        return 0.0f;
+        return placedSample (playing.placement, numChannels, ch,
+                             [&] (int part) { return soloPart[static_cast<size_t> (part)][static_cast<size_t> (i)]; });
     }
 
     // The metered Band Slot, 0 for none: one in use, not Bypassed, whose Shape has dynamics.
@@ -293,12 +267,12 @@ void Engine::prepare (double sampleRate, int, int numChannels)
     for (auto& dynamics : impl->dynamics)
         dynamics.prepare (sampleRate);
     impl->output.prepare (sampleRate, numChannels);
-    impl->bypassMix.configure (Impl::bypassFadeTimeConstantSeconds * sampleRate, 1.0e-6);
+    impl->bypassMix.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     impl->bypassMix.reset (0.0);
     impl->dry.assign (static_cast<size_t> (numChannels), {});
     impl->subBlock.assign (static_cast<size_t> (numChannels), nullptr);
     impl->soloRegion.prepare (sampleRate, numChannels);
-    impl->heldMix.configure (Impl::heldFadeTimeConstantSeconds * sampleRate, 1.0e-6);
+    impl->heldMix.configure (glideTimeConstantSeconds * sampleRate, 1.0e-6);
     impl->heldMix.reset (0.0);
     impl->soloPart.assign (static_cast<size_t> (std::max (numChannels, 1)), {});
     impl->soloPartChannels.clear();
@@ -375,36 +349,16 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
         {
             if (partChannels > 0)
                 impl->soloRegion.process (impl->soloPartChannels.data(), partChannels, impl->gridRun, position, count);
-            std::array<double, Band::maxSubBlock> mixes;
-            for (size_t i = 0; i < static_cast<size_t> (count); ++i)
-                mixes[i] = impl->heldMix.next();
-            for (int ch = 0; ch < channels; ++ch)
-            {
-                float* samples = impl->subBlock[static_cast<size_t> (ch)];
-                for (int i = 0; i < count; ++i)
-                {
-                    // In double, so a full mix plays the region exactly.
-                    const double dry = samples[i];
-                    samples[i] = static_cast<float> (dry + mixes[static_cast<size_t> (i)] * (impl->heldSample (partChannels, ch, i) - dry));
-                }
-            }
+            // In double, so a full mix plays the region exactly.
+            crossfade<double> (impl->heldMix, impl->subBlock.data(), channels, count,
+                               [&] (int ch, int i) { return impl->heldSample (partChannels, ch, i); });
         }
 
         impl->output.process (impl->subBlock.data(), channels, count);
 
         if (bypassing)
-        {
-            std::array<double, Band::maxSubBlock> mixes;
-            for (size_t i = 0; i < static_cast<size_t> (count); ++i)
-                mixes[i] = impl->bypassMix.next();
-            for (int ch = 0; ch < channels; ++ch)
-            {
-                float* samples = impl->subBlock[static_cast<size_t> (ch)];
-                const auto& input = impl->dry[static_cast<size_t> (ch)];
-                for (size_t i = 0; i < static_cast<size_t> (count); ++i)
-                    samples[i] = static_cast<float> (samples[i] + mixes[i] * (input[i] - samples[i]));
-            }
-        }
+            crossfade<float> (impl->bypassMix, impl->subBlock.data(), channels, count,
+                              [&] (int ch, int i) { return impl->dry[static_cast<size_t> (ch)][static_cast<size_t> (i)]; });
 
         // A non-finite input sample never reaches the output (docs/adr/0008-performance-never-costs-sound.md,
         // "Non-finite input"): whatever the input or a Band's state made of it plays as 0. The Bands
