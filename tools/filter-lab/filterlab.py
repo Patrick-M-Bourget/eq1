@@ -15,6 +15,7 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py high-cut --slopes 15 21 87 --target blend
     python3 tools/filter-lab/filterlab.py slopes
     python3 tools/filter-lab/filterlab.py slope-gaps seams shelves rescale --jobs 6
+    python3 tools/filter-lab/filterlab.py resonant-shelves --jobs 8
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report(). A new command registers itself with @command in its own
@@ -1449,6 +1450,78 @@ def run_slope_gaps(args):
         print()
     if "rescale" in gaps:
         report_rescale()
+
+
+# --- Resonant shelves over a dense Frequency scan (#195) -----------------------------------------
+# report() reads Shelves at a few Frequencies. A resonant shelf's error can peak sharply between them,
+# where a section's zeros or poles near Nyquist, so this scans Frequency densely: every DENSE_STEP
+# octave over the plugin's range, plus, for each second-order section, every DENSE_NEAR step of its
+# zeros' and its poles' natural frequency from 0.8 to 1.12 x Nyquist (where the split fades out).
+
+DENSE_STEP = 1 / 24
+DENSE_NEAR = 0.0025
+DENSE_QS = (2.25, 2.5, 3, 4, 10, 20, 40)
+DENSE_GAINS = (-30, -18, -12, -6, -3, 3, 12, 18, 30)
+
+
+def _dense_frequencies(fs, order, gain, q):
+    top = min(FREQUENCY_RANGE[1], 0.91 * fs / 2)
+    octaves = math.log2(top / FREQUENCY_RANGE[0])
+    found = {FREQUENCY_RANGE[0] * 2 ** (i * DENSE_STEP) for i in range(int(octaves / DENSE_STEP) + 1)}
+    for s in _low_shelf_sections(order, 10 ** (abs(gain) / 20), q):
+        if s.d2:  # a mirrored (High Shelf) section's zeros sit where the Low Shelf's poles do
+            for natural in (math.sqrt(s.n0 / s.n2), math.sqrt(s.d0 / s.d2)):
+                for i in range(round(0.32 / DENSE_NEAR) + 1):
+                    frequency = (0.8 + i * DENSE_NEAR) * fs / 2 / natural
+                    if FREQUENCY_RANGE[0] <= frequency <= top:
+                        found.add(frequency)
+    return sorted(found)
+
+
+def _dense_job(job):
+    """The worst share of the span per position band for one (shape, fs, Q, order), as report() reads it."""
+    shape, fs, q, order, points = job
+    worst = {}
+    for gain in DENSE_GAINS:
+        for frequency in _dense_frequencies(fs, order, gain, q):
+            sections, target = SHAPES[shape](fs, frequency, gain, q, order)
+            error, span, lowest = 0.0, abs(gain), target(10)
+            for i in range(points + 1):
+                f = 10 * (fs / 2 / 10) ** (i / points)
+                t = target(f)
+                span = max(span, abs(t - lowest))
+                error = max(error, abs(cascade_db(sections, f, fs) - t))
+            share = error / span
+            band = position_band(frequency, fs)
+            if share > worst.get(band, (0,))[0]:
+                worst[band] = (share, error, fs, frequency, gain, order)
+    return shape, q, worst
+
+
+def dense_options(parser):
+    parser.add_argument("--shapes", nargs="+", choices=SHELVES, default=list(SHELVES))
+    parser.add_argument("--q", type=float, nargs="+", default=list(DENSE_QS))
+    parser.add_argument("--orders", type=int, nargs="+", default=list(range(2, 17)))
+    parser.add_argument("--jobs", type=int, default=4, help="worker processes")
+
+
+@command("resonant-shelves", options=dense_options)
+def run_resonant_shelves(args, points=200):
+    """Worst error as a share of the span (report()'s measure) per Shelf, position band and Q, over a dense
+    Frequency scan, every Gain in DENSE_GAINS and the lab's sample rates, against SHELF_LIMITS."""
+    jobs = [(shape, fs, q, order, points) for shape in args.shapes for fs in SAMPLE_RATES for q in args.q
+            for order in args.orders]
+    worst = {}
+    for shape, q, found in _parallel(_dense_job, jobs, args.jobs):
+        for band, value in found.items():
+            if value[0] > worst.get((shape, band, q), (0,))[0]:
+                worst[(shape, band, q)] = value
+    print(f"{'shape':>10} {'band':>7} {'Q':>5}  {'share':>6} {'dB':>6} {'limit':>5}   worst case")
+    for (shape, band, q), (share, error, fs, frequency, gain, order) in sorted(worst.items()):
+        limit = SHELF_LIMITS[band][q > RESONANT_SHELF_Q]
+        mark = " over" if share > limit else ""
+        print(f"{shape:>10} {band:>7} {q:>5g}  {share:6.1%} {error:6.2f} {limit:5.0%}{mark:5}"
+              f" fs={fs} F={frequency:.1f} G={gain} order={order}")
 
 
 # --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------

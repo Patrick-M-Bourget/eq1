@@ -74,13 +74,15 @@ The measured column is the worst case in the filter lab over the test's grid (Fr
 
 **Low Shelf, High Shelf, Tilt Shelf** (share of the curve's span: how far the target strays from its value at 10 Hz, and at least |Gain|; plus 0.06 dB, or 0.6 dB above 0.73):
 
-| Frequency / Nyquist | Q up to 2 | Q above 2 | Q above 2, measured |
-|---|---|---|---|
-| up to 0.45 | 12% | 12% | 11.1% |
-| up to 0.73 | 12% | 15% | 13.9% |
-| up to 0.91 | 45% | 45% | 41.2% |
+| Frequency / Nyquist | Q up to 2 | Q above 2 | Q 2.25 to 4, measured | Q 10 to 40, measured |
+|---|---|---|---|---|
+| up to 0.45 | 12% | 12% | 11.4% | 7.7% |
+| up to 0.73 | 12% | 15% | 12.1% | 13.5% |
+| up to 0.91 | 45% | 45% | 43.3% | 31.8% |
 
-The measured column is the worst case in the filter lab, as a share of the span alone, over Frequency 20 Hz to 20 kHz, Gain ±3 to ±30 dB, every Slope from 6 to 96 dB/oct, Q 2.25, 2.5, 3, 4, 10, 20 and 40, at 44.1, 48 and 96 kHz, at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py low-shelf --orders 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 --q 2.25 2.5 3 4 10 20 40` (`high-shelf` and `tilt-shelf` measure the same).
+The measured columns are the worst case in the filter lab, as a share of the span alone, over a dense Frequency scan (every 1/24 octave from 10 Hz to 30 kHz, plus every 0.0025 × Nyquist from 0.8 to 1.12 × Nyquist for each second-order section's zeros and poles), Gain ±3 to ±30 dB, every Slope from 12 to 96 dB/oct, Q 2.25, 2.5, 3, 4, 10, 20 and 40, at 44.1, 48 and 96 kHz, at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py resonant-shelves --jobs 8`. Low Shelf, High Shelf and Tilt Shelf measure the same. The worst cases are at Q 40 below 0.73 (13.5%: 18 dB/oct, ±18 dB, 16.5 kHz at 48 kHz) and at Q 2.25 above it (43.3%: 96 dB/oct, ±3 dB, 21.8 kHz at 48 kHz). Before the resonance's match point slid (#195), Q 40 reached 17.7%, 25.7% and 32.6%, at Frequencies between those the response test read.
+
+The response test reads the shelves at a few Frequencies; a second test steps Frequency through the region where a section's zeros or poles near Nyquist, at Q 40 and 12 and 18 dB/oct, the Slopes whose sections are sharpest.
 
 The other Shapes' limits are in the test, beside each Shape's check.
 
