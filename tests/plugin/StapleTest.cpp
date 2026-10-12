@@ -1,5 +1,6 @@
 #include "EditorHarness.h"
 #include "PluginProcessor.h"
+#include "staple/CachedLayer.h"
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
 #include "staple/LookAndFeel.h"
@@ -11,6 +12,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 
@@ -161,6 +163,103 @@ TEST_CASE ("Staple's LookAndFeel draws a stock knob's and slider thumb's shadows
                    return p.getDistanceFrom (thumb.getCentre()) > thumbSize / 2.0f + 1.5f && std::abs (p.y - 50.0f) > 2.5f;
                }) <= 1);
     }
+}
+
+namespace
+{
+// The largest difference of any colour channel between two images of the same size.
+int largestColourDifference (const juce::Image& a, const juce::Image& b)
+{
+    int largest = 0;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+        {
+            const auto ca = a.getPixelAt (x, y), cb = b.getPixelAt (x, y);
+            largest = std::max ({ largest, std::abs (ca.getRed() - cb.getRed()), std::abs (ca.getGreen() - cb.getGreen()), std::abs (ca.getBlue() - cb.getBlue()) });
+        }
+    return largest;
+}
+} // namespace
+
+// What doesn't change between frames is drawn once into an image and from it after (staple::CachedLayer,
+// staple::SoftShadowCache): it looks as drawn directly, at 1x and 2x, anywhere within a pixel, and
+// whatever colour the last drawing left the Graphics with. Onto the platform's own images, which a
+// window draws with and the layers draw into.
+TEST_CASE ("A cached layer and a cached soft shadow draw as their drawing does, at 1x and 2x and anywhere within a pixel")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const float scale = GENERATE (1.0f, 2.0f);
+    const float offset = GENERATE (0.0f, 0.3f, 0.5f, 0.77f);
+    INFO ("scale " << scale << ", offset " << offset);
+    const auto text = [&] (juce::Graphics& g) {
+        g.setFont (staple::font (staple::tokens::size::fs2));
+        g.setColour (staple::tokens::colour::text2);
+        g.drawText ("20k", juce::Rectangle<float> (20.0f + offset, 30.0f + offset, 48.0f, 14.0f), juce::Justification::centred, false);
+    };
+    const auto handle = juce::Rectangle<float> (22.0f, 22.0f).withCentre ({ 50.0f + offset, 20.0f + offset });
+    const auto glow = juce::DropShadow { juce::Colour (0xff4ab8f0).withAlpha (0.4f), 6, {} };
+    const auto frame = [&] (auto&& draw) {
+        return harness::paintImage (juce::roundToInt (100 * scale), juce::roundToInt (60 * scale), [&] (juce::Graphics& g) {
+            g.fillAll (juce::Colour (0xffc08020));
+            g.addTransform (juce::AffineTransform::scale (scale));
+            // Left translucent by the drawing before, as a faded curve leaves it.
+            g.setColour (juce::Colours::white.withAlpha (0.2f));
+            draw (g);
+        }, juce::NativeImageType()); // as a window and the layers' own images are
+    };
+
+    const auto direct = frame ([&] (juce::Graphics& g) {
+        text (g);
+        staple::drawSoftShadow (g, handle, 11.0f, staple::tokens::shadow::selectedHandle);
+        staple::drawSoftShadow (g, handle.expanded (1.0f), 12.0f, glow);
+    });
+    staple::CachedLayer<int> layer;
+    staple::SoftShadowCache shadows;
+    const auto cached = [&] (juce::Graphics& g) {
+        layer.draw (g, {}, { 10.0f, 25.0f, 70.0f, 25.0f }, 0, juce::Image::ARGB, text);
+        shadows.draw (g, {}, handle, 11.0f, staple::tokens::shadow::selectedHandle);
+        shadows.draw (g, {}, handle.expanded (1.0f), 12.0f, glow);
+    };
+    CHECK (largestColourDifference (direct, frame (cached)) <= 2);
+    // Drawn again, from the images.
+    CHECK (largestColourDifference (direct, frame (cached)) <= 2);
+}
+
+// An image is drawn back pixel for pixel only where its drawing starts on a whole device pixel. The EQ
+// display starts 78 px down the window: at 75% or 125% on a 1x screen that is half a device pixel, where
+// an image would be drawn back resampled, softer. There the layers draw directly, as sharp as ever.
+TEST_CASE ("Starting half a device pixel in, at 75% and 125% on a 1x screen, a cached layer and a cached soft shadow draw directly")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    const float scale = GENERATE (0.75f, 1.25f);
+    INFO ("scale " << scale);
+    const juce::Point<float> origin { 0.0f, 78.0f }; // where the drawing starts in the window
+    const auto text = [&] (juce::Graphics& g) {
+        g.setFont (staple::font (staple::tokens::size::fs2));
+        g.setColour (staple::tokens::colour::text2);
+        g.drawText ("20k", juce::Rectangle<float> (20.0f, 30.0f, 48.0f, 14.0f), juce::Justification::centred, false);
+    };
+    const auto handle = juce::Rectangle<float> (16.0f, 16.0f).withCentre ({ 50.0f, 20.0f });
+    const auto frame = [&] (auto&& draw) {
+        return harness::paintImage (juce::roundToInt (100 * scale), juce::roundToInt (160 * scale), [&] (juce::Graphics& g) {
+            g.fillAll (juce::Colour (0xffc08020));
+            g.addTransform (juce::AffineTransform::translation (origin).scaled (scale));
+            draw (g);
+        }, juce::NativeImageType());
+    };
+
+    const auto direct = frame ([&] (juce::Graphics& g) {
+        text (g);
+        staple::drawSoftShadow (g, handle, 8.0f, staple::tokens::shadow::handle);
+    });
+    staple::CachedLayer<int> layer;
+    staple::SoftShadowCache shadows;
+    const auto cached = [&] (juce::Graphics& g) {
+        layer.draw (g, origin, { 10.0f, 25.0f, 70.0f, 25.0f }, 0, juce::Image::ARGB, text);
+        shadows.draw (g, origin, handle, 8.0f, staple::tokens::shadow::handle);
+    };
+    CHECK (largestColourDifference (direct, frame (cached)) <= 2);
+    CHECK (largestColourDifference (direct, frame (cached)) <= 2);
 }
 
 TEST_CASE ("A Tween counts as easing from towards() until it lands, and not after a jump or once it is gone")

@@ -2,6 +2,7 @@
 
 #include "DisplayFrame.h"
 #include "DisplayGeometry.h"
+#include "../staple/controls/Overlay.h"
 
 #include <vector>
 
@@ -56,6 +57,8 @@ Readout dragReadout (int slot, const BandSettings& band);
 
 // Over the curves: the Dynamic Range Handles, a handle per Band in use with the Solo cue on a Soloed
 // one, the readouts beside the Bands being dragged, the marquee, and the "All 24 Bands are in use" message.
-void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame);
+// The handles' shadows are drawn from images in shadows, kept from frame to frame, where the display
+// starts on a whole device pixel; origin is its top left in the window (staple::SoftShadowCache).
+void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame, staple::SoftShadowCache& shadows, juce::Point<float> origin);
 
 } // namespace eq1::display

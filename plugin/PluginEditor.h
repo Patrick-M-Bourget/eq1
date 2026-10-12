@@ -10,6 +10,7 @@
 #include "HeaderBar.h"
 #include "KeyboardControl.h"
 #include "OutputMeter.h"
+#include "staple/CachedLayer.h"
 #include "staple/LookAndFeel.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -57,6 +58,9 @@ private:
     // Everything the editor shows, laid out in logical pixels (as at 100%) and drawn at the UI Scale
     // through one transform on it, so it all stays vectors. It holds every component below.
     juce::Component content;
+    // The window's background, drawn again only when the window's size or the scale it is drawn at
+    // changes: whatever repaints over it (the EQ display, the Output Meter) then costs a copy of it.
+    staple::CachedLayer<int> background;
     BandEditing editing;
     EqDisplay display;
     BandPanel panel;
