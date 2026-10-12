@@ -77,7 +77,7 @@ TEST_CASE ("Render scenes meter a moving Band and an idle one, and hear an Exter
     }));
 }
 
-TEST_CASE ("Render scenes cover a glide, a structure crossfade, Solo, Detection Audition, Global Bypass and the Output", "[render]")
+TEST_CASE ("Render scenes cover a glide, a structure crossfade, Solo, Detection Audition, Global Bypass and the Output, settled and gliding", "[render]")
 {
     // A change of Frequency or Gain glides; a change of Shape crossfades between structures.
     CHECK (someScene ([] (const test::RenderScene& s) {
@@ -93,6 +93,16 @@ TEST_CASE ("Render scenes cover a glide, a structure crossfade, Solo, Detection 
     CHECK (someScene ([] (const test::RenderScene& s) { return s.settings.autoGain; }));
     CHECK (someScene ([] (const test::RenderScene& s) { return s.settings.phaseInvert; }));
     CHECK (someScene ([] (const test::RenderScene& s) { return s.settings.gainScale != 1.0; }));
+    // The Output's amounts glide from one setting to another, and settle: in L/R and M/S, and with Auto Gain
+    // switched on.
+    CHECK (someScene ([] (const test::RenderScene& s) {
+        return s.change && s.change->panMode == PanMode::LeftRight && s.change->outputGainDb != s.settings.outputGainDb
+               && s.change->outputPan != s.settings.outputPan;
+    }));
+    CHECK (someScene ([] (const test::RenderScene& s) {
+        return s.change && s.change->panMode == PanMode::MidSide && s.change->outputPan != s.settings.outputPan;
+    }));
+    CHECK (someScene ([] (const test::RenderScene& s) { return s.change && s.change->autoGain && ! s.settings.autoGain; }));
 }
 
 TEST_CASE ("Render scene names are distinct file names, and the block size isn't a multiple of 16", "[render]")
