@@ -140,8 +140,6 @@ struct Engine::Impl
     int meteredSlot = 0;
     DetectionLevelTap detectionLevel;
 
-    // About 1.4 s at 48 kHz: enough for the Analyzer to read at display rate.
-    static constexpr int analysisCapacity = 1 << 16;
     AnalysisFifo preEq, postEq, sidechain;
 
     // The Output Level, per channel prepared.
@@ -306,9 +304,9 @@ void Engine::prepare (double sampleRate, int, int numChannels)
         impl->soloPartChannels.push_back (part.data());
     impl->settingsChanged = true;
     impl->snapToSettings = true;
-    impl->preEq.allocate (Impl::analysisCapacity);
-    impl->postEq.allocate (Impl::analysisCapacity);
-    impl->sidechain.allocate (Impl::analysisCapacity);
+    impl->preEq.prepare (sampleRate);
+    impl->postEq.prepare (sampleRate);
+    impl->sidechain.prepare (sampleRate);
     if (numChannels != impl->outputLevelChannels)
     {
         impl->outputLevels = std::make_unique<OutputLevelTap[]> (static_cast<size_t> (std::max (numChannels, 0)));
@@ -453,6 +451,11 @@ OutputLevel Engine::readOutputLevel (int channel)
 double Engine::readDetectionLevel()
 {
     return impl->detectionLevel.read();
+}
+
+int Engine::analysisCapacity() const
+{
+    return impl->preEq.capacity();
 }
 
 int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples)

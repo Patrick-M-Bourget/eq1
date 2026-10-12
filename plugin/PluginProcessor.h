@@ -149,6 +149,7 @@ public:
 
     // The Engine's analysis taps, for the Analyzer: from one reader thread, the message thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return engine.readAnalysis (tap, destination, maxSamples); }
+    int analysisCapacity() const { return engine.analysisCapacity(); }
 
     // The Output Meter. The Engine's Output Level of a channel (0 to outputLevelChannels() - 1), from
     // one reader thread, the message thread. A peak read above 0 dBFS lights that channel's Clip Light,
