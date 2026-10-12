@@ -2,7 +2,7 @@
 # Runs the checks CI runs (.github/workflows/ci.yml calls this script, a stage at a time), and the local-only
 # paint time, on macOS or Windows (Git Bash).
 #
-#   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate
+#   scripts/check.sh            docs, hooks, build, test, cpu, paint, tsan and validate (not null, which needs a ref)
 #   scripts/check.sh docs       every doc section cited in code (docs/<file>.md, "<Section>") exists, GLOSSARY.md is the only
 #                               glossary, no two ADRs share a number, the filter lab's parameter ranges match the
 #                               plugin's, code points at no closed ticket (when gh is signed in), no test reads a saved state as raw bytes, runs
@@ -19,8 +19,12 @@
 #   scripts/check.sh focus <re> build the tests and run those whose names match the regex; none matching fails
 #   scripts/check.sh screens <dir>  build the tests and render every hidden [.screens] test into <dir> as PNGs, to
 #                               compare with the rendered Staple prototype
-#   scripts/check.sh cpu        the Engine's CPU load against its budget (docs/performance.md, "CPU budget"); on a
-#                               Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh cpu        the Engine's CPU load in every CPU scene against its budget (docs/performance.md,
+#                               "CPU budget"); on a Mac busy with other work it measures nothing and exits 3
+#   scripts/check.sh null <ref> the null check (docs/performance.md, "Null check"): builds <ref>'s render tool in a
+#                               temporary worktree (removed on exit) and this tree's, renders every render scene through
+#                               both Engines into BUILD_DIR/null, and prints each scene's worst deviation in dBFS, or
+#                               "exact"; fails above -120 dBFS, or on a scene <ref> has that this tree hasn't
 #   scripts/check.sh paint      the editor's paint time against its ceiling (docs/performance.md, "Paint time"); local
 #                               only, not in CI; on a Mac busy with other work it measures nothing and exits 3
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
@@ -226,21 +230,29 @@ match_generator() {
     fi
 }
 
-build() {
-    step "Build ($os)"
+# Configures a source tree into a build folder the way CI builds: Release, without link-time
+# optimisation, sharing the dependencies. The main build is build(); the null check configures <ref>'s.
+configure() {
+    local source=$1 build=$2
+    shift 2
     if [ "$os" = macos ]; then
         match_generator Ninja
-        cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
-            -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+        cmake -S "$source" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+            -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     elif command -v cl > /dev/null; then
         # In an MSVC developer environment (CI sets one up), Ninja compiles every file in parallel.
         match_generator Ninja
-        cmake -S . -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+        cmake -S "$source" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     else
         # Without one, Visual Studio finds the compiler itself.
         match_generator "Visual Studio"
-        cmake -S . -B "$BUILD_DIR" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS"
+        cmake -S "$source" -B "$build" -A x64 -DEQ1_LTO=OFF "-DFETCHCONTENT_BASE_DIR=$DEPS" "$@"
     fi
+}
+
+build() {
+    step "Build ($os)"
+    configure . "$BUILD_DIR"
     cmake --build "$BUILD_DIR" --config Release --parallel
 }
 
@@ -324,6 +336,35 @@ cpu() {
     fi
     return "$status"
 }
+
+# Both trees' render tools (tests/render/RenderTool.cpp) render the same scenes; this tree's compares
+# them. <ref> is built in a worktree under BUILD_DIR/null, the Engine and the tool only (no Plugin Shell),
+# with the same compiler and flags as this tree, so a deviation is the source's. A subshell, so the EXIT
+# trap that removes the worktree stays local.
+null() (
+    local ref=$1 work=$BUILD_DIR/null
+    step "Null check against $ref"
+    if ! git rev-parse --verify --quiet "$ref^{commit}" > /dev/null; then
+        echo "null: no such ref: $ref" >&2
+        exit 1
+    fi
+    mkdir -p "$work"
+    work=$(cd "$work" && pwd)
+    rm -rf "$work/current" "$work/ref"
+    git worktree remove --force "$work/src" 2> /dev/null || rm -rf "$work/src"
+    trap 'git worktree remove --force "$work/src" 2> /dev/null || true; rm -rf "$work/src" "$work/build"' EXIT
+    git worktree add --quiet --detach "$work/src" "$ref"
+    if [ ! -f "$work/src/tests/render/RenderTool.cpp" ]; then
+        echo "null: $ref has no render tool (tests/render/RenderTool.cpp); compare against a ref that has one" >&2
+        exit 1
+    fi
+    configure "$work/src" "$work/build" -DEQ1_BUILD_PLUGIN=OFF > "$work/configure.log" 2>&1 || { cat "$work/configure.log" >&2; exit 1; }
+    cmake --build "$work/build" --config Release --parallel --target eq1_render
+    cmake --build "$BUILD_DIR" --config Release --parallel --target eq1_render
+    "$(BUILD_DIR=$work/build test_exe eq1_render)" render "$work/ref"
+    "$(test_exe eq1_render)" render "$work/current"
+    "$(test_exe eq1_render)" compare "$work/current" "$work/ref"
+)
 
 # The editor drawing a busy frame at 2x, from the hidden [paint] test, which fails above its ceiling.
 # Local only: CI has no step for it.
@@ -426,6 +467,7 @@ case "${1:-all}" in
     test) run_tests ;;
     cpu) cpu ;;
     paint) paint ;;
+    null) null "${2:?usage: scripts/check.sh null <ref>}" ;;
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     screens) screens "${2:?usage: scripts/check.sh screens <dir>}" ;;
     tsan) tsan ;;
@@ -435,5 +477,5 @@ case "${1:-all}" in
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,26p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,31p' "$0" >&2; exit 2 ;;
 esac

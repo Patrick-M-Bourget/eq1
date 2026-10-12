@@ -19,6 +19,7 @@ add_executable(eq1_engine_tests
     engine/OutputLevelTest.cpp
     engine/OutputTest.cpp
     engine/RealtimeSafetyTest.cpp
+    engine/RenderScenesTest.cpp
     engine/ResponseTest.cpp
     engine/RobustnessTest.cpp
     engine/SampleRateAndBlockSizeTest.cpp
@@ -95,3 +96,9 @@ endif()
 # generators are Catch2's, so it links Catch2 without its main.
 add_executable(eq1_cpu_budget cpu/CpuBudget.cpp)
 target_link_libraries(eq1_cpu_budget PRIVATE eq1::engine Catch2::Catch2)
+
+# Renders the null check's scenes through the Engine and compares two trees' renders
+# (scripts/check.sh null). Not a ctest test; the scenes themselves are tested in eq1_engine_tests.
+# Linked against the Engine only, and Catch2 without its main for the shared helpers' generators.
+add_executable(eq1_render render/RenderTool.cpp)
+target_link_libraries(eq1_render PRIVATE eq1::engine Catch2::Catch2)
