@@ -372,3 +372,80 @@ TEST_CASE ("The saved names a test checks include nested properties and host par
     CHECK (names.contains ("auditionSlot"));
     CHECK (names.contains ("Held"));
 }
+
+namespace
+{
+
+// Every host parameter holds a finite normalised value within 0 to 1, and a plain one within its range.
+void checkEveryParameterFiniteAndInRange (juce::AudioProcessor& processor)
+{
+    for (auto* p : processor.getParameters())
+    {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p);
+        REQUIRE (ranged != nullptr);
+        CAPTURE (ranged->getParameterID());
+        const float normalised = ranged->getValue();
+        REQUIRE (std::isfinite (normalised));
+        REQUIRE (normalised >= 0.0f);
+        REQUIRE (normalised <= 1.0f);
+        const float plain = ranged->convertFrom0to1 (normalised);
+        const auto& range = ranged->getNormalisableRange();
+        REQUIRE (std::isfinite (plain));
+        REQUIRE (plain >= range.start);
+        REQUIRE (plain <= range.end);
+    }
+}
+
+// Sets a saved setting's value as written in the file, which may be anything.
+void setSaved (juce::XmlElement& state, const juce::String& id, const juce::String& text)
+{
+    for (auto* child : state.getChildWithTagNameIterator ("PARAM"))
+        if (child->getStringAttribute ("id") == id)
+        {
+            child->setAttribute ("value", text);
+            return;
+        }
+    FAIL ("No saved setting " << id);
+}
+
+} // namespace
+
+TEST_CASE ("A state with nan, inf and out-of-range values restores to finite, in-range parameters: defaults where a value isn't finite, the range's end where it is outside")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor maker;
+    set (maker, "band1_in_use", 1.0f);
+    const auto xml = eq1::test::savedXml (maker);
+    REQUIRE (xml != nullptr);
+    setSaved (*xml, "band1_frequency", "nan");
+    setSaved (*xml, "band1_gain", "inf");
+    setSaved (*xml, "band1_q", "-inf");
+    setSaved (*xml, "band1_threshold", "NaN");
+    setSaved (*xml, "band2_gain", "99");
+    setSaved (*xml, "band2_frequency", "1");
+    setSaved (*xml, "band2_q", "1e30");
+    setSaved (*xml, "band3_shape", "42");
+    setSaved (*xml, "band3_slope", "-7");
+    setSaved (*xml, "output_gain", "-1000");
+    setSaved (*xml, "gain_scale", "not a number");
+
+    eq1::PluginProcessor restored;
+    load (restored, *xml);
+    checkEveryParameterFiniteAndInRange (restored);
+    // Not finite: the default.
+    CHECK_THAT (value (restored, "band1_frequency"), WithinAbs (1000.0, 1.0e-3));
+    CHECK (value (restored, "band1_gain") == 0.0f);
+    CHECK_THAT (value (restored, "band1_q"), WithinAbs (1.0, 1.0e-4));
+    CHECK_THAT (value (restored, "band1_threshold"), WithinAbs (-30.0, 1.0e-4));
+    // Finite and outside the range: the range's end.
+    CHECK_THAT (value (restored, "band2_gain"), WithinAbs (30.0, 1.0e-4));
+    CHECK_THAT (value (restored, "band2_frequency"), WithinAbs (10.0, 1.0e-3));
+    CHECK_THAT (value (restored, "band2_q"), WithinAbs (40.0, 1.0e-3));
+    CHECK (value (restored, "band3_shape") == static_cast<float> (eq1::parameters::shapeNames().size() - 1));
+    CHECK (value (restored, "band3_slope") == 0.0f);
+    CHECK_THAT (value (restored, "output_gain"), WithinAbs (eq1::parameters::outputGainSilentDb, 1.0e-3));
+    // Text that isn't a number reads as 0, which is in Gain Scale's range.
+    CHECK (value (restored, "gain_scale") == 0.0f);
+    // The rest restored as saved.
+    CHECK (value (restored, "band1_in_use") == 1.0f);
+}

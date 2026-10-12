@@ -1,5 +1,6 @@
 #include "PresetSettings.h"
 
+#include <cmath>
 #include <unordered_map>
 
 namespace eq1
@@ -23,13 +24,13 @@ void forEachPresetSetting (juce::AudioProcessorValueTreeState& parameters, Visit
 template <typename Visit>
 void forEachPresetSettingIn (juce::AudioProcessorValueTreeState& parameters, const juce::ValueTree& tree, Visit&& visit)
 {
-    std::unordered_map<juce::String, float> saved;
+    std::unordered_map<juce::String, juce::var> saved;
     for (const auto& setting : tree)
         if (setting.hasType (parameterType))
-            saved.try_emplace (setting.getProperty (idProperty).toString(), static_cast<float> (setting.getProperty (valueProperty)));
+            saved.try_emplace (setting.getProperty (idProperty).toString(), setting.getProperty (valueProperty));
     forEachPresetSetting (parameters, [&] (juce::RangedAudioParameter& p) {
         const auto found = saved.find (p.getParameterID());
-        visit (p, found != saved.end() ? p.convertTo0to1 (found->second) : p.getDefaultValue());
+        visit (p, found != saved.end() ? p.convertTo0to1 (restoredPlainValue (p, found->second)) : p.getDefaultValue());
     });
 }
 
@@ -44,6 +45,33 @@ juce::ValueTree settingOf (const juce::RangedAudioParameter& p, float value)
 bool isPresetSetting (const juce::RangedAudioParameter& parameter)
 {
     return parameter.getParameterID() != parameters::globalBypassId;
+}
+
+float restoredPlainValue (const juce::RangedAudioParameter& parameter, const juce::var& saved)
+{
+    // Read in double, so a value a float can't hold ("1e39") is still a finite one to clamp.
+    const double value = static_cast<double> (saved);
+    const auto& range = parameter.getNormalisableRange();
+    if (! std::isfinite (value))
+        return parameter.convertFrom0to1 (parameter.getDefaultValue());
+    return static_cast<float> (juce::jlimit (static_cast<double> (range.start), static_cast<double> (range.end), value));
+}
+
+void sanitiseSavedSettings (juce::AudioProcessorValueTreeState& parameters, juce::ValueTree& tree)
+{
+    for (auto setting : tree)
+    {
+        if (! setting.hasType (parameterType))
+            continue;
+        const auto* p = parameters.getParameter (setting.getProperty (idProperty).toString());
+        if (p == nullptr)
+            continue;
+        const auto saved = setting.getProperty (valueProperty);
+        const double value = static_cast<double> (saved);
+        if (std::isfinite (value) && value >= p->getNormalisableRange().start && value <= p->getNormalisableRange().end)
+            continue;
+        setting.setProperty (valueProperty, restoredPlainValue (*p, saved), nullptr);
+    }
 }
 
 juce::ValueTree capturePresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::Identifier& type)

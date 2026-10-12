@@ -14,6 +14,16 @@ namespace eq1
 
 bool isPresetSetting (const juce::RangedAudioParameter& parameter);
 
+// The plain value a saved one restores to, on a session restore and on a Preset load alike: the saved
+// value itself when it is finite and in the parameter's range, the range's nearer end when it is finite
+// outside it, and the parameter's default when it isn't a finite number (nan, inf, or no number at
+// all). Nothing a file holds reaches the filter design unchecked.
+float restoredPlainValue (const juce::RangedAudioParameter& parameter, const juce::var& saved);
+
+// Puts every PARAM child of tree that names a parameter through restoredPlainValue(), in place, leaving
+// a value that restores as itself untouched. For a saved state about to replace the parameters' state.
+void sanitiseSavedSettings (juce::AudioProcessorValueTreeState& parameters, juce::ValueTree& tree);
+
 // The settings a Preset holds, as a tree of the given type, with a PARAM child for each, holding
 // its id and plain value as the saved state does.
 juce::ValueTree capturePresetSettings (juce::AudioProcessorValueTreeState& parameters, const juce::Identifier& type);

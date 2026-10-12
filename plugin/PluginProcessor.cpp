@@ -280,6 +280,8 @@ void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
         const auto savedCompare = state.getChildWithName (ABCompare::stateType);
         compare.restore (savedCompare);
         state.removeChild (savedCompare, nullptr);
+        // A value a file holds reaches a parameter finite and in range, or not at all.
+        sanitiseSavedSettings (parameters, state);
         parameters.replaceState (state);
         history.sessionRestored();
         const auto restored = currentHeardGains();
