@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <random>
 #include <vector>
 
 using namespace eq1;
@@ -18,16 +17,13 @@ namespace
 // ring longest, and so take longest to decay into subnormal numbers.
 Settings everyShapeRinging()
 {
-    Settings settings;
-    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
-        settings.bands[slot] = { .inUse = true,
-                                 .shape = test::allShapes[slot % test::allShapes.size()],
-                                 .frequency = 20.0 * std::pow (1.33, static_cast<double> (slot)),
-                                 .gain = slot % 2 == 0 ? 12.0 : -12.0,
-                                 .q = 20.0,
-                                 .slope = 96.0,
-                                 .dynamicRange = slot % 2 == 0 ? -12.0 : 0.0 };
-    return settings;
+    return test::spreadBands ([] (size_t slot) {
+        return BandSettings { .shape = test::allShapes[slot % test::allShapes.size()],
+                              .gain = slot % 2 == 0 ? 12.0 : -12.0,
+                              .q = 20.0,
+                              .slope = 96.0,
+                              .dynamicRange = slot % 2 == 0 ? -12.0 : 0.0 };
+    }, 20.0);
 }
 
 int subnormalsIn (const std::vector<float>& samples)
@@ -122,8 +118,7 @@ TEST_CASE ("Every Shape at the ends of every setting stays finite and bounded, t
     // Full-scale noise for 0.25 s, then silence. The tail is not required to fall yet: Bands resonating
     // together at 10 Hz stack into a ringing that builds for seconds before it decays. An
     // unstable filter grows without limit instead.
-    std::mt19937 random (7);
-    std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
+    test::Noise noise (7);
     const auto inputSamples = static_cast<int> (0.25 * sampleRate);
     std::vector<float> left (blockSize), right (blockSize);
     float* main[] = { left.data(), right.data() };
@@ -134,8 +129,8 @@ TEST_CASE ("Every Shape at the ends of every setting stays finite and bounded, t
         for (size_t i = 0; i < left.size(); ++i)
         {
             const bool playing = n + static_cast<int> (i) < inputSamples;
-            left[i] = playing ? noise (random) : 0.0f;
-            right[i] = playing ? noise (random) : 0.0f;
+            left[i] = playing ? noise() : 0.0f;
+            right[i] = playing ? noise() : 0.0f;
         }
         engine.process ({ main, 2, blockSize });
         for (size_t i = 0; i < left.size(); ++i)

@@ -7,7 +7,6 @@
 #include <cmath>
 #include <functional>
 #include <numbers>
-#include <random>
 #include <vector>
 
 using namespace eq1;
@@ -20,18 +19,16 @@ namespace
 // Range. Slot meteredSlot is metered: 22 is a Dynamic Band when dynamic, 21 a Bell that never is.
 Settings scene (bool dynamic, int meteredSlot)
 {
-    Settings settings;
-    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
-        settings.bands[slot] = { .inUse = true,
-                                 .shape = test::allShapes[slot % test::allShapes.size()],
-                                 .frequency = 30.0 * std::pow (1.3, static_cast<double> (slot)),
-                                 .gain = slot % 2 == 0 ? -6.0 : 6.0,
-                                 .q = 1.5,
-                                 .slope = 24.0,
-                                 .placement = test::allPlacements[slot % test::allPlacements.size()],
-                                 .dynamicRange = dynamic && slot % 3 == 0 ? -9.0 : 0.0,
-                                 .threshold = -30.0,
-                                 .thresholdAuto = slot % 2 == 0 };
+    auto settings = test::spreadBands ([dynamic] (size_t slot) {
+        return BandSettings { .shape = test::allShapes[slot % test::allShapes.size()],
+                              .gain = slot % 2 == 0 ? -6.0 : 6.0,
+                              .q = 1.5,
+                              .slope = 24.0,
+                              .placement = test::allPlacements[slot % test::allPlacements.size()],
+                              .dynamicRange = dynamic && slot % 3 == 0 ? -9.0 : 0.0,
+                              .threshold = -30.0,
+                              .thresholdAuto = slot % 2 == 0 };
+    }, 30.0, 1.3);
     settings.bands[3].detectionSource = DetectionSource::External;
     settings.bands[18].detectionRange = DetectionRange::Free;
     settings.bands[18].detectionLow = 200.0;
@@ -51,16 +48,15 @@ std::vector<float> play (double sampleRate, bool dynamic, const std::function<in
     const auto burst = static_cast<size_t> (0.1 * sampleRate);
     const auto sidechainBurst = static_cast<size_t> (0.07 * sampleRate);
     std::vector<float> left (length), right (length), sidechainLeft (length), sidechainRight (length);
-    std::mt19937 random (3);
-    std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
+    test::Noise noise (3);
     for (size_t i = 0; i < length; ++i)
     {
         const float level = i / burst % 2 == 0 ? 0.05f : 0.5f;
-        left[i] = level * noise (random);
-        right[i] = level * noise (random);
+        left[i] = level * noise();
+        right[i] = level * noise();
         const float sidechainLevel = i / sidechainBurst % 2 == 0 ? 0.5f : 0.02f;
-        sidechainLeft[i] = sidechainLevel * noise (random);
-        sidechainRight[i] = sidechainLevel * noise (random);
+        sidechainLeft[i] = sidechainLevel * noise();
+        sidechainRight[i] = sidechainLevel * noise();
     }
 
     Engine engine;

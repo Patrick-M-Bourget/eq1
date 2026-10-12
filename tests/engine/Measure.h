@@ -1,8 +1,9 @@
 #pragma once
 
-// The Engine tests' shared helpers: what the Engine is driven with (every Shape and Stereo
-// Placement, the sample rates checked) and how what comes out of its public interface is measured.
-// A helper a second test needs lives here (CODING_STANDARDS.md, "Shared behaviour lives once").
+// The Engine tests' shared helpers, and the CPU budget's: what the Engine is driven with (every
+// Shape and Stereo Placement, the sample rates checked, a 24-Band scene, seeded noise) and how what
+// comes out of its public interface is measured. A helper a second test needs lives here
+// (CODING_STANDARDS.md, "Shared behaviour lives once").
 
 #include "eq1/Engine.h"
 
@@ -12,7 +13,9 @@
 #include <array>
 #include <cmath>
 #include <complex>
+#include <functional>
 #include <numbers>
+#include <random>
 #include <vector>
 
 namespace eq1::test
@@ -26,6 +29,33 @@ inline constexpr std::array allPlacements = { StereoPlacement::Stereo, StereoPla
 
 // The sample rates eq1 is checked at, one Catch2 section each.
 inline double anySampleRate() { return GENERATE (44100.0, 48000.0, 88200.0, 96000.0, 176400.0, 192000.0); }
+
+// White noise between -1 and 1: the same sequence for the same seed, so a test repeats exactly.
+class Noise
+{
+public:
+    explicit Noise (std::mt19937::result_type seed) : random (seed) {}
+    float operator()() { return unit (random); }
+
+private:
+    std::mt19937 random;
+    std::uniform_real_distribution<float> unit { -1.0f, 1.0f };
+};
+
+// A scene of all 24 Band slots in use, spread geometrically across the spectrum: slot n at
+// lowest x ratio^n Hz, 30 Hz to about 21 kHz by default. band (slot) gives each one everything else:
+// Shape, Gain, Q, Slope, Stereo Placement and dynamics.
+inline Settings spreadBands (const std::function<BandSettings (size_t slot)>& band, double lowest = 30.0, double ratio = 1.33)
+{
+    Settings settings;
+    for (size_t slot = 0; slot < settings.bands.size(); ++slot)
+    {
+        settings.bands[slot] = band (slot);
+        settings.bands[slot].inUse = true;
+        settings.bands[slot].frequency = lowest * std::pow (ratio, static_cast<double> (slot));
+    }
+    return settings;
+}
 
 inline BandSettings bellBand (double frequency, double gain, double q)
 {
