@@ -38,7 +38,7 @@ juce::String signedDb (double db, DbFormat format = {});
 // A Slope: "12 dB/oct", or "37.5 dB/oct" where it is not within 0.05 of a whole number.
 juce::String slope (double dbPerOctave);
 
-// Whole percent: "100%".
+// Whole percent, with a true minus below zero: "100%", "−40%".
 juce::String percent (double value);
 
 } // namespace eq1::valueText

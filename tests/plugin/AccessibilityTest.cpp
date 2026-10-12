@@ -321,19 +321,19 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     host.set (4, "q", 0.707f);
     host.settle();
     CHECK (host.element ("Band 4 Gain").value == "+3.50 dB");
-    CHECK (host.element ("Band 4 Frequency").value == "1000.0 Hz");
+    CHECK (host.element ("Band 4 Frequency").value == "1.00 kHz");
     CHECK (host.element ("Band 4 Q").value == "0.707");
-    CHECK (host.element ("Band 4 Slope").value == "12.0 dB/oct");
-    CHECK (host.element ("Gain Scale").value == "100.0 %");
+    CHECK (host.element ("Band 4 Slope").value == "12 dB/oct");
+    CHECK (host.element ("Gain Scale").value == "100%");
     CHECK (host.element ("Band 4 Dynamic Range").value == "+6.00 dB");
     CHECK (host.element ("Band 4 Attack").value == "Auto");
-    CHECK (host.element ("Band 4 Detection High").value == "20000.0 Hz");
+    CHECK (host.element ("Band 4 Detection High").value == "20.0 kHz");
     host.openCallOut ("Analyzer");
     CHECK (host.element ("Analyzer Tilt").value.endsWith (" dB/oct"));
     host.closeCallOut();
     host.set (4, "gain", -12.0f);
     host.settle();
-    CHECK (host.element ("Band 4 Gain").value == "-12.00 dB");
+    CHECK (host.element ("Band 4 Gain").value == juce::String::charToString (0x2212) + "12.00 dB");
 
     // Threshold: Auto at its top, else its dB.
     host.set (4, "threshold_auto", 1.0f);
@@ -343,6 +343,17 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     host.set (4, "threshold_auto", 0.0f);
     host.settle();
     CHECK (host.element ("Band 4 Threshold").value == juce::String::charToString (0x2212) + "20.0 dB");
+    // What it reads, set back as text, is the same value.
+    auto* threshold = host.element ("Band 4 Threshold").component->getAccessibilityHandler()->getValueInterface();
+    host.set (4, "threshold", -30.0f);
+    host.settle();
+    threshold->setValueAsString (juce::String::charToString (0x2212) + "20.0 dB");
+    host.settle();
+    CHECK (host.element ("Band 4 Threshold").value == juce::String::charToString (0x2212) + "20.0 dB");
+    // So does a Gain read with a true minus.
+    host.element ("Band 4 Gain").component->getAccessibilityHandler()->getValueInterface()->setValueAsString (juce::String::charToString (0x2212) + "6.50 dB");
+    host.settle();
+    CHECK (host.element ("Band 4 Gain").value == juce::String::charToString (0x2212) + "6.50 dB");
     // The Detection Range: Band or Free, and the bar's segment with its limits.
     auto* rangeButton = harness::findChild<juce::Button> (*host.editor, [] (juce::Button& b) { return b.getTitle() == "Band 4 Detection Range"; });
     REQUIRE (rangeButton != nullptr);
@@ -356,7 +367,7 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     host.parameter ("output_gain").setValueNotifyingHost (0.0f);
     host.settle();
     host.openCallOut ("Output");
-    CHECK (host.element ("Output Gain").value == "-inf dB");
+    CHECK (host.element ("Output Gain").value == juce::String::charToString (0x2212) + "inf dB");
 }
 
 TEST_CASE ("A Band reads its Shape, Frequency, Gain when it has one, and Q, then Bypassed and Dynamic Band")
@@ -365,17 +376,17 @@ TEST_CASE ("A Band reads its Shape, Frequency, Gain when it has one, and Q, then
     host.addBand (4, 1000.0f, 3.5f);
     host.set (4, "q", 0.707f);
     host.settle();
-    CHECK (host.element ("Band 4").value == "Bell, 1000.0 Hz, +3.50 dB, Q 0.707");
+    CHECK (host.element ("Band 4").value == "Bell, 1.00 kHz, +3.50 dB, Q 0.707");
 
     host.set (4, "bypass", 1.0f);
     host.set (4, "dynamic_range", -6.0f);
     host.settle();
-    CHECK (host.element ("Band 4").value == "Bell, 1000.0 Hz, +3.50 dB, Q 0.707, Bypassed, Dynamic Band");
+    CHECK (host.element ("Band 4").value == "Bell, 1.00 kHz, +3.50 dB, Q 0.707, Bypassed, Dynamic Band");
 
     // Low Cut has no Gain, nor dynamics.
     host.set (4, "shape", 2.0f);
     host.settle();
-    CHECK (host.element ("Band 4").value == "Low Cut, 1000.0 Hz, Q 0.707, Bypassed");
+    CHECK (host.element ("Band 4").value == "Low Cut, 1.00 kHz, Q 0.707, Bypassed");
 }
 
 TEST_CASE ("The Presets button reads the Loaded Preset, with Modified, or No Preset")

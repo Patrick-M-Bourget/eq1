@@ -172,7 +172,12 @@ private:
         {
             return slider.spokenValue != nullptr ? slider.spokenValue (slider.getValue()) : slider.getTextFromValue (slider.getValue());
         }
-        void setValueAsString (const juce::String& text) override { setValue (slider.getValueFromText (text)); }
+        // Read as typed: what the slider is read with ("−6.50 dB", "1.00 kHz") sets it back.
+        void setValueAsString (const juce::String& text) override
+        {
+            const auto parsed = staple::parseValue (text, slider.getTextValueSuffix().trim());
+            setValue (parsed.has_value() ? *parsed : slider.getValueFromText (text));
+        }
         AccessibleValueRange getRange() const override
         {
             const double interval = slider.getInterval();

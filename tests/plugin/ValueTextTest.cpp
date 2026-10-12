@@ -81,9 +81,11 @@ TEST_CASE ("A Slope reads in whole dB/oct, or to 1 decimal off a whole number")
     CHECK (valueText::slope (0.5) == "0.5 dB/oct");
 }
 
-TEST_CASE ("A percent is whole")
+TEST_CASE ("A percent is whole, with a true minus below zero")
 {
     CHECK (valueText::percent (100.0) == "100%");
     CHECK (valueText::percent (49.6) == "50%");
     CHECK (valueText::percent (0.0) == "0%");
+    CHECK (valueText::percent (-0.4) == "0%");
+    CHECK (valueText::percent (-40.0) == juce::String::charToString (0x2212) + "40%");
 }

@@ -5,7 +5,8 @@ namespace staple
 
 std::optional<double> parseValue (const juce::String& text, const juce::String& unit)
 {
-    const auto t = text.trim().toLowerCase().replaceCharacter (',', '.');
+    // A true minus sign (U+2212), as the editor writes one, is a minus.
+    const auto t = text.trim().toLowerCase().replaceCharacter (',', '.').replaceCharacter (juce::juce_wchar (0x2212), '-');
     auto p = t.getCharPointer();
 
     // The number: an optional sign, digits, and at most one point with a digit after it.

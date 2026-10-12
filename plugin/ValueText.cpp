@@ -52,6 +52,10 @@ juce::String slope (double dbPerOctave)
     return fixed (dbPerOctave, whole ? 0 : 1) + " dB/oct";
 }
 
-juce::String percent (double value) { return juce::String (juce::roundToInt (value)) + "%"; }
+juce::String percent (double value)
+{
+    const int rounded = juce::roundToInt (value);
+    return (rounded < 0 ? juce::String::charToString (0x2212) : juce::String()) + juce::String (std::abs (rounded)) + "%";
+}
 
 } // namespace eq1::valueText
