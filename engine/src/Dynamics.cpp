@@ -1,5 +1,6 @@
 #include "Dynamics.h"
 
+#include "Placement.h"
 #include "Smoothstep.h"
 #include "Solo.h"
 #include "Units.h"
@@ -166,32 +167,13 @@ int Dynamics::takeDetectionSignal (const float* const* input, int numChannels, c
         input = sidechain;
         numChannels = sidechainChannels;
     }
-    if (numChannels < 2)
-    {
-        // On mono the signal is all Mid, and Left and Right are the same signal.
-        if (placement == StereoPlacement::Side)
-            return 0;
-        copy (0, input[0]);
-        return 1;
-    }
-    switch (placement)
-    {
-        case StereoPlacement::Stereo:
-            copy (0, input[0]);
-            copy (1, input[1]);
-            return 2;
-        case StereoPlacement::Left: copy (0, input[0]); return 1;
-        case StereoPlacement::Right: copy (0, input[1]); return 1;
-        case StereoPlacement::Mid:
-        case StereoPlacement::Side:
-        {
-            const float sign = placement == StereoPlacement::Mid ? 1.0f : -1.0f;
+    // The part the Band processes, of the first two channels.
+    return routePlacement (
+        placement, std::min (numChannels, 2), [&] (int part, int ch) { copy (static_cast<size_t> (part), input[ch]); },
+        [&] (bool mid) {
             for (size_t i = 0; i < static_cast<size_t> (numSamples); ++i)
-                detection[0][i] = 0.5f * (input[0][i] + sign * input[1][i]);
-            return 1;
-        }
-    }
-    return 0;
+                detection[0][i] = mid ? encodeMid (input[0][i], input[1][i]) : encodeSide (input[0][i], input[1][i]);
+        });
 }
 
 double Dynamics::autoAttackSeconds (double overshootDb) const

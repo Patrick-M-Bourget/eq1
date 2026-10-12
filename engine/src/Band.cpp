@@ -1,6 +1,7 @@
 #include "Band.h"
 
 #include "Crossfade.h"
+#include "Placement.h"
 
 #include <algorithm>
 #include <cmath>
@@ -55,32 +56,9 @@ void Band::Chain::run (size_t channel, float* samples, const Piece& piece)
 
 void Band::Chain::runPlaced (float* const* channels, int numChannels, const Piece& piece)
 {
-    switch (setup.placement)
-    {
-        case StereoPlacement::Stereo:
-            for (int ch = 0; ch < numChannels; ++ch)
-                run (static_cast<size_t> (ch), channels[ch], piece);
-            return;
-        case StereoPlacement::Left: run (0, channels[0], piece); return;
-        case StereoPlacement::Right:
-        {
-            // On mono, Left and Right are the same signal.
-            const int right = numChannels > 1 ? 1 : 0;
-            run (static_cast<size_t> (right), channels[right], piece);
-            return;
-        }
-        // On mono the signal is all Mid: a Mid Band processes it and a Side Band has nothing to process.
-        case StereoPlacement::Mid:
-            if (numChannels > 1)
-                runMidSide (channels, piece, true);
-            else
-                run (0, channels[0], piece);
-            return;
-        case StereoPlacement::Side:
-            if (numChannels > 1)
-                runMidSide (channels, piece, false);
-            return;
-    }
+    routePlacement (
+        setup.placement, numChannels, [&] (int, int ch) { run (static_cast<size_t> (ch), channels[ch], piece); },
+        [&] (bool mid) { runMidSide (channels, piece, mid); });
 }
 
 void Band::Chain::runMidSide (float* const* channels, const Piece& piece, bool mid)
@@ -91,14 +69,14 @@ void Band::Chain::runMidSide (float* const* channels, const Piece& piece, bool m
     const auto numSamples = static_cast<size_t> (piece.numSamples);
     for (size_t i = 0; i < numSamples; ++i)
     {
-        midSamples[i] = 0.5f * (left[i] + right[i]);
-        sideSamples[i] = 0.5f * (left[i] - right[i]);
+        midSamples[i] = encodeMid (left[i], right[i]);
+        sideSamples[i] = encodeSide (left[i], right[i]);
     }
     run (0, mid ? midSamples.data() : sideSamples.data(), piece);
     for (size_t i = 0; i < numSamples; ++i)
     {
-        left[i] = midSamples[i] + sideSamples[i];
-        right[i] = midSamples[i] - sideSamples[i];
+        left[i] = decodeLeft (midSamples[i], sideSamples[i]);
+        right[i] = decodeRight (midSamples[i], sideSamples[i]);
     }
 }
 
