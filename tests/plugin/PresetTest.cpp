@@ -1,9 +1,11 @@
 #include "PluginProcessor.h"
+#include "PresetLibrary.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <cmath>
 #include <functional>
 #include <vector>
 
@@ -344,4 +346,56 @@ TEST_CASE ("Each side remembers the folder its Loaded Preset came from, while it
     remembering.processor.getStateInformation (withFolder);
     plain.processor.getStateInformation (without);
     CHECK (withFolder == without);
+}
+
+TEST_CASE ("A Preset file with nan, inf and out-of-range values loads finite, in-range settings: defaults where a value isn't finite, the range's end where it is outside")
+{
+    Host maker;
+    maker.edit ("band1_in_use", 1.0f);
+    const auto xml = maker.processor.presetState().createXml();
+    REQUIRE (xml != nullptr);
+    const auto setSaved = [&xml] (const juce::String& id, const juce::String& text) {
+        for (auto* child : xml->getChildWithTagNameIterator ("PARAM"))
+            if (child->getStringAttribute ("id") == id)
+            {
+                child->setAttribute ("value", text);
+                return;
+            }
+        FAIL ("No saved setting " << id);
+    };
+    setSaved ("band1_frequency", "nan");
+    setSaved ("band1_gain", "inf");
+    setSaved ("band1_q", "-inf");
+    setSaved ("band2_gain", "99");
+    setSaved ("band2_frequency", "1");
+    setSaved ("band3_shape", "42");
+    setSaved ("output_gain", "-1000");
+    juce::TemporaryFile folder;
+    REQUIRE (folder.getFile().createDirectory());
+    const auto file = folder.getFile().getChildFile ("Odd" + eq1::PresetLibrary::fileExtension);
+    REQUIRE (xml->writeTo (file));
+    const auto preset = eq1::PresetLibrary::read (file);
+    REQUIRE (preset.isValid());
+
+    Host host;
+    REQUIRE (host.processor.loadPreset (preset, "Odd"));
+    for (auto* p : host.processor.getParameters())
+    {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (p);
+        REQUIRE (ranged != nullptr);
+        CAPTURE (ranged->getParameterID());
+        REQUIRE (std::isfinite (ranged->getValue()));
+        REQUIRE (ranged->getValue() >= 0.0f);
+        REQUIRE (ranged->getValue() <= 1.0f);
+    }
+    CHECK_THAT (host.value ("band1_frequency"), WithinAbs (1000.0, 1.0e-3));
+    CHECK (host.value ("band1_gain") == 0.0f);
+    CHECK_THAT (host.value ("band1_q"), WithinAbs (1.0, 1.0e-4));
+    CHECK_THAT (host.value ("band2_gain"), WithinAbs (30.0, 1.0e-4));
+    CHECK_THAT (host.value ("band2_frequency"), WithinAbs (10.0, 1.0e-3));
+    CHECK (host.value ("band3_shape") == static_cast<float> (eq1::parameters::shapeNames().size() - 1));
+    CHECK_THAT (host.value ("output_gain"), WithinAbs (eq1::parameters::outputGainSilentDb, 1.0e-3));
+    CHECK (host.value ("band1_in_use") == 1.0f);
+    // Loaded as sanitised, the side is not Modified.
+    CHECK_FALSE (host.processor.isLoadedPresetModified());
 }
