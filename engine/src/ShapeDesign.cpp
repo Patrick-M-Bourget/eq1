@@ -392,18 +392,8 @@ Cascade designFlatTilt (const ShapeParameters& p, double sampleRate)
     }
 
     // Pass exactly 0 dB at Frequency: measured on the digital cascade when Frequency is below Nyquist.
-    double gainAtFrequency = analogGainAtFrequency;
-    if (p.frequency < sampleRate / 2.0)
-    {
-        const std::complex<double> z = std::polar (1.0, -2.0 * std::numbers::pi * p.frequency / sampleRate);
-        std::complex<double> h = 1.0;
-        for (int i = 0; i < cascade.count; ++i)
-        {
-            const auto& c = cascade.sections[static_cast<size_t> (i)];
-            h *= (c.b0 + c.b1 * z) / (1.0 + c.a1 * z);
-        }
-        gainAtFrequency = std::abs (h);
-    }
+    const double gainAtFrequency = p.frequency < sampleRate / 2.0 ? std::abs (responseAt (cascade, p.frequency, sampleRate))
+                                                                   : analogGainAtFrequency;
     scale (cascade, 1.0 / gainAtFrequency);
     return cascade;
 }
