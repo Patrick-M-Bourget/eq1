@@ -174,7 +174,7 @@ docs() {
     local closed stale
     if closed=$(gh issue list --state closed --limit 2000 --json number --jq '.[].number' 2>/dev/null) && [ -n "$closed" ]; then
         # shellcheck disable=SC2086 # one ticket number per word
-        stale=$(scripts/cited-tickets.sh $closed | sed -E 's/:(#[0-9]+)$/: points at closed ticket \1/')
+        stale=$(scripts/cited-tickets.sh $closed | sed -E 's/:(#[0-9]+)$/: points at closed ticket \1/' || true)
         if [ -n "$stale" ]; then
             printf '%s\n' "$stale" | sed 's/$/; say what the code does now, or point at an open ticket/' >&2
             broken=1

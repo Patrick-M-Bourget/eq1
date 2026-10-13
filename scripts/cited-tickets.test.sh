@@ -49,6 +49,11 @@ expect $'engine/a.cpp:2:#123\nengine/a.cpp:2:#9\nplugin/d.cpp:1:#9' "several tic
 expect "" "no citation, no output and no failure" 77
 expect "engine/a.cpp:2:#9" "--at reads a commit's files, not the working tree's" --at "$first" 9
 
+if "$script" --at 0123456789abcdef0123456789abcdef01234567 9 > /dev/null 2>&1; then
+    echo "FAIL: a commit git can't read should fail, not pass as citing nothing" >&2
+    failures=$((failures + 1))
+fi
+
 if [ "$failures" = 0 ]; then
     echo "cited-tickets.sh finds the code that cites a ticket, in the working tree or at a commit"
 else

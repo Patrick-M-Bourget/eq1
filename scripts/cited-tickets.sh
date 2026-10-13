@@ -6,7 +6,7 @@
 #   scripts/cited-tickets.sh [--at <commit>] <ticket number>...
 #
 # Reads the working tree's tracked files, or with --at a commit's. Run it inside the repo. Exits 0 whether or not
-# anything cites them.
+# anything cites them, and non-zero only when git can't read the files (an unknown commit, say).
 set -uo pipefail
 at=
 if [ "${1:-}" = --at ]; then
@@ -18,4 +18,6 @@ git grep -noP '(?<![A-Za-z0-9&/_])#\d{1,4}(?![0-9A-Za-z])' ${at:+"$at"} -- engin
     { if [ -n "$at" ]; then cut -d: -f2-; else cat; fi; } |
     awk -F: -v list="$*" 'BEGIN { n = split (list, c, " "); for (i = 1; i <= n; i++) cited["#" c[i]] = 1 }
                           ($NF in cited) { print }'
-exit 0
+codes=("${PIPESTATUS[@]}")
+# git grep exits 1 when nothing matches at all.
+[ "${codes[0]}" -le 1 ] && [ "${codes[1]}" = 0 ] && [ "${codes[2]}" = 0 ]
