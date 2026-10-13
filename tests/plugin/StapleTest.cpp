@@ -4,8 +4,8 @@
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
 #include "staple/LookAndFeel.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
-#include "staple/controls/Overlay.h"
 #include "staple/controls/Tween.h"
 
 #include <catch2/catch_test_macros.hpp>

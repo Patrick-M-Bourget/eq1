@@ -4,7 +4,6 @@
 #include "Light.h"
 #include "Painting.h"
 #include "Tokens.h"
-#include "controls/Overlay.h"
 
 #include <cmath>
 #include <utility>

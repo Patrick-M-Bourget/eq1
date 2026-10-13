@@ -2,7 +2,7 @@
 
 #include "DisplayFrame.h"
 #include "DisplayGeometry.h"
-#include "../staple/controls/Overlay.h"
+#include "../staple/Painting.h"
 
 #include <vector>
 

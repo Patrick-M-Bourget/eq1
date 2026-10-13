@@ -12,8 +12,8 @@
 #include "display/EdgeFadeLayer.h"
 #include "display/GhostLayer.h"
 #include "display/GridLayer.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
-#include "staple/controls/Overlay.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 

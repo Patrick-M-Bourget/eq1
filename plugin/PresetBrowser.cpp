@@ -3,6 +3,7 @@
 #include "Accessibility.h"
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
 #include "staple/controls/Overlay.h"
 

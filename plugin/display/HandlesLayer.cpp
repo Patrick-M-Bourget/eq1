@@ -4,7 +4,6 @@
 #include "../staple/Fonts.h"
 #include "../staple/Painting.h"
 #include "../staple/Tokens.h"
-#include "../staple/controls/Overlay.h"
 
 namespace eq1::display
 {

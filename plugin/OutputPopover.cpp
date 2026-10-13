@@ -4,8 +4,8 @@
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
-#include "staple/controls/Overlay.h"
 #include "staple/controls/TextChip.h"
 
 #include <cmath>

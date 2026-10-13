@@ -1,16 +1,80 @@
 #include "Painting.h"
 
+#include "CachedLayer.h"
 #include "Fonts.h"
 #include "Tokens.h"
-#include "controls/Overlay.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace staple
 {
 
 namespace colour = tokens::colour;
 namespace size = tokens::size;
+
+namespace
+{
+constexpr int shadowLayers = 8;
+// SoftShadowCache's images: as many as a display of every Band's handle, hovered and selected, uses;
+// past that it starts again.
+constexpr size_t maxCachedShadows = 64;
+
+bool operator== (const juce::DropShadow& a, const juce::DropShadow& b)
+{
+    return a.colour == b.colour && a.radius == b.radius && a.offset == b.offset;
+}
+} // namespace
+
+void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow)
+{
+    const auto base = shape.translated (static_cast<float> (shadow.offset.x), static_cast<float> (shadow.offset.y));
+    const float blur = static_cast<float> (shadow.radius);
+    // Each layer's alpha, so that all of them together reach the shadow's own.
+    const float alpha = 1.0f - std::pow (1.0f - shadow.colour.getFloatAlpha(), 1.0f / shadowLayers);
+    g.setColour (shadow.colour.withAlpha (alpha));
+    for (int i = 0; i < shadowLayers; ++i)
+    {
+        const float spread = blur * (static_cast<float> (i) / (shadowLayers - 1) - 0.5f);
+        const auto r = base.expanded (spread);
+        if (r.isEmpty())
+            continue;
+        g.fillRoundedRectangle (r, std::max (0.0f, cornerRadius + spread));
+    }
+}
+
+void SoftShadowCache::draw (juce::Graphics& g, juce::Point<float> origin, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow)
+{
+    const auto paint = [&] (juce::Graphics& into) { drawSoftShadow (into, shape, cornerRadius, shadow); };
+    const auto imageScale = imageScaleFor (g, origin);
+    if (! imageScale)
+    {
+        paint (g);
+        return;
+    }
+    const float scale = *imageScale;
+    // drawSoftShadow's widest layer reaches half the blur past the offset shape; a pixel more for its
+    // anti-aliased edge.
+    const auto reach = shape.translated (static_cast<float> (shadow.offset.x), static_cast<float> (shadow.offset.y))
+                           .expanded (static_cast<float> (shadow.radius) / 2.0f + 1.0f);
+    const auto device = devicePixelsOf (reach, scale);
+    if (device.isEmpty())
+        return;
+    // The image is the same wherever the shape sits on the same place within a device pixel.
+    const auto relative = shape - device.getPosition().toFloat() / scale;
+    auto entry = std::find_if (entries.begin(), entries.end(), [&] (const Entry& e) {
+        return e.shape == relative && juce::exactlyEqual (e.cornerRadius, cornerRadius) && e.shadow == shadow && juce::exactlyEqual (e.scale, scale)
+               && e.image.getBounds() == device.withZeroOrigin();
+    });
+    if (entry == entries.end())
+    {
+        if (entries.size() >= maxCachedShadows)
+            entries.clear();
+        entries.push_back ({ relative, cornerRadius, shadow, scale, drawnAtDevicePixels (device, scale, juce::Image::ARGB, paint) });
+        entry = std::prev (entries.end());
+    }
+    drawBackAtDevicePixels (g, entry->image, device, scale);
+}
 
 void drawKnobFace (juce::Graphics& g, juce::Rectangle<float> face, const juce::DropShadow& shadow, float rimWidth, juce::Colour rimColour,
                    float opacity)

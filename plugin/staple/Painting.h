@@ -4,11 +4,38 @@
 
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace staple
 {
 
 // Drawings more than one control shares, each written once here.
+
+// A shadow drawn without blur (HANDOFF.md §4): stacked translucent rounded rectangles, each a step
+// wider, that add up to the shadow's colour inside the shape and fade out over its blur radius.
+void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow);
+
+// drawSoftShadow from images, for shadows drawn on every frame (the EQ display's handles): each shadow
+// is drawn once per shape size, corner, shadow, scale and place within a device pixel, and drawn back
+// from its image pixel for pixel. origin is where g's logical (0, 0) lies from a whole device pixel (the
+// component's place in the window); where that isn't one at g's scale (startsOnWholeDevicePixel), the
+// shadow is drawn directly.
+class SoftShadowCache
+{
+public:
+    void draw (juce::Graphics& g, juce::Point<float> origin, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow);
+
+private:
+    struct Entry
+    {
+        juce::Rectangle<float> shape; // from the image's top left, in logical pixels
+        float cornerRadius = 0.0f;
+        juce::DropShadow shadow;
+        float scale = 0.0f;
+        juce::Image image;
+    };
+    std::vector<Entry> entries;
+};
 
 // A knob's face (the Knob and the look-and-feel's rotary slider): on its shadow, a gradient lit from
 // 12 % below its top, ringed by a rim rimWidth wide. opacity dims the gradient only.
