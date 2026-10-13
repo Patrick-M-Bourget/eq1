@@ -229,3 +229,24 @@ TEST_CASE ("Peak Hold starts afresh when cleared or prepared again")
     spectrum.prepare (sampleRate, AnalyzerResolution::high);
     CHECK (spectrum.heldLevelDb (1000.0, 0.0) < -120.0);
 }
+
+TEST_CASE ("Forgetting what was shown starts the spectrum and Peak Hold from silence, and keeps the samples pushed")
+{
+    AnalyzerSpectrum spectrum;
+    spectrum.prepare (sampleRate, AnalyzerResolution::medium);
+    play (spectrum, { { 1000.0, 1.0 } }, 2.0, AnalyzerSpeed::fast);
+    REQUIRE (spectrum.levelDb (1000.0, 0.0) > -3.0);
+    REQUIRE (spectrum.heldLevelDb (1000.0, 0.0) > -3.0);
+
+    spectrum.forgetShown();
+    CHECK (spectrum.levelDb (1000.0, 0.0) < -120.0);
+    CHECK (spectrum.heldLevelDb (1000.0, 0.0) < -120.0);
+
+    // The next update analyses the samples pushed before: the tone, at its full level in Peak Hold,
+    // and risen from silence by one frame at the speed in the shown spectrum, not held at its old level.
+    spectrum.update (1.0 / 60.0, AnalyzerSpeed::fast);
+    const double peak = spectrum.peakNear (1000.0);
+    CHECK (spectrum.heldLevelDb (peak, 0.0) > -3.0);
+    const double oneFrame = 10.0 * std::log10 (1.0 - std::exp (-(1.0 / 60.0) / 0.1)); // Fast's 100 ms
+    CHECK_THAT (spectrum.levelDb (peak, 0.0) - spectrum.heldLevelDb (peak, 0.0), WithinAbs (oneFrame, 0.01));
+}

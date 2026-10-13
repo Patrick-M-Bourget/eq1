@@ -178,10 +178,20 @@ bool EqDisplay::updateAnalyzer (double seconds)
             tapSamples = std::vector<float> (capacity);
         const int count = processor.readAnalysis (tap, tapSamples.data(), static_cast<int> (tapSamples.size()));
         spectrum->push (tapSamples.data(), count);
+        // A spectrum turned on starts afresh, as when the editor opens, rather than from where it froze
+        // when it was turned off.
+        if (showing[i] && ! spectrumShown[i])
+            spectrum->forgetShown();
+        spectrumShown[i] = showing[i];
         if (showing[i])
             spectrum->update (seconds, analyzer.speed);
     }
     return analyzer.showPreEq || analyzer.showPostEq || analyzer.showSidechain;
+}
+
+const AnalyzerSpectrum& EqDisplay::spectrum (AnalysisTap tap) const
+{
+    return tap == AnalysisTap::PreEq ? preEq : tap == AnalysisTap::PostEq ? postEq : sidechain;
 }
 
 float EqDisplay::spectrumYAt (const AnalyzerSpectrum& spectrum, float x) const

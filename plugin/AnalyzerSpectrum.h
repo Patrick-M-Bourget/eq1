@@ -58,6 +58,10 @@ public:
     // Forgets what Peak Hold holds.
     void clearPeakHold();
 
+    // Forgets what was shown and held, as prepare does, but keeps the samples pushed: the next update
+    // analyses them, and the shown spectrum rises toward them from silence at the speed.
+    void forgetShown();
+
     // The Frequency of the highest peak of the spectrum within a sixth of an octave of frequency, or
     // frequency itself when there is none.
     double peakNear (double frequency) const;
