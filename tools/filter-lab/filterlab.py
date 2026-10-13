@@ -982,11 +982,13 @@ def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqr
 
 # --- Fractional Slope gaps (ADR 0006): seams, resonant and High Shelf tolerances, the corner rescale -
 # The continuous design: fractional_design with these changes. Each touches only the partial section, a
-# Shelf's resonant split or Band Pass, and whole orders stay as they are (slope-gaps whole checks it).
-#   - High Cut: the partial section, real poles or a pair, is one matched biquad with exact poles. While
-#     its poles are real, its match point aims at a blend of the analog and two first-order sections'
-#     response, weighted by how close its poles are (_closeness: 0 as one comes in from infinity, 1 where
-#     they meet). No seam where they meet, and none as the pole comes in.
+# Shelf's resonant split, High Cut's sections with real poles or Band Pass, and whole orders stay as they
+# are (slope-gaps whole checks it).
+#   - High Cut: every section is one matched biquad, as at whole orders, real poles or a pair; the partial
+#     section has exact poles. While its poles are real, its match point aims at a blend of the analog and
+#     two first-order sections' response, weighted by how close its poles are and by t (_closeness: 0 as
+#     one comes in from infinity, 1 where they meet and at the next whole order). No seam where a
+#     section's poles meet, at a whole order or as the pole comes in, at any Q.
 #   - Shelves: a section's resonant split reduces its zeros' Q to what the same section has at Q 2 (for
 #     whole orders, exactly the existing (2 / Q)^(1 / pairs)), matched where the existing split is; the
 #     partial section's split is weighted by t^PARTIAL_SPLIT_POWER, and while its roots are real it is
@@ -1046,23 +1048,25 @@ def _real_pairs(a: Analog):
     return out
 
 
-def _closeness(a: Analog):
-    """For real poles, 1 - (1 - near / far)^2: 1 where they meet, 0 as one comes in from infinity, and
-    smooth where they meet (near / far alone moves as the square root of the distance). 1 for a pair."""
+def _closeness(a: Analog, t):
+    """For a partial section t of the way to the next whole order, with real poles, 1 - (1 - near / far)^2
+    (1 - t): 1 where they meet and at the next whole order (at low Q they don't meet before it), 0 as one
+    comes in from infinity, and smooth where they meet (near / far alone moves as the square root of the
+    distance). 1 for a pair."""
     disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
     if disc < 0:
         return 1.0
     r = math.sqrt(disc)
-    return 1 - (2 * r / (a.d1 + r)) ** 2
+    return 1 - (2 * r / (a.d1 + r)) ** 2 * (1 - t)
 
 
-def _partial_biquad(a: Analog, analog_at_match: Analog, frequency, fs, match_hz):
+def _partial_biquad(a: Analog, analog_at_match: Analog, frequency, fs, match_hz, t):
     """One matched biquad with a's poles; at DC, Nyquist and match_hz it meets analog_at_match's
     magnitude; at match_hz, times (while a's poles are real) two first-order sections' error there,
-    weighted by 1 - _closeness(a)."""
+    weighted by 1 - _closeness(a, t)."""
     x = match_hz / frequency
     at_match = analog_at_match.squared(x)
-    beta = _closeness(a)
+    beta = _closeness(a, t)
     if beta < 1:
         w = 2 * PI * match_hz / fs
         first, second = (match_section(s, frequency, fs) for s in _real_pairs(a))
@@ -1075,15 +1079,20 @@ def _continuous_high_cut(fs, frequency, q, nu):
     proto = morph_low_pass(nu, q)
     n, t = math.floor(nu), nu - math.floor(nu)
     sections, target = _fractional_cut("high-cut", fs, frequency, q, nu)
+    for i, a in enumerate(proto):  # every shared section is one matched biquad, as at whole orders, real poles or not
+        if a.d2 and _roots(a)[0].imag == 0:
+            b, w0 = normalised(Analog(0, 0, 1 / a.d2, 1, a.d1 / a.d2, 1 / a.d2))
+            damped = frequency * w0 * math.sqrt(max(1 - b.d1 * b.d1 / 4, 0.01))
+            sections[i] = match_section(b, frequency * w0, fs, match_hz=min(damped, fs / 4))
     if n % 2 and t > 0:
         a = proto[-1]
         w0 = math.sqrt(a.d0 / a.d2)
         damped = frequency * w0 * math.sqrt(max(1 - a.d1 * a.d1 / (4 * a.d0 * a.d2), 0.01))
-        sections[-1] = _partial_biquad(a, a, frequency, fs, min(damped, fs / 4))
+        sections[-1] = _partial_biquad(a, a, frequency, fs, min(damped, fs / 4), t)
     return sections, target
 
 
-def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial):
+def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial, share):
     """_resonant_split, with the zeros' Q reduced toward reference_q (the section's at Q 2) and the split
     scaled by weight; a partial section with real roots is matched by _partial_biquad."""
     natural = math.sqrt(a.n0 / a.n2)
@@ -1091,12 +1100,12 @@ def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial):
     x = natural * frequency / (fs / 2)
     t = math.log(SPLIT_NONE / x) / math.log(SPLIT_NONE / SPLIT_FULL)
     t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
-    t *= weight * (_closeness(a) if partial else 1.0)
+    t *= weight * (_closeness(a, share) if partial else 1.0)
     split_q = zeros_q * min(reference_q / zeros_q, 1.0) ** t
     resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs,
                               _resonance_match(frequency * natural, zeros_q, fs))
     split = Analog(a.n2, math.sqrt(a.n0 * a.n2) / split_q, a.n0, a.d2, a.d1, a.d0)
-    poles = _partial_biquad(a, split, frequency, fs, frequency) if partial else match_section(split, frequency, fs)
+    poles = _partial_biquad(a, split, frequency, fs, frequency, share) if partial else match_section(split, frequency, fs)
     if split_q >= zeros_q:
         resonance.b0, resonance.b1, resonance.b2 = 1, resonance.a1, resonance.a2
         return [poles, resonance]
@@ -1118,7 +1127,7 @@ def _continuous_shelf(shape, fs, frequency, gain, q, nu):
             continue
         partial = n % 2 == 1 and t > 0 and i == len(boost) - 1
         poles, zeros = _split_toward(s, math.sqrt(r.n0 * r.n2) / r.n1, frequency, fs, q,
-                                     t ** PARTIAL_SPLIT_POWER if partial else 1.0, partial)
+                                     t ** PARTIAL_SPLIT_POWER if partial else 1.0, partial, t)
         sections += [inverse(poles), inverse(zeros)] if invert else [zeros, poles]
     _, target = _fractional_shelf(shape, fs, frequency, gain, q, nu)
     if shape == "tilt-shelf":
