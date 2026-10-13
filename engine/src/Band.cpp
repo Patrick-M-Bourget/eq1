@@ -4,6 +4,7 @@
 #include "Placement.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <optional>
 #include <span>
@@ -183,6 +184,7 @@ void Band::prepare (double newSampleRate, int numChannels)
     logFrequency.configure (timeConstant, 1.0e-5);
     gain.configure (timeConstant, 1.0e-4);
     logQ.configure (timeConstant, 1.0e-5);
+    logHighLimit.configure (timeConstant, 1.0e-5);
     mix.configure (timeConstant, 1.0e-6);
     shapeCrossfade.configure (timeConstant, 1.0e-6);
     for (auto* chain : { &current, &previous })
@@ -205,10 +207,19 @@ void Band::prepare (double newSampleRate, int numChannels)
     skipped.store (0, std::memory_order_relaxed);
 }
 
-void Band::setSettings (const BandSettings& settings, bool snap)
+void Band::setSettings (const BandSettings& settings, bool snap, std::optional<double> highLimit)
 {
     const double audible = settings.inUse && ! settings.bypass ? 1.0 : 0.0;
-    const Setup setup { structureOf (settings), settings.placement };
+    const Setup setup { structureOf (settings), settings.placement, highLimit.has_value() };
+    // A high limit the current chain doesn't play has nothing to glide from: a chain that gains one
+    // starts at it, as a High Cut Band put in use would.
+    if (highLimit)
+    {
+        if (snap || isSilent() || ! current.setup.highLimit)
+            logHighLimit.reset (std::log (*highLimit));
+        else
+            logHighLimit.setTarget (std::log (*highLimit));
+    }
 
     // A silent Band has nothing to glide or crossfade from: it takes its new settings at once and fades in.
     if (snap || isSilent())
@@ -268,6 +279,15 @@ void Band::design()
     runEndGainDb = targetGainDb();
     current.cascade = designShape ({ current.setup.structure, std::exp (logFrequency.value()), runEndGainDb, std::exp (logQ.value()) },
                                    sampleRate);
+    if (current.setup.highLimit)
+    {
+        // The High Cut's sections after the cascade's, each rounding to float as a second Band's would.
+        const Structure highCut { Shape::HighCut, current.setup.structure.order };
+        const Cascade high = designShape ({ highCut, std::exp (logHighLimit.value()), runEndGainDb, std::exp (logQ.value()) }, sampleRate);
+        assert (current.cascade.count + high.count <= maxSections);
+        std::copy_n (high.sections.begin(), high.count, current.cascade.sections.begin() + current.cascade.count);
+        current.cascade.count += high.count;
+    }
 }
 
 void Band::designNow()
@@ -286,7 +306,7 @@ void Band::startRun()
     }
 
     // A Dynamic Band's moving Live Gain glides its filter as a Gain change does.
-    runGliding = logFrequency.isMoving() || gain.isMoving() || logQ.isMoving() || dynamicOffset != designedOffset;
+    runGliding = logFrequency.isMoving() || gain.isMoving() || logQ.isMoving() || logHighLimit.isMoving() || dynamicOffset != designedOffset;
     runStartGainDb = runEndGainDb;
     if (runGliding)
     {
@@ -294,6 +314,7 @@ void Band::startRun()
         logFrequency.skip (runSamples);
         gain.skip (runSamples);
         logQ.skip (runSamples);
+        logHighLimit.skip (runSamples);
         design();
     }
 }
