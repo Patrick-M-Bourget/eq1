@@ -1,6 +1,7 @@
 #include "BandMenu.h"
 
 #include "BandClipboard.h"
+#include "ValueText.h"
 
 #include <algorithm>
 #include <array>
@@ -37,8 +38,7 @@ juce::String slopeText (double slope, bool brickwall)
 {
     if (brickwall)
         return "Brickwall";
-    const bool whole = std::abs (slope - std::round (slope)) < 0.05;
-    return juce::String (slope, whole ? 0 : 1) + " dB/oct";
+    return valueText::slope (slope);
 }
 
 juce::PopupMenu slopeMenu (BandEditing& edit, const std::vector<int>& slots)
@@ -56,7 +56,7 @@ juce::PopupMenu slopeMenu (BandEditing& edit, const std::vector<int>& slots)
     const auto cut = [] (const BandSettings& b) { return isCut (b.shape); };
     juce::PopupMenu slopes;
     for (double slope : listedSlopes)
-        slopes.addItem (juce::String (juce::roundToInt (slope)) + " dB/oct",
+        slopes.addItem (valueText::slope (slope),
                         true,
                         shared (withSlope, [slope] (const BandSettings& b) { return ! isBrickwall (b) && juce::exactlyEqual (b.slope, slope); }),
                         [&edit, slots, slope] { edit.setSlope (slots, slope); });

@@ -24,15 +24,6 @@ namespace eq1
 namespace
 {
 constexpr float handleRadius = display::DisplayGeometry::handleRadius;
-
-// Exactly the same, Band by Band (display::sameBand): any change at all counts.
-bool same (const Settings& a, const Settings& b)
-{
-    for (size_t i = 0; i < a.bands.size(); ++i)
-        if (! display::sameBand (a.bands[i], b.bands[i]))
-            return false;
-    return true;
-}
 } // namespace
 
 class EqDisplay::BandHandle final : public juce::Component
@@ -125,7 +116,7 @@ public:
 private:
     juce::String value() const
     {
-        const auto& parameter = *display.processor.parameterState().getParameter (parameters::dynamicRangeId (slot));
+        const auto& parameter = parameters::lookUp (display.processor.parameterState(), parameters::dynamicRangeId (slot));
         return accessibility::spokenValue (parameter, parameter.getValue());
     }
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
@@ -137,7 +128,7 @@ private:
 };
 
 EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
-    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), output (parameters::OutputValues::of (p.parameterState())), card (p, e)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), editing (e), output (p.hostSettings().outputValues()), card (p, e)
 {
     setName ("EQ Display");
     setTitle ("EQ display");
@@ -290,7 +281,7 @@ juce::String EqDisplay::spokenBand (int slot) const
     auto& state = processor.parameterState();
     const auto band = editing.band (slot);
     const auto value = [&state] (const juce::String& id) {
-        const auto& parameter = *state.getParameter (id);
+        const auto& parameter = parameters::lookUp (state, id);
         return accessibility::spokenValue (parameter, parameter.getValue());
     };
     juce::StringArray parts { parameters::shapeNames()[static_cast<int> (band.shape)], value (parameters::frequencyId (slot)) };
@@ -373,7 +364,7 @@ void EqDisplay::tick (double seconds)
 
     // The handles move, and their values are read out, only when the Bands or the range shown change:
     // an Analyzer frame, a fade or a Live Gain moves only what is painted.
-    if (! same (latest, shown) || range != shownRangeDb)
+    if (latest != shown || range != shownRangeDb)
     {
         shown = latest;
         shownRangeDb = range;

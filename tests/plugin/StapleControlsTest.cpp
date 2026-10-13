@@ -143,6 +143,10 @@ TEST_CASE ("parseValue reads a typed value in its parameter's units, with or wit
         REQUIRE (value.has_value());
         CHECK_THAT (*value, WithinAbs (row.expected, 1.0e-9));
     }
+    // A true minus sign (U+2212), as the editor writes one.
+    const auto minus = juce::String::charToString (0x2212);
+    CHECK (staple::parseValue (minus + "2.5 dB", "dB") == -2.5);
+    CHECK (staple::parseValue (minus + "20.0 dB", "") == -20.0);
 }
 
 TEST_CASE ("parseValue reads nothing from text that isn't a number with a unit it knows")

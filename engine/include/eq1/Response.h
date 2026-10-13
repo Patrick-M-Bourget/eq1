@@ -26,4 +26,10 @@ double responseDb (const Settings& settings, double frequency, double sampleRate
 // one drawn.
 double autoGainDb (const Settings& settings, double sampleRate);
 
+// What autoGainDb reads of settings, and the dynamics and Stereo Placement it doesn't: every Band but
+// its Detection settings, and Gain Scale, with all else at its default. Settings with equal inputs
+// have the same estimate, so a caller keeps its estimate while the inputs it was worked out for
+// compare equal.
+Settings autoGainInputs (const Settings& settings);
+
 } // namespace eq1

@@ -73,6 +73,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/StateFuzzTest.cpp
         plugin/StateTest.cpp
         plugin/UiScaleTest.cpp
+        plugin/ValueTextTest.cpp
     )
     target_include_directories(eq1_plugin_tests PRIVATE
         ${PROJECT_SOURCE_DIR}/plugin

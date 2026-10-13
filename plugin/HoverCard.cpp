@@ -6,6 +6,7 @@
 #include "PluginProcessor.h"
 #include "ShapeIcon.h"
 #include "ShowMenu.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
 #include "staple/Tokens.h"
@@ -86,11 +87,9 @@ juce::String HoverCard::Value::text()
     switch (kind)
     {
         case Kind::frequency:
-            if (value >= 1000.0)
-                return juce::String (value / 1000.0, 2) + " kHz";
-            return juce::String (value, value < 100.0 ? 1 : 0) + " Hz";
+            return valueText::frequency (value, { .belowHundredHz = 1, .hz = 0, .kHz = 2, .fromTenKHz = 2 });
         case Kind::gain:
-            return (value > 0.0 ? "+" : "") + juce::String (value, 2) + " dB";
+            return valueText::signedDb (value, { .decimals = 2 });
         case Kind::q:
             return "Q " + juce::String (value, value < 1.0 ? 3 : 2);
     }
@@ -388,7 +387,7 @@ void HoverCard::attach (int newSlot)
     {
         // No reset gesture: a double-click types a value.
         value->setDoubleClickReturnValue (false, 0.0);
-        value->describe (*state.getParameter (id));
+        value->describe (parameters::lookUp (state, id));
     }
 
     const auto band = "Band " + juce::String (slot);

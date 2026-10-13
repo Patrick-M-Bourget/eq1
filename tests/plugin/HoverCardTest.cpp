@@ -336,7 +336,7 @@ TEST_CASE ("The Hover Card's values read \"1.00 kHz\", \"+3.00 dB\" and \"Q 0.70
     host.set (4, "gain", -2.5f);
     host.settle();
     CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Frequency").text() == "85.0 Hz");
-    CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Gain").text() == "-2.50 dB");
+    CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Gain").text() == juce::String::charToString (0x2212) + "2.50 dB");
     for (const juce::String title : { "Band 4 Frequency", "Band 4 Gain", "Band 4 Q" })
         CHECK_FALSE (control (card, title).getWantsKeyboardFocus());
 }

@@ -184,10 +184,10 @@ TEST_CASE ("The Output readout shows Output Gain, plus Auto Gain's estimate whil
     CHECK (host.output.getTitle() == "Output");
     host.set ("output_gain", -6.0f);
     host.settle();
-    CHECK (host.output.getButtonText() == "-6.0 dB");
+    CHECK (host.output.getButtonText() == juce::String::charToString (0x2212) + "6.0 dB");
     host.set ("output_gain", eq1::parameters::outputGainSilentDb);
     host.settle();
-    CHECK (host.output.getButtonText() == "-inf dB");
+    CHECK (host.output.getButtonText() == juce::String::charToString (0x2212) + "inf dB");
 
     // A Bell at 1 kHz, +12 dB: Auto Gain turns it down.
     host.set ("output_gain", 3.0f);
@@ -201,7 +201,7 @@ TEST_CASE ("The Output readout shows Output Gain, plus Auto Gain's estimate whil
     const double estimate = eq1::autoGainDb (settings, 48000.0);
     REQUIRE (estimate < -1.0);
     CHECK (host.output.getButtonText() == eq1::outputReadoutText (3.0 + estimate));
-    CHECK (eq1::outputReadoutText (-1.84) == "-1.8 dB");
+    CHECK (eq1::outputReadoutText (-1.84) == juce::String::charToString (0x2212) + "1.8 dB");
     CHECK (eq1::outputReadoutText (0.0) == "+0.0 dB");
     CHECK (eq1::outputReadoutText (2.25) == "+2.3 dB");
 }

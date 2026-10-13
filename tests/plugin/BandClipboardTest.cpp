@@ -42,7 +42,7 @@ struct Host
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
+    eq1::BandEditing editing { processor, processor.editHistory() };
 
     explicit Host (float gainScale)
     {
