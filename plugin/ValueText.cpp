@@ -7,6 +7,13 @@ namespace eq1::valueText
 
 namespace
 {
+// The true minus sign, U+2212, that signed values are written with.
+const juce::String& minus()
+{
+    static const juce::String sign = juce::String::charToString (0x2212);
+    return sign;
+}
+
 // value to a fixed number of decimals, a half rounded away from zero ("2.3" for 2.25 to 1 decimal).
 // juce::String (value, 0) would write every digit it has.
 juce::String fixed (double value, int decimals)
@@ -36,13 +43,12 @@ juce::String frequencyLabel (double hz)
 
 juce::String signedDb (double db, DbFormat format)
 {
-    const auto minus = juce::String::charToString (0x2212);
     const juce::String unit = format.unit ? " dB" : "";
     if (std::isinf (db))
-        return (db < 0.0 ? minus : "+") + "inf" + unit;
+        return (db < 0.0 ? minus() : "+") + "inf" + unit;
     const auto magnitude = fixed (std::abs (db), format.decimals);
     const bool zero = juce::exactlyEqual (magnitude.getDoubleValue(), 0.0);
-    const juce::String sign = zero ? (format.plusAtZero ? "+" : "") : (db < 0.0 ? minus : "+");
+    const juce::String sign = zero ? (format.plusAtZero ? "+" : "") : (db < 0.0 ? minus() : "+");
     return sign + magnitude + unit;
 }
 
@@ -55,7 +61,7 @@ juce::String slope (double dbPerOctave)
 juce::String percent (double value)
 {
     const int rounded = juce::roundToInt (value);
-    return (rounded < 0 ? juce::String::charToString (0x2212) : juce::String()) + juce::String (std::abs (rounded)) + "%";
+    return (rounded < 0 ? minus() : juce::String()) + juce::String (std::abs (rounded)) + "%";
 }
 
 } // namespace eq1::valueText
