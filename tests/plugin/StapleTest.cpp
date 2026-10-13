@@ -218,7 +218,9 @@ TEST_CASE ("A cached layer and a cached soft shadow draw as their drawing does, 
     const auto cached = [&] (juce::Graphics& g) {
         layer.draw (g, {}, { 10.0f, 25.0f, 70.0f, 25.0f }, 0, juce::Image::ARGB, text);
         shadows.draw (g, {}, handle, 11.0f, staple::tokens::shadow::selectedHandle);
-        shadows.draw (g, {}, handle.expanded (1.0f), 12.0f, glow);
+        // The selected handle's glow is drawn directly, as the display draws it: from an image as well,
+        // its rounding would add to the shadow's beneath it.
+        staple::drawSoftShadow (g, handle.expanded (1.0f), 12.0f, glow);
     };
     CHECK (largestColourDifference (direct, frame (cached)) <= 2);
     // Drawn again, from the images.
