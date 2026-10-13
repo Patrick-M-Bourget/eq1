@@ -32,7 +32,7 @@ void setUpBands (juce::AudioProcessor& processor)
     setParameter (processor, "band1_gain", 12.0f);
     setParameter (processor, "band2_in_use", 1.0f);
     setParameter (processor, "band2_shape", 4.0f); // High Cut
-    setParameter (processor, "band2_frequency", 30000.0f);
+    setParameter (processor, "band2_frequency", static_cast<float> (eq1::parameterRanges::frequency.high));
 }
 
 // Plays seconds of the tone through the processor as a host does, in blocks of blockAt(n) samples

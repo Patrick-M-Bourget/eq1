@@ -244,7 +244,7 @@ TEST_CASE ("A resonant shelf swept across its split does not zipper")
     CAPTURE (host.sampleRate, host.blockSize, static_cast<int> (shelf), slope);
     const auto output = playTone (host, [&] (double time, Settings& s) {
         const auto sweep = [time] (double speed) { return 0.5 + 0.5 * std::sin (time * speed); };
-        const double highest = std::min (0.9 * host.sampleRate / 2.0, 30000.0); // Frequency's range ends at 30 kHz
+        const double highest = std::min (0.9 * host.sampleRate / 2.0, parameterRanges::frequency.high);
         s.bands[0] = bellBand (highest / 4.5 * std::pow (4.5, sweep (5.0)), -24.0 + 48.0 * sweep (7.0), 0.5 * std::pow (80.0, sweep (11.0)));
         s.bands[0].shape = shelf;
         s.bands[0].slope = slope;
