@@ -13,6 +13,8 @@
 namespace eq1
 {
 
+class PluginProcessor;
+
 // The editor's rules for adding, deleting and moving Bands. Every edit goes to the host parameters
 // as a gesture, so hosts record it as Host Automation. Message thread only.
 //
@@ -24,7 +26,8 @@ class BandEditing
 public:
     // Each edit is one step in history: adding a Band, and Spectrum Grab with its drag, change several
     // parameters but are undone together.
-    BandEditing (juce::AudioProcessorValueTreeState& parameters, EditHistory& history);
+    // It edits processor's host parameters and reads them through its hostSettings().
+    BandEditing (PluginProcessor& processor, EditHistory& history);
     // Ends a drag still going, so the host sees every gesture finish.
     ~BandEditing();
 
@@ -125,8 +128,7 @@ private:
     juce::AudioProcessorValueTreeState& parameters;
     EditHistory& history;
     bool grabbing = false; // a Spectrum Grab's transaction is open until its drag ends
-    std::array<parameters::SlotValues, numBandSlots> slots;
-    parameters::OutputValues output;
+    const parameters::SettingsReader& reader;
     std::vector<Dragged> dragged;
     int rangeDragged = 0; // the Band whose Dynamic Range is being dragged, or 0
 };

@@ -223,8 +223,8 @@ void DetectionRangeBar::update()
             auto& state = processor.parameterState();
             lowAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionLowId (slot), *low);
             highAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionHighId (slot), *high);
-            low->describe (*state.getParameter (parameters::detectionLowId (slot)));
-            high->describe (*state.getParameter (parameters::detectionHighId (slot)));
+            low->describe (parameters::lookUp (state, parameters::detectionLowId (slot)));
+            high->describe (parameters::lookUp (state, parameters::detectionHighId (slot)));
             segment->setTitle ("Band " + juce::String (slot) + " Detection Range");
             segment->colour = tokens::band[static_cast<size_t> (slot - 1)];
         }

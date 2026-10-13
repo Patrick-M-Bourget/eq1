@@ -47,4 +47,21 @@ double autoGainDb (const Settings& settings, double sampleRate)
     return estimate.db();
 }
 
+Settings autoGainInputs (const Settings& settings)
+{
+    const BandSettings defaults;
+    Settings inputs;
+    for (size_t i = 0; i < inputs.bands.size(); ++i)
+    {
+        auto& band = inputs.bands[i];
+        band = settings.bands[i];
+        band.detectionSource = defaults.detectionSource;
+        band.detectionRange = defaults.detectionRange;
+        band.detectionLow = defaults.detectionLow;
+        band.detectionHigh = defaults.detectionHigh;
+    }
+    inputs.gainScale = settings.gainScale;
+    return inputs;
+}
+
 } // namespace eq1

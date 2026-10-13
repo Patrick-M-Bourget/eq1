@@ -58,6 +58,10 @@ public:
     // The host parameters and the editor's settings, saved with the plugin.
     juce::AudioProcessorValueTreeState& parameterState() { return parameters; }
 
+    // The host parameters as Settings: the one table of them, which the audio thread and the editor
+    // both read, from any thread.
+    const parameters::SettingsReader& hostSettings() const { return reader; }
+
     // The undo history of the editor's edits. It outlives the editor, and restoring a session empties it.
     EditHistory& editHistory() { return history; }
 
@@ -190,8 +194,7 @@ public:
 
 private:
     juce::AudioProcessorValueTreeState parameters;
-    std::array<eq1::parameters::SlotValues, numBandSlots> slots; // read on the audio thread
-    eq1::parameters::OutputValues output;
+    parameters::SettingsReader reader { parameters }; // read on the audio thread too
     EditHistory history { *this };
     ABCompare compare { parameters, history };
 

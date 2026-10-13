@@ -4,6 +4,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <array>
 #include <atomic>
 #include <vector>
 
@@ -81,6 +82,12 @@ inline bool isOn (float value) { return value >= 0.5f; }
 inline bool isOn (const std::atomic<float>* parameter) { return isOn (parameter->load()); }
 inline bool isOn (const juce::AudioProcessorParameter& parameter) { return isOn (parameter.getValue()); }
 
+// The parameter with this id: the one lookup the editor uses, so a missing id fails safely in a
+// release build too. A missing id asserts in a debug build and, in any build, gives an inert parameter:
+// one no processor holds, with no name, which no host, Engine, undo history or saved state ever sees,
+// so reading, describing, attaching to or setting it is harmless. Message thread only.
+juce::RangedAudioParameter& lookUp (juce::AudioProcessorValueTreeState& parameters, const juce::String& id);
+
 // The host parameters of one Band slot, readable from any thread.
 struct SlotValues
 {
@@ -122,6 +129,28 @@ struct OutputValues
     static OutputValues of (juce::AudioProcessorValueTreeState& parameters);
     // Sets the whole-plugin settings, leaving the Bands, Solo and Detection Audition alone.
     void readInto (Settings& settings) const;
+};
+
+// The host parameters as Settings, each resolved once: the one table of every Band Slot's and the
+// whole-plugin parameters, which the processor owns (PluginProcessor::hostSettings) and the editor
+// reads too. Reads from any thread, with no allocation or lock.
+class SettingsReader
+{
+public:
+    explicit SettingsReader (juce::AudioProcessorValueTreeState& parameters);
+
+    // Every Band's and the whole-plugin settings. Solo, Detection Audition and the Metered Band are
+    // not host parameters: they stay at 0.
+    Settings read() const;
+    // One Band Slot's (1 to 24) settings.
+    BandSettings band (int slot) const { return slotValues (slot).read(); }
+    // One Band Slot's (1 to 24) parameters, and the whole-plugin ones, for a read of only a few.
+    const SlotValues& slotValues (int slot) const { return slots[static_cast<size_t> (slot - 1)]; }
+    const OutputValues& outputValues() const { return outputs; }
+
+private:
+    std::array<SlotValues, numBandSlots> slots;
+    OutputValues outputs;
 };
 
 } // namespace eq1::parameters
