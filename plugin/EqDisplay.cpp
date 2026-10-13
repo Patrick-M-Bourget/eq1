@@ -148,7 +148,6 @@ EqDisplay::EqDisplay (PluginProcessor& p, BandEditing& e)
         processor.skipAnalysis (tap);
     // An editor opened under Global Bypass shows it at once.
     globalBypassFade = isGlobalBypassOn() ? 1.0f : 0.0f;
-    lastFadeStep = juce::Time::getMillisecondCounter();
 }
 
 bool EqDisplay::updateAnalyzer (double seconds)
@@ -341,7 +340,7 @@ void EqDisplay::tick (double seconds)
     updateCard();
     // A Heard Gain changed beyond the Display Range, from anywhere, zooms it out.
     processor.fitDisplayRangeToHeardGains();
-    const bool fading = stepFades();
+    const bool fading = stepFades (seconds);
     const bool analyzing = updateAnalyzer (seconds);
 
     const bool messageExpired = allInUseMessageUntil != 0 && juce::Time::getMillisecondCounter() > allInUseMessageUntil;
@@ -388,11 +387,9 @@ bool EqDisplay::isGlobalBypassOn() const
     return parameters::isOn (output.globalBypass);
 }
 
-bool EqDisplay::stepFades()
+bool EqDisplay::stepFades (double seconds)
 {
-    const auto now = juce::Time::getMillisecondCounter();
-    const auto elapsed = static_cast<float> (now - lastFadeStep);
-    lastFadeStep = now;
+    const auto elapsed = static_cast<float> (seconds * 1000.0); // ms
     const auto toward = [elapsed] (float& fade, bool on, int milliseconds) {
         const float target = on ? 1.0f : 0.0f;
         const float moved = juce::jlimit (fade - elapsed / static_cast<float> (milliseconds), fade + elapsed / static_cast<float> (milliseconds), target);

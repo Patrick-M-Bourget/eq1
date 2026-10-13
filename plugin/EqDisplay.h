@@ -229,7 +229,6 @@ private:
     float ghostFade = 0.0f;                    // the ghost Bell's fade in, from when it appears
     std::array<float, numBandSlots> hoverFades {};
     float globalBypassFade = 0.0f;
-    juce::uint32 lastFadeStep = 0;
     bool isGlobalBypassOn() const;
 
     // The Hover Card, in the editor's overlay layer so it draws over the Band panel. It shows once the
@@ -263,8 +262,9 @@ private:
     display::CachedLabels gridLabelImages, analyzerLabelImages;
     // The handles' shadows, each drawn once per size, scale and place within a pixel.
     staple::SoftShadowCache handleShadows;
-    // Moves every fade on by the time since the last step; true while any of them moved.
-    bool stepFades();
+    // Moves every fade on by seconds, the tick's (EditorTick::Client::tick: at most 0.25 s after a
+    // stall); true while any of them moved.
+    bool stepFades (double seconds);
 };
 
 } // namespace eq1
