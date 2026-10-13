@@ -397,44 +397,13 @@ TEST_CASE ("A marquee drag tells the Band panel about the selection only when th
     CHECK (shown == std::vector<int> { 1, 2, 3 });
 }
 
-TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its peak")
-{
-    OpenEditor host;
-    auto& processor = host.processor;
-    processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = true });
-    processor.prepareToPlay (48000.0, 512);
-    // A loud 1 kHz sine, so the spectrum's line peaks there.
-    double phase = 0.0;
-    for (int frame = 0; frame < 30; ++frame)
-    {
-        juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), 512);
-        juce::MidiBuffer midi;
-        for (int block = 0; block < 4; ++block)
-        {
-            for (int n = 0; n < 512; ++n, phase += 2.0 * juce::MathConstants<double>::pi * 1000.0 / 48000.0)
-                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-                    buffer.setSample (ch, n, static_cast<float> (0.5 * std::sin (phase)));
-            processor.processBlock (buffer, midi);
-        }
-        host.settle (20);
-    }
-    // Down the display at 1 kHz until a press there grabs: only the spectrum's line does.
-    const auto x = host.at (1000.0).x;
-    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
-    for (float y = 20.0f; y < static_cast<float> (host.display.getHeight()) && host.value (1, "in_use") == 0.0f; y += 6.0f)
-        host.drag ({ x, y }, { x, y + 20.0f }, left);
-    REQUIRE (host.value (1, "in_use") == 1.0f);
-    CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 0.1f));
-    CHECK (host.display.selection() == std::set<int> { 1 });
-}
-
 namespace
 {
 // Plays a sine of amplitude at frequency into every input, the Sidechain's included, for about
 // milliseconds, letting the editor tick as it plays.
 void playTone (OpenEditor& host, double frequency, double amplitude, int milliseconds)
 {
-    static double phase = 0.0;
+    double phase = 0.0;
     auto& processor = host.processor;
     juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), 512);
     juce::MidiBuffer midi;
@@ -451,6 +420,24 @@ void playTone (OpenEditor& host, double frequency, double amplitude, int millise
     }
 }
 } // namespace
+
+TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its peak")
+{
+    OpenEditor host;
+    auto& processor = host.processor;
+    processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = true });
+    processor.prepareToPlay (48000.0, 512);
+    // A loud 1 kHz sine, so the spectrum's line peaks there.
+    playTone (host, 1000.0, 0.5, 600);
+    // Down the display at 1 kHz until a press there grabs: only the spectrum's line does.
+    const auto x = host.at (1000.0).x;
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    for (float y = 20.0f; y < static_cast<float> (host.display.getHeight()) && host.value (1, "in_use") == 0.0f; y += 6.0f)
+        host.drag ({ x, y }, { x, y + 20.0f }, left);
+    REQUIRE (host.value (1, "in_use") == 1.0f);
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 0.1f));
+    CHECK (host.display.selection() == std::set<int> { 1 });
+}
 
 TEST_CASE ("A spectrum turned back on starts afresh from silence, showing none of what played before it was turned off")
 {
