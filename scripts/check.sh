@@ -11,7 +11,7 @@
 #                               tests/plugin/EditorHarness.h, and no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh colours    only that last check: no colour is hard-coded in plugin/ outside plugin/staple/
 #   scripts/check.sh hooks      the Claude Code worktree hook's, merge-on-green.sh's, the git pre-push hook's, the
-#                               colours check's and the CPU A/B verdicts' tests, against fakes and scratch repos (not run by git hooks, which run
+#                               colours check's, the CPU A/B verdicts' and the ticket-citation rule's tests, against fakes and scratch repos (not run by git hooks, which run
 #                               docs)
 #   scripts/check.sh build      configure and build every format (macOS Universal / Windows x64),
 #                               without link-time optimisation (EQ1_LTO=OFF; shipping builds keep its default, ON)
@@ -173,9 +173,8 @@ docs() {
     # is skipped where gh isn't signed in (CI's docs stage among them).
     local closed stale
     if closed=$(gh issue list --state closed --limit 2000 --json number --jq '.[].number' 2>/dev/null) && [ -n "$closed" ]; then
-        stale=$(git grep -noP '(?<![A-Za-z0-9&/_])#\d{1,4}(?![0-9A-Za-z])' -- engine plugin tools tests ':!*.md' |
-            awk -F: -v list="$(printf '%s ' $closed)" 'BEGIN { n = split (list, c, " "); for (i = 1; i <= n; i++) shut["#" c[i]] = 1 }
-                                       ($NF in shut) { print $1 ":" $2 ": points at closed ticket " $NF }' || true)
+        # shellcheck disable=SC2086 # one ticket number per word
+        stale=$(scripts/cited-tickets.sh $closed | sed -E 's/:(#[0-9]+)$/: points at closed ticket \1/')
         if [ -n "$stale" ]; then
             printf '%s\n' "$stale" | sed 's/$/; say what the code does now, or point at an open ticket/' >&2
             broken=1
@@ -202,6 +201,8 @@ hooks() {
     scripts/colours.test.sh
     step "CPU A/B verdicts"
     scripts/cpu-ab.test.sh
+    step "Ticket citations"
+    scripts/cited-tickets.test.sh
 }
 
 # Every colour in the editor comes from Staple's tokens (plugin/staple/Tokens.h): a colour written as a
