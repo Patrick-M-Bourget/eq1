@@ -78,6 +78,7 @@ target_sources(eq1 PRIVATE
     staple/LookAndFeel.cpp
     staple/WindowBackground.cpp
     Accessibility.cpp
+    ValueText.cpp
     staple/controls/EdgeSelector.cpp
     staple/controls/IconButton.cpp
     staple/controls/Knob.cpp

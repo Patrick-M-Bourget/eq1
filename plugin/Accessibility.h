@@ -10,9 +10,10 @@
 namespace eq1::accessibility
 {
 
-// A parameter's value as a screen reader says it: its text with its unit, a positive dB value
-// signed ("+3.50 dB", "-inf dB", "1000.0 Hz", "0.707"). Words such as "Auto" go without a unit.
-// The parameter's own text, which hosts show, is unchanged.
+// A parameter's value as a screen reader says it, as the editor writes it (ValueText.h): "1.00 kHz",
+// "+3.50 dB" and "−inf dB" (dB to the parameter's own decimals), "12 dB/oct", "100%", or the parameter's
+// text when it has no such unit ("0.707"). Words such as "Auto" stay words. The parameter's own text,
+// which hosts show, is unchanged.
 juce::String spokenValue (const juce::RangedAudioParameter& parameter, float normalisedValue);
 
 // The kit's handler (staple/Accessibility.h), for eq1's own components.

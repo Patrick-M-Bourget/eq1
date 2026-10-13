@@ -2,10 +2,12 @@
 
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
 #include "staple/Painting.h"
 #include "staple/Tokens.h"
+#include "staple/controls/ParseValue.h"
 
 #include <cmath>
 
@@ -31,9 +33,11 @@ ThresholdFader::ThresholdFader (PluginProcessor& p)
     setHasFocusOutline (true);
     setRange (parameterRanges::threshold.low, autoPosition, 0.1);
     setDoubleClickReturnValue (true, autoPosition);
-    textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB"; };
+    textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : valueText::signedDb (value); };
     valueFromTextFunction = [] (const juce::String& text) {
-        return text.trim().equalsIgnoreCase ("Auto") ? autoPosition : juce::jmin (thresholdTopDb, text.getDoubleValue());
+        if (text.trim().equalsIgnoreCase ("Auto"))
+            return autoPosition;
+        return juce::jmin (thresholdTopDb, staple::parseValue (text, "dB").value_or (text.getDoubleValue()));
     };
     // Between 0 dB and Auto there are no values: a step up from 0 dB is Auto, a step down from Auto 0 dB.
     landStep = [] (double from, double to) {
