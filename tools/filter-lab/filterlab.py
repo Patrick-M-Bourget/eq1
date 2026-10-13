@@ -14,7 +14,7 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py auto-threshold --spreads 0.1 0.2 0.3 --falls 1 1.25 2
     python3 tools/filter-lab/filterlab.py high-cut --slopes 15 21 87 --target blend
     python3 tools/filter-lab/filterlab.py slopes
-    python3 tools/filter-lab/filterlab.py slope-gaps seams shelves rescale --jobs 6
+    python3 tools/filter-lab/filterlab.py slope-gaps whole seams shelves rescale --jobs 6
     python3 tools/filter-lab/filterlab.py resonant-shelves --jobs 8
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
@@ -982,7 +982,7 @@ def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqr
 
 # --- Fractional Slope gaps (ADR 0006): seams, resonant and High Shelf tolerances, the corner rescale -
 # The continuous design: fractional_design with these changes. Each touches only the partial section, a
-# Shelf's resonant split or Band Pass, and whole orders stay exactly as they are (within 1e-13 dB).
+# Shelf's resonant split or Band Pass, and whole orders stay as they are (slope-gaps whole checks it).
 #   - High Cut: the partial section, real poles or a pair, is one matched biquad with exact poles. While
 #     its poles are real, its match point aims at a blend of the analog and two first-order sections'
 #     response, weighted by how close its poles are (_closeness: 0 as one comes in from infinity, 1 where
@@ -1423,7 +1423,43 @@ def report_rescale(steps=(1, 2, 3, 4), gains=(-30, -18, -6, -1, -0.1, 0.1, 1, 6,
                   + (f" G={gain:g}" if gain else ""))
 
 
-GAPS = ("seams", "shelves", "rescale")
+WHOLE_LIMIT_DB = 1e-6  # how far continuous_design may stray from the existing design at a whole order
+
+
+def _whole_job(job):
+    """The largest difference, in dB, between continuous_design and the existing design at whole orders, for
+    one (shape, fs, Frequency, Gain, Q), at 100 points from 10 Hz to Nyquist."""
+    shape, fs, frequency, gain, q = job
+    unit = 12 if shape == "notch" else 6
+    grid = [10 * (fs / 2 / 10) ** (i / 100) for i in range(101)]
+    worst = (0.0, 0)
+    for order in range(1, 96 // unit + 1):
+        after, _ = continuous_design(shape, fs, frequency, gain, q, unit * order)
+        existing, _ = SHAPES[shape](fs, frequency, gain, q, order)
+        difference = max(abs(cascade_db(after, f, fs) - cascade_db(existing, f, fs)) for f in grid)
+        worst = max(worst, (difference, order))
+    return shape, worst, (fs, frequency, gain, q)
+
+
+def report_whole(shapes, workers):
+    """At every whole order, continuous_design must be the existing design: the worst difference per Shape
+    over the seams' grid, against WHOLE_LIMIT_DB. Returns whether every Shape is within it."""
+    jobs = [(shape, *point) for shape in shapes for point in _seam_grid(shape)]
+    worst = {}
+    for shape, found, place in _parallel(_whole_job, jobs, workers):
+        if shape not in worst or found > worst[shape][0]:
+            worst[shape] = (found, place)
+    print(f"whole orders: continuous_design against the existing design, worst dB (limit {WHOLE_LIMIT_DB:g})")
+    within = True
+    for shape in shapes:
+        (difference, order), (fs, frequency, gain, q) = worst[shape]
+        over = difference > WHOLE_LIMIT_DB
+        within &= not over
+        print(f"{shape:>10} {difference:9.2g}{' over' if over else '':5}   order={order} fs={fs} F={frequency} G={gain:g} Q={q:g}")
+    return within
+
+
+GAPS = ("whole", "seams", "shelves", "rescale")
 
 
 def gap_options(parser):
@@ -1432,7 +1468,7 @@ def gap_options(parser):
             raise argparse.ArgumentTypeError(f"choose from {', '.join(GAPS)}")
         return name
     parser.add_argument("gaps", nargs="*", type=gap, metavar="gap", help=f"{', '.join(GAPS)} (default: all)")
-    parser.add_argument("--shapes", nargs="+", choices=FRACTIONAL_SHAPES, help="seams: default all; shelves: default low-shelf high-shelf")
+    parser.add_argument("--shapes", nargs="+", choices=FRACTIONAL_SHAPES, help="whole, seams: default all; shelves: default low-shelf high-shelf")
     parser.add_argument("--q", type=float, nargs="+", default=[0.71, 2, 2.25, 2.5, 3, 4, 10, 20, 40], help="shelves")
     parser.add_argument("--slopes", type=float, nargs="+", help="shelves: default 8 between each pair of whole orders")
     parser.add_argument("--jobs", type=int, default=4, help="worker processes")
@@ -1442,6 +1478,10 @@ def gap_options(parser):
 def run_slope_gaps(args):
     """ADR 0006's gaps, before (fractional_design) and after (continuous_design)."""
     gaps = args.gaps or GAPS
+    within = True
+    if "whole" in gaps:
+        within = report_whole(args.shapes or FRACTIONAL_SHAPES, args.jobs)
+        print()
     if "seams" in gaps:
         report_seams(args.shapes or FRACTIONAL_SHAPES, args.jobs)
         print()
@@ -1450,6 +1490,8 @@ def run_slope_gaps(args):
         print()
     if "rescale" in gaps:
         report_rescale()
+    if not within:
+        raise SystemExit("continuous_design strays from the existing design at a whole order")
 
 
 # --- Resonant shelves over a dense Frequency scan (#195) -----------------------------------------
