@@ -38,6 +38,8 @@
 #                               the VST3's code by library; and the heap one Engine holds, whose test fails above
 #                               its ceiling. Not in CI. On Windows, the heap only
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
+#   scripts/check.sh asan       Engine and Plugin Shell tests under AddressSanitizer and UndefinedBehaviorSanitizer
+#                               (macOS only; not in the default run)
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
 #
@@ -617,6 +619,48 @@ tsan() {
     TSAN_OPTIONS=halt_on_error=1 ctest --test-dir "$BUILD_DIR-tsan" --output-on-failure -LE 'response|sweep'
 }
 
+# Some toolchains' AddressSanitizer runtime never finishes starting (Apple clang 17 on macOS 27 spins in
+# its own initialisation), which would hang the build at test discovery: an empty program built with it
+# must exit within 30 seconds.
+asan_starts() {
+    local dir pid
+    dir=$(mktemp -d)
+    echo 'int main() { return 0; }' > "$dir/empty.cpp"
+    c++ -fsanitize=address "$dir/empty.cpp" -o "$dir/empty"
+    "$dir/empty" &
+    pid=$!
+    for _ in $(seq 30); do
+        kill -0 "$pid" 2> /dev/null || { rm -rf "$dir"; return 0; }
+        sleep 1
+    done
+    kill -9 "$pid"; wait "$pid" 2> /dev/null || true
+    rm -rf "$dir"
+    echo "This toolchain's AddressSanitizer runtime hangs starting an empty program ($(c++ --version | head -1))" >&2
+    return 1
+}
+
+asan() {
+    if [ "$os" != macos ]; then
+        echo "AddressSanitizer and UndefinedBehaviorSanitizer run on macOS only; skipped"
+        return
+    fi
+    # Catches out-of-bounds and use-after-free accesses, leaks aside (Apple's clang has no LeakSanitizer),
+    # and undefined behaviour such as signed overflow, each halting the test with a stack
+    # trace. Only the test executables are built, not the plugin formats; the frequency response grids
+    # and the sweeps are left to the normal run, as tsan does.
+    step "Engine and Plugin Shell tests under AddressSanitizer and UndefinedBehaviorSanitizer"
+    asan_starts || return
+    local flags="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+    sanitizer_deps asan
+    cmake -S . -B "$BUILD_DIR-asan" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_LTO=OFF -DEQ1_STRIP=OFF \
+        "${sanitizer_deps[@]}" "-DCMAKE_C_FLAGS=$flags" "-DCMAKE_CXX_FLAGS=$flags" \
+        -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+    cmake --build "$BUILD_DIR-asan" --parallel --target eq1_engine_tests eq1_plugin_tests
+    ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:detect_stack_use_after_return=1 \
+        UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+        ctest --test-dir "$BUILD_DIR-asan" -j 8 --output-on-failure -LE 'response|sweep'
+}
+
 fetch_validators() {
     local dir="$DEPS/validators/$os-$PLUGINVAL_VERSION-$CLAP_VALIDATOR_VERSION"
     if [ ! -d "$dir" ]; then
@@ -698,11 +742,12 @@ case "${1:-all}" in
     focus) focus "${2:?usage: scripts/check.sh focus <regex>}" ;;
     screens) screens "${2:?usage: scripts/check.sh screens <dir>}" ;;
     tsan) tsan ;;
+    asan) asan ;;
     validate) validate ;;
     docs) docs; colours ;;
     colours) colours ;;
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,42p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,44p' "$0" >&2; exit 2 ;;
 esac
