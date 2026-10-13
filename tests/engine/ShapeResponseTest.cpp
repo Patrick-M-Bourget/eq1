@@ -1,6 +1,7 @@
 #include "Measure.h"
 
 #include "eq1/Response.h"
+#include "eq1/Settings.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <complex>
 #include <numbers>
+#include <vector>
 
 using namespace eq1;
 
@@ -231,20 +233,34 @@ TEST_CASE ("Low Shelf, High Shelf and Tilt Shelf match their analog targets up t
 // (docs/dsp/filter-design.md, "Test tolerances").
 TEST_CASE ("Resonant shelves match their analog targets wherever a section's zeros or poles near Nyquist", "[response]")
 {
-    const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);
-    const double gain = GENERATE (-30.0, -12.0, 18.0);
-    const int order = GENERATE (2, 3);
+    // The second-order section's zeros and poles sit at rz and 1 / rz times Frequency (Low Shelf; a
+    // High Shelf's are the reciprocals). The one at Frequency / rz sits below Frequency, which stays below
+    // 0.91 x Nyquist, so never nears it. The one at rz x Frequency is placed in 41 steps from 0.9 to 1.1 x
+    // Nyquist, or to as high as the highest Frequency puts it (30 kHz at 96 kHz), so every case asserts.
+    // A sample rate, Gain and order where no Frequency in range puts it near Nyquist is left out.
+    struct Case
+    {
+        double sampleRate, gain;
+        int order;
+        double rz, highest;
+    };
+    std::vector<Case> cases;
+    for (double sampleRate : { 44100.0, 48000.0, 96000.0 })
+        for (double gain : { -30.0, -12.0, 18.0 })
+            for (int order : { 2, 3 })
+            {
+                const double nyquist = sampleRate / 2.0;
+                const double rz = std::pow (10.0, std::abs (gain) / 20.0 / (2.0 * order));
+                const double highest = std::min (1.1, rz * std::min (eq1::parameterRanges::frequency.high, 0.91 * nyquist) / nyquist);
+                if (highest >= 0.9)
+                    cases.push_back ({ sampleRate, gain, order, rz, highest });
+            }
+    const auto [sampleRate, gain, order, rz, highest] = GENERATE_REF (from_range (cases));
     const double q = 40.0;
     const Shape s = GENERATE (Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf);
-
-    // The second-order section's zeros and poles sit at rz and 1 / rz times Frequency (Low Shelf; a
-    // High Shelf's are the reciprocals): place each from 0.9 to 1.1 x Nyquist.
-    const double rz = std::pow (10.0, std::abs (gain) / 20.0 / (2.0 * order));
-    const auto natural = GENERATE_COPY (rz, 1.0 / rz);
-    const auto atNyquist = GENERATE (range (0.9, 1.1, 0.005));
-    const double frequency = atNyquist * sampleRate / 2.0 / natural;
-    if (frequency > std::min (30000.0, 0.91 * sampleRate / 2.0) || frequency < 10.0)
-        return;
+    const int step = GENERATE (range (0, 41));
+    const double atNyquist = 0.9 + (highest - 0.9) * step / 40.0;
+    const double frequency = atNyquist * sampleRate / 2.0 / rz;
 
     const auto target = [&] (double f) {
         switch (s)
