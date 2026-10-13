@@ -4,6 +4,7 @@
 #include "BandPanel.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ValueText.h"
 #include "display/DisplayGeometry.h"
 #include "staple/Fonts.h"
 #include "staple/Painting.h"
@@ -19,12 +20,6 @@ namespace
 namespace tokens = staple::tokens;
 namespace colour = tokens::colour;
 namespace layout = tokens::layout;
-
-// "120 Hz", "4.50 kHz".
-juce::String frequencyText (double frequency)
-{
-    return frequency >= 1000.0 ? juce::String (frequency / 1000.0, 2) + " kHz" : juce::String (juce::roundToInt (frequency)) + " Hz";
-}
 
 // Room round a pill handle for its shadow and focus ring.
 constexpr int handleMargin = 6;
@@ -90,7 +85,7 @@ DetectionRangeBar::Segment::Segment (DetectionRangeBar& b) : bar (b)
 
 juce::String DetectionRangeBar::Segment::valueText() const
 {
-    return frequencyText (bar.low->getValue()) + juce::String::fromUTF8 (" \xe2\x80\x93 ") + frequencyText (bar.high->getValue());
+    return valueText::frequency (bar.low->getValue()) + juce::String::fromUTF8 (" \xe2\x80\x93 ") + valueText::frequency (bar.high->getValue());
 }
 
 void DetectionRangeBar::Segment::paint (juce::Graphics& g)
@@ -223,8 +218,8 @@ void DetectionRangeBar::update()
             auto& state = processor.parameterState();
             lowAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionLowId (slot), *low);
             highAttachment = std::make_unique<SliderAttachment> (state, parameters::detectionHighId (slot), *high);
-            low->describe (*state.getParameter (parameters::detectionLowId (slot)));
-            high->describe (*state.getParameter (parameters::detectionHighId (slot)));
+            low->describe (parameters::lookUp (state, parameters::detectionLowId (slot)));
+            high->describe (parameters::lookUp (state, parameters::detectionHighId (slot)));
             segment->setTitle ("Band " + juce::String (slot) + " Detection Range");
             segment->colour = tokens::band[static_cast<size_t> (slot - 1)];
         }
@@ -287,7 +282,7 @@ void DetectionRangeBar::paint (juce::Graphics& g)
     g.setColour (colour::text3);
     g.setFont (staple::font (tokens::size::fs1));
     for (auto [x, value] : { std::pair { x1, low->getValue() }, std::pair { x2, high->getValue() } })
-        g.drawText (frequencyText (value), juce::Rectangle<float> (80.0f, 12.0f).withCentre ({ x, y - layout::detectionLabelAbove + 6.0f }),
+        g.drawText (valueText::frequency (value), juce::Rectangle<float> (80.0f, 12.0f).withCentre ({ x, y - layout::detectionLabelAbove + 6.0f }),
                     juce::Justification::centred, false);
 }
 

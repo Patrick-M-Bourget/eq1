@@ -139,9 +139,7 @@ private:
     std::unique_ptr<ButtonAttachment> globalBypassAttachment;
     bool bypassedShown = false;
     staple::Tween bypassedFade { staple::tokens::motion::dur2Ms, 0.0f }; // "Bypassed" fading in
-    std::vector<parameters::SlotValues> slotValues;
-    parameters::OutputValues outputValues;
-    // Auto Gain's estimate, and the settings it was worked out for.
+    // Auto Gain's estimate, and the inputs it was worked out for (autoGainInputs).
     Settings estimatedFor;
     double estimateDb = 0.0;
     bool estimated = false;

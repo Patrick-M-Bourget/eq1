@@ -5,6 +5,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "UiScale.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
 
@@ -25,34 +26,14 @@ constexpr int readoutHeight = 28, gainScaleWidth = 54, outputWidth = 70, readout
 constexpr int footerGap = 18, bypassedOverlap = 10, analyzerLabelGap = 8;
 const juce::String bypassedText { "Bypassed" };
 
-// Whether Auto Gain's estimate holds for both: the same Bands, exactly, and Gain Scale. (Settings' own ==
-// would do, but its float comparison warns where it is defined.)
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
-bool sameEstimate (const Settings& a, const Settings& b)
-{
-    for (size_t i = 0; i < a.bands.size(); ++i)
-    {
-        const auto &x = a.bands[i], &y = b.bands[i];
-        if (x.inUse != y.inUse || x.bypass != y.bypass || x.shape != y.shape || x.frequency != y.frequency || x.gain != y.gain
-            || x.q != y.q || x.slope != y.slope || x.brickwall != y.brickwall || x.placement != y.placement
-            || x.dynamicRange != y.dynamicRange || x.threshold != y.threshold || x.thresholdAuto != y.thresholdAuto
-            || x.attack != y.attack || x.release != y.release || x.dynamicsBypass != y.dynamicsBypass)
-            return false;
-    }
-    return a.gainScale == b.gainScale;
-}
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-
 juce::Font readoutFont() { return staple::font (size::fs3); }
 juce::Font bypassedFont() { return staple::font (size::fs3, staple::Weight::medium); }
 } // namespace
 
 juce::String outputReadoutText (double db)
 {
-    if (! std::isfinite (db) || db <= parameters::outputGainSilentDb)
-        return "-inf dB";
-    const double rounded = std::round (db * 10.0) / 10.0;
-    return (rounded >= 0.0 ? "+" : "-") + juce::String (std::abs (rounded), 1) + " dB";
+    const bool silent = ! std::isfinite (db) || db <= parameters::outputGainSilentDb;
+    return valueText::signedDb (silent ? -std::numeric_limits<double>::infinity() : db, { .plusAtZero = true });
 }
 
 GainScaleReadout::GainScaleReadout() : KeyboardSlider ("Gain Scale")
@@ -71,7 +52,7 @@ void GainScaleReadout::setNotApplied (bool n)
     repaint();
 }
 
-juce::String GainScaleReadout::text() const { return juce::String (juce::roundToInt (getValue())) + "%"; }
+juce::String GainScaleReadout::text() const { return valueText::percent (getValue()); }
 
 void GainScaleReadout::paint (juce::Graphics& g)
 {
@@ -151,7 +132,7 @@ juce::PopupMenu UiScaleMenu::menu() const
     juce::PopupMenu items;
     items.addSectionHeader ("UI Scale");
     for (int percent : uiScale::percents)
-        items.addItem (percent, juce::String (percent) + "%", true, percent == shown);
+        items.addItem (percent, valueText::percent (percent), true, percent == shown);
     return items;
 }
 
@@ -164,22 +145,20 @@ void UiScaleMenu::pick (int percent)
 
 std::unique_ptr<juce::AccessibilityHandler> UiScaleMenu::createAccessibilityHandler()
 {
-    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return juce::String (shown) + "%"; }, [this] { triggerClick(); });
+    return accessibility::handler (*this, juce::AccessibilityRole::button, [this] { return valueText::percent (shown); }, [this] { triggerClick(); });
 }
 
 FooterBar::FooterBar (PluginProcessor& p)
-    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), outputValues (parameters::OutputValues::of (p.parameterState())), analyzerPopover (p), outputPopover (p)
+    : EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), analyzerPopover (p), outputPopover (p)
 {
     bypassedFade.apply = [this] (float) { repaint(); };
     auto& state = processor.parameterState();
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-        slotValues.push_back (parameters::SlotValues::of (state, slot));
 
     globalBypass.setClickingTogglesState (true);
     globalBypass.setOffLook (true);
     globalBypass.setIconSize (14.0f);
     globalBypassAttachment = std::make_unique<ButtonAttachment> (state, parameters::globalBypassId, globalBypass);
-    globalBypass.setTitle (state.getParameter (parameters::globalBypassId)->getName (100));
+    globalBypass.setTitle (parameters::lookUp (state, parameters::globalBypassId).getName (100));
     globalBypass.setTooltip ("Global Bypass (Cmd/Ctrl+B)");
     globalBypass.onStateChange = [this] { showBypass(); };
     addAndMakeVisible (globalBypass);
@@ -204,7 +183,7 @@ FooterBar::FooterBar (PluginProcessor& p)
     addChildComponent (analyzerPopover);
 
     gainScaleAttachment = std::make_unique<SliderAttachment> (state, parameters::gainScaleId, gainScale);
-    gainScale.describe (*state.getParameter (parameters::gainScaleId));
+    gainScale.describe (parameters::lookUp (state, parameters::gainScaleId));
     addAndMakeVisible (gainScale);
 
     output.onClick = [this] {
@@ -284,19 +263,16 @@ void FooterBar::showBypass()
 
 void FooterBar::showOutputLevel()
 {
-    Settings settings;
-    for (size_t slot = 0; slot < slotValues.size(); ++slot)
-        settings.bands[slot] = slotValues[slot].read();
-    outputValues.readInto (settings);
+    const auto settings = processor.hostSettings().read();
     double db = settings.outputGainDb;
     if (settings.autoGain && std::isfinite (db))
     {
         // Worked out again only when the Bands or Gain Scale change, at the rate the curve is drawn at.
-        if (! estimated || ! sameEstimate (settings, estimatedFor))
+        if (const auto inputs = autoGainInputs (settings); ! estimated || inputs != estimatedFor)
         {
             const double sampleRate = sampleRateOrAssumed (processor);
             estimateDb = autoGainDb (settings, sampleRate);
-            estimatedFor = settings;
+            estimatedFor = inputs;
             estimated = true;
         }
         db += estimateDb;

@@ -1,6 +1,7 @@
 #include "GhostLayer.h"
 
 #include "eq1/Response.h"
+#include "../ValueText.h"
 #include "../staple/Fonts.h"
 #include "../staple/Tokens.h"
 
@@ -16,12 +17,7 @@ namespace ghostStyle = staple::tokens::ghost;
 
 constexpr float readoutHeight = 14.0f, readoutWidth = 80.0f;
 
-juce::String readoutOf (double frequency)
-{
-    if (frequency < 999.5)
-        return juce::String (frequency, 1) + " Hz";
-    return juce::String (frequency / 1000.0, frequency < 10000.0 ? 2 : 1) + " kHz";
-}
+juce::String readoutOf (double frequency) { return valueText::frequency (frequency, { .belowHundredHz = 1, .hz = 1 }); }
 
 juce::Rectangle<float> readoutArea (const DisplayGeometry& geometry, float x)
 {

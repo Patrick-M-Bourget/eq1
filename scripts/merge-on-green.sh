@@ -2,6 +2,10 @@
 # Squash-merges a PR once CI passes and a reviewer has passed its head commit (docs/agents/reviewer.md).
 # Stops, saying why, on a conflict with main, failed checks, no checks, a changes verdict or a head that moved
 # from the one CI ran on (gh pr merge --match-head-commit also refuses one that moves at the last moment).
+# It also refuses a head whose code still cites a ticket the PR closes (its closingIssuesReferences, or a
+# Closes/Fixes/Resolves #N in its body), listing each "file:line: points at #N, which this PR closes": merged,
+# that citation would point at a closed ticket, which scripts/check.sh docs refuses on main. The rule for a
+# citation is scripts/cited-tickets.sh's. --user-approved doesn't override it: it's a content error, not a verdict.
 #
 #   scripts/merge-on-green.sh <PR number>
 #   scripts/merge-on-green.sh <PR number> --user-approved "<the user's words>"
@@ -41,6 +45,30 @@ head_moved() {
         exit 1
     fi
 }
+
+# Code citing a ticket this PR closes would cite a closed ticket once merged (scripts/check.sh docs).
+if ! closes=$(gh pr view "$pr" --json closingIssuesReferences,body -q '[.closingIssuesReferences[].number,
+    (.body | scan("(?:^|[^A-Za-z])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\\s+#([0-9]+)"; "i") | .[0] | tonumber)]
+    | unique | .[]'); then
+    echo "NOT MERGED #$pr: could not read which tickets it closes"
+    exit 1
+fi
+if [ -n "$closes" ]; then
+    if ! git fetch -q origin "refs/pull/$pr/head"; then
+        echo "NOT MERGED #$pr: could not fetch its head to read its files"
+        exit 1
+    fi
+    # shellcheck disable=SC2086 # one ticket number per word
+    if ! cited=$("$(dirname "$0")/cited-tickets.sh" --at "$head" $closes); then
+        echo "NOT MERGED #$pr: could not read its head's files (has it moved from ${head:0:7}?)"
+        exit 1
+    fi
+    if [ -n "$cited" ]; then
+        sed -E 's/:(#[0-9]+)$/: points at \1, which this PR closes/' <<< "$cited"
+        echo "NOT MERGED #$pr: its head cites tickets it closes; say what the code does now, or point at an open ticket"
+        exit 1
+    fi
+fi
 
 gh pr checks "$pr" --watch --interval 60 > /dev/null 2>&1
 # Both platforms' jobs must have run, by exact name: an empty or partial list of checks is not green.

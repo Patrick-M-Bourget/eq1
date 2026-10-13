@@ -5,6 +5,9 @@
 # The fake reads its PR from files in $FAKE: mergeable, title, comments (JSON array of bodies), checks
 # (JSON array of {name, bucket}; [] is answered as gh does, "no checks reported") and heads (one SHA per line:
 # each read of headRefOid takes the next, the last repeating, so a later line is a push landing meanwhile).
+# The tickets the PR closes come from closes (JSON array of numbers, its closingIssuesReferences) and body; its
+# head's files are a scratch repo's, whose commits are $a (citing no ticket) and $c (citing #12 in engine/a.cpp),
+# read through the fake git's grep (fetches are logged to fetch.log, and fail if $FAKE/no-fetch).
 # gh pr merge is logged to merge.log, and refused when --match-head-commit isn't the PR's head. Branch deletions,
 # through gh api and a fake git (local branch "topic" exists unless $FAKE/no-local, and is checked out in a
 # worktree if $FAKE/checked-out), are logged to deleted.log.
@@ -37,6 +40,10 @@ case "$1 $2 $fields" in
     "pr view mergeable") jq -n --arg m "$(cat "$FAKE/mergeable")" '{mergeable: $m}' | jq -r "$query" ;;
     "pr view title") jq -n --arg t "$(cat "$FAKE/title")" '{title: $t}' | jq -r "$query" ;;
     "pr view headRefName") echo topic ;;
+    "pr view closingIssuesReferences,body")
+        jq -n --argjson c "$(cat "$FAKE/closes")" --arg b "$(cat "$FAKE/body")" \
+            '{closingIssuesReferences: $c | map({number: .}), body: $b}' | jq -r "$query"
+        ;;
     "api -X ") echo "origin ${args[3]##*/}" >> "$FAKE/deleted.log" ;;
     "pr view comments") jq '{comments: map({body: .})}' "$FAKE/comments" | jq -r "$query" ;;
     "pr view headRefOid")
@@ -64,6 +71,8 @@ EOF
 cat > "$tmp/bin/git" << 'EOF'
 #!/usr/bin/env bash
 case "$1 $2" in
+    "fetch "* | "fetch -q") echo "$*" >> "$FAKE/fetch.log"; [ ! -e "$FAKE/no-fetch" ]; exit ;;
+    "grep "*) exec "$REAL_GIT" -C "$REPO" "$@" ;;
     "show-ref -q") [ ! -e "$FAKE/no-local" ]; exit ;;
     "worktree list") [ -e "$FAKE/checked-out" ] && printf 'worktree /x\nbranch refs/heads/topic\n' ;;
     "branch -q") echo "local $4" >> "$FAKE/deleted.log" ;;
@@ -73,7 +82,16 @@ exit 0
 EOF
 chmod +x "$tmp/bin/sleep" "$tmp/bin/gh" "$tmp/bin/git"
 
-a=aaaaaaa1111111111111111111111111111111111
+export REAL_GIT REPO=$tmp/repo
+REAL_GIT=$(command -v git)
+mkdir -p "$REPO/engine"
+git -C "$REPO" init -q
+printf '// Holds.\n' > "$REPO/engine/a.cpp"
+git -C "$REPO" add . && git -C "$REPO" -c user.name=t -c user.email=t@t commit -qm clean
+a=$(git -C "$REPO" rev-parse HEAD)
+printf '// Holds until #12 lands.\n' > "$REPO/engine/a.cpp"
+git -C "$REPO" -c user.name=t -c user.email=t@t commit -qam cites
+c=$(git -C "$REPO" rev-parse HEAD)
 b=bbbbbbb2222222222222222222222222222222222
 green='[{"name":"Windows x64","bucket":"pass"},{"name":"macOS Universal","bucket":"pass"}]'
 failures=0
@@ -88,10 +106,12 @@ pr() {
     printf '%s\n' "$1" > "$FAKE/checks"
     printf '%s\n' "$2" > "$FAKE/heads"
     printf '%s\n' "${3:-[\"qa-verdict: pass sha=${a:0:7}\"]}" > "$FAKE/comments"
+    echo "[]" > "$FAKE/closes"
+    echo "Does a thing." > "$FAKE/body"
 }
 # expect <exit code> <output pattern> <merged|unmerged> <description> [script arguments...]
 expect() {
-    local code=$1 pattern=$2 merged=$3 what=$4 out got
+    local code=$1 pattern=$2 merged=$3 what=$4 got
     shift 4
     out=$(PATH="$tmp/bin:$PATH" "$script" 7 "$@" 2>&1)
     got=$?
@@ -167,6 +187,37 @@ expect 1 "asked for changes on ${a:0:7}" unmerged "a changes verdict stops the m
 pr "$green" "$a"
 echo CONFLICTING > "$FAKE/mergeable"
 expect 1 "conflicts with main" unmerged "a conflict with main stops the merge"
+
+pr "$green" "$c" "[\"qa-verdict: pass sha=${c:0:7}\"]"
+echo "[12]" > "$FAKE/closes"
+expect 1 "^engine/a.cpp:1: points at #12, which this PR closes$" unmerged "a PR whose head cites a ticket it closes isn't merged"
+grep -q "NOT MERGED #7: its head cites tickets it closes" <<< "$out" || {
+    echo "FAIL: the refusal doesn't say why: $out" >&2
+    failures=$((failures + 1))
+}
+
+pr "$green" "$c" "[]"
+printf 'Does a thing.\n\nFixes #12\n' > "$FAKE/body"
+expect 1 "^engine/a.cpp:1: points at #12, which this PR closes$" unmerged \
+    "the user's go-ahead doesn't merge a head that cites a ticket the body's Fixes line closes" --user-approved "merge it"
+
+pr "$green" "$a"
+echo "[12]" > "$FAKE/closes"
+printf 'closes #13\n' > "$FAKE/body"
+expect 0 "^MERGED #7" merged "a PR closing tickets its head doesn't cite merges"
+grep -q "refs/pull/7/head" "$FAKE/fetch.log" 2> /dev/null || {
+    echo "FAIL: the PR's head wasn't fetched to read its files" >&2
+    failures=$((failures + 1))
+}
+
+pr "$green" "$c" "[\"qa-verdict: pass sha=${c:0:7}\"]"
+echo "[12]" > "$FAKE/closes"
+touch "$FAKE/no-fetch"
+expect 1 "could not fetch its head" unmerged "a head it can't fetch isn't merged"
+
+pr "$green" "$b" "[\"qa-verdict: pass sha=${b:0:7}\"]"
+echo "[12]" > "$FAKE/closes"
+expect 1 "could not read" unmerged "a head whose files it can't read isn't merged"
 
 if [ "$failures" = 0 ]; then
     echo "merge-on-green.sh merges only the head CI passed, with every required job by name"

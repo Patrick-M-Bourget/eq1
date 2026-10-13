@@ -255,6 +255,15 @@ void setTogether (const std::vector<NewValue>& values)
         parameter->endChangeGesture();
 }
 
+juce::RangedAudioParameter& lookUp (juce::AudioProcessorValueTreeState& parameters, const juce::String& id)
+{
+    if (auto* found = parameters.getParameter (id))
+        return *found;
+    jassertfalse; // an id the layout doesn't have
+    static juce::AudioParameterFloat inert { juce::ParameterID { "inert", 1 }, {}, juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.0f };
+    return inert;
+}
+
 SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int slot)
 {
     return { parameters.getRawParameterValue (frequencyId (slot)), parameters.getRawParameterValue (gainId (slot)),
@@ -315,6 +324,21 @@ void OutputValues::readInto (Settings& settings) const
     settings.panMode = static_cast<PanMode> (juce::roundToInt (panMode->load()));
     settings.phaseInvert = isOn (phaseInvert);
     settings.globalBypass = isOn (globalBypass);
+}
+
+SettingsReader::SettingsReader (juce::AudioProcessorValueTreeState& parameters) : outputs (OutputValues::of (parameters))
+{
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        slots[static_cast<size_t> (slot - 1)] = SlotValues::of (parameters, slot);
+}
+
+Settings SettingsReader::read() const
+{
+    Settings settings;
+    for (size_t i = 0; i < slots.size(); ++i)
+        settings.bands[i] = slots[i].read();
+    outputs.readInto (settings);
+    return settings;
 }
 
 } // namespace eq1::parameters

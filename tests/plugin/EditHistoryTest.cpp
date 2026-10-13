@@ -21,7 +21,7 @@ struct Host
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
     eq1::EditHistory& history = processor.editHistory();
-    eq1::BandEditing editing { processor.parameterState(), history };
+    eq1::BandEditing editing { processor, history };
 
     juce::RangedAudioParameter& parameter (const juce::String& id) { return *processor.parameterState().getParameter (id); }
     float value (const juce::String& id) { return processor.parameterState().getRawParameterValue (id)->load(); }

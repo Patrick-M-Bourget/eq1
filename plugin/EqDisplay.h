@@ -182,7 +182,7 @@ private:
 
     PluginProcessor& processor;
     BandEditing& editing;
-    parameters::OutputValues output; // Global Bypass, read each frame
+    const parameters::OutputValues& output; // Global Bypass, read each frame
 
     AnalyzerSpectrum preEq, postEq, sidechain;
     AnalyzerSettings analyzer; // taken once a frame

@@ -16,7 +16,7 @@ struct Host
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
+    eq1::BandEditing editing { processor, processor.editHistory() };
     int deletes = 0, selectAlls = 0;
     std::vector<int> selected;
     juce::String clipboard; // the system clipboard's text, which the tests never touch

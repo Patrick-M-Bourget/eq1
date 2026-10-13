@@ -28,7 +28,7 @@ struct Host
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
+    eq1::BandEditing editing { processor, processor.editHistory() };
     std::unique_ptr<eq1::BandPanel> panel = std::make_unique<eq1::BandPanel> (processor, editing);
 
     Host()
