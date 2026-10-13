@@ -370,6 +370,41 @@ TEST_CASE ("A slider reads its value with its unit, as the control shows it")
     CHECK (host.element ("Output Gain").value == juce::String::charToString (0x2212) + "inf dB");
 }
 
+// Attack and Release are Knobs, whose tooltip shows what a screen reader reads; Output Pan is a slider
+// whose labels show "40 L" or "40 R" (outputPanText) and which a screen reader reads in percent.
+TEST_CASE ("Output Pan, Attack and Release read whole percent with a true minus, as Attack's and Release's tooltips show")
+{
+    EveryControl host;
+    const auto minus = juce::String::charToString (0x2212);
+    const auto knobShows = [&host] (const juce::String& title, const juce::String& expected) {
+        CAPTURE (title, expected);
+        const auto element = host.element (title);
+        CHECK (element.value == expected);
+        auto* knob = dynamic_cast<staple::Knob*> (element.component);
+        REQUIRE (knob != nullptr);
+        CHECK (knob->tooltipValue() == expected);
+    };
+
+    host.set (4, "attack", 40.0f);
+    host.set (4, "release", 75.4f);
+    host.settle();
+    knobShows ("Band 4 Attack", "40%");
+    knobShows ("Band 4 Release", "75%");
+    host.set (4, "release", 0.0f);
+    host.settle();
+    knobShows ("Band 4 Release", "0%");
+
+    host.openCallOut ("Output");
+    host.settle();
+    host.set ("output_pan", -40.0f);
+    host.settle();
+    CHECK (host.element ("Output Pan").value == minus + "40%");
+    host.set ("output_pan", 40.0f);
+    host.settle();
+    CHECK (host.element ("Output Pan").value == "40%");
+    host.closeCallOut();
+}
+
 TEST_CASE ("A Band reads its Shape, Frequency, Gain when it has one, and Q, then Bypassed and Dynamic Band")
 {
     Editor host;
