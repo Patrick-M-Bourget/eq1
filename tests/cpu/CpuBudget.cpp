@@ -95,18 +95,21 @@ struct Scene
 std::vector<Scene> scenes()
 {
     return {
-        { "24 Dynamic Bells", dynamicBells(), 512, bursts, .ceiling = Ceiling { 35.0, 60.0 } },
+        { .name = "24 Dynamic Bells", .settings = dynamicBells(), .blockSize = 512, .signal = bursts,
+          .ceiling = Ceiling { 35.0, 60.0 } },
         { "24 Bells", test::bells(), 512, bursts },
         { "1 Bell", test::bell (1000.0, 3.0, 1.0), 512, bursts },
         { "24 Brickwall Cuts", test::brickwallCuts(), 512, bursts },
         { "24 Bells, Output Gain and Pan", withOutputGainAndPan (test::bells()), 512, bursts },
         { "24 Dynamic Bells, 32-sample blocks", dynamicBells(), 32, bursts },
-        { "24 Dynamic Bells, Gain automated", dynamicBells(), 512, bursts, .automate = automateGain,
-          .ceiling = Ceiling { 35.0, 60.0 } },
+        { .name = "24 Dynamic Bells, Gain automated", .settings = dynamicBells(), .blockSize = 512, .signal = bursts,
+          .automate = automateGain, .ceiling = Ceiling { 35.0, 60.0 } },
         // Timed after 10 s of silence, long enough for every filter to have rung down below the
         // smallest normal float.
-        { "24 Dynamic Bells on silence", dynamicBells(), 512, thenSilence, 10.0, .quiet = true },
-        { "24 Dynamic Bells on subnormal input", dynamicBells(), 512, subnormalInput, .quiet = true },
+        { .name = "24 Dynamic Bells on silence", .settings = dynamicBells(), .blockSize = 512, .signal = thenSilence,
+          .startSeconds = 10.0, .quiet = true },
+        { .name = "24 Dynamic Bells on subnormal input", .settings = dynamicBells(), .blockSize = 512,
+          .signal = subnormalInput, .quiet = true },
     };
 }
 
