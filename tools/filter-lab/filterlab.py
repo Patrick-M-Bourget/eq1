@@ -988,8 +988,9 @@ def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqr
 #     response, weighted by how close its poles are (_closeness: 0 as one comes in from infinity, 1 where
 #     they meet). No seam where they meet, and none as the pole comes in.
 #   - Shelves: a section's resonant split reduces its zeros' Q to what the same section has at Q 2 (for
-#     whole orders, exactly the existing (2 / Q)^(1 / pairs)); the partial section's split is weighted by
-#     t^PARTIAL_SPLIT_POWER, and while its roots are real it is matched as the High Cut's is.
+#     whole orders, exactly the existing (2 / Q)^(1 / pairs)), matched where the existing split is; the
+#     partial section's split is weighted by t^PARTIAL_SPLIT_POWER, and while its roots are real it is
+#     matched as the High Cut's is.
 #   - Band Pass: a pair's upper section gets the transform's gain, |p|^2 / Q^2, in the target too; the
 #     steep design comes in over 24 to 30 dB/oct instead of switching on above 24.
 # Low Cut and Notch keep fractional_design's design. Band Pass and Notch keep one seam each where the
@@ -1092,7 +1093,8 @@ def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial):
     t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
     t *= weight * (_closeness(a) if partial else 1.0)
     split_q = zeros_q * min(reference_q / zeros_q, 1.0) ** t
-    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs)
+    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs,
+                              _resonance_match(frequency * natural, zeros_q, fs))
     split = Analog(a.n2, math.sqrt(a.n0 * a.n2) / split_q, a.n0, a.d2, a.d1, a.d0)
     poles = _partial_biquad(a, split, frequency, fs, frequency) if partial else match_section(split, frequency, fs)
     if split_q >= zeros_q:
