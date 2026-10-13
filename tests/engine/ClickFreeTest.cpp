@@ -416,3 +416,35 @@ TEST_CASE ("Jumps in Output Pan, and switching Pan Mode, do not click")
     CHECK (discontinuity (output[0], host.sampleRate) < threshold);
     CHECK (discontinuity (output[1], host.sampleRate) < threshold);
 }
+
+TEST_CASE ("A Free Detection Range moved during Detection Audition does not click")
+{
+    const auto host = anyHost();
+    const int move = GENERATE (0, 1, 2); // swept block by block, jumping, or switched to Band and back
+    CAPTURE (host.sampleRate, host.blockSize, move);
+    // Detection Audition plays the tone through the Free range's limits, which move through it.
+    const auto output = playTone (host, [move] (double time, Settings& s) {
+        const auto sweep = [time] (double speed) { return 0.5 + 0.5 * std::sin (time * speed); };
+        s.bands[0] = dynamicBellOnTone (50.0);
+        s.bands[0].detectionRange = DetectionRange::Free;
+        s.auditionSlot = 1;
+        switch (move)
+        {
+            case 0:
+                s.bands[0].detectionLow = 40.0 * std::pow (12.0, sweep (15.0));
+                s.bands[0].detectionHigh = 120.0 * std::pow (20.0, sweep (11.0));
+                break;
+            case 1:
+                s.bands[0].detectionLow = alternating (time) ? 400.0 : 30.0;
+                s.bands[0].detectionHigh = alternating (time) ? 2000.0 : 150.0;
+                break;
+            default:
+                s.bands[0].detectionLow = 120.0;
+                s.bands[0].detectionHigh = 400.0;
+                if (alternating (time))
+                    s.bands[0].detectionRange = DetectionRange::Band;
+                break;
+        }
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
+}
