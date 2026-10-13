@@ -5,6 +5,9 @@
 # nothing uncommitted in what the build reads; a push of several branches is gated once, on that commit.
 # Not gated: a push of Markdown changes alone, a deletion, a tag, the pr-assets images, or a tree the
 # gate already passed (the commit hook's, when nothing was rebased since).
+# It also refuses to push onto a branch whose tip failed CI (a draft PR's integration branch, say) until that
+# failure is fixed: EQ1_FIXES_RED_CI=1 lets the push that fixes it through. Without gh, or offline, that
+# check is skipped.
 # Tests: scripts/pre-push.test.sh.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -13,12 +16,28 @@ source .githooks/build-inputs.sh
 zero=0000000000000000000000000000000000000000
 head=$(git rev-parse HEAD)
 gate=no
+
+# red_ci <remote ref> <remote sha>: refuses when CI failed on the remote tip, naming the failed jobs.
+red_ci() {
+    if [ "$2" = "$zero" ] || [ "${EQ1_FIXES_RED_CI:-}" = 1 ] || ! command -v gh > /dev/null; then
+        return 0
+    fi
+    local run
+    run=$(gh run list --commit "$2" --json conclusion,databaseId,url \
+        -q 'map(select(.conclusion == "failure"))[0] | "\(.databaseId) \(.url)"' 2> /dev/null) || return 0
+    [ -n "$run" ] || return 0
+    echo "pre-push: CI failed on ${1#refs/heads/}'s tip (${2:0:7}): $(gh run view "${run%% *}" --json jobs \
+        -q '[.jobs[] | select(.conclusion == "failure") | .name] | join(", ")' 2> /dev/null), ${run#* }" >&2
+    echo "pre-push: fix that first; push the fix with EQ1_FIXES_RED_CI=1" >&2
+    return 1
+}
 while read -r local_ref local_sha remote_ref remote_sha; do
     [ "$local_sha" = "$zero" ] && continue # deleting a branch or tag
     case $remote_ref in
     refs/tags/*) continue ;;          # a tag names a commit; it brings no new build to test
     refs/heads/pr-assets) continue ;; # images for PR comments (scripts/pr-images.sh)
     esac
+    red_ci "$remote_ref" "$remote_sha" || exit 1
     # A new branch, or a remote tip this repository hasn't fetched (pushed from elsewhere), is compared
     # with where it left main.
     base=$remote_sha
