@@ -132,6 +132,12 @@ void AnalyzerSpectrum::clearPeakHold()
     std::fill (held.begin(), held.end(), silence);
 }
 
+void AnalyzerSpectrum::forgetShown()
+{
+    std::fill (power.begin(), power.end(), silence);
+    clearPeakHold();
+}
+
 double AnalyzerSpectrum::peakNear (double frequency) const
 {
     if (power.size() < 3)
