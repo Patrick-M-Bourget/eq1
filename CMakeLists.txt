@@ -35,6 +35,20 @@ set(EQ1_STRIP "" CACHE STRING
 
 include(FetchContent)
 
+# A .deps folder is shared by every worktree's universal build (scripts/check.sh), dependencies' build
+# folders included. A build for other architectures rebuilds those libraries for its own alone, and the
+# other worktrees' links then fail for the architecture it left out. Such a build fetches into a folder
+# of its own (as check.sh's sanitizer builds do, under .deps/<name>).
+if(APPLE AND DEFINED FETCHCONTENT_BASE_DIR)
+    get_filename_component(eq1_deps_name "${FETCHCONTENT_BASE_DIR}" NAME)
+    if(eq1_deps_name STREQUAL ".deps" AND NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64;x86_64")
+        message(FATAL_ERROR "FETCHCONTENT_BASE_DIR ${FETCHCONTENT_BASE_DIR} is shared by universal builds, "
+            "and this one builds for '${CMAKE_OSX_ARCHITECTURES}'. Configure with "
+            "-DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" (scripts/check.sh does), or with a folder of its own: "
+            "-DFETCHCONTENT_BASE_DIR=${FETCHCONTENT_BASE_DIR}/<name> -DFETCHCONTENT_SOURCE_DIR_<DEP>=<its -src folder>.")
+    endif()
+endif()
+
 add_subdirectory(engine)
 
 if(EQ1_BUILD_PLUGIN)
