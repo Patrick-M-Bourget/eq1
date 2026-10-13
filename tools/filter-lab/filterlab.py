@@ -16,6 +16,7 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py slopes
     python3 tools/filter-lab/filterlab.py slope-gaps whole seams shelves rescale --jobs 6
     python3 tools/filter-lab/filterlab.py resonant-shelves --jobs 8
+    python3 tools/filter-lab/filterlab.py matched-rounding
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report(). A new command registers itself with @command in its own
@@ -1575,6 +1576,84 @@ def run_resonant_shelves(args, points=200):
         mark = " over" if share > limit else ""
         print(f"{shape:>10} {band:>7} {q:>5g}  {share:6.1%} {error:6.2f} {limit:5.0%}{mark:5}"
               f" fs={fs} F={frequency:.1f} G={gain} order={order}")
+
+
+# --- Matched-design rounding at low Frequency and high Q ------------------------------------------
+# match_section reads the poles' squared magnitude at the match point in the phi form, d0 p0 + d1 p1 + d2 p2
+# (as engine/src/MatchedDesign.cpp does). With poles near z = 1 that sum cancels: its rounding is about
+# 1e-16 x d1 p1, which the analog magnitude (Q^2 at a resonance) multiplies and p2 (about w^2) divides. At
+# Q 40 and a match point far below the sample rate, that swamps the numerator's p2, whose true value
+# shrinks as w^4: the design's level jumps by many dB between settings a rounding apart.
+# match_section_from_poles reads it from the poles instead, |1 - p e^(-jw)|^2 = (1 - r)^2 +
+# 4 r sin^2((w - angle) / 2) per pole, which doesn't cancel.
+
+def match_section_from_poles(a: Analog, reference_hz, fs, match_hz=None):
+    """match_section, the poles' squared magnitude at DC and at match_hz read from the poles themselves."""
+    if a.d2 == 0:
+        return _phi_form_match_section(a, reference_hz, fs, match_hz)
+    w = min(2 * PI * reference_hz / fs, 0.98 * PI)
+    c = _phi_form_match_section(Analog(0, 0, 1, a.d2, a.d1, a.d0), reference_hz, fs)
+    disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
+    re = -a.d1 / (2 * a.d2) * w
+    if disc < 0:
+        im = math.sqrt(-disc) / (2 * a.d2) * w
+        poles = [(re, im), (re, -im)]
+    else:
+        spread = math.sqrt(disc) / (2 * a.d2) * w
+        poles = [(re + spread, 0.0), (re - spread, 0.0)]
+    at = lambda x: math.prod(math.expm1(lr) ** 2 + 4 * math.exp(lr) * math.sin((x - angle) / 2) ** 2
+                             for lr, angle in poles)
+    wm = w if match_hz is None else min(2 * PI * match_hz / fs, 0.98 * PI)
+    p0, p1, p2 = _phi(wm)
+    n0 = at(0.0) * a.squared(0)
+    n1 = _weights(1, c.a1, c.a2)[1] * a.squared(0.5 * fs / reference_hz)
+    n2 = (at(wm) * a.squared(wm / (2 * PI) * fs / reference_hz) - n0 * p0 - n1 * p1) / p2
+    c.b0, c.b1, c.b2 = _factor(n0, n1, n2)
+    return c
+
+
+_phi_form_match_section = match_section
+ROUNDING_RATES = (44100, 48000, 96000, 192000)
+
+
+def _rounding_report(label):
+    """High Cut's worst error against its target where the target is above -60 dB, at whole orders 1 to 16,
+    Q 40, Frequency 10 to 40 Hz (every 1/20 octave), per sample rate; and the largest jump between Slopes
+    1e-9 dB/oct apart at Q 40, 20 Hz, 96 kHz, at 10 Hz, over Slopes 0.1 dB/oct apart from 0.1 to 96."""
+    errors = []
+    for fs in ROUNDING_RATES:
+        worst = (0.0, 0, 0)
+        for i in range(41):
+            frequency = 10 * 2 ** (i / 20)
+            for order in range(1, 17):
+                sections, target = high_cut(fs, frequency, None, 40.0, order)
+                for f in (10, frequency / 2, frequency, 2 * frequency, 4 * frequency):
+                    if f >= 10 and target(f) > -60:
+                        worst = max(worst, (abs(cascade_db(sections, f, fs) - target(f)), frequency, order))
+        errors.append(f"{worst[0]:7.2g} dB (F={worst[1]:.1f} order={worst[2]})")
+    jump = (0.0, 0.0)
+    for i in range(1, 961):
+        slope = i / 10 + 0.0123  # off the whole orders
+        a, _ = continuous_design("high-cut", 96000, 20, 0, 40.0, slope)
+        b, _ = continuous_design("high-cut", 96000, 20, 0, 40.0, slope + 1e-9)
+        jump = max(jump, (abs(cascade_db(a, 10, 96000) - cascade_db(b, 10, 96000)), slope))
+    print(f"{label:>11}  " + "  ".join(errors) + f"   {jump[0]:7.2g} dB (Slope={jump[1]:g})")
+
+
+@command("matched-rounding")
+def run_matched_rounding(args):
+    """High Cut at Q 40 and low Frequency, with match_section as the Engine has it and with
+    match_section_from_poles."""
+    global match_section
+    print("High Cut, Q 40, Frequency 10 to 40 Hz, whole orders 1 to 16: worst error against the target, by")
+    print(f"sample rate ({', '.join(str(r) for r in ROUNDING_RATES)}); then the largest jump at 10 Hz between")
+    print("Slopes 1e-9 dB/oct apart (Q 40, 20 Hz, 96 kHz)")
+    try:
+        _rounding_report("phi form")
+        match_section = match_section_from_poles
+        _rounding_report("from poles")
+    finally:
+        match_section = _phi_form_match_section
 
 
 # --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------
