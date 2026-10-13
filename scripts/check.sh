@@ -40,7 +40,8 @@
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh asan       Engine and Plugin Shell tests under AddressSanitizer and UndefinedBehaviorSanitizer
 #                               (macOS only; not in the default run); where the toolchain's AddressSanitizer
-#                               hangs at startup, it says so and runs UndefinedBehaviorSanitizer alone
+#                               hangs at startup, it says so and runs UndefinedBehaviorSanitizer alone; with
+#                               EQ1_REQUIRE_ASAN=1 (for a CI runner whose ASan works) it fails there instead
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
 #
@@ -650,9 +651,14 @@ asan() {
     # and undefined behaviour such as signed overflow, each halting the test with a stack
     # trace. Only the test executables are built, not the plugin formats; the frequency response grids
     # and the sweeps are left to the normal run, as tsan does. Where the toolchain's AddressSanitizer
-    # hangs, it says so and runs UndefinedBehaviorSanitizer alone, in its own build and dependency folders.
+    # hangs, it says so and runs UndefinedBehaviorSanitizer alone, in its own build and dependency folders,
+    # unless EQ1_REQUIRE_ASAN=1 asks for AddressSanitizer: then it fails.
     local sanitizers=address,undefined name=asan
     if ! asan_starts; then
+        if [ "${EQ1_REQUIRE_ASAN:-}" = 1 ]; then
+            echo "AddressSanitizer is required (EQ1_REQUIRE_ASAN=1) but hangs on this toolchain: failing rather than running UndefinedBehaviorSanitizer alone" >&2
+            return 1
+        fi
         echo "AddressSanitizer skipped: running the tests under UndefinedBehaviorSanitizer only" >&2
         sanitizers=undefined name=ubsan
     fi
