@@ -48,9 +48,19 @@ public:
             return;
         float* left = channels[0];
         float* right = channels[1];
-        for (int i = 0; i < numSamples; ++i)
+        // Each amount glides while any moves; once all have settled, next() would return each one's goal
+        // exactly, so the rest is mixed with those as constants, sample for sample the same.
+        int i = 0;
+        for (; i < numSamples && ! settled(); ++i)
         {
             const double ll = amounts[0].next(), lr = amounts[1].next(), rl = amounts[2].next(), rr = amounts[3].next();
+            const double l = left[i], r = right[i];
+            left[i] = static_cast<float> (ll * l + lr * r);
+            right[i] = static_cast<float> (rl * l + rr * r);
+        }
+        const double ll = amounts[0].value(), lr = amounts[1].value(), rl = amounts[2].value(), rr = amounts[3].value();
+        for (; i < numSamples; ++i)
+        {
             const double l = left[i], r = right[i];
             left[i] = static_cast<float> (ll * l + lr * r);
             right[i] = static_cast<float> (rl * l + rr * r);
@@ -79,7 +89,8 @@ private:
     {
         if (! moving() && amounts[0].value() == 1.0)
             return;
-        for (int i = 0; i < numSamples; ++i)
+        int i = 0;
+        for (; i < numSamples && ! settled(); ++i)
         {
             for (size_t a = 1; a < amounts.size(); ++a)
                 amounts[a].next();
@@ -87,11 +98,21 @@ private:
             for (int ch = 0; ch < channelCount; ++ch)
                 channels[ch][i] = static_cast<float> (gain * channels[ch][i]);
         }
+        const double gain = amounts[0].value();
+        for (int ch = 0; ch < channelCount; ++ch)
+            for (int n = i; n < numSamples; ++n)
+                channels[ch][n] = static_cast<float> (gain * channels[ch][n]);
     }
 
     bool moving() const
     {
         return std::any_of (amounts.begin(), amounts.end(), [] (const Smoother& amount) { return amount.isMoving(); });
+    }
+
+    // Every amount at rest on its goal, so stepping it would change nothing.
+    bool settled() const
+    {
+        return std::all_of (amounts.begin(), amounts.end(), [] (const Smoother& amount) { return amount.isSettled(); });
     }
 
     bool isIdentity() const

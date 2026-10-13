@@ -14,7 +14,6 @@ EditorTick::EditorTick (juce::AudioProcessor& p) : processor (p)
 EditorTick::~EditorTick()
 {
     processor.removeListener (this);
-    cancelPendingUpdate();
     stopTimer();
     clients.call ([] (Client& client) { client.source = nullptr; });
 }
@@ -35,7 +34,7 @@ void EditorTick::audioProcessorParameterChanged (juce::AudioProcessor*, int, flo
     if (juce::MessageManager::getInstance()->isThisTheMessageThread())
         wake();
     else
-        triggerAsyncUpdate();
+        changedOffThread.store (true, std::memory_order_relaxed);
 }
 
 void EditorTick::runAt (int hz)
@@ -54,8 +53,11 @@ void EditorTick::timerCallback()
     lastTickMs = now;
     // A change a Client makes while ticking is one the next tick shows.
     woken = false;
+    // A change from another thread since the last tick: this tick shows it, and the next comes at
+    // activeHz, so automation that keeps changing is followed at activeHz as an edit is.
+    const bool changedElsewhere = changedOffThread.exchange (false, std::memory_order_relaxed);
     clients.call ([seconds] (Client& client) { client.tick (seconds); });
-    bool active = woken || staple::Tween::numberEasing() > 0;
+    bool active = woken || changedElsewhere || staple::Tween::numberEasing() > 0;
     clients.call ([&active] (Client& client) { active = active || client.isActive(); });
     runAt (active ? activeHz : idleHz);
 }

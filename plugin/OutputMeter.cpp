@@ -2,6 +2,7 @@
 
 #include "Accessibility.h"
 #include "PluginProcessor.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
 
 namespace eq1
@@ -69,6 +70,10 @@ OutputMeter::OutputMeter (PluginProcessor& p) : EditorTick::Client (static_cast<
     // Tab reaches the Clip Lights, which Space or Return puts out; a click leaves focus where it was.
     setWantsKeyboardFocus (true);
     setMouseClickGrabsKeyboardFocus (false);
+    // The peak held since the last editor closed is old: it is dropped, but an over in it still
+    // lights its Clip Light. The RMS is the last 300 ms whenever it is read.
+    for (int ch = 0; ch < processor.outputLevelChannels(); ++ch)
+        processor.readOutputLevel (ch);
     tick (1.0 / EditorTick::activeHz);
 }
 
@@ -148,10 +153,8 @@ void OutputMeter::paint (juce::Graphics& g)
 
     // The gradient is fixed to the scale, not to the bar's height: meter1 at the bottom, meter2 at
     // -16 dBFS, meter3 at -6 dBFS and meterClip from 0 dBFS up.
-    juce::ColourGradient gradient (colour::meter1, 0.0f, yOf (bottomDb), colour::meterClip, 0.0f, yOf (0.0), false);
     const auto stop = [] (double db) { return (db - bottomDb) / (0.0 - bottomDb); };
-    gradient.addColour (stop (-16.0), colour::meter2);
-    gradient.addColour (stop (-6.0), colour::meter3);
+    const auto gradient = staple::meterGradient (yOf (bottomDb), yOf (0.0), stop (-16.0), stop (-6.0));
 
     for (int ch = 0; ch < numChannels; ++ch)
     {

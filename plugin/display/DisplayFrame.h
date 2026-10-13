@@ -2,6 +2,7 @@
 
 #include "../AnalyzerSettings.h"
 #include "../AnalyzerSpectrum.h"
+#include "../AssumedSampleRate.h"
 #include "../staple/Tokens.h"
 
 #include "eq1/Settings.h"
@@ -26,7 +27,7 @@ struct DisplayFrame
     bool dragging = false; // the selected Bands are being dragged
     std::optional<juce::Rectangle<float>> marquee;
     bool allInUseMessage = false; // "All 24 Bands are in use"
-    double sampleRate = 48000.0;
+    double sampleRate = assumedSampleRate;
     bool mono = false;
     std::array<float, numBandSlots> hover {}; // each Band's hover fade, 0 to 1
     float globalBypass = 0.0f;                 // Global Bypass's fade, 0 to 1

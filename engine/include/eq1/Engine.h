@@ -37,17 +37,17 @@ inline constexpr double levelFloorDb = -150.0;
 struct OutputLevel
 {
     double peakDb = levelFloorDb; // sample peak since the last read
-    double rmsDb = levelFloorDb;  // over the last 300 ms
+    double rmsDb = levelFloorDb;  // over the last 300 ms, rounded up to whole 16-sample runs
 };
 
-// The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis(), liveGainDb(),
+// The DSP Engine. prepare() may allocate; setSettings(), process(), readAnalysis(), skipAnalysis(), liveGainDb(),
 // outputLevelChannels(), readOutputLevel() and readDetectionLevel() never allocate, lock or do I/O. process() flushes
 // subnormal numbers to zero, whatever the caller's floating-point mode, and leaves that mode as it
 // found it.
 //
 // Threads: process() runs on the audio thread. setSettings() may run on another thread, but only
 // one thread at a time may call it; the newest settings are taken at the start of each process().
-// readAnalysis() may run on one reader thread, and readOutputLevel() and readDetectionLevel() each on
+// readAnalysis() and skipAnalysis() may run on one reader thread, and readOutputLevel() and readDetectionLevel() each on
 // one reader thread, through any prepare(): a re-prepare at another sample rate or channel count
 // never frees or moves what a reader touches.
 class Engine
@@ -69,6 +69,11 @@ public:
     // Copies up to maxSamples of the tap's mono signal, oldest first, and returns how many were copied.
     // Called from one reader thread while process() runs on the audio thread.
     int readAnalysis (AnalysisTap tap, float* destination, int maxSamples);
+
+    // Drops what the tap holds, so the next readAnalysis() copies only what process() pushed after
+    // this: a reader starting afresh, the editor opening, sees current audio rather than what the tap
+    // kept while nothing read it. From readAnalysis()'s reader thread.
+    void skipAnalysis (AnalysisTap tap);
 
     // How many samples a tap holds between reads: the reader's buffer is this big. Safe to call from
     // any thread.
@@ -97,6 +102,11 @@ public:
     // once per snapshot that differs from the settings it plays. A snapshot equal to them is skipped,
     // so a block with no edits does no settings work. Safe to call from any thread, for tests.
     std::uint64_t settingsApplied() const;
+
+    // How many sections' passes over a piece of a run the Bands have skipped since prepare(), each one
+    // exactly the identity (an unsplit resonant shelf's second biquad) with nothing in its state
+    // (docs/performance.md, "Identity sections"). Safe to call from any thread, for tests.
+    std::uint64_t sectionsSkipped() const;
 
 private:
     struct Impl;

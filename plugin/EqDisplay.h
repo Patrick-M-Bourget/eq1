@@ -11,6 +11,8 @@
 #include "display/DisplayGeometry.h"
 #include "display/EdgeFadeLayer.h"
 #include "display/GhostLayer.h"
+#include "display/GridLayer.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -180,7 +182,7 @@ private:
 
     PluginProcessor& processor;
     BandEditing& editing;
-    parameters::OutputValues output; // Global Bypass, read each frame
+    const parameters::OutputValues& output; // Global Bypass, read each frame
 
     AnalyzerSpectrum preEq, postEq, sidechain;
     AnalyzerSettings analyzer; // taken once a frame
@@ -227,7 +229,6 @@ private:
     float ghostFade = 0.0f;                    // the ghost Bell's fade in, from when it appears
     std::array<float, numBandSlots> hoverFades {};
     float globalBypassFade = 0.0f;
-    juce::uint32 lastFadeStep = 0;
     bool isGlobalBypassOn() const;
 
     // The Hover Card, in the editor's overlay layer so it draws over the Band panel. It shows once the
@@ -256,8 +257,14 @@ private:
     display::EdgeFadeOverlay edgeFade;
     std::optional<EdgeFadeFor> edgeFadeFor;
     const display::EdgeFadeOverlay& edgeFadeAt (float scale);
-    // Moves every fade on by the time since the last step; true while any of them moved.
-    bool stepFades();
+    // The labels, each drawn once into an image and from it on every frame until it changes
+    // (display::CachedLabels): the grid's, and the Analyzer's dB scale.
+    display::CachedLabels gridLabelImages, analyzerLabelImages;
+    // The handles' shadows, each drawn once per size, scale and place within a pixel.
+    staple::SoftShadowCache handleShadows;
+    // Moves every fade on by seconds, the tick's (EditorTick::Client::tick: at most 0.25 s after a
+    // stall); true while any of them moved.
+    bool stepFades (double seconds);
 };
 
 } // namespace eq1

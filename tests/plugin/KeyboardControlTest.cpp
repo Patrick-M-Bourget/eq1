@@ -460,11 +460,11 @@ TEST_CASE ("Arrow keys move the display's selection together, and it stops toget
 
     for (int i = 0; i < 12; ++i)
         host.press (right); // Band 2 reaches 30 kHz after seven
-    CHECK_THAT (host.value (2, "frequency"), WithinAbs (30000.0, 0.5));
-    CHECK_THAT (host.value (1, "frequency"), WithinAbs (30000.0 / 20000.0 * 1000.0, 0.5));
+    CHECK_THAT (host.value (2, "frequency"), WithinAbs (eq1::parameterRanges::frequency.high, 0.5));
+    CHECK_THAT (host.value (1, "frequency"), WithinAbs (eq1::parameterRanges::frequency.high / 20000.0 * 1000.0, 0.5));
     for (int i = 0; i < 4; ++i)
         host.press (up); // Band 2 reaches +30 dB after two
-    CHECK_THAT (host.value (2, "gain"), WithinAbs (30.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (eq1::parameterRanges::gain.high, 1.0e-4));
     CHECK_THAT (host.value (1, "gain"), WithinAbs (4.0, 1.0e-4));
 
     host.set (2, "frequency", 12.0f);
@@ -472,9 +472,9 @@ TEST_CASE ("Arrow keys move the display's selection together, and it stops toget
     host.settle();
     for (int i = 0; i < 6; ++i)
         host.press (left);
-    CHECK_THAT (host.value (2, "frequency"), WithinAbs (10.0, 0.01));
+    CHECK_THAT (host.value (2, "frequency"), WithinAbs (eq1::parameterRanges::frequency.low, 0.01));
     host.press (down);
-    CHECK_THAT (host.value (2, "gain"), WithinAbs (-30.0, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (eq1::parameterRanges::gain.low, 1.0e-4));
     CHECK_THAT (host.value (1, "gain"), WithinAbs (3.8, 1.0e-4));
 }
 

@@ -44,17 +44,30 @@ void Band::Chain::Lines::prepare (int numChannels)
     count = 0;
 }
 
-void Band::Chain::run (Lines& lines, const Piece& piece)
+bool Band::Chain::skips (size_t s, const Lines& lines, const Piece& piece) const
+{
+    if (! isIdentity (cascade.sections[s]) || (piece.from != nullptr && ! isIdentity (piece.from->sections[s])))
+        return false;
+    for (size_t line = 0; line < static_cast<size_t> (lines.count); ++line)
+        if (! states[lines.states[line]][s].isClear())
+            return false;
+    return true;
+}
+
+int Band::Chain::run (Lines& lines, const Piece& piece)
 {
     if (lines.count == 2)
-    {
-        runLanes (lines, piece);
-        return;
-    }
+        return runLanes (lines, piece);
     const auto numLines = static_cast<size_t> (lines.count);
     const auto numSamples = static_cast<size_t> (piece.numSamples);
+    int skipped = 0;
     for (size_t s = 0; s < static_cast<size_t> (cascade.count); ++s)
     {
+        if (skips (s, lines, piece))
+        {
+            ++skipped;
+            continue;
+        }
         const auto& to = cascade.sections[s];
         if (piece.from == nullptr)
         {
@@ -70,20 +83,27 @@ void Band::Chain::run (Lines& lines, const Piece& piece)
         const auto& start = piece.from->sections[s];
         for (size_t i = 0; i < numSamples; ++i)
         {
-            const auto coefficients = interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / maxSubBlock);
+            const auto coefficients = interpolate (start, to, piece.reached (i));
             for (size_t line = 0; line < numLines; ++line)
                 lines.samples[line][i] = states[lines.states[line]][s].process (coefficients, lines.samples[line][i]);
         }
     }
+    return skipped;
 }
 
-void Band::Chain::runLanes (Lines& lines, const Piece& piece)
+int Band::Chain::runLanes (Lines& lines, const Piece& piece)
 {
     float* line0 = lines.samples[0];
     float* line1 = lines.samples[1];
     const auto numSamples = static_cast<size_t> (piece.numSamples);
+    int skipped = 0;
     for (size_t s = 0; s < static_cast<size_t> (cascade.count); ++s)
     {
+        if (skips (s, lines, piece))
+        {
+            ++skipped;
+            continue;
+        }
         auto& state0 = states[lines.states[0]][s];
         auto& state1 = states[lines.states[1]][s];
         Double2 s1 = make2<Double2> (state0.s1, state1.s1), s2 = make2<Double2> (state0.s2, state1.s2);
@@ -105,14 +125,15 @@ void Band::Chain::runLanes (Lines& lines, const Piece& piece)
             // Designed once per run and interpolated by position in it, as run() does for its lines.
             const auto& start = piece.from->sections[s];
             for (size_t i = 0; i < numSamples; ++i)
-                step (interpolate (start, to, (piece.position + static_cast<double> (i) + 1.0) / maxSubBlock), i);
+                step (interpolate (start, to, piece.reached (i)), i);
         }
         state0 = { lane0 (s1), lane0 (s2) };
         state1 = { lane1 (s1), lane1 (s2) };
     }
+    return skipped;
 }
 
-void Band::Chain::runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece)
+int Band::Chain::runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece)
 {
     lines.count = 0;
     std::optional<bool> midSide;
@@ -125,14 +146,15 @@ void Band::Chain::runPlaced (float* const* channels, int numChannels, Lines& lin
         },
         [&] (bool mid) { midSide = mid; });
     if (midSide)
-        runMidSide (channels, lines, piece, *midSide);
-    else if (lines.count > 0)
-        run (lines, piece);
+        return runMidSide (channels, lines, piece, *midSide);
+    if (lines.count > 0)
+        return run (lines, piece);
+    return 0;
 }
 
-void Band::Chain::runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid)
+int Band::Chain::runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid)
 {
-    std::array<float, maxSubBlock> midSamples, sideSamples;
+    std::array<float, runSamples> midSamples, sideSamples;
     float* left = channels[0];
     float* right = channels[1];
     const auto numSamples = static_cast<size_t> (piece.numSamples);
@@ -144,12 +166,13 @@ void Band::Chain::runMidSide (float* const* channels, Lines& lines, const Piece&
     lines.samples[0] = mid ? midSamples.data() : sideSamples.data();
     lines.states[0] = 0;
     lines.count = 1;
-    run (lines, piece);
+    const int skippedSections = run (lines, piece);
     for (size_t i = 0; i < numSamples; ++i)
     {
         left[i] = decodeLeft (midSamples[i], sideSamples[i]);
         right[i] = decodeRight (midSamples[i], sideSamples[i]);
     }
+    return skippedSections;
 }
 
 void Band::prepare (double newSampleRate, int numChannels)
@@ -179,6 +202,7 @@ void Band::prepare (double newSampleRate, int numChannels)
     startedRun = noRun;
     // A Dynamic Band starts the new session at its Gain, as its detector does.
     dynamicOffset = designedOffset = 0.0;
+    skipped.store (0, std::memory_order_relaxed);
 }
 
 void Band::setSettings (const BandSettings& settings, bool snap)
@@ -230,7 +254,7 @@ void Band::crossfadeTo (const Setup& setup)
 // Between the run's start and end as the coefficients are: near enough, for the display.
 double Band::liveGainDb() const
 {
-    return runStartGainDb + (runEndGainDb - runStartGainDb) * runPosition / maxSubBlock;
+    return runStartGainDb + (runEndGainDb - runStartGainDb) * runPosition / runSamples;
 }
 
 double Band::targetGainDb() const
@@ -267,9 +291,9 @@ void Band::startRun()
     if (runGliding)
     {
         runFrom = current.cascade;
-        logFrequency.skip (maxSubBlock);
-        gain.skip (maxSubBlock);
-        logQ.skip (maxSubBlock);
+        logFrequency.skip (runSamples);
+        gain.skip (runSamples);
+        logQ.skip (runSamples);
         design();
     }
 }
@@ -284,25 +308,24 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
     if (isSilent())
         return;
 
-    if (position == 0)
+    if (position == 0 || joinedLate)
     {
         // A chain a non-finite sample got into starts afresh at this run's filter, with no glide from
-        // the one it lost: the output is finite again from here, and its detector's offset, which
-        // starts afresh too, applies at once.
+        // the one it lost, whether it saw the run's start or joins it late (a detector whose Sidechain
+        // dropped out with a bad sample in it): the output is finite again from here, and its
+        // detector's offset, which starts afresh too, applies at once. A cleared section is clear, so
+        // it may be skipped (Chain::skips).
         bool recovering = current.clearNonFinite();
         if (shapeCrossfade.isMoving() && previous.clearNonFinite())
             recovering = true;
-        startRun();
-        if (recovering)
+        if (position == 0)
+            startRun();
+        // One that joins late plays the filter last designed until the next run, as if snapped.
+        if (recovering || joinedLate)
         {
             runGliding = false;
             runStartGainDb = runEndGainDb;
         }
-    }
-    else if (joinedLate)
-    {
-        runGliding = false;
-        runStartGainDb = runEndGainDb;
     }
 
     const bool fading = mix.isMoving();
@@ -311,7 +334,7 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
 
     if (! fading && ! crossfading && mix.value() == 1.0)
     {
-        current.runPlaced (channels, numChannels, lines, piece);
+        countSkipped (current.runPlaced (channels, numChannels, lines, piece));
         return;
     }
 
@@ -320,18 +343,18 @@ void Band::process (float* const* channels, int numChannels, std::uint64_t run, 
         for (int ch = 0; ch < numChannels; ++ch)
             std::copy (channels[ch], channels[ch] + numSamples, to[static_cast<size_t> (ch)]);
     };
-    const auto sampleOf = [] (const std::vector<std::array<float, maxSubBlock>>& buffers, int ch, int i) {
+    const auto sampleOf = [] (const std::vector<std::array<float, runSamples>>& buffers, int ch, int i) {
         return buffers[static_cast<size_t> (ch)][static_cast<size_t> (i)];
     };
     copyInput (wetChannels);
-    current.runPlaced (wetChannels.data(), numChannels, lines, piece);
+    countSkipped (current.runPlaced (wetChannels.data(), numChannels, lines, piece));
     // The filtered signal the dry one mixes with: the current chain's, or while crossfading, the
     // previous chain's moving to it (left in previousWet).
     const auto* filtered = &wet;
     if (crossfading)
     {
         copyInput (previousWetChannels);
-        previous.runPlaced (previousWetChannels.data(), numChannels, lines, { position, numSamples });
+        countSkipped (previous.runPlaced (previousWetChannels.data(), numChannels, lines, { position, numSamples }));
         crossfade<float> (shapeCrossfade, previousWetChannels.data(), numChannels, numSamples, [&] (int ch, int i) { return sampleOf (wet, ch, i); });
         filtered = &previousWet;
     }

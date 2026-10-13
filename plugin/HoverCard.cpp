@@ -5,11 +5,13 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "ShapeIcon.h"
+#include "ShowMenu.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
 #include "staple/controls/Knob.h"
-#include "staple/controls/Overlay.h"
 #include "staple/controls/TypeIn.h"
 
 #include <algorithm>
@@ -85,11 +87,9 @@ juce::String HoverCard::Value::text()
     switch (kind)
     {
         case Kind::frequency:
-            if (value >= 1000.0)
-                return juce::String (value / 1000.0, 2) + " kHz";
-            return juce::String (value, value < 100.0 ? 1 : 0) + " Hz";
+            return valueText::frequency (value, { .belowHundredHz = 1, .hz = 0, .kHz = 2, .fromTenKHz = 2 });
         case Kind::gain:
-            return (value > 0.0 ? "+" : "") + juce::String (value, 2) + " dB";
+            return valueText::signedDb (value, { .decimals = 2 });
         case Kind::q:
             return "Q " + juce::String (value, value < 1.0 ? 3 : 2);
     }
@@ -387,7 +387,7 @@ void HoverCard::attach (int newSlot)
     {
         // No reset gesture: a double-click types a value.
         value->setDoubleClickReturnValue (false, 0.0);
-        value->describe (*state.getParameter (id));
+        value->describe (parameters::lookUp (state, id));
     }
 
     const auto band = "Band " + juce::String (slot);
@@ -447,11 +447,8 @@ void HoverCard::openMenu()
     if (slot == 0)
         return;
     menuOpen = true;
-    auto popup = menu();
-    // A menu is a window of its own: it draws with the editor's look only when given it.
-    popup.setLookAndFeel (&getLookAndFeel());
     const juce::Component::SafePointer<HoverCard> safe (this);
-    popup.showMenuAsync (juce::PopupMenu::Options().withDeletionCheck (*this).withTargetComponent (&more), [safe] (int) {
+    showMenu (menu(), *this, juce::PopupMenu::Options().withTargetComponent (&more), [safe] (int) {
         if (safe != nullptr)
             safe->menuOpen = false;
     });

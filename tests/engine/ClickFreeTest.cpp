@@ -244,7 +244,7 @@ TEST_CASE ("A resonant shelf swept across its split does not zipper")
     CAPTURE (host.sampleRate, host.blockSize, static_cast<int> (shelf), slope);
     const auto output = playTone (host, [&] (double time, Settings& s) {
         const auto sweep = [time] (double speed) { return 0.5 + 0.5 * std::sin (time * speed); };
-        const double highest = std::min (0.9 * host.sampleRate / 2.0, 30000.0); // Frequency's range ends at 30 kHz
+        const double highest = std::min (0.9 * host.sampleRate / 2.0, parameterRanges::frequency.high);
         s.bands[0] = bellBand (highest / 4.5 * std::pow (4.5, sweep (5.0)), -24.0 + 48.0 * sweep (7.0), 0.5 * std::pow (80.0, sweep (11.0)));
         s.bands[0].shape = shelf;
         s.bands[0].slope = slope;
@@ -415,4 +415,36 @@ TEST_CASE ("Jumps in Output Pan, and switching Pan Mode, do not click")
     });
     CHECK (discontinuity (output[0], host.sampleRate) < threshold);
     CHECK (discontinuity (output[1], host.sampleRate) < threshold);
+}
+
+TEST_CASE ("A Free Detection Range moved during Detection Audition does not click")
+{
+    const auto host = anyHost();
+    const int move = GENERATE (0, 1, 2); // swept block by block, jumping, or switched to Band and back
+    CAPTURE (host.sampleRate, host.blockSize, move);
+    // Detection Audition plays the tone through the Free range's limits, which move through it.
+    const auto output = playTone (host, [move] (double time, Settings& s) {
+        const auto sweep = [time] (double speed) { return 0.5 + 0.5 * std::sin (time * speed); };
+        s.bands[0] = dynamicBellOnTone (50.0);
+        s.bands[0].detectionRange = DetectionRange::Free;
+        s.auditionSlot = 1;
+        switch (move)
+        {
+            case 0:
+                s.bands[0].detectionLow = 40.0 * std::pow (12.0, sweep (15.0));
+                s.bands[0].detectionHigh = 120.0 * std::pow (20.0, sweep (11.0));
+                break;
+            case 1:
+                s.bands[0].detectionLow = alternating (time) ? 400.0 : 30.0;
+                s.bands[0].detectionHigh = alternating (time) ? 2000.0 : 150.0;
+                break;
+            default:
+                s.bands[0].detectionLow = 120.0;
+                s.bands[0].detectionHigh = 400.0;
+                if (alternating (time))
+                    s.bands[0].detectionRange = DetectionRange::Band;
+                break;
+        }
+    });
+    CHECK (discontinuity (output, host.sampleRate) < threshold);
 }

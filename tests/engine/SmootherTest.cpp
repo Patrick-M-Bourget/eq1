@@ -34,7 +34,7 @@ TEST_CASE ("Smoother::skip over a run, and over any other length, equals the clo
     const double timeConstant = GENERATE (glideTimeConstantSeconds * 44100.0, glideTimeConstantSeconds * 48000.0,
                                           glideTimeConstantSeconds * 192000.0, 3.0);
     const double tolerance = GENERATE (1.0e-6, 1.0e-4);
-    const int length = GENERATE (Band::maxSubBlock, 7);
+    const int length = GENERATE (runSamples, 7);
     CAPTURE (timeConstant, tolerance, length);
 
     Smoother smoother;
@@ -53,4 +53,30 @@ TEST_CASE ("Smoother::skip over a run, and over any other length, equals the clo
         REQUIRE (smoother.value() == reference.stage2);
         REQUIRE (smoother.isMoving() == (reference.stage2 != reference.goal));
     }
+}
+
+TEST_CASE ("A settled Smoother returns its goal exactly from next(); one whose first stage still moves isn't settled")
+{
+    Smoother smoother;
+    smoother.configure (336.0, 1.0e-6);
+    smoother.reset (0.7);
+    REQUIRE (smoother.isSettled());
+    for (int i = 0; i < 100; ++i)
+        CHECK (smoother.next() == 0.7);
+
+    // Gliding up, then retargeted to where the second stage is: it isn't moving by its value, but its
+    // first stage is ahead, so next() still changes it.
+    smoother.setTarget (1.0);
+    for (int i = 0; i < 50; ++i)
+        smoother.next();
+    smoother.setTarget (smoother.value());
+    CHECK_FALSE (smoother.isMoving());
+    CHECK_FALSE (smoother.isSettled());
+    const double before = smoother.value();
+    CHECK (smoother.next() != before);
+
+    while (! smoother.isSettled())
+        smoother.next();
+    const double goal = smoother.value();
+    CHECK (smoother.next() == goal);
 }

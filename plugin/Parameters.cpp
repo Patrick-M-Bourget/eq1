@@ -16,10 +16,10 @@ juce::String slotName (int slot, const char* control) { return "Band " + juce::S
 
 // A range that moves evenly in log space, as Frequency and Q are heard. The maths runs in double
 // so a value set by the host survives save and reload exactly.
-juce::NormalisableRange<float> logRange (float minimum, float maximum)
+juce::NormalisableRange<float> logRange (ParameterRange range)
 {
-    return { minimum,
-             maximum,
+    return { static_cast<float> (range.low),
+             static_cast<float> (range.high),
              [] (float start, float end, float normalised) {
                  return static_cast<float> (start * std::pow (double { end } / start, double { normalised }));
              },
@@ -29,13 +29,19 @@ juce::NormalisableRange<float> logRange (float minimum, float maximum)
              [] (float, float, float value) { return value; } };
 }
 
+// A range that moves evenly.
+juce::NormalisableRange<float> linearRange (ParameterRange range)
+{
+    return { static_cast<float> (range.low), static_cast<float> (range.high) };
+}
+
 // Output Gain: -inf (its silent bottom) to +36 dB, skewed so 0 dB sits at the centre. The skew's float maths
 // misses 0 dB by a few float steps (the centre reads 1.4e-6 dB), so anything that close is exactly 0 dB:
 // the default passes audio through bit for bit.
 juce::NormalisableRange<float> outputGainRange()
 {
     constexpr float snapToZeroDb = 1.0e-4f; // about 20 float steps either side of the centre
-    juce::NormalisableRange<float> skewed (outputGainSilentDb, 36.0f);
+    juce::NormalisableRange<float> skewed = linearRange (parameterRanges::outputGain);
     skewed.setSkewForCentre (0.0f);
     return { skewed.start,
              skewed.end,
@@ -121,27 +127,26 @@ const juce::StringArray& panModeNames()
 
 juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
-    // Ranges match Pro-Q 4: Frequency 10 Hz to 30 kHz, Gain +/-30 dB, Q 0.025 to 40. Slope is one continuous
-    // 0 to 96 dB/oct range shared by every Shape, and Brickwall a separate switch (ADR 0003).
-    // Dynamic Range is +/-30 dB as in Pro-Q 4; Threshold -60 to 0 dB, with Auto a separate switch
-    // (ADR 0003, Consequences), on by default; Attack and Release 0 to 100%, Auto at 50%. The Free
-    // Detection Range's limits span Frequency's range, from 20 Hz to 20 kHz by default.
+    // The ranges are Pro-Q 4's (eq1/Settings.h, parameterRanges). Slope is one continuous range shared by
+    // every Shape, and Brickwall a separate switch (ADR 0003). Threshold's Auto is a separate switch
+    // (ADR 0003, Consequences), on by default; Attack and Release are Auto at 50%. The Free Detection
+    // Range's limits span Frequency's range, from 20 Hz to 20 kHz by default.
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
     for (int slot = 1; slot <= numBandSlots; ++slot)
     {
         layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { frequencyId (slot), 1 },
                                                                  slotName (slot, "Frequency"),
-                                                                 logRange (10.0f, 30000.0f),
+                                                                 logRange (parameterRanges::frequency),
                                                                  1000.0f,
                                                                  withText (1, "Hz")),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { gainId (slot), 1 },
                                                                  slotName (slot, "Gain"),
-                                                                 juce::NormalisableRange<float> (-30.0f, 30.0f),
+                                                                 linearRange (parameterRanges::gain),
                                                                  0.0f,
                                                                  withText (2, "dB")),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { qId (slot), 1 },
                                                                  slotName (slot, "Q"),
-                                                                 logRange (0.025f, 40.0f),
+                                                                 logRange (parameterRanges::q),
                                                                  1.0f,
                                                                  withText (3)),
                     std::make_unique<juce::AudioParameterBool> (juce::ParameterID { inUseId (slot), 1 },
@@ -156,7 +161,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                   0),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { slopeId (slot), 1 },
                                                                  slotName (slot, "Slope"),
-                                                                 juce::NormalisableRange<float> (0.0f, 96.0f),
+                                                                 linearRange (parameterRanges::slope),
                                                                  12.0f,
                                                                  withText (1, "dB/oct")),
                     std::make_unique<juce::AudioParameterBool> (juce::ParameterID { brickwallId (slot), 1 },
@@ -168,12 +173,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                   0),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { dynamicRangeId (slot), 1 },
                                                                  slotName (slot, "Dynamic Range"),
-                                                                 juce::NormalisableRange<float> (-30.0f, 30.0f),
+                                                                 linearRange (parameterRanges::dynamicRange),
                                                                  0.0f,
                                                                  withText (2, "dB")),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { thresholdId (slot), 1 },
                                                                  slotName (slot, "Threshold"),
-                                                                 juce::NormalisableRange<float> (-60.0f, 0.0f),
+                                                                 linearRange (parameterRanges::threshold),
                                                                  -30.0f,
                                                                  withText (1, "dB")),
                     std::make_unique<juce::AudioParameterBool> (juce::ParameterID { thresholdAutoId (slot), 1 },
@@ -181,12 +186,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                 true),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { attackId (slot), 1 },
                                                                  slotName (slot, "Attack"),
-                                                                 juce::NormalisableRange<float> (0.0f, 100.0f),
+                                                                 linearRange (parameterRanges::timing),
                                                                  50.0f,
                                                                  timingText()),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { releaseId (slot), 1 },
                                                                  slotName (slot, "Release"),
-                                                                 juce::NormalisableRange<float> (0.0f, 100.0f),
+                                                                 linearRange (parameterRanges::timing),
                                                                  50.0f,
                                                                  timingText()),
                     std::make_unique<juce::AudioParameterBool> (juce::ParameterID { dynamicsBypassId (slot), 1 },
@@ -202,18 +207,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                                   0),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { detectionLowId (slot), 1 },
                                                                  slotName (slot, "Detection Low"),
-                                                                 logRange (10.0f, 30000.0f),
+                                                                 logRange (parameterRanges::frequency),
                                                                  20.0f,
                                                                  withText (1, "Hz")),
                     std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { detectionHighId (slot), 1 },
                                                                  slotName (slot, "Detection High"),
-                                                                 logRange (10.0f, 30000.0f),
+                                                                 logRange (parameterRanges::frequency),
                                                                  20000.0f,
                                                                  withText (1, "Hz")));
     }
 
-    // Gain Scale 0 to 200%, Output Gain -inf to +36 dB as in Pro-Q 4, with 0 dB at the centre and its
-    // bottom (-80 dB) silent; Output Pan -100% (left, or Mid) to 100% (right, or Side).
+    // Output Gain has 0 dB at the centre and its bottom silent; Output Pan goes from left (or Mid) to
+    // right (or Side).
     const auto outputGainText = juce::AudioParameterFloatAttributes()
                                     .withLabel ("dB")
                                     .withStringFromValueFunction ([] (float value, int) {
@@ -224,14 +229,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                     });
     layout.add (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { gainScaleId, 1 },
                                                              "Gain Scale",
-                                                             juce::NormalisableRange<float> (0.0f, 200.0f),
+                                                             linearRange (parameterRanges::gainScale),
                                                              100.0f,
                                                              withText (1, "%")),
                 std::make_unique<juce::AudioParameterBool> (juce::ParameterID { autoGainId, 1 }, "Auto Gain", false),
                 std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { outputGainId, 1 }, "Output Gain", outputGainRange(), 0.0f, outputGainText),
                 std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { outputPanId, 1 },
                                                              "Output Pan",
-                                                             juce::NormalisableRange<float> (-100.0f, 100.0f),
+                                                             linearRange (parameterRanges::outputPan),
                                                              0.0f,
                                                              withText (1, "%")),
                 std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { panModeId, 1 }, "Pan Mode", panModeNames(), 0),
@@ -248,6 +253,15 @@ void setTogether (const std::vector<NewValue>& values)
         parameter->setValueNotifyingHost (value);
     for (const auto& [parameter, value] : values)
         parameter->endChangeGesture();
+}
+
+juce::RangedAudioParameter& lookUp (juce::AudioProcessorValueTreeState& parameters, const juce::String& id)
+{
+    if (auto* found = parameters.getParameter (id))
+        return *found;
+    jassertfalse; // an id the layout doesn't have
+    static juce::AudioParameterFloat inert { juce::ParameterID { "inert", 1 }, {}, juce::NormalisableRange<float> { 0.0f, 1.0f }, 0.0f };
+    return inert;
 }
 
 SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int slot)
@@ -271,14 +285,14 @@ SlotValues SlotValues::of (juce::AudioProcessorValueTreeState& parameters, int s
 
 BandSettings SlotValues::read() const
 {
-    return { .inUse = inUse->load() >= 0.5f,
-             .bypass = bypass->load() >= 0.5f,
+    return { .inUse = isOn (inUse),
+             .bypass = isOn (bypass),
              .shape = static_cast<Shape> (juce::roundToInt (shape->load())),
              .frequency = frequency->load(),
              .gain = gain->load(),
              .q = q->load(),
              .slope = slope->load(),
-             .brickwall = brickwall->load() >= 0.5f,
+             .brickwall = isOn (brickwall),
              .placement = static_cast<StereoPlacement> (juce::roundToInt (placement->load())),
              .detectionSource = static_cast<DetectionSource> (juce::roundToInt (detectionSource->load())),
              .detectionRange = static_cast<DetectionRange> (juce::roundToInt (detectionRange->load())),
@@ -286,10 +300,10 @@ BandSettings SlotValues::read() const
              .detectionHigh = detectionHigh->load(),
              .dynamicRange = dynamicRange->load(),
              .threshold = threshold->load(),
-             .thresholdAuto = thresholdAuto->load() >= 0.5f,
+             .thresholdAuto = isOn (thresholdAuto),
              .attack = attack->load(),
              .release = release->load(),
-             .dynamicsBypass = dynamicsBypass->load() >= 0.5f };
+             .dynamicsBypass = isOn (dynamicsBypass) };
 }
 
 OutputValues OutputValues::of (juce::AudioProcessorValueTreeState& parameters)
@@ -304,12 +318,27 @@ void OutputValues::readInto (Settings& settings) const
 {
     const float outputGainDb = outputGain->load();
     settings.gainScale = gainScale->load() / 100.0;
-    settings.autoGain = autoGain->load() >= 0.5f;
+    settings.autoGain = isOn (autoGain);
     settings.outputGainDb = outputGainDb <= outputGainSilentDb ? -std::numeric_limits<double>::infinity() : outputGainDb;
     settings.outputPan = outputPan->load() / 100.0;
     settings.panMode = static_cast<PanMode> (juce::roundToInt (panMode->load()));
-    settings.phaseInvert = phaseInvert->load() >= 0.5f;
-    settings.globalBypass = globalBypass->load() >= 0.5f;
+    settings.phaseInvert = isOn (phaseInvert);
+    settings.globalBypass = isOn (globalBypass);
+}
+
+SettingsReader::SettingsReader (juce::AudioProcessorValueTreeState& parameters) : outputs (OutputValues::of (parameters))
+{
+    for (int slot = 1; slot <= numBandSlots; ++slot)
+        slots[static_cast<size_t> (slot - 1)] = SlotValues::of (parameters, slot);
+}
+
+Settings SettingsReader::read() const
+{
+    Settings settings;
+    for (size_t i = 0; i < slots.size(); ++i)
+        settings.bands[i] = slots[i].read();
+    outputs.readInto (settings);
+    return settings;
 }
 
 } // namespace eq1::parameters

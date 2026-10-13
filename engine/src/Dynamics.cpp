@@ -205,15 +205,15 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         return;
 
     const int detectionCount = detectionChannelCount = takeDetectionSignal (input, numChannels, sidechain, sidechainChannels, numSamples);
-    // A run is at most maxSubBlock samples, and finishRun() empties the levels at its end.
-    assert (runLevelCount + numSamples <= Band::maxSubBlock);
+    // A run is at most runSamples samples, and finishRun() empties the levels at its end.
+    assert (runLevelCount + numSamples <= runSamples);
     if (detectionCount == 0)
     {
         power = {}; // nothing heard: a Sidechain connected again starts afresh
         // The gain computer hears silence, so the Band returns to its Gain over the run.
         if (moving)
         {
-            const auto count = static_cast<size_t> (std::min (numSamples, Band::maxSubBlock - runLevelCount));
+            const auto count = static_cast<size_t> (std::min (numSamples, runSamples - runLevelCount));
             std::fill_n (runLevels.begin() + runLevelCount, count, nothingToHearDb);
             runLevelCount += static_cast<int> (count);
         }
@@ -243,7 +243,7 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         }
         const double level = levelOf (peakPower);
         loudest = std::max (loudest, level);
-        if (runLevelCount < Band::maxSubBlock)
+        if (runLevelCount < runSamples)
             runLevels[static_cast<size_t> (runLevelCount++)] = level;
         // The mean and variance of every level heard, until a rise time's worth has been: then
         // rising over about the rise time and falling over about the fall time.
@@ -297,8 +297,8 @@ double Dynamics::finishRun()
     if (sustain < movementRest)
         sustain = 0.0;
 
-    dynamicRangeGlide.skip (Band::maxSubBlock);
-    active.skip (Band::maxSubBlock);
+    dynamicRangeGlide.skip (runSamples);
+    active.skip (runSamples);
     return movement * dynamicRangeGlide.value() * active.value();
 }
 

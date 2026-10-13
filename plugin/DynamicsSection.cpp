@@ -2,10 +2,12 @@
 
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
-#include "staple/controls/Overlay.h"
+#include "staple/controls/ParseValue.h"
 
 #include <cmath>
 
@@ -19,16 +21,7 @@ namespace colour = tokens::colour;
 namespace layout = tokens::layout;
 
 // Threshold's top in dB; the fader's position above it is Auto.
-constexpr double thresholdTopDb = 0.0;
-
-// The meter's colours up a track of this height, from its bottom.
-juce::ColourGradient meterGradient (juce::Rectangle<float> track)
-{
-    juce::ColourGradient gradient (colour::meter1, 0.0f, track.getBottom(), colour::meterClip, 0.0f, track.getY(), false);
-    gradient.addColour (tokens::dynamics::meterStop2, colour::meter2);
-    gradient.addColour (tokens::dynamics::meterStop3, colour::meter3);
-    return gradient;
-}
+constexpr double thresholdTopDb = parameterRanges::threshold.high;
 } // namespace
 
 //==============================================================================
@@ -38,11 +31,13 @@ ThresholdFader::ThresholdFader (PluginProcessor& p)
     setSliderStyle (juce::Slider::LinearVertical);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     setHasFocusOutline (true);
-    setRange (-60.0, autoPosition, 0.1);
+    setRange (parameterRanges::threshold.low, autoPosition, 0.1);
     setDoubleClickReturnValue (true, autoPosition);
-    textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : juce::String (value, 1) + " dB"; };
+    textFromValueFunction = [] (double value) { return isAuto (value) ? juce::String ("Auto") : valueText::signedDb (value); };
     valueFromTextFunction = [] (const juce::String& text) {
-        return text.trim().equalsIgnoreCase ("Auto") ? autoPosition : juce::jmin (thresholdTopDb, text.getDoubleValue());
+        if (text.trim().equalsIgnoreCase ("Auto"))
+            return autoPosition;
+        return juce::jmin (thresholdTopDb, staple::parseValue (text, "dB").value_or (text.getDoubleValue()));
     };
     // Between 0 dB and Auto there are no values: a step up from 0 dB is Auto, a step down from Auto 0 dB.
     landStep = [] (double from, double to) {
@@ -99,7 +94,8 @@ void ThresholdFader::paint (juce::Graphics& g)
     {
         const juce::Graphics::ScopedSaveState saved (g);
         g.reduceClipRegion (shape);
-        const auto gradient = meterGradient (bar);
+        // The meter's colours up the whole track.
+        const auto gradient = staple::meterGradient (bar.getBottom(), bar.getY(), tokens::dynamics::meterStop2, tokens::dynamics::meterStop3);
         auto faint = gradient;
         faint.multiplyOpacity (tokens::dynamics::meterBehindAlpha);
         g.setGradientFill (faint);
@@ -112,11 +108,7 @@ void ThresholdFader::paint (juce::Graphics& g)
     const float thumbY = thumbCentreY (getValue());
     const auto thumb = juce::Rectangle<float> (static_cast<float> (getWidth()), static_cast<float> (layout::faderThumbHeight))
                            .withCentre ({ static_cast<float> (getWidth()) / 2.0f, thumbY });
-    staple::drawSoftShadow (g, thumb, tokens::size::r1, tokens::shadow::thumb);
-    g.setGradientFill (juce::ColourGradient::vertical (colour::thumbTop, thumb.getY(), colour::thumbBottom, thumb.getBottom()));
-    g.fillRoundedRectangle (thumb, tokens::size::r1);
-    g.setColour (colour::thumbHighlight);
-    g.fillRect (thumb.withHeight (1.0f).reduced (tokens::size::r1, 0.0f));
+    staple::drawPillThumb (g, thumb, tokens::size::r1, colour::thumbTop, colour::thumbBottom, tokens::size::r1);
     if (isAuto (getValue()))
     {
         g.setColour (colour::text1);
@@ -323,16 +315,16 @@ void DynamicsSection::show (int newSlot)
     attackAttachment = std::make_unique<SliderAttachment> (state, parameters::attackId (slot), attack);
     releaseAttachment = std::make_unique<SliderAttachment> (state, parameters::releaseId (slot), release);
     const auto attach = [&] (const juce::String& id, std::function<void()> shown) {
-        return std::make_unique<juce::ParameterAttachment> (*state.getParameter (id), [shown] (float) { shown(); });
+        return std::make_unique<juce::ParameterAttachment> (parameters::lookUp (state, id), [shown] (float) { shown(); });
     };
     thresholdAttachment = attach (parameters::thresholdId (slot), [this] { showThreshold(); });
     thresholdAutoAttachment = attach (parameters::thresholdAutoId (slot), [this] { showThreshold(); });
     detectionSourceAttachment = attach (parameters::detectionSourceId (slot), [this] { showChoices(); });
     detectionRangeAttachment = attach (parameters::detectionRangeId (slot), [this] { showChoices(); });
 
-    const auto name = [&state] (const juce::String& id) { return state.getParameter (id)->getName (100); };
-    attack.describe (*state.getParameter (parameters::attackId (slot)));
-    release.describe (*state.getParameter (parameters::releaseId (slot)));
+    const auto name = [&state] (const juce::String& id) { return parameters::lookUp (state, id).getName (100); };
+    attack.describe (parameters::lookUp (state, parameters::attackId (slot)));
+    release.describe (parameters::lookUp (state, parameters::releaseId (slot)));
     threshold.setTitle (name (parameters::thresholdId (slot)));
     detectionSource.setTitle (name (parameters::detectionSourceId (slot)));
     detectionRange->setTitle (name (parameters::detectionRangeId (slot)));
@@ -346,7 +338,7 @@ void DynamicsSection::showChoices()
     if (slot == 0)
         return;
     auto& state = processor.parameterState();
-    const auto chosen = [&state] (const juce::String& id) { return state.getParameter (id)->getValue() >= 0.5f; };
+    const auto chosen = [&state] (const juce::String& id) { return parameters::isOn (parameters::lookUp (state, id)); };
     detectionSource.setToggleState (chosen (parameters::detectionSourceId (slot)), juce::dontSendNotification);
     detectionRange->setFree (chosen (parameters::detectionRangeId (slot)));
 }
@@ -358,8 +350,8 @@ void DynamicsSection::showThreshold()
     // From the parameters themselves: while their listeners are told of a change, the raw values may
     // not have caught up yet.
     auto& state = processor.parameterState();
-    const auto& level = *state.getParameter (parameters::thresholdId (slot));
-    const bool automatic = state.getParameter (parameters::thresholdAutoId (slot))->getValue() >= 0.5f;
+    const auto& level = parameters::lookUp (state, parameters::thresholdId (slot));
+    const bool automatic = parameters::isOn (parameters::lookUp (state, parameters::thresholdAutoId (slot)));
     threshold.setValue (automatic ? ThresholdFader::autoPosition : level.convertFrom0to1 (level.getValue()), juce::dontSendNotification);
 }
 

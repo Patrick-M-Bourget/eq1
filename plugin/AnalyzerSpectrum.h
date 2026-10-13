@@ -1,5 +1,7 @@
 #pragma once
 
+#include "AssumedSampleRate.h"
+
 #include <juce_dsp/juce_dsp.h>
 
 #include <memory>
@@ -69,7 +71,7 @@ private:
     // The level of a per-bin power at frequency, plus Analyzer Tilt.
     double levelDbOf (const std::vector<double>& perBin, double frequency, double tiltDbPerOctave) const;
 
-    double sampleRate = 48000.0;
+    double sampleRate = assumedSampleRate;
     AnalyzerResolution resolution = AnalyzerResolution::medium;
     int size = 0;
     std::unique_ptr<juce::dsp::FFT> fft;

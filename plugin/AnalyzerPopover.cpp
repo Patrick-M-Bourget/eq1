@@ -1,6 +1,7 @@
 #include "AnalyzerPopover.h"
 
 #include "PluginProcessor.h"
+#include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Icons.h"
 #include "staple/Light.h"
@@ -36,10 +37,7 @@ juce::Font labelFont() { return staple::font (size::fs3, staple::Weight::medium)
 
 juce::String tiltText (double tilt)
 {
-    if (tilt <= 0.0)
-        return "Off";
-    const bool whole = std::abs (tilt - std::round (tilt)) < 1.0e-6;
-    return (whole ? juce::String (juce::roundToInt (tilt)) : juce::String (tilt, 1)) + " dB/oct";
+    return tilt <= 0.0 ? "Off" : valueText::slope (tilt);
 }
 } // namespace
 

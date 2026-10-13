@@ -14,10 +14,15 @@ namespace eq1
 
 bool isPresetSetting (const juce::RangedAudioParameter& parameter);
 
-// The plain value a saved one restores to, on a session restore and on a Preset load alike: the saved
-// value itself when it is finite and in the parameter's range, the range's nearer end when it is finite
-// outside it, and the parameter's default when it isn't a finite number (nan, inf, or no number at
-// all). Nothing a file holds reaches the filter design unchecked.
+// A saved number as it restores, for a parameter's value and for the other numbers a session holds
+// alike: itself within minimum to maximum, the nearer end when it is finite outside, and defaultValue
+// when it isn't a finite number (nan, inf). Read in double, so a value a float can't hold ("1e39") is
+// still a finite one to clamp. Nothing a file holds reaches the filter design or the editor unchecked.
+double restoredNumber (const juce::var& saved, double defaultValue, double minimum, double maximum);
+
+// The plain value a saved one restores to, on a session restore and on a Preset load alike:
+// restoredNumber() within the parameter's range, with the parameter's default for one that isn't a
+// finite number (nan, inf). Text that isn't a number reads as 0, as juce::var converts it.
 float restoredPlainValue (const juce::RangedAudioParameter& parameter, const juce::var& saved);
 
 // Puts every PARAM child of tree that names a parameter through restoredPlainValue(), in place, leaving

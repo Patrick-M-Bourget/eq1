@@ -16,16 +16,20 @@
 using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
 using eq1::Shape;
+namespace ranges = eq1::parameterRanges;
 
 namespace
 {
+
+float lowest (eq1::ParameterRange range) { return static_cast<float> (range.low); }
+float highest (eq1::ParameterRange range) { return static_cast<float> (range.high); }
 
 // A plugin as a host has it, with the editing rules the editor uses on top.
 struct Host
 {
     juce::ScopedJuceInitialiser_GUI juce;
     eq1::PluginProcessor processor;
-    eq1::BandEditing editing { processor.parameterState(), processor.editHistory() };
+    eq1::BandEditing editing { processor, processor.editHistory() };
 
     float value (int slot, const char* control)
     {
@@ -163,8 +167,8 @@ TEST_CASE ("Dragging several Bands moves them together, stopping together at the
     CHECK_THAT (host.value (1, "gain"), WithinAbs (5.0, 1.0e-4));
     CHECK_THAT (host.value (2, "frequency"), WithinRel (1500.0f, 1.0e-4f));
     CHECK_THAT (host.value (2, "gain"), WithinAbs (0.0, 1.0e-4));
-    CHECK_THAT (host.value (3, "frequency"), WithinRel (30000.0f, 1.0e-4f));
-    CHECK_THAT (host.value (3, "gain"), WithinAbs (30.0, 1.0e-4));
+    CHECK_THAT (host.value (3, "frequency"), WithinRel (highest (ranges::frequency), 1.0e-4f));
+    CHECK_THAT (host.value (3, "gain"), WithinAbs (ranges::gain.high, 1.0e-4));
     // A Shape without Gain keeps its stored Gain.
     CHECK_THAT (host.value (4, "frequency"), WithinRel (75.0f, 1.0e-4f));
     CHECK_THAT (host.value (4, "gain"), WithinAbs (5.0, 1.0e-4));
@@ -193,15 +197,15 @@ TEST_CASE ("A nudge moves Bands by semitones and heard dB from where they are, s
     // -30 dB. The rest stop with them, keeping their spacing, and the Cut keeps its stored Gain.
     for (int press = 0; press < 100; ++press)
         host.editing.nudge ({ 1, 2, 3 }, 1.0, 0.5);
-    CHECK_THAT (host.value (1, "frequency"), WithinRel (30000.0f, 1.0e-4f));
+    CHECK_THAT (host.value (1, "frequency"), WithinRel (highest (ranges::frequency), 1.0e-4f));
     CHECK_THAT (host.value (2, "frequency"), WithinRel (static_cast<float> (3000.0 / std::pow (2.0, 0.1 / 12.0)), 1.0e-4f));
-    CHECK_THAT (host.value (1, "gain"), WithinAbs (30.0, 1.0e-4));
-    CHECK_THAT (host.value (2, "gain"), WithinAbs (-2.0 + (30.0 - 2.95), 1.0e-4));
+    CHECK_THAT (host.value (1, "gain"), WithinAbs (ranges::gain.high, 1.0e-4));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (-2.0 + (ranges::gain.high - 2.95), 1.0e-4));
     CHECK_THAT (host.value (3, "gain"), WithinAbs (5.0, 1.0e-4));
     for (int press = 0; press < 400; ++press)
         host.editing.nudge ({ 1, 2, 3 }, -1.0, -0.5);
-    CHECK_THAT (host.value (3, "frequency"), WithinRel (10.0f, 1.0e-3f));
-    CHECK_THAT (host.value (2, "gain"), WithinAbs (-30.0, 1.0e-4));
+    CHECK_THAT (host.value (3, "frequency"), WithinRel (lowest (ranges::frequency), 1.0e-3f));
+    CHECK_THAT (host.value (2, "gain"), WithinAbs (ranges::gain.low, 1.0e-4));
     CHECK_THAT (host.value (3, "gain"), WithinAbs (5.0, 1.0e-4));
 }
 
@@ -329,7 +333,7 @@ TEST_CASE ("An editor closed in the middle of a drag still ends its gestures")
     GestureLog log;
     host.processor.addListener (&log);
     {
-        eq1::BandEditing editing { host.processor.parameterState(), host.processor.editHistory() };
+        eq1::BandEditing editing { host.processor, host.processor.editHistory() };
         editing.beginDrag ({ 1 });
         editing.dragBy (2.0, 1.0);
     }
@@ -781,7 +785,7 @@ TEST_CASE ("A Dynamic Range drag sets the stored Dynamic Range so its heard end 
         host.editing.beginDynamicRangeDrag (1);
         host.editing.dragDynamicRangeTo (80.0);
         host.editing.endDynamicRangeDrag();
-        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (30.0, 1.0e-4));
+        CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (ranges::dynamicRange.high, 1.0e-4));
     }
     SECTION ("at Gain Scale 0 % nothing is heard, so the drag changes nothing")
     {
@@ -810,6 +814,6 @@ TEST_CASE ("Setting a Band's Dynamic Range is one gesture, within +/-30 dB")
     host.editing.setDynamicRange (1, 0.0);
     CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (0.0, 1.0e-4));
     host.editing.setDynamicRange (1, -45.0);
-    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (-30.0, 1.0e-4));
+    CHECK_THAT (host.value (1, "dynamic_range"), WithinAbs (ranges::dynamicRange.low, 1.0e-4));
     CHECK (host.processor.editHistory().undoSteps() == 2);
 }

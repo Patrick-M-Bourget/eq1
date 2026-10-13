@@ -35,7 +35,7 @@ constexpr double repaintStepDb = 0.01;
 
 DynamicRangeRing::DynamicRangeRing (PluginProcessor& p, staple::Knob& g)
     : KeyboardSlider ("Dynamic Range"), EditorTick::Client (static_cast<juce::Component&> (*this)), processor (p), gain (g),
-      output (parameters::OutputValues::of (p.parameterState()))
+      output (p.hostSettings().outputValues())
 {
     setSliderStyle (juce::Slider::RotaryVerticalDrag);
     setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
@@ -63,9 +63,9 @@ void DynamicRangeRing::show (int newSlot)
     if (slot == 0)
         return;
     auto& state = processor.parameterState();
-    band = parameters::SlotValues::of (state, slot);
+    band = &processor.hostSettings().slotValues (slot);
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, parameters::dynamicRangeId (slot), *this);
-    describe (*state.getParameter (parameters::dynamicRangeId (slot)));
+    describe (parameters::lookUp (state, parameters::dynamicRangeId (slot)));
     gain.ringChanged();
 }
 
@@ -81,7 +81,7 @@ void DynamicRangeRing::setAvailable (bool available)
 
 float DynamicRangeRing::rangeAlpha() const
 {
-    return slot != 0 && isOn (band.dynamicsBypass) ? tokens::knob::ringRangeBypassedAlpha : tokens::knob::ringRangeAlpha;
+    return slot != 0 && parameters::isOn (band->dynamicsBypass) ? tokens::knob::ringRangeBypassedAlpha : tokens::knob::ringRangeAlpha;
 }
 
 //==============================================================================
@@ -211,7 +211,7 @@ void DynamicRangeRing::tick (double)
         return;
 
     std::optional<double> live;
-    if (isVisible() && getValue() != 0.0 && ! isOn (band.dynamicsBypass) && ! isOn (band.bypass) && ! isOn (output.globalBypass))
+    if (isVisible() && getValue() != 0.0 && ! parameters::isOn (band->dynamicsBypass) && ! parameters::isOn (band->bypass) && ! parameters::isOn (output.globalBypass))
     {
         // Live Gain is heard under Gain Scale, the ring shows stored dB: its movement from the heard
         // Gain, unscaled, is drawn from the stored Gain.

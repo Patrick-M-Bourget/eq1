@@ -1,10 +1,12 @@
 #pragma once
 
+#include "RunGrid.h"
 #include "ShapeDesign.h"
 #include "Smoother.h"
 #include "eq1/Settings.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -17,15 +19,12 @@ namespace eq1
 // crossfades in and out as it is put in use, taken out of use, Bypassed or un-Bypassed, and from
 // its old filter to its new one when its Shape, Slope or Stereo Placement changes.
 //
-// It runs on the Engine's grid of runs of maxSubBlock samples: its filter is re-designed once at the
+// It runs on the Engine's grid of runs of runSamples samples: its filter is re-designed once at the
 // start of each run, and its coefficients move to the new design over the run by position in it, so
 // a run cut into pieces sounds the same as a whole one.
 class Band
 {
 public:
-    // The grid's run length; coefficients follow glides at this rate.
-    static constexpr int maxSubBlock = glideRunSamples;
-
     void prepare (double sampleRate, int numChannels);
 
     // With snap, the new settings take effect at once instead of gliding.
@@ -40,11 +39,15 @@ public:
     double liveGainDb() const;
 
     // Processes the piece of the grid's run numbered run (counted by the Engine from prepare) from
-    // position (0 to maxSubBlock - 1) on, numSamples long, at most to the run's end. A run's first
+    // position (0 to runSamples - 1) on, numSamples long, at most to the run's end. A run's first
     // piece starts at position 0. A Band that missed the run's start (a detector with nothing to
     // listen to for a while) plays at the filter last designed until the next run; one that saw the
     // start and misses a piece in the middle keeps gliding by position.
     void process (float* const* channels, int numChannels, std::uint64_t run, int position, int numSamples);
+
+    // How many sections' passes over a piece of a run the Band has skipped since prepare(), each one
+    // exactly the identity with nothing in its state (Chain::run). Safe to call from any thread, for tests.
+    std::uint64_t sectionsSkipped() const { return skipped.load (std::memory_order_relaxed); }
 
 private:
     // What a chain is: its filter's structure and the part of the signal it plays on. A Band crossfades
@@ -75,6 +78,10 @@ private:
             int position = 0;
             int numSamples = 0;
             const Cascade* from = nullptr;
+
+            // How far the coefficients have moved from from to the cascade's at the piece's sample i:
+            // the fraction of the run done once it is processed, so the run's last sample reaches 1.
+            double reached (size_t i) const { return (position + static_cast<double> (i) + 1.0) / runSamples; }
         };
 
         // The channels a cascade runs on together: each one's samples, and which channel's section
@@ -88,17 +95,24 @@ private:
             void prepare (int numChannels);
         };
 
+        // Whether section s is skipped over the piece: exactly the identity at both ends of the run, so
+        // at every position in it, with every line's state clear. Its samples and state stay as they
+        // are, which is what running it leaves where nothing fuses; on arm64 running it would add a
+        // fused multiply-add's rounding residual, near -300 dBFS (docs/performance.md, "Identity
+        // sections"). One with state left from filtering runs until that has drained. The section
+        // count stays fixed for glides.
+        bool skips (size_t s, const Lines& lines, const Piece& piece) const;
         // Runs the lines' samples through the cascade, in place: over a gliding run, with the
         // coefficients interpolated once per position, for every line at once. Two lines (a Stereo
-        // Band on a stereo track) run in two lanes.
-        void run (Lines& lines, const Piece& piece);
+        // Band on a stereo track) run in two lanes. Returns how many sections it skipped.
+        int run (Lines& lines, const Piece& piece);
         // Two lines through the cascade together, one per lane of a Double2: the same operations in
         // the same order as one line on its own, so each comes out bit for bit as it would alone.
-        void runLanes (Lines& lines, const Piece& piece);
+        int runLanes (Lines& lines, const Piece& piece);
         // Runs the part of the signal the chain's Stereo Placement selects, in place.
-        void runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
+        int runPlaced (float* const* channels, int numChannels, Lines& lines, const Piece& piece);
         // On stereo: encodes Mid and Side, runs the Mid (mid) or the Side, and decodes.
-        void runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid);
+        int runMidSide (float* const* channels, Lines& lines, const Piece& piece, bool mid);
     };
 
     // Once per run, at its start: a waiting crossfade starts, and a glide moves on by the whole run
@@ -110,6 +124,11 @@ private:
     void designNow();
     void crossfadeTo (const Setup& setup);
     bool isSilent() const { return mix.value() == 0.0 && ! mix.isMoving(); }
+    void countSkipped (int sections)
+    {
+        if (sections > 0)
+            skipped.fetch_add (static_cast<std::uint64_t> (sections), std::memory_order_relaxed);
+    }
 
     double sampleRate = 44100.0;
     Smoother logFrequency, gain, logQ;
@@ -118,6 +137,7 @@ private:
     Chain current, previous;
     Chain::Lines lines; // sized at prepare(), for either chain's run
     double dynamicOffset = 0.0, designedOffset = 0.0; // dB
+    std::atomic<std::uint64_t> skipped { 0 };         // sections skipped, for sectionsSkipped()
 
     // The run in progress: the last one whose start the Band saw; whether the coefficients move over
     // it, and from what; where the last piece ended; and the Live Gain at its start and its end, for
@@ -130,7 +150,7 @@ private:
     double runStartGainDb = 0.0, runEndGainDb = 0.0;
 
     // Per channel, for mixing the filtered signal with the dry one, and the previous chain's with the current.
-    std::vector<std::array<float, maxSubBlock>> wet, previousWet;
+    std::vector<std::array<float, runSamples>> wet, previousWet;
     std::vector<float*> wetChannels, previousWetChannels;
 
     // A Shape, Slope or Stereo Placement change that arrived during a crossfade waits for it to

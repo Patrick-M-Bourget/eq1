@@ -2,15 +2,12 @@
 
 #include "../Tokens.h"
 
-#include <cmath>
-
 namespace staple
 {
 
 namespace
 {
 const juce::Identifier overlayLayerProperty { "stapleOverlayLayer" };
-constexpr int shadowLayers = 8;
 } // namespace
 
 juce::Component& overlayLayerFor (juce::Component& component)
@@ -29,23 +26,6 @@ juce::Component& overlayLayerFor (juce::Component& component)
 }
 
 void markOverlayLayer (juce::Component& layer) { layer.getProperties().set (overlayLayerProperty, true); }
-
-void drawSoftShadow (juce::Graphics& g, juce::Rectangle<float> shape, float cornerRadius, const juce::DropShadow& shadow)
-{
-    const auto base = shape.translated (static_cast<float> (shadow.offset.x), static_cast<float> (shadow.offset.y));
-    const float blur = static_cast<float> (shadow.radius);
-    // Each layer's alpha, so that all of them together reach the shadow's own.
-    const float alpha = 1.0f - std::pow (1.0f - shadow.colour.getFloatAlpha(), 1.0f / shadowLayers);
-    g.setColour (shadow.colour.withAlpha (alpha));
-    for (int i = 0; i < shadowLayers; ++i)
-    {
-        const float spread = blur * (static_cast<float> (i) / (shadowLayers - 1) - 0.5f);
-        const auto r = base.expanded (spread);
-        if (r.isEmpty())
-            continue;
-        g.fillRoundedRectangle (r, std::max (0.0f, cornerRadius + spread));
-    }
-}
 
 juce::AffineTransform popInTransform (juce::Rectangle<float> card, float progress)
 {

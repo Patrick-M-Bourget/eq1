@@ -1,6 +1,7 @@
 #include "Popover.h"
 
 #include "../LookAndFeel.h"
+#include "../Painting.h"
 #include "../Tokens.h"
 #include "Overlay.h"
 

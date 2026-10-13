@@ -73,10 +73,12 @@ target_sources(eq1 PRIVATE
     AnalyzerSpectrum.cpp
     staple/Accessibility.cpp
     staple/Fonts.cpp
+    staple/Painting.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
     staple/WindowBackground.cpp
     Accessibility.cpp
+    ValueText.cpp
     staple/controls/EdgeSelector.cpp
     staple/controls/IconButton.cpp
     staple/controls/Knob.cpp
@@ -148,9 +150,22 @@ clap_juce_extensions_plugin(TARGET eq1
 # the linker keeps). A shipping build (EQ1_STRIP) compiles with debug information, keeps it beside
 # the bundle (a .dSYM on macOS, a PDB on Windows) and strips the binary of its local symbols; a
 # crash log is symbolicated against the .dSYM, whose UUID is the binary's (scripts/check.sh size
-# checks it). Test builds keep their symbols: scripts/check.sh configures with EQ1_STRIP=OFF.
-if(EQ1_STRIP AND APPLE)
-    target_compile_options(eq1 PUBLIC -g)
+# checks it). Both are decided per configuration, so a multi-config generator (Xcode, Visual Studio)
+# gets each right: with EQ1_STRIP left empty every configuration but Debug strips and is dead-stripped,
+# and Debug keeps its symbols and unused code for the debugger. EQ1_STRIP=ON strips and dead-strips
+# every configuration; EQ1_STRIP=OFF strips none but leaves dead-stripping as by default (scripts/check.sh
+# sets it, so its Release test builds keep their symbols and are linked like the shipping build).
+set(eq1_release_config "$<NOT:$<CONFIG:Debug>>")
+if(EQ1_STRIP STREQUAL "")
+    set(eq1_strip "${eq1_release_config}")
+elseif(EQ1_STRIP)
+    set(eq1_strip 1)
+else()
+    set(eq1_strip 0)
+endif()
+set(eq1_dead_strip "$<OR:${eq1_strip},${eq1_release_config}>")
+if(APPLE)
+    target_compile_options(eq1 PUBLIC $<${eq1_strip}:-g>)
 endif()
 foreach(format VST3 AU AAX Standalone CLAP)
     set(binary eq1_${format})
@@ -159,37 +174,39 @@ foreach(format VST3 AU AAX Standalone CLAP)
         continue()
     endif()
     if(APPLE)
-        target_link_options(${binary} PRIVATE LINKER:-dead_strip)
-        if(EQ1_STRIP)
-            # With link-time optimisation the linker compiles everything into one temporary object,
-            # which it deletes after the link unless told where to keep it; dsymutil reads the debug
-            # information from there. A Universal link runs the linker once per architecture, each
-            # writing to the one path it is given, so each architecture gets its own.
-            list(LENGTH CMAKE_OSX_ARCHITECTURES arch_count)
-            if(arch_count GREATER 1)
-                foreach(arch IN LISTS CMAKE_OSX_ARCHITECTURES)
-                    target_link_options(${binary} PRIVATE
-                        "SHELL:-Xarch_${arch} -Wl,-object_path_lto,${CMAKE_CURRENT_BINARY_DIR}/${binary}-${arch}-lto.o")
-                endforeach()
-            else()
+        target_link_options(${binary} PRIVATE $<${eq1_dead_strip}:LINKER:-dead_strip>)
+        # With link-time optimisation the linker compiles everything into one temporary object,
+        # which it deletes after the link unless told where to keep it; dsymutil reads the debug
+        # information from there. A Universal link runs the linker once per architecture, each
+        # writing to the one path it is given, so each architecture gets its own.
+        list(LENGTH CMAKE_OSX_ARCHITECTURES arch_count)
+        if(arch_count GREATER 1)
+            foreach(arch IN LISTS CMAKE_OSX_ARCHITECTURES)
                 target_link_options(${binary} PRIVATE
-                    LINKER:-object_path_lto,${CMAKE_CURRENT_BINARY_DIR}/${binary}-lto.o)
-            endif()
-            # Stripping invalidates the linker's ad hoc signature, without which macOS loads no arm64
-            # code, so the binary is signed ad hoc again; the release signature is #16's.
+                    "$<${eq1_strip}:SHELL:-Xarch_${arch} -Wl,-object_path_lto,${CMAKE_CURRENT_BINARY_DIR}/${binary}-${arch}-lto.o>")
+            endforeach()
+        else()
+            target_link_options(${binary} PRIVATE
+                $<${eq1_strip}:LINKER:-object_path_lto,${CMAKE_CURRENT_BINARY_DIR}/${binary}-lto.o>)
+        endif()
+        # Stripping invalidates the linker's ad hoc signature, without which macOS loads no arm64
+        # code, so the binary is signed ad hoc again; the release signature is #16's. A command
+        # whose expression is empty (a configuration that doesn't strip) isn't run.
+        if(NOT eq1_strip STREQUAL "0")
             add_custom_command(TARGET ${binary} POST_BUILD
-                COMMAND dsymutil "$<TARGET_FILE:${binary}>" -o "$<TARGET_BUNDLE_DIR:${binary}>.dSYM"
-                COMMAND strip -x -no_code_signature_warning "$<TARGET_FILE:${binary}>"
-                COMMAND codesign --force --sign - "$<TARGET_FILE:${binary}>"
+                COMMAND "$<${eq1_strip}:dsymutil;$<TARGET_FILE:${binary}>;-o;$<TARGET_BUNDLE_DIR:${binary}>.dSYM>"
+                COMMAND "$<${eq1_strip}:strip;-x;-no_code_signature_warning;$<TARGET_FILE:${binary}>>"
+                COMMAND "$<${eq1_strip}:codesign;--force;--sign;-;$<TARGET_FILE:${binary}>>"
+                COMMAND_EXPAND_LISTS
                 VERBATIM)
         endif()
     elseif(MSVC)
         # /OPT:REF and /OPT:ICF are the linker's defaults until /DEBUG turns them off, so they are
         # spelled out; /DEBUG writes the PDB beside the binary from the objects' debug information.
-        target_link_options(${binary} PRIVATE $<$<NOT:$<CONFIG:Debug>>:/OPT:REF;/OPT:ICF>)
-        if(EQ1_STRIP)
-            set_property(TARGET eq1 ${binary} PROPERTY MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
-            target_link_options(${binary} PRIVATE /DEBUG)
-        endif()
+        # CMake's own default format is kept where it applies (Debug and RelWithDebInfo).
+        target_link_options(${binary} PRIVATE $<${eq1_dead_strip}:/OPT:REF;/OPT:ICF>)
+        set_property(TARGET eq1 ${binary} PROPERTY MSVC_DEBUG_INFORMATION_FORMAT
+            $<$<OR:${eq1_strip},$<CONFIG:Debug,RelWithDebInfo>>:ProgramDatabase>)
+        target_link_options(${binary} PRIVATE $<${eq1_strip}:/DEBUG>)
     endif()
 endforeach()

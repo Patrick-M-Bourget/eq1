@@ -4,8 +4,8 @@
 #include "PluginProcessor.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
-#include "staple/controls/Overlay.h"
 #include "staple/controls/TextChip.h"
 
 #include <cmath>
@@ -168,15 +168,15 @@ OutputPopover::OutputPopover (PluginProcessor& p)
     outputGain.setArcColour (colour::curveMain);
     outputGain.setBipolar (true);
     outputGainAttachment = std::make_unique<SliderAttachment> (state, parameters::outputGainId, outputGain);
-    outputGain.describe (*state.getParameter (parameters::outputGainId));
+    outputGain.describe (parameters::lookUp (state, parameters::outputGainId));
     outputPanAttachment = std::make_unique<SliderAttachment> (state, parameters::outputPanId, outputPan);
-    outputPan.describe (*state.getParameter (parameters::outputPanId));
+    outputPan.describe (parameters::lookUp (state, parameters::outputPanId));
     panModeAttachment = std::make_unique<ButtonAttachment> (state, parameters::panModeId, *panMode);
     phaseInvertAttachment = std::make_unique<ButtonAttachment> (state, parameters::phaseInvertId, phaseInvert);
     autoGainAttachment = std::make_unique<ButtonAttachment> (state, parameters::autoGainId, autoGain);
-    panMode->setTitle (state.getParameter (parameters::panModeId)->getName (100));
-    phaseInvert.setTitle (state.getParameter (parameters::phaseInvertId)->getName (100));
-    autoGain.setTitle (state.getParameter (parameters::autoGainId)->getName (100));
+    panMode->setTitle (parameters::lookUp (state, parameters::panModeId).getName (100));
+    phaseInvert.setTitle (parameters::lookUp (state, parameters::phaseInvertId).getName (100));
+    autoGain.setTitle (parameters::lookUp (state, parameters::autoGainId).getName (100));
 
     phaseInvert.setTooltip ("Phase Invert");
     autoGain.setTooltip ("Auto Gain: compensates the output level so EQ changes are heard without a loudness bias");

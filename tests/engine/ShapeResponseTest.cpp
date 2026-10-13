@@ -1,6 +1,7 @@
 #include "Measure.h"
 
 #include "eq1/Response.h"
+#include "eq1/Settings.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <complex>
 #include <numbers>
+#include <vector>
 
 using namespace eq1;
 
@@ -223,6 +225,68 @@ TEST_CASE ("Low Shelf, High Shelf and Tilt Shelf match their analog targets up t
         const double error = test::magnitudeDb (response, f, sampleRate) - target (f);
         REQUIRE (std::abs (error) <= shelfToleranceDb (sampleRate, frequency, q, span));
     }
+}
+
+// The test above reads shelves at a few Frequencies; a resonant shelf's error can peak sharply
+// between them, where a section's zeros or poles sit near Nyquist. This one moves Frequency in small
+// steps through that region, and reads the response at 201 points, as the filter lab does
+// (docs/dsp/filter-design.md, "Test tolerances").
+TEST_CASE ("Resonant shelves match their analog targets wherever a section's zeros or poles near Nyquist", "[response]")
+{
+    // The second-order section's zeros and poles sit at rz and 1 / rz times Frequency (Low Shelf; a
+    // High Shelf's are the reciprocals). The one at Frequency / rz sits below Frequency, which stays below
+    // 0.91 x Nyquist, so never nears it. The one at rz x Frequency is placed in 41 steps from 0.9 to 1.1 x
+    // Nyquist, or to as high as the highest Frequency puts it (30 kHz at 96 kHz), so every case asserts.
+    // A sample rate, Gain and order where no Frequency in range puts it near Nyquist is left out.
+    struct Case
+    {
+        double sampleRate, gain;
+        int order;
+        double rz, highest;
+    };
+    std::vector<Case> cases;
+    for (double sampleRate : { 44100.0, 48000.0, 96000.0 })
+        for (double gain : { -30.0, -12.0, 18.0 })
+            for (int order : { 2, 3 })
+            {
+                const double nyquist = sampleRate / 2.0;
+                const double rz = std::pow (10.0, std::abs (gain) / 20.0 / (2.0 * order));
+                const double highest = std::min (1.1, rz * std::min (eq1::parameterRanges::frequency.high, 0.91 * nyquist) / nyquist);
+                if (highest >= 0.9)
+                    cases.push_back ({ sampleRate, gain, order, rz, highest });
+            }
+    const auto [sampleRate, gain, order, rz, highest] = GENERATE_REF (from_range (cases));
+    const double q = 40.0;
+    const Shape s = GENERATE (Shape::LowShelf, Shape::HighShelf, Shape::TiltShelf);
+    const int step = GENERATE (range (0, 41));
+    const double atNyquist = 0.9 + (highest - 0.9) * step / 40.0;
+    const double frequency = atNyquist * sampleRate / 2.0 / rz;
+
+    const auto target = [&] (double f) {
+        switch (s)
+        {
+            case Shape::LowShelf: return lowShelfDb (f, frequency, gain, order, q);
+            case Shape::HighShelf: return highShelfDb (f, frequency, gain, order, q);
+            default: return tiltShelfDb (f, frequency, gain, order, q);
+        }
+    };
+
+    const auto response = responseOf (sampleRate, shape (s, frequency, gain, q, 6.0 * order));
+    const auto frequencies = test::frequenciesUpToNyquist (sampleRate, 201);
+
+    double span = std::abs (gain);
+    for (double f : frequencies)
+        span = std::max (span, std::abs (target (f) - target (frequencies.front())));
+
+    double worst = 0.0, at = 0.0;
+    for (double f : frequencies)
+    {
+        const double error = std::abs (test::magnitudeDb (response, f, sampleRate) - target (f));
+        if (error > worst)
+            worst = error, at = f;
+    }
+    CAPTURE (sampleRate, frequency, atNyquist, gain, order, static_cast<int> (s), at, worst / span);
+    REQUIRE (worst <= shelfToleranceDb (sampleRate, frequency, q, span));
 }
 
 TEST_CASE ("Butterworth shelves reach half their Gain at Frequency and their full Gain away from it")

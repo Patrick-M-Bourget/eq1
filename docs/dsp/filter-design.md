@@ -15,6 +15,7 @@ How each Shape becomes a decramped digital filter (ADR 0001), what analog curve 
   - its poles over zeros at the Q the section has at Q 2, matched directly;
   - the zeros' extra resonance, (zeros at their own Q) / (zeros at the Q-2 Q), designed as its inverse, whose sharp poles the matched z-transform follows, and inverted back.
   - **Fades:** the split eases in from Q 2 to Q 2.5, and fades out as the zeros' natural frequency goes from 0.8 to 1.1 × Nyquist: beyond it the inverse's poles would be held below Nyquist, where they nearly cancel their own zeros and stir up noise near Nyquist as they move. Fading out by 1.2 × Nyquist instead is a little more accurate but clicks when swept. Both fades are smooth (a smoothstep), so the coefficients' path has no corner: a corner sounds in a section with large coefficients.
+  - **Match point:** the zeros' extra resonance is matched at its natural frequency until that passes 0.8 × Nyquist; from there the match point slides, smoothly in log frequency, to 0.97 × Nyquist as the natural frequency reaches Nyquist. The slide grows in, smoothly, as the zeros' Q goes from 4 to 16. Matched right at a sharp resonance near Nyquist, the match point and Nyquist crowd together and the fit swings: up to 26% of the span at Q 40 (#195). A broad resonance fits best at its natural frequency: sliding the match point at every zeros' Q pushed a 96 dB/oct shelf at Q 40 past its limit near 0.91 × Nyquist.
   - **Layout:** every second-order section takes two biquads whatever the Q, so the section count never changes in a glide. Unsplit, the second is its matched poles over equal zeros: exactly the identity, and the limit of the split. The biquad with the sharp zeros comes first, so the other doesn't amplify what a moving resonance stirs up near Nyquist; a cut (the inverse) swaps the two, so at 0 dB, where boost and cut meet, so do the biquads in each place.
   - **Sweep test:** the click-free test sweeps a resonant shelf's Frequency a third as fast as the Bell sweep. A resonance of Q up to 40 swept up to Nyquist at the Bell sweep's speed changes faster than a sine turns there, split or not: it reads just over the threshold either way. At the slower speed the test fails without either fade: without the fade near Nyquist by tens of times the threshold, without the ease-in from Q 2 by up to 2.5 times. At up to 96 kHz the sweep carries the zeros through 0.8 to 1.1 × Nyquist; at 176.4 and 192 kHz, Frequency's 30 kHz limit keeps them below 0.65 × Nyquist, so the fade near Nyquist is never reached there.
   - Critically damped companion zeros (Q 0.5) instead reach 10% of the span up to 0.45 × Nyquist without a fade, but over 100% above it.
@@ -73,13 +74,15 @@ The measured column is the worst case in the filter lab over the test's grid (Fr
 
 **Low Shelf, High Shelf, Tilt Shelf** (share of the curve's span: how far the target strays from its value at 10 Hz, and at least |Gain|; plus 0.06 dB, or 0.6 dB above 0.73):
 
-| Frequency / Nyquist | Q up to 2 | Q above 2 | Q above 2, measured |
-|---|---|---|---|
-| up to 0.45 | 12% | 12% | 11.1% |
-| up to 0.73 | 12% | 15% | 13.9% |
-| up to 0.91 | 45% | 45% | 41.2% |
+| Frequency / Nyquist | Q up to 2 | Q above 2 | Q 2.25 to 4, measured | Q 10 to 40, measured |
+|---|---|---|---|---|
+| up to 0.45 | 12% | 12% | 11.4% | 7.7% |
+| up to 0.73 | 12% | 15% | 12.1% | 13.5% |
+| up to 0.91 | 45% | 45% | 43.3% | 31.8% |
 
-The measured column is the worst case in the filter lab, as a share of the span alone, over Frequency 20 Hz to 20 kHz, Gain ±3 to ±30 dB, every Slope from 6 to 96 dB/oct, Q 2.25, 2.5, 3, 4, 10, 20 and 40, at 44.1, 48 and 96 kHz, at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py low-shelf --orders 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 --q 2.25 2.5 3 4 10 20 40` (`high-shelf` and `tilt-shelf` measure the same).
+The measured columns are the worst case in the filter lab, as a share of the span alone, over a dense Frequency scan (every 1/24 octave from 10 Hz to 30 kHz, plus every 0.0025 × Nyquist from 0.8 to 1.12 × Nyquist for each second-order section's zeros and poles), Gain ±3 to ±30 dB, every Slope from 12 to 96 dB/oct, Q 2.25, 2.5, 3, 4, 10, 20 and 40, at 44.1, 48 and 96 kHz, at 200 points from 10 Hz to Nyquist: `python3 tools/filter-lab/filterlab.py resonant-shelves --jobs 8`. Low Shelf, High Shelf and Tilt Shelf measure the same. The worst cases are at Q 40 below 0.73 (13.5%: 18 dB/oct, ±18 dB, 16.5 kHz at 48 kHz) and at Q 2.25 above it (43.3%: 96 dB/oct, ±3 dB, 21.8 kHz at 48 kHz). Before the resonance's match point slid (#195), Q 40 reached 17.7%, 25.7% and 32.6%, at Frequencies between those the response test read.
+
+The response test reads the shelves at a few Frequencies; a second test steps Frequency through the region where a section's zeros or poles near Nyquist, at Q 40 and 12 and 18 dB/oct, the Slopes whose sections are sharpest.
 
 The other Shapes' limits are in the test, beside each Shape's check.
 

@@ -2,8 +2,8 @@
 
 #include "Icons.h"
 #include "Light.h"
+#include "Painting.h"
 #include "Tokens.h"
-#include "controls/Overlay.h"
 
 #include <cmath>
 #include <utility>
@@ -315,19 +315,9 @@ void LookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, 
         return;
     const auto face = area.withSizeKeepingCentre (diameter, diameter);
 
-    drawSoftShadow (g, face, diameter / 2.0f, tokens::shadow::knob);
-
-    // Lit from the top: the face's gradient is centred 12 % down from its top edge.
-    juce::ColourGradient gradient (colour::knobFaceTop, face.getCentreX(), face.getY() + 0.12f * diameter,
-                                   colour::knobFaceEdge, face.getCentreX(), face.getY() + 1.32f * diameter, true);
-    gradient.addColour (0.45, colour::knobFaceMid);
-    g.setGradientFill (gradient);
-    g.setOpacity (alpha);
-    g.fillEllipse (face);
-
-    const float rim = diameter <= tokens::knob::small ? tokens::knob::rimSmall : tokens::knob::rim;
-    g.setColour (slider.findColour (juce::Slider::rotarySliderOutlineColourId).withMultipliedAlpha (alpha));
-    g.drawEllipse (face.reduced (rim / 2.0f), rim);
+    // Its shadow undimmed while disabled, unlike the Knob, which dims all of itself.
+    drawKnobFace (g, face, tokens::shadow::knob, diameter <= tokens::knob::small ? tokens::knob::rimSmall : tokens::knob::rim,
+                  slider.findColour (juce::Slider::rotarySliderOutlineColourId).withMultipliedAlpha (alpha), alpha);
 
     // Only the active arc, no track; a knob whose range is centred on 0 starts from 12 o'clock.
     const float radius = diameter / 2.0f - std::max (tokens::knob::arcInset, std::round (diameter * tokens::knob::arcInsetProportion));

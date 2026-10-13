@@ -22,8 +22,11 @@ option(EQ1_BUILD_TESTS "Build the tests" ON)
 # format's link several minutes long.
 option(EQ1_LTO "Build the Plugin Shell with link-time optimisation" ON)
 # So is stripping: shipping binaries keep their debug information beside the bundle, not in it
-# (plugin/CMakeLists.txt). scripts/check.sh turns it off too, so test builds keep their symbols.
-option(EQ1_STRIP "Strip the Plugin Shell's binaries, keeping a .dSYM or PDB beside each bundle" ON)
+# (plugin/CMakeLists.txt). Left empty, every configuration but Debug strips, so a Debug build keeps its
+# symbols; ON or OFF applies to every configuration. scripts/check.sh sets OFF, so its Release test
+# builds keep their symbols too.
+set(EQ1_STRIP "" CACHE STRING
+    "Strip the Plugin Shell's binaries, keeping a .dSYM or PDB beside each bundle: ON, OFF, or empty for every configuration but Debug")
 
 include(FetchContent)
 

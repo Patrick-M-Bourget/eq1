@@ -1,8 +1,9 @@
 #include "HandlesLayer.h"
 
+#include "../ValueText.h"
 #include "../staple/Fonts.h"
+#include "../staple/Painting.h"
 #include "../staple/Tokens.h"
-#include "../staple/controls/Overlay.h"
 
 namespace eq1::display
 {
@@ -14,14 +15,8 @@ namespace colour = staple::tokens::colour;
 namespace size = staple::tokens::size;
 namespace handle = staple::tokens::handle;
 
-juce::String frequencyText (double frequency)
-{
-    return frequency >= 1000.0 ? juce::String (frequency / 1000.0, 2) + " kHz" : juce::String (juce::roundToInt (frequency)) + " Hz";
-}
-
-// The readout's card, as the knob tooltip's (KnobTooltip.cpp).
-constexpr float readoutPaddingTop = 5.0f, readoutPaddingSide = 10.0f, readoutPaddingBottom = 6.0f;
-constexpr float readoutTitleLine = 14.0f, readoutValueLine = 18.0f, readoutOffset = 12.0f;
+// How far up and right of its handle the readout's card sits.
+constexpr float readoutOffset = 12.0f;
 } // namespace
 
 HandleStyle handleStyle (const HandleState& state)
@@ -79,9 +74,9 @@ juce::Rectangle<float> dynamicRangeHandleArea (juce::Point<float> centre)
 
 Readout dragReadout (int slot, const BandSettings& band)
 {
-    juce::String value = frequencyText (band.frequency);
+    juce::String value = valueText::frequency (band.frequency);
     if (hasGain (band.shape))
-        value << "  " << (band.gain > 0.0 ? "+" : "") << juce::String (band.gain, 1) << " dB";
+        value << "  " << valueText::signedDb (band.gain);
     value << "  Q " << juce::String (band.q, 2);
     return { "Band " + juce::String (slot), value };
 }
@@ -100,12 +95,14 @@ void paintDynamicRangeHandle (juce::Graphics& g, const DynamicRangeHandle& dynam
     g.fillPath (triangles);
 }
 
-void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyle& style, juce::Colour bandColour)
+void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyle& style, juce::Colour bandColour, staple::SoftShadowCache& shadows, juce::Point<float> origin)
 {
     const float r = style.diameter / 2.0f;
     const auto circle = juce::Rectangle<float> (style.diameter, style.diameter).withCentre (centre);
     // The shadow and the glow are stacked translucent circles, with no blur.
-    staple::drawSoftShadow (g, circle, r, style.shadow);
+    shadows.draw (g, origin, circle, r, style.shadow);
+    // The glow, on the selected handles only, is drawn directly: from an image, its faint layers of
+    // colour round off past what the screens allow (docs/performance.md, "Paint time").
     if (style.glowAlpha > 0.0f)
         staple::drawSoftShadow (g, circle.expanded (1.0f), r + 1.0f, { bandColour.withAlpha (style.glowAlpha), static_cast<int> (handle::glow), {} });
     g.setColour (style.fill);
@@ -120,24 +117,11 @@ void paintHandle (juce::Graphics& g, juce::Point<float> centre, const HandleStyl
 
 void paintReadout (juce::Graphics& g, const DisplayGeometry& geometry, juce::Point<float> handleCentre, const Readout& readout)
 {
-    const auto titleFont = staple::font (size::fs2), valueFont = staple::font (size::fs4);
-    const int textWidth = std::max (staple::textWidth (titleFont, readout.title), staple::textWidth (valueFont, readout.value));
-    const float height = readoutPaddingTop + readoutTitleLine + readoutValueLine + readoutPaddingBottom;
-    auto box = juce::Rectangle<float> (static_cast<float> (textWidth) + 2.0f * readoutPaddingSide, height)
-                   .withPosition (handleCentre.x + readoutOffset, handleCentre.y - readoutOffset - height)
-                   .constrainedWithin (geometry.bounds());
-    staple::drawSoftShadow (g, box, size::r2, tokens::shadow::shadow1);
-    g.setColour (colour::menu);
-    g.fillRoundedRectangle (box, size::r2);
-    g.setColour (colour::line2);
-    g.drawRoundedRectangle (box.reduced (0.5f), size::r2, 1.0f);
-    auto text = box.withTrimmedTop (readoutPaddingTop).reduced (readoutPaddingSide, 0.0f);
-    g.setFont (titleFont);
-    g.setColour (colour::text3);
-    g.drawText (readout.title, text.removeFromTop (readoutTitleLine), juce::Justification::centred, false);
-    g.setFont (valueFont);
-    g.setColour (colour::text1);
-    g.drawText (readout.value, text.removeFromTop (readoutValueLine), juce::Justification::centred, false);
+    constexpr auto height = static_cast<float> (staple::readoutCard::height);
+    const auto box = juce::Rectangle<float> (staple::readoutCardWidth (readout.title, readout.value), height)
+                         .withPosition (handleCentre.x + readoutOffset, handleCentre.y - readoutOffset - height)
+                         .constrainedWithin (geometry.bounds());
+    staple::drawReadoutCard (g, box, readout.title, readout.value);
 }
 
 void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)
@@ -157,7 +141,7 @@ void paintSoloCue (juce::Graphics& g, juce::Point<float> centre, float diameter)
 }
 } // namespace
 
-void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame)
+void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const DisplayFrame& frame, staple::SoftShadowCache& shadows, juce::Point<float> origin)
 {
     for (const auto& dynamicRangeHandle : dynamicRangeHandles (geometry, frame))
         paintDynamicRangeHandle (g, dynamicRangeHandle, bandColour (dynamicRangeHandle.slot));
@@ -173,7 +157,7 @@ void paintHandles (juce::Graphics& g, const DisplayGeometry& geometry, const Dis
                                           .dragged = frame.dragging && selected,
                                           .globalBypass = frame.globalBypass });
         const auto centre = geometry.handleOf (band);
-        paintHandle (g, centre, style, bandColour (slot));
+        paintHandle (g, centre, style, bandColour (slot), shadows, origin);
         if (slot == frame.soloedSlot)
             paintSoloCue (g, centre, style.diameter);
     };

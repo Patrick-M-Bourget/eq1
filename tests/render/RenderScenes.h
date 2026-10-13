@@ -166,6 +166,18 @@ inline std::vector<RenderScene> renderScenes()
         held.globalBypass = true;
         scenes.push_back ({ .name = "global-bypass", .settings = bells(), .change = held });
     }
+    // A Dynamic Band's Detection Range switched between Band and Free while its Detection Audition is
+    // held, both ways: what the detector hears, and so the output, crosses from one range to the other.
+    {
+        auto band = oneBand (dynamicBell());
+        band.auditionSlot = 1;
+        auto free = band;
+        free.bands[0].detectionRange = DetectionRange::Free;
+        free.bands[0].detectionLow = 100.0;
+        free.bands[0].detectionHigh = 5000.0;
+        scenes.push_back ({ .name = "detection-range-band-to-free", .settings = band, .change = free });
+        scenes.push_back ({ .name = "detection-range-free-to-band", .settings = free, .change = band });
+    }
 
     // The Output and the global settings.
     {
@@ -185,6 +197,30 @@ inline std::vector<RenderScene> renderScenes()
         auto settings = bells();
         settings.autoGain = true;
         scenes.push_back ({ .name = "auto-gain", .settings = settings });
+    }
+    // The Output's amounts gliding from one setting to another and settling, in L/R and M/S, and Auto Gain
+    // switched on.
+    {
+        auto settings = bells();
+        settings.outputGainDb = 3.0;
+        auto change = settings;
+        change.outputGainDb = -4.0;
+        change.outputPan = 0.4;
+        change.phaseInvert = true;
+        scenes.push_back ({ .name = "output-glide", .settings = settings, .change = change });
+    }
+    {
+        auto settings = bells();
+        settings.outputPan = -0.5;
+        settings.panMode = PanMode::MidSide;
+        auto change = settings;
+        change.outputPan = 0.6;
+        scenes.push_back ({ .name = "output-glide-mid-side", .settings = settings, .change = change });
+    }
+    {
+        auto change = bells();
+        change.autoGain = true;
+        scenes.push_back ({ .name = "auto-gain-on", .settings = bells(), .change = change });
     }
     {
         auto settings = dynamicBells();

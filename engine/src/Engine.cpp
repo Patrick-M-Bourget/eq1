@@ -11,6 +11,7 @@
 #include "Output.h"
 #include "OutputLevelTap.h"
 #include "Placement.h"
+#include "RunGrid.h"
 #include "Smoother.h"
 #include "Solo.h"
 
@@ -36,7 +37,7 @@ struct Engine::Impl
 
     std::array<Band, numBandSlots> bands;
     std::array<Dynamics, numBandSlots> dynamics;
-    // Where the next sample falls in the grid of runs of Band::maxSubBlock samples that starts at
+    // Where the next sample falls in the grid of runs of runSamples samples that starts at
     // prepare() and carries across process() calls. A Dynamic Band's filter over a run follows what
     // its detector heard up to the run's start, so the output doesn't depend on how blocks cut runs.
     int gridPosition = 0;
@@ -47,7 +48,7 @@ struct Engine::Impl
 
     // Global Bypass: bypassMix crossfades from the processed output (0) to the input (1), copied into dry.
     Smoother bypassMix;
-    std::vector<std::array<float, Band::maxSubBlock>> dry; // per channel
+    std::vector<std::array<float, runSamples>> dry; // per channel
 
     // Auto Gain's estimate is worked out over several blocks, at most a point every
     // samplesPerAutoGainPoint samples, so a new estimate takes about 40 ms at 48 kHz.
@@ -80,7 +81,7 @@ struct Engine::Impl
     // What the settings ask for. A different one than is playing waits for that one to fade out.
     Held wanted;
     BandSettings wantedSoloRegion;
-    std::vector<std::array<float, Band::maxSubBlock>> soloPart; // per channel
+    std::vector<std::array<float, runSamples>> soloPart; // per channel
     std::vector<float*> soloPartChannels;
 
     bool heldAudible() const { return heldMix.value() > 0.0 || heldMix.isMoving(); }
@@ -116,6 +117,17 @@ struct Engine::Impl
     DetectionLevelTap detectionLevel;
 
     AnalysisFifo preEq, postEq, sidechain;
+
+    AnalysisFifo& fifoFor (AnalysisTap tap)
+    {
+        switch (tap)
+        {
+            case AnalysisTap::PreEq: return preEq;
+            case AnalysisTap::PostEq: return postEq;
+            case AnalysisTap::Sidechain: return sidechain;
+        }
+        return preEq;
+    }
 
     // The Output Level: one tap per channel the Engine was prepared with, in an array for the most
     // channels any layout allows, so a re-prepare to another channel count never frees or moves a
@@ -320,7 +332,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
     {
         // The rest of the grid's run, or of the block where it ends first, leaving the run open.
         const int position = impl->gridPosition;
-        count = std::min (Band::maxSubBlock - position, main.numSamples - start);
+        count = std::min (runSamples - position, main.numSamples - start);
         for (int ch = 0; ch < channels; ++ch)
             impl->subBlock[static_cast<size_t> (ch)] = main.channels[ch] + start;
         for (int ch = 0; ch < sidechainChannels; ++ch)
@@ -375,7 +387,7 @@ void Engine::process (AudioBlock main, const ConstAudioBlock* sidechain)
 
         // At the run's end, each detector moves its Band over the next run.
         impl->gridPosition = position + count;
-        if (impl->gridPosition == Band::maxSubBlock)
+        if (impl->gridPosition == runSamples)
         {
             for (size_t band = 0; band < impl->bands.size(); ++band)
                 impl->bands[band].setDynamicOffset (impl->dynamics[band].finishRun());
@@ -417,20 +429,21 @@ std::uint64_t Engine::settingsApplied() const
     return impl->settingsApplications.load (std::memory_order_relaxed);
 }
 
+std::uint64_t Engine::sectionsSkipped() const
+{
+    std::uint64_t total = 0;
+    for (const auto& band : impl->bands)
+        total += band.sectionsSkipped();
+    return total;
+}
+
 int Engine::analysisCapacity() const
 {
     return impl->preEq.capacity();
 }
 
-int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples)
-{
-    switch (tap)
-    {
-        case AnalysisTap::PreEq: return impl->preEq.pop (destination, maxSamples);
-        case AnalysisTap::PostEq: return impl->postEq.pop (destination, maxSamples);
-        case AnalysisTap::Sidechain: return impl->sidechain.pop (destination, maxSamples);
-    }
-    return 0;
-}
+int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return impl->fifoFor (tap).pop (destination, maxSamples); }
+
+void Engine::skipAnalysis (AnalysisTap tap) { impl->fifoFor (tap).skip(); }
 
 } // namespace eq1

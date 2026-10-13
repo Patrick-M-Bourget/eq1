@@ -14,7 +14,9 @@ only. See docs/dsp/filter-design.md for the targets and the design method.
     python3 tools/filter-lab/filterlab.py auto-threshold --spreads 0.1 0.2 0.3 --falls 1 1.25 2
     python3 tools/filter-lab/filterlab.py high-cut --slopes 15 21 87 --target blend
     python3 tools/filter-lab/filterlab.py slopes
-    python3 tools/filter-lab/filterlab.py slope-gaps seams shelves rescale --jobs 6
+    python3 tools/filter-lab/filterlab.py slope-gaps whole seams shelves rescale --jobs 6
+    python3 tools/filter-lab/filterlab.py resonant-shelves --jobs 8
+    python3 tools/filter-lab/filterlab.py matched-rounding
 
 To try a new design, write a function returning (digital sections, analog target in dB) like the
 ones under "Shapes", and pass it to report(). A new command registers itself with @command in its own
@@ -30,7 +32,7 @@ from dataclasses import dataclass
 
 PI = math.pi
 
-# A Band's parameter ranges, as plugin/Parameters.cpp declares them (scripts/check.sh docs keeps the two equal).
+# A Band's parameter ranges, as engine/include/eq1/Settings.h names them (scripts/check.sh docs keeps the two equal).
 FREQUENCY_RANGE = (10, 30000)
 GAIN_RANGE = (-30, 30)
 Q_RANGE = (0.025, 40)
@@ -221,11 +223,27 @@ def _analog_db(sections, f, frequency):
 RESONANT_SHELF_Q = 2.0  # above this Q, a shelf section's extra resonance goes into a second biquad
 SPLIT_IN = 2.5  # the split eases in from Q 2 to this Q
 SPLIT_FULL, SPLIT_NONE = 0.8, 1.1  # zeros' natural frequency, as a share of Nyquist, where the split fades out
+RESONANCE_MATCH = 0.97  # where a sharp zeros' extra resonance is matched once it reaches Nyquist, as a share of Nyquist
+SHARP_FROM, SHARP_TO = 4.0, 16.0  # zeros' Q over which the match point's slide grows in
 
 
 def _smoothstep(x):
     x = min(max(x, 0.0), 1.0)
     return x * x * (3 - 2 * x)
+
+
+def _resonance_match(natural_hz, zeros_q, fs):
+    """Where the zeros' extra resonance is matched: at its natural frequency, sliding (in log
+    frequency, smoothly) towards RESONANCE_MATCH x Nyquist as the natural frequency goes from SPLIT_FULL
+    to 1 x Nyquist. The slide grows in, smoothly, as the zeros' Q goes from SHARP_FROM to SHARP_TO.
+    Matched right at a sharp resonance near Nyquist, the match point and Nyquist crowd together and the
+    fit swings: up to 26% of the span at Q 40. A broad resonance fits best at its natural frequency."""
+    x = natural_hz / (fs / 2)
+    if x <= SPLIT_FULL:
+        return natural_hz
+    slide = (_smoothstep(math.log(x / SPLIT_FULL) / math.log(1 / SPLIT_FULL))
+             * _smoothstep(math.log(zeros_q / SHARP_FROM) / math.log(SHARP_TO / SHARP_FROM)))
+    return natural_hz ** (1 - slide) * (RESONANCE_MATCH * fs / 2) ** slide
 
 
 def _resonant_split(a: Analog, frequency, fs, q, pairs):
@@ -234,15 +252,17 @@ def _resonant_split(a: Analog, frequency, fs, q, pairs):
     resonance, (zeros at their Q) / (zeros at that Q), designed as its inverse and inverted back. The
     split eases in from Q 2 to SPLIT_IN and fades out, geometrically in the zeros' Q, as the zeros'
     natural frequency goes from SPLIT_FULL to SPLIT_NONE x Nyquist, where the inverse's poles would be
-    held; both fades are smoothsteps, so the coefficients' path has no corner. Unsplit, the second is its
-    matched poles over equal zeros: exactly the identity, and the limit of the split."""
+    held; both fades are smoothsteps, so the coefficients' path has no corner. The resonance is matched
+    at _resonance_match. Unsplit, the second is its matched poles over equal zeros: exactly the identity,
+    and the limit of the split."""
     natural = math.sqrt(a.n0 / a.n2)
     zeros_q = math.sqrt(a.n0 * a.n2) / a.n1
     x = natural * frequency / (fs / 2)
     t = math.log(SPLIT_NONE / x) / math.log(SPLIT_NONE / SPLIT_FULL)
     t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
     split_q = zeros_q * (RESONANT_SHELF_Q / q) ** (t / pairs)
-    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs)
+    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs,
+                              _resonance_match(frequency * natural, zeros_q, fs))
     if split_q >= zeros_q:
         resonance.b0, resonance.b1, resonance.b2 = 1, resonance.a1, resonance.a2
         return [match_section(a, frequency, fs), resonance]
@@ -963,14 +983,17 @@ def report_slopes(frequency=1000.0, fs=1e8, gains=(-18.0, 6.0, 18.0), q=math.sqr
 
 # --- Fractional Slope gaps (ADR 0006): seams, resonant and High Shelf tolerances, the corner rescale -
 # The continuous design: fractional_design with these changes. Each touches only the partial section, a
-# Shelf's resonant split or Band Pass, and whole orders stay exactly as they are (within 1e-13 dB).
-#   - High Cut: the partial section, real poles or a pair, is one matched biquad with exact poles. While
-#     its poles are real, its match point aims at a blend of the analog and two first-order sections'
-#     response, weighted by how close its poles are (_closeness: 0 as one comes in from infinity, 1 where
-#     they meet). No seam where they meet, and none as the pole comes in.
+# Shelf's resonant split, High Cut's sections with real poles or Band Pass, and whole orders stay as they
+# are (slope-gaps whole checks it).
+#   - High Cut: every section is one matched biquad, as at whole orders, real poles or a pair; the partial
+#     section has exact poles. While its poles are real, its match point aims at a blend of the analog and
+#     two first-order sections' response, weighted by how close its poles are and by t (_closeness: 0 as
+#     one comes in from infinity, 1 where they meet and at the next whole order). No seam where a
+#     section's poles meet, at a whole order or as the pole comes in, at any Q.
 #   - Shelves: a section's resonant split reduces its zeros' Q to what the same section has at Q 2 (for
-#     whole orders, exactly the existing (2 / Q)^(1 / pairs)); the partial section's split is weighted by
-#     t^PARTIAL_SPLIT_POWER, and while its roots are real it is matched as the High Cut's is.
+#     whole orders, exactly the existing (2 / Q)^(1 / pairs)), matched where the existing split is; the
+#     partial section's split is weighted by t^PARTIAL_SPLIT_POWER, and while its roots are real it is
+#     matched as the High Cut's is.
 #   - Band Pass: a pair's upper section gets the transform's gain, |p|^2 / Q^2, in the target too; the
 #     steep design comes in over 24 to 30 dB/oct instead of switching on above 24.
 # Low Cut and Notch keep fractional_design's design. Band Pass and Notch keep one seam each where the
@@ -1026,23 +1049,25 @@ def _real_pairs(a: Analog):
     return out
 
 
-def _closeness(a: Analog):
-    """For real poles, 1 - (1 - near / far)^2: 1 where they meet, 0 as one comes in from infinity, and
-    smooth where they meet (near / far alone moves as the square root of the distance). 1 for a pair."""
+def _closeness(a: Analog, t):
+    """For a partial section t of the way to the next whole order, with real poles, 1 - (1 - near / far)^2
+    (1 - t): 1 where they meet and at the next whole order (at low Q they don't meet before it), 0 as one
+    comes in from infinity, and smooth where they meet (near / far alone moves as the square root of the
+    distance). 1 for a pair."""
     disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
     if disc < 0:
         return 1.0
     r = math.sqrt(disc)
-    return 1 - (2 * r / (a.d1 + r)) ** 2
+    return 1 - (2 * r / (a.d1 + r)) ** 2 * (1 - t)
 
 
-def _partial_biquad(a: Analog, analog_at_match: Analog, frequency, fs, match_hz):
+def _partial_biquad(a: Analog, analog_at_match: Analog, frequency, fs, match_hz, t):
     """One matched biquad with a's poles; at DC, Nyquist and match_hz it meets analog_at_match's
     magnitude; at match_hz, times (while a's poles are real) two first-order sections' error there,
-    weighted by 1 - _closeness(a)."""
+    weighted by 1 - _closeness(a, t)."""
     x = match_hz / frequency
     at_match = analog_at_match.squared(x)
-    beta = _closeness(a)
+    beta = _closeness(a, t)
     if beta < 1:
         w = 2 * PI * match_hz / fs
         first, second = (match_section(s, frequency, fs) for s in _real_pairs(a))
@@ -1055,15 +1080,20 @@ def _continuous_high_cut(fs, frequency, q, nu):
     proto = morph_low_pass(nu, q)
     n, t = math.floor(nu), nu - math.floor(nu)
     sections, target = _fractional_cut("high-cut", fs, frequency, q, nu)
+    for i, a in enumerate(proto):  # every shared section is one matched biquad, as at whole orders, real poles or not
+        if a.d2 and _roots(a)[0].imag == 0:
+            b, w0 = normalised(Analog(0, 0, 1 / a.d2, 1, a.d1 / a.d2, 1 / a.d2))
+            damped = frequency * w0 * math.sqrt(max(1 - b.d1 * b.d1 / 4, 0.01))
+            sections[i] = match_section(b, frequency * w0, fs, match_hz=min(damped, fs / 4))
     if n % 2 and t > 0:
         a = proto[-1]
         w0 = math.sqrt(a.d0 / a.d2)
         damped = frequency * w0 * math.sqrt(max(1 - a.d1 * a.d1 / (4 * a.d0 * a.d2), 0.01))
-        sections[-1] = _partial_biquad(a, a, frequency, fs, min(damped, fs / 4))
+        sections[-1] = _partial_biquad(a, a, frequency, fs, min(damped, fs / 4), t)
     return sections, target
 
 
-def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial):
+def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial, share):
     """_resonant_split, with the zeros' Q reduced toward reference_q (the section's at Q 2) and the split
     scaled by weight; a partial section with real roots is matched by _partial_biquad."""
     natural = math.sqrt(a.n0 / a.n2)
@@ -1071,11 +1101,12 @@ def _split_toward(a: Analog, reference_q, frequency, fs, q, weight, partial):
     x = natural * frequency / (fs / 2)
     t = math.log(SPLIT_NONE / x) / math.log(SPLIT_NONE / SPLIT_FULL)
     t = _smoothstep(t) * _smoothstep(math.log(q / RESONANT_SHELF_Q) / math.log(SPLIT_IN / RESONANT_SHELF_Q)) if q > RESONANT_SHELF_Q else 0.0
-    t *= weight * (_closeness(a) if partial else 1.0)
+    t *= weight * (_closeness(a, share) if partial else 1.0)
     split_q = zeros_q * min(reference_q / zeros_q, 1.0) ** t
-    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs)
+    resonance = match_section(Analog(1, 1 / split_q, 1, 1, 1 / zeros_q, 1), frequency * natural, fs,
+                              _resonance_match(frequency * natural, zeros_q, fs))
     split = Analog(a.n2, math.sqrt(a.n0 * a.n2) / split_q, a.n0, a.d2, a.d1, a.d0)
-    poles = _partial_biquad(a, split, frequency, fs, frequency) if partial else match_section(split, frequency, fs)
+    poles = _partial_biquad(a, split, frequency, fs, frequency, share) if partial else match_section(split, frequency, fs)
     if split_q >= zeros_q:
         resonance.b0, resonance.b1, resonance.b2 = 1, resonance.a1, resonance.a2
         return [poles, resonance]
@@ -1097,7 +1128,7 @@ def _continuous_shelf(shape, fs, frequency, gain, q, nu):
             continue
         partial = n % 2 == 1 and t > 0 and i == len(boost) - 1
         poles, zeros = _split_toward(s, math.sqrt(r.n0 * r.n2) / r.n1, frequency, fs, q,
-                                     t ** PARTIAL_SPLIT_POWER if partial else 1.0, partial)
+                                     t ** PARTIAL_SPLIT_POWER if partial else 1.0, partial, t)
         sections += [inverse(poles), inverse(zeros)] if invert else [zeros, poles]
     _, target = _fractional_shelf(shape, fs, frequency, gain, q, nu)
     if shape == "tilt-shelf":
@@ -1404,7 +1435,43 @@ def report_rescale(steps=(1, 2, 3, 4), gains=(-30, -18, -6, -1, -0.1, 0.1, 1, 6,
                   + (f" G={gain:g}" if gain else ""))
 
 
-GAPS = ("seams", "shelves", "rescale")
+WHOLE_LIMIT_DB = 1e-6  # how far continuous_design may stray from the existing design at a whole order
+
+
+def _whole_job(job):
+    """The largest difference, in dB, between continuous_design and the existing design at whole orders, for
+    one (shape, fs, Frequency, Gain, Q), at 100 points from 10 Hz to Nyquist."""
+    shape, fs, frequency, gain, q = job
+    unit = 12 if shape == "notch" else 6
+    grid = [10 * (fs / 2 / 10) ** (i / 100) for i in range(101)]
+    worst = (0.0, 0)
+    for order in range(1, 96 // unit + 1):
+        after, _ = continuous_design(shape, fs, frequency, gain, q, unit * order)
+        existing, _ = SHAPES[shape](fs, frequency, gain, q, order)
+        difference = max(abs(cascade_db(after, f, fs) - cascade_db(existing, f, fs)) for f in grid)
+        worst = max(worst, (difference, order))
+    return shape, worst, (fs, frequency, gain, q)
+
+
+def report_whole(shapes, workers):
+    """At every whole order, continuous_design must be the existing design: the worst difference per Shape
+    over the seams' grid, against WHOLE_LIMIT_DB. Returns whether every Shape is within it."""
+    jobs = [(shape, *point) for shape in shapes for point in _seam_grid(shape)]
+    worst = {}
+    for shape, found, place in _parallel(_whole_job, jobs, workers):
+        if shape not in worst or found > worst[shape][0]:
+            worst[shape] = (found, place)
+    print(f"whole orders: continuous_design against the existing design, worst dB (limit {WHOLE_LIMIT_DB:g})")
+    within = True
+    for shape in shapes:
+        (difference, order), (fs, frequency, gain, q) = worst[shape]
+        over = difference > WHOLE_LIMIT_DB
+        within &= not over
+        print(f"{shape:>10} {difference:9.2g}{' over' if over else '':5}   order={order} fs={fs} F={frequency} G={gain:g} Q={q:g}")
+    return within
+
+
+GAPS = ("whole", "seams", "shelves", "rescale")
 
 
 def gap_options(parser):
@@ -1413,7 +1480,7 @@ def gap_options(parser):
             raise argparse.ArgumentTypeError(f"choose from {', '.join(GAPS)}")
         return name
     parser.add_argument("gaps", nargs="*", type=gap, metavar="gap", help=f"{', '.join(GAPS)} (default: all)")
-    parser.add_argument("--shapes", nargs="+", choices=FRACTIONAL_SHAPES, help="seams: default all; shelves: default low-shelf high-shelf")
+    parser.add_argument("--shapes", nargs="+", choices=FRACTIONAL_SHAPES, help="whole, seams: default all; shelves: default low-shelf high-shelf")
     parser.add_argument("--q", type=float, nargs="+", default=[0.71, 2, 2.25, 2.5, 3, 4, 10, 20, 40], help="shelves")
     parser.add_argument("--slopes", type=float, nargs="+", help="shelves: default 8 between each pair of whole orders")
     parser.add_argument("--jobs", type=int, default=4, help="worker processes")
@@ -1423,6 +1490,10 @@ def gap_options(parser):
 def run_slope_gaps(args):
     """ADR 0006's gaps, before (fractional_design) and after (continuous_design)."""
     gaps = args.gaps or GAPS
+    within = True
+    if "whole" in gaps:
+        within = report_whole(args.shapes or FRACTIONAL_SHAPES, args.jobs)
+        print()
     if "seams" in gaps:
         report_seams(args.shapes or FRACTIONAL_SHAPES, args.jobs)
         print()
@@ -1431,6 +1502,158 @@ def run_slope_gaps(args):
         print()
     if "rescale" in gaps:
         report_rescale()
+    if not within:
+        raise SystemExit("continuous_design strays from the existing design at a whole order")
+
+
+# --- Resonant shelves over a dense Frequency scan ------------------------------------------------
+# report() reads Shelves at a few Frequencies. A resonant shelf's error can peak sharply between them,
+# where a section's zeros or poles near Nyquist, so this scans Frequency densely: every DENSE_STEP
+# octave over the plugin's range, plus, for each second-order section, every DENSE_NEAR step of its
+# zeros' and its poles' natural frequency from 0.8 to 1.12 x Nyquist (where the split fades out).
+
+DENSE_STEP = 1 / 24
+DENSE_NEAR = 0.0025
+DENSE_QS = (2.25, 2.5, 3, 4, 10, 20, 40)
+DENSE_GAINS = (-30, -18, -12, -6, -3, 3, 12, 18, 30)
+
+
+def _dense_frequencies(fs, order, gain, q):
+    top = min(FREQUENCY_RANGE[1], 0.91 * fs / 2)
+    octaves = math.log2(top / FREQUENCY_RANGE[0])
+    found = {FREQUENCY_RANGE[0] * 2 ** (i * DENSE_STEP) for i in range(int(octaves / DENSE_STEP) + 1)}
+    for s in _low_shelf_sections(order, 10 ** (abs(gain) / 20), q):
+        if s.d2:  # a mirrored (High Shelf) section's zeros sit where the Low Shelf's poles do
+            for natural in (math.sqrt(s.n0 / s.n2), math.sqrt(s.d0 / s.d2)):
+                for i in range(round(0.32 / DENSE_NEAR) + 1):
+                    frequency = (0.8 + i * DENSE_NEAR) * fs / 2 / natural
+                    if FREQUENCY_RANGE[0] <= frequency <= top:
+                        found.add(frequency)
+    return sorted(found)
+
+
+def _dense_job(job):
+    """The worst share of the span per position band for one (shape, fs, Q, order), as report() reads it."""
+    shape, fs, q, order, points = job
+    worst = {}
+    for gain in DENSE_GAINS:
+        for frequency in _dense_frequencies(fs, order, gain, q):
+            sections, target = SHAPES[shape](fs, frequency, gain, q, order)
+            error, span, lowest = 0.0, abs(gain), target(10)
+            for i in range(points + 1):
+                f = 10 * (fs / 2 / 10) ** (i / points)
+                t = target(f)
+                span = max(span, abs(t - lowest))
+                error = max(error, abs(cascade_db(sections, f, fs) - t))
+            share = error / span
+            band = position_band(frequency, fs)
+            if share > worst.get(band, (0,))[0]:
+                worst[band] = (share, error, fs, frequency, gain, order)
+    return shape, q, worst
+
+
+def dense_options(parser):
+    parser.add_argument("--shapes", nargs="+", choices=SHELVES, default=list(SHELVES))
+    parser.add_argument("--q", type=float, nargs="+", default=list(DENSE_QS))
+    parser.add_argument("--orders", type=int, nargs="+", default=list(range(2, 17)))
+    parser.add_argument("--jobs", type=int, default=4, help="worker processes")
+
+
+@command("resonant-shelves", options=dense_options)
+def run_resonant_shelves(args, points=200):
+    """Worst error as a share of the span (report()'s measure) per Shelf, position band and Q, over a dense
+    Frequency scan, every Gain in DENSE_GAINS and the lab's sample rates, against SHELF_LIMITS."""
+    jobs = [(shape, fs, q, order, points) for shape in args.shapes for fs in SAMPLE_RATES for q in args.q
+            for order in args.orders]
+    worst = {}
+    for shape, q, found in _parallel(_dense_job, jobs, args.jobs):
+        for band, value in found.items():
+            if value[0] > worst.get((shape, band, q), (0,))[0]:
+                worst[(shape, band, q)] = value
+    print(f"{'shape':>10} {'band':>7} {'Q':>5}  {'share':>6} {'dB':>6} {'limit':>5}   worst case")
+    for (shape, band, q), (share, error, fs, frequency, gain, order) in sorted(worst.items()):
+        limit = SHELF_LIMITS[band][q > RESONANT_SHELF_Q]
+        mark = " over" if share > limit else ""
+        print(f"{shape:>10} {band:>7} {q:>5g}  {share:6.1%} {error:6.2f} {limit:5.0%}{mark:5}"
+              f" fs={fs} F={frequency:.1f} G={gain} order={order}")
+
+
+# --- Matched-design rounding at low Frequency and high Q ------------------------------------------
+# match_section reads the poles' squared magnitude at the match point in the phi form, d0 p0 + d1 p1 + d2 p2
+# (as engine/src/MatchedDesign.cpp does). With poles near z = 1 that sum cancels: its rounding is about
+# 1e-16 x d1 p1, which the analog magnitude (Q^2 at a resonance) multiplies and p2 (about w^2) divides. At
+# Q 40 and a match point far below the sample rate, that swamps the numerator's p2, whose true value
+# shrinks as w^4: the design's level jumps by many dB between settings a rounding apart.
+# match_section_from_poles reads it from the poles instead, |1 - p e^(-jw)|^2 = (1 - r)^2 +
+# 4 r sin^2((w - angle) / 2) per pole, which doesn't cancel.
+
+def match_section_from_poles(a: Analog, reference_hz, fs, match_hz=None):
+    """match_section, the poles' squared magnitude at DC and at match_hz read from the poles themselves."""
+    if a.d2 == 0:
+        return _phi_form_match_section(a, reference_hz, fs, match_hz)
+    w = min(2 * PI * reference_hz / fs, 0.98 * PI)
+    c = _phi_form_match_section(Analog(0, 0, 1, a.d2, a.d1, a.d0), reference_hz, fs)
+    disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
+    re = -a.d1 / (2 * a.d2) * w
+    if disc < 0:
+        im = math.sqrt(-disc) / (2 * a.d2) * w
+        poles = [(re, im), (re, -im)]
+    else:
+        spread = math.sqrt(disc) / (2 * a.d2) * w
+        poles = [(re + spread, 0.0), (re - spread, 0.0)]
+    at = lambda x: math.prod(math.expm1(lr) ** 2 + 4 * math.exp(lr) * math.sin((x - angle) / 2) ** 2
+                             for lr, angle in poles)
+    wm = w if match_hz is None else min(2 * PI * match_hz / fs, 0.98 * PI)
+    p0, p1, p2 = _phi(wm)
+    n0 = at(0.0) * a.squared(0)
+    n1 = _weights(1, c.a1, c.a2)[1] * a.squared(0.5 * fs / reference_hz)
+    n2 = (at(wm) * a.squared(wm / (2 * PI) * fs / reference_hz) - n0 * p0 - n1 * p1) / p2
+    c.b0, c.b1, c.b2 = _factor(n0, n1, n2)
+    return c
+
+
+_phi_form_match_section = match_section
+ROUNDING_RATES = (44100, 48000, 96000, 192000)
+
+
+def _rounding_report(label):
+    """High Cut's worst error against its target where the target is above -60 dB, at whole orders 1 to 16,
+    Q 40, Frequency 10 to 40 Hz (every 1/20 octave), per sample rate; and the largest jump between Slopes
+    1e-9 dB/oct apart at Q 40, 20 Hz, 96 kHz, at 10 Hz, over Slopes 0.1 dB/oct apart from 0.1 to 96."""
+    errors = []
+    for fs in ROUNDING_RATES:
+        worst = (0.0, 0, 0)
+        for i in range(41):
+            frequency = 10 * 2 ** (i / 20)
+            for order in range(1, 17):
+                sections, target = high_cut(fs, frequency, None, 40.0, order)
+                for f in (10, frequency / 2, frequency, 2 * frequency, 4 * frequency):
+                    if f >= 10 and target(f) > -60:
+                        worst = max(worst, (abs(cascade_db(sections, f, fs) - target(f)), frequency, order))
+        errors.append(f"{worst[0]:7.2g} dB (F={worst[1]:.1f} order={worst[2]})")
+    jump = (0.0, 0.0)
+    for i in range(1, 961):
+        slope = i / 10 + 0.0123  # off the whole orders
+        a, _ = continuous_design("high-cut", 96000, 20, 0, 40.0, slope)
+        b, _ = continuous_design("high-cut", 96000, 20, 0, 40.0, slope + 1e-9)
+        jump = max(jump, (abs(cascade_db(a, 10, 96000) - cascade_db(b, 10, 96000)), slope))
+    print(f"{label:>11}  " + "  ".join(errors) + f"   {jump[0]:7.2g} dB (Slope={jump[1]:g})")
+
+
+@command("matched-rounding")
+def run_matched_rounding(args):
+    """High Cut at Q 40 and low Frequency, with match_section as the Engine has it and with
+    match_section_from_poles."""
+    global match_section
+    print("High Cut, Q 40, Frequency 10 to 40 Hz, whole orders 1 to 16: worst error against the target, by")
+    print(f"sample rate ({', '.join(str(r) for r in ROUNDING_RATES)}); then the largest jump at 10 Hz between")
+    print("Slopes 1e-9 dB/oct apart (Q 40, 20 Hz, 96 kHz)")
+    try:
+        _rounding_report("phi form")
+        match_section = match_section_from_poles
+        _rounding_report("from poles")
+    finally:
+        match_section = _phi_form_match_section
 
 
 # --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------

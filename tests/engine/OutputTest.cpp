@@ -476,6 +476,60 @@ TEST_CASE ("Global Bypass passes the input through, whatever the Bands and outpu
     checkMix (mono, processed (settings, mono), 0, 1.0, 0.0);
 }
 
+namespace
+{
+// Converts to any field's type, to count an aggregate's fields: the most it can be brace-initialised from.
+struct AnyField
+{
+    template <typename T>
+    operator T() const;
+};
+template <typename T, typename... Fields>
+constexpr int fieldCount()
+{
+    if constexpr (requires { T { Fields {}..., AnyField {} }; })
+        return fieldCount<T, Fields..., AnyField>();
+    else
+        return static_cast<int> (sizeof... (Fields));
+}
+} // namespace
+
+// autoGainInputs (Response.cpp) lists the Band settings the estimate doesn't read (Detection), and the
+// test below checks them by name. A Band setting added since fails this count: decide whether Auto
+// Gain reads it, set it aside in autoGainInputs if not, add it to the test below, then update the count.
+static_assert (fieldCount<BandSettings>() == 19, "a new BandSettings field: does Auto Gain read it? See autoGainInputs");
+
+TEST_CASE ("Auto Gain's inputs: the Bands, Detection aside, and Gain Scale; equal inputs give the same estimate")
+{
+    Settings a;
+    a.bands[0] = { .inUse = true, .shape = Shape::Bell, .frequency = 1000.0, .gain = 6.0, .q = 2.0 };
+    auto b = a;
+    // What the estimate doesn't read.
+    b.bands[0].detectionSource = DetectionSource::External;
+    b.bands[0].detectionRange = DetectionRange::Free;
+    b.bands[0].detectionLow = 100.0;
+    b.bands[0].detectionHigh = 5000.0;
+    b.soloSlot = b.auditionSlot = b.meteredSlot = 1;
+    b.autoGain = true;
+    b.outputGainDb = -6.0;
+    b.outputPan = 0.5;
+    b.panMode = PanMode::MidSide;
+    b.phaseInvert = b.globalBypass = true;
+    CHECK (autoGainInputs (a) == autoGainInputs (b));
+    CHECK (autoGainDb (a, 48000.0) == autoGainDb (b, 48000.0));
+
+    // What it does.
+    auto gain = a;
+    gain.bands[0].gain = 6.5;
+    CHECK_FALSE (autoGainInputs (a) == autoGainInputs (gain));
+    auto scale = a;
+    scale.gainScale = 0.5;
+    CHECK_FALSE (autoGainInputs (a) == autoGainInputs (scale));
+    auto other = a;
+    other.bands[5].inUse = true;
+    CHECK_FALSE (autoGainInputs (a) == autoGainInputs (other));
+}
+
 TEST_CASE ("Auto Gain is held to +/-30 dB, however much the Bands take away or add")
 {
     // A Low Cut at 10 kHz and a High Cut at 100 Hz leave almost nothing.

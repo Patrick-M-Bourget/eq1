@@ -64,13 +64,12 @@ private:
     void tick (double seconds) override;
     bool isActive() const override { return moving; }
     double valueDraggedBy (double from, float pixels, bool fine) override;
-    static bool isOn (const std::atomic<float>* parameter) { return parameter->load() >= 0.5f; }
 
     PluginProcessor& processor;
     staple::Knob& gain;
     int slot = 0;
-    parameters::SlotValues band {};  // the Band's parameters, while a Band is shown
-    parameters::OutputValues output; // Gain Scale and Global Bypass
+    const parameters::SlotValues* band = nullptr; // the Band's parameters, while a Band is shown
+    const parameters::OutputValues& output;       // Gain Scale and Global Bypass
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     std::optional<double> liveGain;
     bool moving = false; // the last tick moved the Live Gain arc

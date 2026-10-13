@@ -15,11 +15,8 @@ PluginProcessor::PluginProcessor (juce::File userSettingsFile)
                           .withInput ("Sidechain", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "eq1", parameters::createLayout()),
-      output (eq1::parameters::OutputValues::of (parameters)),
       userSettings (std::move (userSettingsFile))
 {
-    for (int slot = 1; slot <= numBandSlots; ++slot)
-        slots[static_cast<size_t> (slot - 1)] = eq1::parameters::SlotValues::of (parameters, slot);
     seenGains = currentHeardGains();
 }
 
@@ -45,13 +42,10 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     // The Engine flushes subnormal numbers for its own duration (engine/src/NoSubnormals.h); nothing
     // here computes on the audio.
     // Host Automation arrives on the audio thread, so the snapshot is taken here, once per block.
-    Settings settings;
-    for (size_t slot = 0; slot < slots.size(); ++slot)
-        settings.bands[slot] = slots[slot].read();
+    auto settings = reader.read();
     settings.soloSlot = heldSoloSlot.load();
     settings.auditionSlot = heldAuditionSlot.load();
     settings.meteredSlot = heldMeteredSlot.load();
-    output.readInto (settings);
     // Published only when it differs from the last one: a block with no edits does no settings work.
     if (! publishedSincePrepare || settings != publishedSettings)
     {
@@ -112,14 +106,6 @@ juce::ValueTree toTree (const AnalyzerSettings& a)
         .setProperty (resolutionProperty, static_cast<int> (a.resolution), nullptr)
         .setProperty (analyzerTiltProperty, a.tiltDbPerOctave, nullptr)
         .setProperty (peakHoldProperty, a.peakHold, nullptr);
-}
-
-// A saved number as a session restores it, like a parameter's value (restoredPlainValue): itself within
-// minimum to maximum, the nearer end outside, and defaultValue when it isn't a finite number.
-double restoredNumber (const juce::var& saved, double defaultValue, double minimum, double maximum)
-{
-    const double value = static_cast<double> (saved);
-    return std::isfinite (value) ? juce::jlimit (minimum, maximum, value) : defaultValue;
 }
 
 template <typename Enum>
@@ -210,11 +196,7 @@ void PluginProcessor::pickUiScale (int percent)
 
 HeardGains PluginProcessor::currentHeardGains() const
 {
-    Settings settings;
-    for (size_t slot = 0; slot < slots.size(); ++slot)
-        settings.bands[slot] = slots[slot].read();
-    output.readInto (settings);
-    return heardGains (settings);
+    return heardGains (reader.read());
 }
 
 void PluginProcessor::fitDisplayRangeToHeardGains()

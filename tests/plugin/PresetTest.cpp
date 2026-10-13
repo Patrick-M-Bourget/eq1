@@ -1,6 +1,6 @@
+#include "EditorHarness.h"
 #include "PluginProcessor.h"
 #include "PresetLibrary.h"
-#include "SavedState.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -379,12 +379,12 @@ TEST_CASE ("A Preset file with nan, inf and out-of-range values loads finite, in
 
     Host host;
     REQUIRE (host.processor.loadPreset (preset, "Odd"));
-    REQUIRE (eq1::test::firstParameterOutOfRange (host.processor).isEmpty());
+    REQUIRE (harness::firstParameterOutOfRange (host.processor).isEmpty());
     CHECK_THAT (host.value ("band1_frequency"), WithinAbs (1000.0, 1.0e-3));
     CHECK (host.value ("band1_gain") == 0.0f);
     CHECK_THAT (host.value ("band1_q"), WithinAbs (1.0, 1.0e-4));
-    CHECK_THAT (host.value ("band2_gain"), WithinAbs (30.0, 1.0e-4));
-    CHECK_THAT (host.value ("band2_frequency"), WithinAbs (10.0, 1.0e-3));
+    CHECK_THAT (host.value ("band2_gain"), WithinAbs (eq1::parameterRanges::gain.high, 1.0e-4));
+    CHECK_THAT (host.value ("band2_frequency"), WithinAbs (eq1::parameterRanges::frequency.low, 1.0e-3));
     CHECK (host.value ("band3_shape") == static_cast<float> (eq1::parameters::shapeNames().size() - 1));
     CHECK_THAT (host.value ("output_gain"), WithinAbs (eq1::parameters::outputGainSilentDb, 1.0e-3));
     CHECK (host.value ("band1_in_use") == 1.0f);

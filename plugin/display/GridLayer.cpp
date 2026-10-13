@@ -1,5 +1,6 @@
 #include "GridLayer.h"
 
+#include "../ValueText.h"
 #include "../staple/Fonts.h"
 #include "../staple/Tokens.h"
 
@@ -24,6 +25,8 @@ constexpr float gainLabelFromRight = 42.0f, analyzerLabelFromRight = 10.0f;
 // the bottom.
 constexpr float analyzerLabelClearTop = 40.0f, analyzerLabelClearBottom = 30.0f;
 constexpr float labelWidth = 48.0f, labelHeight = 14.0f;
+// How far a label's image reaches past its area, for glyphs that overhang it.
+constexpr float labelImageMargin = 4.0f;
 
 bool narrow (const DisplayGeometry& geometry)
 {
@@ -31,14 +34,7 @@ bool narrow (const DisplayGeometry& geometry)
 }
 
 // Signed, with a true minus sign: "+6", "0", "−6".
-juce::String signedDb (int db)
-{
-    if (db > 0)
-        return "+" + juce::String (db);
-    if (db < 0)
-        return juce::String::charToString (0x2212) + juce::String (-db);
-    return "0";
-}
+juce::String dbLabel (int db) { return valueText::signedDb (db, { .decimals = 0, .unit = false }); }
 
 juce::Rectangle<float> rightAligned (float right, float centreY)
 {
@@ -73,7 +69,7 @@ std::vector<Label> gridLabels (const DisplayGeometry& geometry)
             continue;
         const double f = majorFrequencies[i];
         const float x = geometry.xOf (f);
-        const auto text = f >= 1000.0 ? juce::String (juce::roundToInt (f / 1000.0)) + "k" : juce::String (juce::roundToInt (f));
+        const auto text = valueText::frequencyLabel (f);
         juce::Rectangle<float> area { 0.0f, bottom - labelHeight, labelWidth, labelHeight };
         auto justification = juce::Justification::centred;
         if (i == 0)
@@ -98,7 +94,7 @@ std::vector<Label> gridLabels (const DisplayGeometry& geometry)
     for (int i = 2; i >= -2; --i)
     {
         const int db = juce::roundToInt (i * step);
-        labels.push_back ({ signedDb (db), rightAligned (right, geometry.yOf (i * step)), juce::Justification::centredRight,
+        labels.push_back ({ dbLabel (db), rightAligned (right, geometry.yOf (i * step)), juce::Justification::centredRight,
                             i == 0 ? colour::text2 : colour::text3, size::fs2 });
     }
     return labels;
@@ -116,7 +112,7 @@ std::vector<Label> analyzerScaleLabels (const DisplayGeometry& geometry, const A
     {
         const float y = static_cast<float> (-level) / static_cast<float> (settings.rangeDb) * height;
         if (y > analyzerLabelClearTop && y < height - analyzerLabelClearBottom)
-            labels.push_back ({ signedDb (level), rightAligned (right, y), juce::Justification::centredRight, colour::text4, size::fs1 });
+            labels.push_back ({ dbLabel (level), rightAligned (right, y), juce::Justification::centredRight, colour::text4, size::fs1 });
     }
     return labels;
 }
@@ -137,14 +133,27 @@ void paintGrid (juce::Graphics& g, const DisplayGeometry& geometry)
     g.drawHorizontalLine (juce::roundToInt (lines.zeroY), 0.0f, width);
 }
 
+namespace
+{
+void paintLabel (juce::Graphics& g, const Label& label)
+{
+    g.setFont (staple::font (label.fontSize));
+    g.setColour (label.colour);
+    g.drawText (label.text, label.area, label.justification, false);
+}
+} // namespace
+
 void paintLabels (juce::Graphics& g, const std::vector<Label>& labels)
 {
     for (const auto& label : labels)
-    {
-        g.setFont (staple::font (label.fontSize));
-        g.setColour (label.colour);
-        g.drawText (label.text, label.area, label.justification, false);
-    }
+        paintLabel (g, label);
+}
+
+void CachedLabels::paint (juce::Graphics& g, juce::Point<float> origin, const std::vector<Label>& labels)
+{
+    layers.resize (labels.size());
+    for (size_t i = 0; i < labels.size(); ++i)
+        layers[i].draw (g, origin, labels[i].area.expanded (labelImageMargin), labels[i], juce::Image::ARGB, [&] (juce::Graphics& into) { paintLabel (into, labels[i]); });
 }
 
 } // namespace eq1::display

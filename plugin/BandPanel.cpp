@@ -6,6 +6,7 @@
 #include "PluginProcessor.h"
 #include "ShapeIcon.h"
 #include "staple/Fonts.h"
+#include "staple/Painting.h"
 #include "staple/Tokens.h"
 #include "staple/controls/KnobTooltip.h"
 #include "staple/controls/Overlay.h"
@@ -191,7 +192,7 @@ void BandPanel::SlopeButton::startedDragging()
 {
     if (panel.slot == 0 || ! isCut (panel.editing.band (panel.slot).shape) || ! panel.editing.band (panel.slot).brickwall)
         return;
-    brickwall = panel.processor.parameterState().getParameter (parameters::brickwallId (panel.slot));
+    brickwall = &parameters::lookUp (panel.processor.parameterState(), parameters::brickwallId (panel.slot));
     brickwall->beginChangeGesture();
     brickwall->setValueNotifyingHost (0.0f);
 }
@@ -402,13 +403,13 @@ void BandPanel::show (int newSlot)
 void BandPanel::describe()
 {
     auto& state = processor.parameterState();
-    const auto name = [&state] (const juce::String& id) { return state.getParameter (id)->getName (100); };
+    const auto name = [&state] (const juce::String& id) { return parameters::lookUp (state, id).getName (100); };
     const std::pair<KeyboardSlider*, juce::String> sliders[] = { { &frequency, parameters::frequencyId (slot) },
                                                                  { &gain, parameters::gainId (slot) },
                                                                  { &q, parameters::qId (slot) },
                                                                  { slope.get(), parameters::slopeId (slot) } };
     for (const auto& [slider, id] : sliders)
-        slider->describe (*state.getParameter (id));
+        slider->describe (parameters::lookUp (state, id));
     // Read as it shows: Brickwall on a Brickwall Cut.
     slope->spokenValue = [this, spoken = slope->spokenValue] (double value) {
         const auto text = slope->text();
@@ -642,11 +643,8 @@ void BandPanel::paint (juce::Graphics& g)
         g.reduceClipRegion (slab);
         const juce::Point<float> top { bounds.getCentreX(), 0.0f };
         const float rx = 0.55f * bounds.getWidth(), ry = 1.2f * bounds.getHeight();
-        g.addTransform (juce::AffineTransform::scale (1.0f, ry / rx, top.x, top.y));
-        juce::ColourGradient wash (band.withAlpha (washTop), top, band.withAlpha (0.0f), top.translated (rx, 0.0f), true);
-        wash.addColour (0.55, band.withAlpha (washMid));
-        g.setGradientFill (wash);
-        g.fillRect (juce::Rectangle<float> (top.x - rx, 0.0f, 2.0f * rx, rx));
+        staple::fillSquashedRadial (g, { top.x - rx, 0.0f, 2.0f * rx, ry }, top, rx, ry / rx, band.withAlpha (washTop),
+                                    std::pair { 0.55, band.withAlpha (washMid) });
     }
     // The hairline along the top edge, 0 at both ends and 45 % at the centre.
     {

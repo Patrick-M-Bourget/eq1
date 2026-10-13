@@ -392,3 +392,46 @@ TEST_CASE ("Output Meter snapshots: a playing signal, and a lit Clip Light", "[.
     playSine (processor, 0.5f);
     write ("clip");
 }
+
+TEST_CASE ("An editor opening shows current audio: the Analyzer taps and the Output Level's peak hold only what played after it opened, and an over while it was closed still lights the Clip Light")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
+    // Half a second over full scale with no editor reading: the taps fill up and hold its end.
+    playSine (processor, 2.0f);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    juce::AudioBuffer<float> buffer (2, blockSize);
+    for (int ch = 0; ch < 2; ++ch)
+        buffer.clear (ch, 0, blockSize);
+    for (int i = 0; i < blockSize; ++i)
+        for (int ch = 0; ch < 2; ++ch)
+            buffer.setSample (ch, i, 0.25f * static_cast<float> (i + 1) / blockSize);
+    juce::MidiBuffer midi;
+    processor.processBlock (buffer, midi);
+
+    std::vector<float> read (static_cast<size_t> (processor.analysisCapacity()));
+    const int count = processor.readAnalysis (eq1::AnalysisTap::PreEq, read.data(), static_cast<int> (read.size()));
+    REQUIRE (count == blockSize);
+    for (int i = 0; i < count; ++i)
+        REQUIRE_THAT (read[static_cast<size_t> (i)], WithinAbs (0.25 * (i + 1) / blockSize, 1.0e-6));
+    CHECK (processor.readAnalysis (eq1::AnalysisTap::PostEq, read.data(), static_cast<int> (read.size())) == blockSize);
+    CHECK_THAT (processor.readOutputLevel (0).peakDb, WithinAbs (-12.04, 0.01));
+    CHECK (processor.isClipLit (0));
+    CHECK (processor.isClipLit (1));
+}
+
+TEST_CASE ("An Output Meter opening after an over and then silence draws no peak, only its lit Clip Lights")
+{
+    juce::ScopedJuceInitialiser_GUI juce;
+    eq1::PluginProcessor processor;
+    harness::useLayout (processor, juce::AudioChannelSet::stereo());
+    playSine (processor, 2.0f);
+    playSine (processor, 0.0f); // longer than the 300 ms RMS window
+    eq1::OutputMeter meter (processor);
+    const auto image = paintMeter (meter, 500);
+    const std::vector<int> bars { 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26 };
+    CHECK (columnsIn (image, 300, staple::tokens::colour::meterTrack) == bars);
+    CHECK (columnsIn (image, 12, staple::tokens::colour::meterClip) == bars);
+}

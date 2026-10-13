@@ -1,5 +1,6 @@
 #pragma once
 
+#include "RunGrid.h"
 #include "Units.h"
 
 #include <cmath>
@@ -12,10 +13,6 @@ namespace eq1
 // Global Bypass, Solo and Detection Audition. They settle in about 7 time constants, so about 50 ms.
 inline constexpr double glideTimeConstantSeconds = 0.007;
 
-// The Engine's grid: a run is this many samples (Band::maxSubBlock), and the glides a Band or its
-// dynamics step once per run skip by it.
-inline constexpr int glideRunSamples = 16;
-
 // Glides a value to its target along a critically damped curve (two one-pole stages): it starts
 // and settles without corners, and follows a target that keeps moving without zippering.
 class Smoother
@@ -25,7 +22,7 @@ public:
     void configure (double timeConstant, double arrivalTolerance)
     {
         coefficient = onePoleCoefficient (timeConstant);
-        runStep = stepOver (glideRunSamples);
+        runStep = stepOver (runSamples);
         tolerance = arrivalTolerance;
     }
 
@@ -35,7 +32,7 @@ public:
     // Moves on by samples at once. A run's step is worked out when configured; any other length's here.
     void skip (int samples)
     {
-        const double k = samples == glideRunSamples ? runStep : stepOver (samples);
+        const double k = samples == runSamples ? runStep : stepOver (samples);
         stage1 += k * (goal - stage1);
         stage2 += k * (stage1 - stage2);
         settleIfArrived();
@@ -51,6 +48,8 @@ public:
 
     double value() const { return stage2; }
     bool isMoving() const { return stage2 != goal; }
+    // At rest on its goal, both stages: next() returns the goal exactly and skip() leaves it there.
+    bool isSettled() const { return stage1 == goal && stage2 == goal; }
 
 private:
     void settleIfArrived()

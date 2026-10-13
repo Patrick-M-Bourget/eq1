@@ -1,9 +1,8 @@
 #include "KnobTooltip.h"
 
-#include "../Fonts.h"
+#include "../Painting.h"
 #include "../Tokens.h"
 #include "Knob.h"
-#include "Overlay.h"
 #include "TypeIn.h"
 
 namespace staple
@@ -11,11 +10,7 @@ namespace staple
 
 namespace
 {
-namespace colour = tokens::colour;
-namespace size = tokens::size;
-
-constexpr int minimumWidth = 86, paddingTop = 5, paddingSide = 10, paddingBottom = 6;
-constexpr int titleLine = 14, valueLine = 18, gap = 6;
+constexpr int minimumWidth = 86, gap = 6;
 constexpr int fieldWidth = 74, fieldHeight = 20;
 } // namespace
 
@@ -31,9 +26,8 @@ void KnobTooltip::refresh()
 {
     title = knob.tooltipTitle();
     value = knob.tooltipValue();
-    const int text = std::max (textWidth (font (size::fs2), title), textWidth (font (size::fs4), value));
-    const int width = std::max (minimumWidth, text + 2 * paddingSide);
-    const int height = paddingTop + titleLine + valueLine + paddingBottom;
+    const int width = std::max (minimumWidth, static_cast<int> (readoutCardWidth (title, value)));
+    const int height = readoutCard::height;
 
     if (auto* layer = getParentComponent())
     {
@@ -67,30 +61,14 @@ void KnobTooltip::disappear()
 
 void KnobTooltip::paint (juce::Graphics& g)
 {
-    const auto bounds = getLocalBounds().toFloat();
-    drawSoftShadow (g, bounds, size::r2, tokens::shadow::shadow1);
-    g.setColour (colour::menu);
-    g.fillRoundedRectangle (bounds, size::r2);
-    g.setColour (colour::line2);
-    g.drawRoundedRectangle (bounds.reduced (0.5f), size::r2, 1.0f);
-
-    auto text = getLocalBounds().withTrimmedTop (paddingTop).reduced (paddingSide, 0);
-    g.setFont (font (size::fs2));
-    g.setColour (colour::text3);
-    g.drawText (title, text.removeFromTop (titleLine), juce::Justification::centred, false);
-    if (! isEditing())
-    {
-        g.setFont (font (size::fs4));
-        g.setColour (colour::text1);
-        g.drawText (value, text.removeFromTop (valueLine), juce::Justification::centred, false);
-    }
+    drawReadoutCard (g, getLocalBounds().toFloat(), title, isEditing() ? juce::String() : value);
 }
 
 void KnobTooltip::resized()
 {
     if (editor != nullptr)
         editor->setBounds (juce::Rectangle<int> (fieldWidth, fieldHeight)
-                               .withCentre ({ getWidth() / 2, paddingTop + titleLine + 1 + valueLine / 2 }));
+                               .withCentre ({ getWidth() / 2, readoutCard::paddingTop + readoutCard::titleLine + 1 + readoutCard::valueLine / 2 }));
 }
 
 void KnobTooltip::mouseDoubleClick (const juce::MouseEvent&)
