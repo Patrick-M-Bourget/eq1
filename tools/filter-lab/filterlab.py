@@ -106,34 +106,61 @@ def _factor(p0, p1, p2):
     return c0, c1, c2
 
 
-def match_section(a: Analog, reference_hz, fs, match_hz=None):
-    """Poles by matched z-transform; numerator exact at DC, at match_hz (default: the reference) and Nyquist."""
-    w = min(2 * PI * reference_hz / fs, 0.98 * PI)
-    nyquist = 0.5 * fs / reference_hz
+# Only matched-rounding sets this, for its comparison: the numerator fit then reads the poles' squared
+# magnitude in the phi form, d0 p0 + d1 p1 + d2 p2, which cancels near z = 1.
+_phi_form = False
+
+
+def _match_poles(a: Analog, w):
+    """The matched z-transform of a second-order section's poles: the Biquad holding them, and each pole
+    as (log radius, angle)."""
     c = Biquad()
-    if a.d2 == 0:
-        c.a1 = -math.exp(-a.d0 / a.d1 * w)
-        d0, d1, _ = _weights(1, c.a1, 0)
-        r0, r1 = math.sqrt(d0 * a.squared(0)), math.sqrt(d1 * a.squared(nyquist))
-        c.b0, c.b1 = 0.5 * (r0 + r1), 0.5 * (r0 - r1)
-        return c
     disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
     re = -a.d1 / (2 * a.d2) * w
     if disc < 0:
         im = math.sqrt(-disc) / (2 * a.d2) * w
         c.a1, c.a2 = -2 * math.exp(re) * math.cos(im), math.exp(2 * re)
-    else:
-        spread = math.sqrt(disc) / (2 * a.d2) * w
-        c.a1, c.a2 = -(math.exp(re + spread) + math.exp(re - spread)), math.exp(2 * re)
+        return c, [(re, im), (re, -im)]
+    spread = math.sqrt(disc) / (2 * a.d2) * w
+    c.a1, c.a2 = -(math.exp(re + spread) + math.exp(re - spread)), math.exp(2 * re)
+    return c, [(re + spread, 0.0), (re - spread, 0.0)]
+
+
+def _poles_squared(poles, w):
+    """The poles' squared magnitude at w, |1 - p e^(-jw)|^2 = (1 - r)^2 + 4 r sin^2((w - angle) / 2) per
+    pole: unlike the phi form it doesn't cancel when the poles sit near z = 1."""
+    return math.prod(math.expm1(lr) ** 2 + 4 * math.exp(lr) * math.sin((w - angle) / 2) ** 2 for lr, angle in poles)
+
+
+def _fit_numerator(c: Biquad, poles, wm, at_dc, at_match, at_nyquist):
+    """The numerator whose squared magnitude over c's poles is at_dc at DC, at_match at wm and at_nyquist
+    at Nyquist."""
     den = _weights(1, c.a1, c.a2)
-    wm = w if match_hz is None else min(2 * PI * match_hz / fs, 0.98 * PI)
     p0, p1, p2 = _phi(wm)
-    n0 = den[0] * a.squared(0)
-    n1 = den[1] * a.squared(nyquist)
-    at_match = den[0] * p0 + den[1] * p1 + den[2] * p2
-    n2 = (at_match * a.squared(wm / (2 * PI) * fs / reference_hz) - n0 * p0 - n1 * p1) / p2
+    if _phi_form:
+        den_dc, den_match = den[0], den[0] * p0 + den[1] * p1 + den[2] * p2
+    else:
+        den_dc, den_match = _poles_squared(poles, 0.0), _poles_squared(poles, wm)
+    n0, n1 = den_dc * at_dc, den[1] * at_nyquist
+    n2 = (den_match * at_match - n0 * p0 - n1 * p1) / p2
     c.b0, c.b1, c.b2 = _factor(n0, n1, n2)
     return c
+
+
+def match_section(a: Analog, reference_hz, fs, match_hz=None):
+    """Poles by matched z-transform; numerator exact at DC, at match_hz (default: the reference) and Nyquist."""
+    w = min(2 * PI * reference_hz / fs, 0.98 * PI)
+    nyquist = 0.5 * fs / reference_hz
+    if a.d2 == 0:
+        c = Biquad()
+        c.a1 = -math.exp(-a.d0 / a.d1 * w)
+        d0, d1, _ = _weights(1, c.a1, 0)
+        r0, r1 = math.sqrt(d0 * a.squared(0)), math.sqrt(d1 * a.squared(nyquist))
+        c.b0, c.b1 = 0.5 * (r0 + r1), 0.5 * (r0 - r1)
+        return c
+    c, poles = _match_poles(a, w)
+    wm = w if match_hz is None else min(2 * PI * match_hz / fs, 0.98 * PI)
+    return _fit_numerator(c, poles, wm, a.squared(0), a.squared(wm / (2 * PI) * fs / reference_hz), a.squared(nyquist))
 
 
 def match_high_pass(a: Analog, reference_hz, fs, and_nyquist=False):
@@ -152,13 +179,8 @@ def match_high_pass(a: Analog, reference_hz, fs, and_nyquist=False):
 def match_magnitudes(poles: Analog, reference_hz, fs, match_hz, at_dc, at_match, at_nyquist):
     """Poles as match_section's for poles; numerator fitting the given squared magnitudes at DC, match_hz
     and Nyquist."""
-    c = match_section(Analog(0, 0, 1, poles.d2, poles.d1, poles.d0), reference_hz, fs)
-    den = _weights(1, c.a1, c.a2)
-    p0, p1, p2 = _phi(min(2 * PI * match_hz / fs, 0.98 * PI))
-    n0, n1 = den[0] * at_dc, den[1] * at_nyquist
-    n2 = ((den[0] * p0 + den[1] * p1 + den[2] * p2) * at_match - n0 * p0 - n1 * p1) / p2
-    c.b0, c.b1, c.b2 = _factor(n0, n1, n2)
-    return c
+    c, matched = _match_poles(poles, min(2 * PI * reference_hz / fs, 0.98 * PI))
+    return _fit_numerator(c, matched, min(2 * PI * match_hz / fs, 0.98 * PI), at_dc, at_match, at_nyquist)
 
 
 def match_notch(a: Analog, reference_hz, fs, zero_hz):
@@ -1579,54 +1601,30 @@ def run_resonant_shelves(args, points=200):
 
 
 # --- Matched-design rounding at low Frequency and high Q ------------------------------------------
-# match_section reads the poles' squared magnitude at the match point in the phi form, d0 p0 + d1 p1 + d2 p2
-# (as engine/src/MatchedDesign.cpp does). With poles near z = 1 that sum cancels: its rounding is about
-# 1e-16 x d1 p1, which the analog magnitude (Q^2 at a resonance) multiplies and p2 (about w^2) divides. At
-# Q 40 and a match point far below the sample rate, that swamps the numerator's p2, whose true value
-# shrinks as w^4: the design's level jumps by many dB between settings a rounding apart.
-# match_section_from_poles reads it from the poles instead, |1 - p e^(-jw)|^2 = (1 - r)^2 +
-# 4 r sin^2((w - angle) / 2) per pole, which doesn't cancel.
+# Read in the phi form, d0 p0 + d1 p1 + d2 p2, the poles' squared magnitude at the match point cancels when
+# they sit near z = 1: its rounding is about 1e-16 x d1 p1, which the analog magnitude (Q^2 at a resonance)
+# multiplies and p2 (about w^2) divides. At Q 40 and a match point far below the sample rate, that swamps
+# the numerator's p2, whose true value shrinks as w^4, and the level jumps by many dB between settings a
+# rounding apart. _fit_numerator reads it from the poles (_poles_squared), which doesn't cancel; the report
+# sets _phi_form to compare the two.
 
-def match_section_from_poles(a: Analog, reference_hz, fs, match_hz=None):
-    """match_section, the poles' squared magnitude at DC and at match_hz read from the poles themselves."""
-    if a.d2 == 0:
-        return _phi_form_match_section(a, reference_hz, fs, match_hz)
-    w = min(2 * PI * reference_hz / fs, 0.98 * PI)
-    c = _phi_form_match_section(Analog(0, 0, 1, a.d2, a.d1, a.d0), reference_hz, fs)
-    disc = a.d1 * a.d1 - 4 * a.d2 * a.d0
-    re = -a.d1 / (2 * a.d2) * w
-    if disc < 0:
-        im = math.sqrt(-disc) / (2 * a.d2) * w
-        poles = [(re, im), (re, -im)]
-    else:
-        spread = math.sqrt(disc) / (2 * a.d2) * w
-        poles = [(re + spread, 0.0), (re - spread, 0.0)]
-    at = lambda x: math.prod(math.expm1(lr) ** 2 + 4 * math.exp(lr) * math.sin((x - angle) / 2) ** 2
-                             for lr, angle in poles)
-    wm = w if match_hz is None else min(2 * PI * match_hz / fs, 0.98 * PI)
-    p0, p1, p2 = _phi(wm)
-    n0 = at(0.0) * a.squared(0)
-    n1 = _weights(1, c.a1, c.a2)[1] * a.squared(0.5 * fs / reference_hz)
-    n2 = (at(wm) * a.squared(wm / (2 * PI) * fs / reference_hz) - n0 * p0 - n1 * p1) / p2
-    c.b0, c.b1, c.b2 = _factor(n0, n1, n2)
-    return c
-
-
-_phi_form_match_section = match_section
 ROUNDING_RATES = (44100, 48000, 96000, 192000)
+ROUNDING_SHAPES = {"High Cut": (high_cut, "high-cut"), "Band Pass": (band_pass, "band-pass")}
 
 
-def _rounding_report(label):
-    """High Cut's worst error against its target where the target is above -60 dB, at whole orders 1 to 16,
-    Q 40, Frequency 10 to 40 Hz (every 1/20 octave), per sample rate; and the largest jump between Slopes
-    1e-9 dB/oct apart at Q 40, 20 Hz, 96 kHz, at 10 Hz, over Slopes 0.1 dB/oct apart from 0.1 to 96."""
+def _rounding_report(name, label):
+    """The Shape's worst error against its target where the target is above -60 dB, at whole orders 1 to 16,
+    Q 40, Frequency 10 to 40 Hz (every 1/20 octave), read at 10 Hz, F/2, F, 2F and 4F, per sample rate; and
+    the largest jump between Slopes 1e-9 dB/oct apart at Q 40, 20 Hz, 96 kHz, at 10 Hz, over Slopes 0.1
+    dB/oct apart from 0.1 to 96."""
+    design, continuous = ROUNDING_SHAPES[name]
     errors = []
     for fs in ROUNDING_RATES:
         worst = (0.0, 0, 0)
         for i in range(41):
             frequency = 10 * 2 ** (i / 20)
             for order in range(1, 17):
-                sections, target = high_cut(fs, frequency, None, 40.0, order)
+                sections, target = design(fs, frequency, None, 40.0, order)
                 for f in (10, frequency / 2, frequency, 2 * frequency, 4 * frequency):
                     if f >= 10 and target(f) > -60:
                         worst = max(worst, (abs(cascade_db(sections, f, fs) - target(f)), frequency, order))
@@ -1634,26 +1632,27 @@ def _rounding_report(label):
     jump = (0.0, 0.0)
     for i in range(1, 961):
         slope = i / 10 + 0.0123  # off the whole orders
-        a, _ = continuous_design("high-cut", 96000, 20, 0, 40.0, slope)
-        b, _ = continuous_design("high-cut", 96000, 20, 0, 40.0, slope + 1e-9)
+        a, _ = continuous_design(continuous, 96000, 20, 0, 40.0, slope)
+        b, _ = continuous_design(continuous, 96000, 20, 0, 40.0, slope + 1e-9)
         jump = max(jump, (abs(cascade_db(a, 10, 96000) - cascade_db(b, 10, 96000)), slope))
-    print(f"{label:>11}  " + "  ".join(errors) + f"   {jump[0]:7.2g} dB (Slope={jump[1]:g})")
+    print(f"{name:>9} {label:>14}  " + "  ".join(errors) + f"   {jump[0]:7.2g} dB (Slope={jump[1]:g})")
 
 
 @command("matched-rounding")
 def run_matched_rounding(args):
-    """High Cut at Q 40 and low Frequency, with match_section as the Engine has it and with
-    match_section_from_poles."""
-    global match_section
-    print("High Cut, Q 40, Frequency 10 to 40 Hz, whole orders 1 to 16: worst error against the target, by")
-    print(f"sample rate ({', '.join(str(r) for r in ROUNDING_RATES)}); then the largest jump at 10 Hz between")
-    print("Slopes 1e-9 dB/oct apart (Q 40, 20 Hz, 96 kHz)")
-    try:
-        _rounding_report("phi form")
-        match_section = match_section_from_poles
-        _rounding_report("from poles")
-    finally:
-        match_section = _phi_form_match_section
+    """High Cut and Band Pass at Q 40 and low Frequency, with the numerator fit's old phi form and with the
+    current design, which reads the poles' squared magnitude from the poles."""
+    global _phi_form
+    print("Q 40, Frequency 10 to 40 Hz, whole orders 1 to 16: worst error against the target, by sample rate")
+    print(f"({', '.join(str(r) for r in ROUNDING_RATES)}); then the largest jump at 10 Hz between Slopes 1e-9")
+    print("dB/oct apart (Q 40, 20 Hz, 96 kHz)")
+    for name in ROUNDING_SHAPES:
+        try:
+            _phi_form = True
+            _rounding_report(name, "old phi form")
+        finally:
+            _phi_form = False
+        _rounding_report(name, "current design")
 
 
 # --- Dynamics gain computer (engine/src/Dynamics.cpp) ---------------------------------------------

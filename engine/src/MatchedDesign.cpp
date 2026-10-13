@@ -36,26 +36,33 @@ double digitalFrequency (double frequency, double sampleRate)
     return std::min (2.0 * std::numbers::pi * frequency / sampleRate, 0.98 * std::numbers::pi);
 }
 
-// The numerator whose squared magnitude, over the denominator c already holds, is squaredAtDc at DC,
-// squaredAtMatch at the digital frequency wMatch and squaredAtNyquist at Nyquist.
-void fitNumerator (BiquadCoefficients& c, double wMatch, double squaredAtDc, double squaredAtMatch, double squaredAtNyquist)
+// The matched poles, each as its log radius and angle: their squared magnitude on the unit circle,
+// |1 - p e^(-iw)|^2 = (1 - r)^2 + 4 r sin^2((w - angle) / 2) per pole, read from them doesn't cancel when
+// they sit near z = 1, as the denominator's phi form does.
+struct MatchedPoles
 {
-    const SquaredMagnitude den (1.0, c.a1, c.a2);
-    const Phi atMatch (wMatch);
-    SquaredMagnitude num;
-    num.p0 = den.p0 * squaredAtDc;
-    num.p1 = den.p1 * squaredAtNyquist;
-    num.p2 = (den.at (atMatch) * squaredAtMatch - num.p0 * atMatch.phi0 - num.p1 * atMatch.phi1) / atMatch.phi2;
-    factor (num, c.b0, c.b1, c.b2);
-}
+    int count = 0;
+    double logRadius[2] {}, angle[2] {};
+
+    double squaredAt (double w) const
+    {
+        double squared = 1.0;
+        for (int i = 0; i < count; ++i)
+        {
+            const double s = std::sin (0.5 * (w - angle[i]));
+            squared *= std::expm1 (logRadius[i]) * std::expm1 (logRadius[i]) + 4.0 * std::exp (logRadius[i]) * s * s;
+        }
+        return squared;
+    }
+};
 
 // Poles: the analog roots, scaled to the digital frequency w of the reference and mapped by z = e^(sT).
-void matchPoles (const AnalogSection& section, double w, BiquadCoefficients& c)
+MatchedPoles matchPoles (const AnalogSection& section, double w, BiquadCoefficients& c)
 {
     if (section.d2 == 0.0)
     {
         c.a1 = -std::exp (-section.d0 / section.d1 * w);
-        return;
+        return { 1, { -section.d0 / section.d1 * w, 0.0 }, { 0.0, 0.0 } };
     }
     const double disc = section.d1 * section.d1 - 4.0 * section.d2 * section.d0;
     const double re = -section.d1 / (2.0 * section.d2) * w;
@@ -64,13 +71,30 @@ void matchPoles (const AnalogSection& section, double w, BiquadCoefficients& c)
         const double im = std::sqrt (-disc) / (2.0 * section.d2) * w;
         c.a1 = -2.0 * std::exp (re) * std::cos (im);
         c.a2 = std::exp (2.0 * re);
+        return { 2, { re, re }, { im, -im } };
     }
-    else
-    {
-        const double spread = std::sqrt (disc) / (2.0 * section.d2) * w;
-        c.a1 = -(std::exp (re + spread) + std::exp (re - spread));
-        c.a2 = std::exp (2.0 * re);
-    }
+    const double spread = std::sqrt (disc) / (2.0 * section.d2) * w;
+    c.a1 = -(std::exp (re + spread) + std::exp (re - spread));
+    c.a2 = std::exp (2.0 * re);
+    return { 2, { re + spread, re - spread }, { 0.0, 0.0 } };
+}
+
+// The numerator whose squared magnitude, over the poles c holds, is squaredAtDc at DC, squaredAtMatch
+// at the digital frequency wMatch and squaredAtNyquist at Nyquist. At Nyquist the phi form doesn't
+// cancel, so it reads the coefficients there.
+void fitNumerator (BiquadCoefficients& c,
+                   const MatchedPoles& poles,
+                   double wMatch,
+                   double squaredAtDc,
+                   double squaredAtMatch,
+                   double squaredAtNyquist)
+{
+    const Phi atMatch (wMatch);
+    SquaredMagnitude num;
+    num.p0 = poles.squaredAt (0.0) * squaredAtDc;
+    num.p1 = SquaredMagnitude (1.0, c.a1, c.a2).p1 * squaredAtNyquist;
+    num.p2 = (poles.squaredAt (wMatch) * squaredAtMatch - num.p0 * atMatch.phi0 - num.p1 * atMatch.phi1) / atMatch.phi2;
+    factor (num, c.b0, c.b1, c.b2);
 }
 
 } // namespace
@@ -92,7 +116,7 @@ BiquadCoefficients matchSection (const AnalogSection& section, double referenceF
     const double nyquist = 0.5 * sampleRate / referenceFrequency;
 
     BiquadCoefficients c;
-    matchPoles (section, w, c);
+    const auto poles = matchPoles (section, w, c);
     const SquaredMagnitude den (1.0, c.a1, c.a2);
     if (section.d2 == 0.0)
     {
@@ -105,6 +129,7 @@ BiquadCoefficients matchSection (const AnalogSection& section, double referenceF
 
     const double wMatch = digitalFrequency (matchFrequency, sampleRate);
     fitNumerator (c,
+                  poles,
                   wMatch,
                   analogSquared (section, 0.0),
                   analogSquared (section, wMatch / (2.0 * std::numbers::pi) * sampleRate / referenceFrequency),
@@ -121,8 +146,8 @@ BiquadCoefficients matchMagnitudes (const AnalogSection& poles,
                                     double squaredAtNyquist)
 {
     BiquadCoefficients c;
-    matchPoles (poles, digitalFrequency (referenceFrequency, sampleRate), c);
-    fitNumerator (c, digitalFrequency (matchFrequency, sampleRate), squaredAtDc, squaredAtMatch, squaredAtNyquist);
+    const auto matched = matchPoles (poles, digitalFrequency (referenceFrequency, sampleRate), c);
+    fitNumerator (c, matched, digitalFrequency (matchFrequency, sampleRate), squaredAtDc, squaredAtMatch, squaredAtNyquist);
     return c;
 }
 

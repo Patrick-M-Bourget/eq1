@@ -84,6 +84,8 @@ The measured columns are the worst case in the filter lab, as a share of the spa
 
 The response test reads the shelves at a few Frequencies; a second test steps Frequency through the region where a section's zeros or poles near Nyquist, at Q 40 and 12 and 18 dB/oct, the Slopes whose sections are sharpest.
 
+High Cut and Band Pass at Q 40 with Frequency 10 to 40 Hz, at 96 and 192 kHz, are read by a test of their own, against the same limits, from 10 Hz up, at whole orders 1 to 16 (ADR 0006, "High Cut rounding at Q 40"). Its Frequency must also move the response smoothly: no more than 0.001 dB between Frequencies 10⁻⁹ apart. Measured with the Engine's `bandResponseDb` at the test's points (`scripts/check.sh focus 'Q 40 and low Frequency'` runs the test; the figures come from a scratch program reading the same points), where the target is above −60 dB and unshifted: High Cut is at most 0.96 dB off at 96 kHz and 0.35 dB at 192 kHz, both at order 1 near Nyquist (the first-order section's own error), and jumps at most 7.6 × 10⁻⁷ dB. Band Pass is at most 0.0011 dB and 0.00025 dB off, and jumps at most 1.8 × 10⁻⁴ dB. The lab's matching figures: `python3 tools/filter-lab/filterlab.py matched-rounding`.
+
 The other Shapes' limits are in the test, beside each Shape's check.
 
 ## Detection
