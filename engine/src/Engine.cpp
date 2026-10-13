@@ -118,6 +118,17 @@ struct Engine::Impl
 
     AnalysisFifo preEq, postEq, sidechain;
 
+    AnalysisFifo& fifoFor (AnalysisTap tap)
+    {
+        switch (tap)
+        {
+            case AnalysisTap::PreEq: return preEq;
+            case AnalysisTap::PostEq: return postEq;
+            case AnalysisTap::Sidechain: return sidechain;
+        }
+        return preEq;
+    }
+
     // The Output Level: one tap per channel the Engine was prepared with, in an array for the most
     // channels any layout allows, so a re-prepare to another channel count never frees or moves a
     // tap while the editor's meter reads it.
@@ -431,25 +442,8 @@ int Engine::analysisCapacity() const
     return impl->preEq.capacity();
 }
 
-int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples)
-{
-    switch (tap)
-    {
-        case AnalysisTap::PreEq: return impl->preEq.pop (destination, maxSamples);
-        case AnalysisTap::PostEq: return impl->postEq.pop (destination, maxSamples);
-        case AnalysisTap::Sidechain: return impl->sidechain.pop (destination, maxSamples);
-    }
-    return 0;
-}
+int Engine::readAnalysis (AnalysisTap tap, float* destination, int maxSamples) { return impl->fifoFor (tap).pop (destination, maxSamples); }
 
-void Engine::skipAnalysis (AnalysisTap tap)
-{
-    switch (tap)
-    {
-        case AnalysisTap::PreEq: impl->preEq.skip(); return;
-        case AnalysisTap::PostEq: impl->postEq.skip(); return;
-        case AnalysisTap::Sidechain: impl->sidechain.skip(); return;
-    }
-}
+void Engine::skipAnalysis (AnalysisTap tap) { impl->fifoFor (tap).skip(); }
 
 } // namespace eq1
