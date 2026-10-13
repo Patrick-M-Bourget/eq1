@@ -397,6 +397,30 @@ TEST_CASE ("A marquee drag tells the Band panel about the selection only when th
     CHECK (shown == std::vector<int> { 1, 2, 3 });
 }
 
+namespace
+{
+// Plays a sine of amplitude at frequency into every input, the Sidechain's included, for about
+// milliseconds, letting the editor tick as it plays.
+void playTone (OpenEditor& host, double frequency, double amplitude, int milliseconds)
+{
+    double phase = 0.0;
+    auto& processor = host.processor;
+    juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), 512);
+    juce::MidiBuffer midi;
+    for (int elapsed = 0; elapsed < milliseconds; elapsed += 20)
+    {
+        for (int block = 0; block < 2; ++block)
+        {
+            for (int n = 0; n < 512; ++n, phase += 2.0 * juce::MathConstants<double>::pi * frequency / 48000.0)
+                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                    buffer.setSample (ch, n, static_cast<float> (amplitude * std::sin (phase)));
+            processor.processBlock (buffer, midi);
+        }
+        host.settle (20);
+    }
+}
+} // namespace
+
 TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its peak")
 {
     OpenEditor host;
@@ -404,20 +428,7 @@ TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its pe
     processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = true });
     processor.prepareToPlay (48000.0, 512);
     // A loud 1 kHz sine, so the spectrum's line peaks there.
-    double phase = 0.0;
-    for (int frame = 0; frame < 30; ++frame)
-    {
-        juce::AudioBuffer<float> buffer (processor.getTotalNumInputChannels(), 512);
-        juce::MidiBuffer midi;
-        for (int block = 0; block < 4; ++block)
-        {
-            for (int n = 0; n < 512; ++n, phase += 2.0 * juce::MathConstants<double>::pi * 1000.0 / 48000.0)
-                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-                    buffer.setSample (ch, n, static_cast<float> (0.5 * std::sin (phase)));
-            processor.processBlock (buffer, midi);
-        }
-        host.settle (20);
-    }
+    playTone (host, 1000.0, 0.5, 600);
     // Down the display at 1 kHz until a press there grabs: only the spectrum's line does.
     const auto x = host.at (1000.0).x;
     const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
@@ -426,6 +437,39 @@ TEST_CASE ("Spectrum Grab: a drag from the spectrum's line adds a Band at its pe
     REQUIRE (host.value (1, "in_use") == 1.0f);
     CHECK_THAT (host.value (1, "frequency"), WithinRel (1000.0f, 0.1f));
     CHECK (host.display.selection() == std::set<int> { 1 });
+}
+
+TEST_CASE ("A spectrum turned back on starts afresh from silence, showing none of what played before it was turned off")
+{
+    OpenEditor host;
+    harness::useLayout (host.processor, juce::AudioChannelSet::stereo(), juce::AudioChannelSet::stereo());
+    const auto tap = GENERATE (eq1::AnalysisTap::PreEq, eq1::AnalysisTap::PostEq, eq1::AnalysisTap::Sidechain);
+    CAPTURE (static_cast<int> (tap));
+    const eq1::AnalyzerSettings shown { .showPreEq = tap == eq1::AnalysisTap::PreEq,
+                                        .showPostEq = tap == eq1::AnalysisTap::PostEq,
+                                        .showSidechain = tap == eq1::AnalysisTap::Sidechain,
+                                        .tiltDbPerOctave = 0.0,
+                                        .peakHold = false };
+    const auto& spectrum = host.display.spectrum (tap);
+    // A 1 kHz tone at -6 dB, shown.
+    host.processor.setAnalyzerSettings (shown);
+    playTone (host, 1000.0, 0.5, 1000);
+    REQUIRE (spectrum.levelDb (1000.0, 0.0) > -10.0);
+
+    // Turned off while a 5 kHz tone plays for longer than Medium's 300 ms, then on again.
+    host.processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = false });
+    playTone (host, 5000.0, 0.5, 1000);
+    host.processor.setAnalyzerSettings (shown);
+    const int ticked = host.editorTick().count();
+    REQUIRE (host.settleUntil ([&] { return host.editorTick().count() > ticked; }));
+    // The first frame shows none of the 1 kHz tone, only the 5 kHz one rising from silence.
+    CHECK (spectrum.levelDb (1000.0, 0.0) < -60.0);
+    CHECK (spectrum.levelDb (5000.0, 0.0) < -6.0);
+
+    // It then reaches the 5 kHz tone's level.
+    playTone (host, 5000.0, 0.5, 1500);
+    CHECK (spectrum.levelDb (spectrum.peakNear (5000.0), 0.0) > -10.0);
+    CHECK (spectrum.levelDb (1000.0, 0.0) < -60.0);
 }
 
 TEST_CASE ("Hovering inside a Band's filled curve lights it, as hovering its handle does")

@@ -27,6 +27,7 @@ namespace eq1
 {
 
 class PluginProcessor;
+enum class AnalysisTap;
 
 // The EQ curve with a handle per Band, over the Analyzer's pre-EQ, post-EQ and Sidechain spectra.
 // Double-click adds a Bell; a ghost Bell follows the mouse over empty space to show where. Click a
@@ -103,6 +104,8 @@ public:
     // changed (placeHandles). An Analyzer frame with the Bands unchanged does neither.
     const display::CurveCache& curveCache() const { return curves; }
     int handlePlacements() const { return placements; }
+    // The spectrum the Analyzer shows for a tap, for a test of what it shows.
+    const AnalyzerSpectrum& spectrum (AnalysisTap tap) const;
 
 private:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
@@ -187,6 +190,7 @@ private:
     AnalyzerSpectrum preEq, postEq, sidechain;
     AnalyzerSettings analyzer; // taken once a frame
     AnalyzerSpectrum* held = nullptr; // the spectrum Peak Hold is drawn for, if any
+    std::array<bool, 3> spectrumShown {}; // Pre-EQ, Post-EQ and Sidechain, as the last frame showed them
     std::vector<float> tapSamples; // read from the taps each frame
     // The Bands as heard: their Gain and Dynamic Range under Gain Scale. The display draws, and the
     // mouse moves, these (BandEditing takes Gains as heard).
