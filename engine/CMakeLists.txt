@@ -1,4 +1,5 @@
 # The DSP Engine: plain C++, no dependency on JUCE's plugin wrapper or UI.
+add_compile_options(${eq1_compile_options})
 add_library(eq1_engine STATIC
     src/Engine.cpp
     src/AutoGain.cpp

@@ -18,6 +18,7 @@ FetchContent_Declare(clap-juce-extensions
     SYSTEM
     EXCLUDE_FROM_ALL)
 FetchContent_MakeAvailable(clap-juce-extensions)
+add_compile_options(${eq1_compile_options})
 
 juce_add_plugin(eq1
     PRODUCT_NAME "eq1"

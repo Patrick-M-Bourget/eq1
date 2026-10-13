@@ -15,6 +15,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(MSVC)
     add_compile_options(/utf-8)
 endif()
+# MSVC refuses an initializer list that mixes designated and positional members (C7556), where clang only
+# warns, so a Mac build passed and Windows CI failed to build (#199's CPU scenes). Clang makes it an error
+# too. eq1's own directories add these options after fetching their dependencies, whose flags stay as they
+# are, so their shared build folders (.deps) aren't rebuilt.
+set(eq1_compile_options "$<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang>:-Werror=c99-designator>")
 
 option(EQ1_BUILD_PLUGIN "Build the Plugin Shell (needs JUCE)" ON)
 option(EQ1_BUILD_TESTS "Build the tests" ON)
