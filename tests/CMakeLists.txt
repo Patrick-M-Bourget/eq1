@@ -4,6 +4,7 @@ FetchContent_Declare(Catch2
     GIT_SHALLOW TRUE
     SYSTEM)
 FetchContent_MakeAvailable(Catch2)
+add_compile_options(${eq1_compile_options})
 
 include(Catch)
 

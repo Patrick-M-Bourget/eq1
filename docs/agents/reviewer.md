@@ -11,7 +11,7 @@ The reviewer checks the diff against the ticket's Agent Brief, spec #1 (includin
 <!-- qa-verdict: changes sha=<first 7 characters of the head commit> -->
 ```
 
-**changes** is for a brief criterion not met, a bug a user would hit, a test that can't fail, a standards or glossary breach, real-time unsafety in `engine/`, or drift from the plan (including into parked work). Anything smaller rides along in a **pass** as a follow-up. A verdict covers one commit: a rebase or new push needs a new one, which reviews the change since the last verdict (and anything that change touches) rather than the whole PR again.
+**changes** is for a brief criterion not met, a bug a user would hit, a test that can't fail, an Engine change no render scene runs, a standards or glossary breach, real-time unsafety in `engine/`, or drift from the plan (including into parked work). Anything smaller rides along in a **pass** as a follow-up. A verdict covers one commit: a rebase or new push needs a new one, which reviews the change since the last verdict (and anything that change touches) rather than the whole PR again.
 
 ## Merging
 
@@ -21,4 +21,4 @@ A session that built a PR can't review it, and can't post a verdict on it: the u
 
 ## Integration branches
 
-A set of tickets can land on an integration branch (such as `spec1-editor-v1`) with one draft PR into main. Each ticket's branch starts from the integration branch and fast-forwards into it once its own checks pass; a ticket PR into the integration branch, if any, merges the same way. Push the fast-forward from the builder's worktree, `git -C ../eq1-N push origin HEAD:<integration>`: the pre-push hook refuses a ref that isn't checked out where it runs, and there it skips the rebuild for a tree the commit gate already passed. Before the draft leaves draft, merge the PRs into main that are ready, then merge main into the integration branch. The reviewer's verdict on the integration PR goes on that final head; while heads are still moving, hold it.
+A set of tickets can land on an integration branch (such as `spec1-editor-v1`) with one draft PR into main. Each ticket's branch starts from the integration branch and fast-forwards into it once its own checks pass; a ticket PR into the integration branch, if any, merges the same way. Push the fast-forward from the builder's worktree, `git -C ../eq1-N push origin HEAD:<integration>`: the pre-push hook refuses a ref that isn't checked out where it runs, and there it skips the rebuild for a tree the commit gate already passed. Before the draft leaves draft, merge the PRs into main that are ready, then merge main into the integration branch. While the draft's CI fails, nothing else lands on the integration branch: the next fast-forward is the fix, pushed with `EQ1_FIXES_RED_CI=1` (the pre-push hook refuses any other). The reviewer's verdict on the integration PR goes on that final head; while heads are still moving, hold it.

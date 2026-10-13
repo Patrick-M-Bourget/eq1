@@ -12,6 +12,18 @@ trap 'rm -rf "$tmp"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export GATE_RUNS=$tmp/gate-runs
+# A fake gh: CI failed on the commits listed in $tmp/red (one SHA per line), and on no other.
+mkdir "$tmp/bin"
+cat > "$tmp/bin/gh" << FAKE
+#!/usr/bin/env bash
+case "\$1 \$2" in
+"run list") grep -qx "\$4" "$tmp/red" 2> /dev/null && echo "7 https://ci/7" || true ;;
+"run view") echo "Windows x64" ;;
+*) exit 99 ;;
+esac
+FAKE
+chmod +x "$tmp/bin/gh"
+export PATH=$tmp/bin:$PATH
 
 git init -q --bare -b main "$tmp/remote.git"
 git init -q -b main "$tmp/seed"
@@ -86,8 +98,17 @@ git -C "$here" switch -q feature
 expect refuse 0 "a code branch, not checked out" push -q origin other
 expect refuse 0 "the checked-out branch and a code branch, not checked out" push -q origin feature:feature2 other
 
+# A branch whose tip failed CI takes no push but the one that fixes it.
+git -C "$here" switch -q feature
+git -C "$here" rev-parse origin/feature > "$tmp/red"
+commit "$here" engine/a.cpp more
+expect refuse 0 "onto a tip that failed CI" push -q origin feature
+export EQ1_FIXES_RED_CI=1
+expect pass 1 "the fix for a tip that failed CI" push -q origin feature
+unset EQ1_FIXES_RED_CI
+
 if [ "$failures" = 0 ]; then
-    echo "The pre-push hook gates the checked-out branch once, skips tags and refuses untested code branches"
+    echo "The pre-push hook gates the checked-out branch once, skips tags, refuses untested code branches and holds a branch whose CI failed"
 else
     exit 1
 fi
