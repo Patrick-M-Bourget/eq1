@@ -39,7 +39,8 @@
 #                               its ceiling. Not in CI. On Windows, the heap only
 #   scripts/check.sh tsan       Engine tests under ThreadSanitizer (macOS only)
 #   scripts/check.sh asan       Engine and Plugin Shell tests under AddressSanitizer and UndefinedBehaviorSanitizer
-#                               (macOS only; not in the default run)
+#                               (macOS only; not in the default run); where the toolchain's AddressSanitizer
+#                               hangs at startup, it says so and runs UndefinedBehaviorSanitizer alone
 #   scripts/check.sh validate   pluginval (VST3, AU) at every sample rate eq1 supports, auval, Sidechain
 #                               routing (VST3, AU), clap-validator, AAX and Standalone built
 #
@@ -648,18 +649,23 @@ asan() {
     # Catches out-of-bounds and use-after-free accesses, leaks aside (Apple's clang has no LeakSanitizer),
     # and undefined behaviour such as signed overflow, each halting the test with a stack
     # trace. Only the test executables are built, not the plugin formats; the frequency response grids
-    # and the sweeps are left to the normal run, as tsan does.
-    step "Engine and Plugin Shell tests under AddressSanitizer and UndefinedBehaviorSanitizer"
-    asan_starts || return
-    local flags="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
-    sanitizer_deps asan
-    cmake -S . -B "$BUILD_DIR-asan" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_LTO=OFF -DEQ1_STRIP=OFF \
+    # and the sweeps are left to the normal run, as tsan does. Where the toolchain's AddressSanitizer
+    # hangs, it says so and runs UndefinedBehaviorSanitizer alone, in its own build and dependency folders.
+    local sanitizers=address,undefined name=asan
+    if ! asan_starts; then
+        echo "AddressSanitizer skipped: running the tests under UndefinedBehaviorSanitizer only" >&2
+        sanitizers=undefined name=ubsan
+    fi
+    step "Engine and Plugin Shell tests under sanitizers: $sanitizers"
+    local flags="-fsanitize=$sanitizers -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+    sanitizer_deps "$name"
+    cmake -S . -B "$BUILD_DIR-$name" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEQ1_LTO=OFF -DEQ1_STRIP=OFF \
         "${sanitizer_deps[@]}" "-DCMAKE_C_FLAGS=$flags" "-DCMAKE_CXX_FLAGS=$flags" \
-        -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
-    cmake --build "$BUILD_DIR-asan" --parallel --target eq1_engine_tests eq1_plugin_tests
+        "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=$sanitizers"
+    cmake --build "$BUILD_DIR-$name" --parallel --target eq1_engine_tests eq1_plugin_tests
     ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:detect_stack_use_after_return=1 \
         UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
-        ctest --test-dir "$BUILD_DIR-asan" -j 8 --output-on-failure -LE 'response|sweep'
+        ctest --test-dir "$BUILD_DIR-$name" -j 8 --output-on-failure -LE 'response|sweep'
 }
 
 fetch_validators() {
@@ -750,5 +756,5 @@ case "${1:-all}" in
     hooks) hooks ;;
     # A busy machine skips the CPU budget and the paint time (exit 3) but not the stages after them.
     all) docs; colours; hooks; build; run_tests; cpu || [ $? -eq 3 ]; paint || [ $? -eq 3 ]; tsan; validate ;;
-    *) sed -n '2,44p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,45p' "$0" >&2; exit 2 ;;
 esac
