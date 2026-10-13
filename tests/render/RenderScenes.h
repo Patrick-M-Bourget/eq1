@@ -166,6 +166,18 @@ inline std::vector<RenderScene> renderScenes()
         held.globalBypass = true;
         scenes.push_back ({ .name = "global-bypass", .settings = bells(), .change = held });
     }
+    // A Dynamic Band's Detection Range switched between Band and Free while its Detection Audition is
+    // held, both ways: what the detector hears, and so the output, crosses from one range to the other.
+    {
+        auto band = oneBand (dynamicBell());
+        band.auditionSlot = 1;
+        auto free = band;
+        free.bands[0].detectionRange = DetectionRange::Free;
+        free.bands[0].detectionLow = 100.0;
+        free.bands[0].detectionHigh = 5000.0;
+        scenes.push_back ({ .name = "detection-range-band-to-free", .settings = band, .change = free });
+        scenes.push_back ({ .name = "detection-range-free-to-band", .settings = free, .change = band });
+    }
 
     // The Output and the global settings.
     {
