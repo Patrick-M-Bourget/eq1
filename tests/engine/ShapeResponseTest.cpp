@@ -226,9 +226,9 @@ TEST_CASE ("Low Shelf, High Shelf and Tilt Shelf match their analog targets up t
 }
 
 // The test above reads shelves at a few Frequencies; a resonant shelf's error can peak sharply
-// between them, where a section's zeros or poles sit near Nyquist (#195: 25.7% at 12 dB/oct, +12 dB,
-// Q 40, 15.61 kHz at 44.1 kHz). This one moves Frequency in small steps through that region, and reads
-// the response at 201 points, as the filter lab does (docs/dsp/filter-design.md, "Test tolerances").
+// between them, where a section's zeros or poles sit near Nyquist. This one moves Frequency in small
+// steps through that region, and reads the response at 201 points, as the filter lab does
+// (docs/dsp/filter-design.md, "Test tolerances").
 TEST_CASE ("Resonant shelves match their analog targets wherever a section's zeros or poles near Nyquist", "[response]")
 {
     const double sampleRate = GENERATE (44100.0, 48000.0, 96000.0);

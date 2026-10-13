@@ -82,7 +82,7 @@ constexpr double splitFull = 0.8, splitNone = 1.1; // the zeros' natural frequen
 // Both fades are smoothsteps, so the split eases in and out without a corner in the coefficients'
 // path: a corner sounds as one in a section with large coefficients.
 
-// Where the zeros' extra resonance is matched (#195): at its natural frequency, sliding (in log
+// Where the zeros' extra resonance is matched: at its natural frequency, sliding (in log
 // frequency, smoothly) towards 0.97 x Nyquist as the natural frequency goes from 0.8 to 1 x Nyquist.
 // The slide grows in, smoothly, as the zeros' Q goes from 4 to 16. Matched right at a sharp resonance
 // near Nyquist, the match point and Nyquist crowd together and the fit swings: up to 26% of the span at

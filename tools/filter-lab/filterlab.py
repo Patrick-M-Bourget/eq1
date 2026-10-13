@@ -233,7 +233,7 @@ def _smoothstep(x):
 
 
 def _resonance_match(natural_hz, zeros_q, fs):
-    """Where the zeros' extra resonance is matched (#195): at its natural frequency, sliding (in log
+    """Where the zeros' extra resonance is matched: at its natural frequency, sliding (in log
     frequency, smoothly) towards RESONANCE_MATCH x Nyquist as the natural frequency goes from SPLIT_FULL
     to 1 x Nyquist. The slide grows in, smoothly, as the zeros' Q goes from SHARP_FROM to SHARP_TO.
     Matched right at a sharp resonance near Nyquist, the match point and Nyquist crowd together and the
@@ -1506,7 +1506,7 @@ def run_slope_gaps(args):
         raise SystemExit("continuous_design strays from the existing design at a whole order")
 
 
-# --- Resonant shelves over a dense Frequency scan (#195) -----------------------------------------
+# --- Resonant shelves over a dense Frequency scan ------------------------------------------------
 # report() reads Shelves at a few Frequencies. A resonant shelf's error can peak sharply between them,
 # where a section's zeros or poles near Nyquist, so this scans Frequency densely: every DENSE_STEP
 # octave over the plugin's range, plus, for each second-order section, every DENSE_NEAR step of its
