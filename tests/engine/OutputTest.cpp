@@ -476,6 +476,29 @@ TEST_CASE ("Global Bypass passes the input through, whatever the Bands and outpu
     checkMix (mono, processed (settings, mono), 0, 1.0, 0.0);
 }
 
+namespace
+{
+// Converts to any field's type, to count an aggregate's fields: the most it can be brace-initialised from.
+struct AnyField
+{
+    template <typename T>
+    operator T() const;
+};
+template <typename T, typename... Fields>
+constexpr int fieldCount()
+{
+    if constexpr (requires { T { Fields {}..., AnyField {} }; })
+        return fieldCount<T, Fields..., AnyField>();
+    else
+        return static_cast<int> (sizeof... (Fields));
+}
+} // namespace
+
+// autoGainInputs (Response.cpp) lists the Band settings the estimate doesn't read (Detection), and the
+// test below checks them by name. A Band setting added since fails this count: decide whether Auto
+// Gain reads it, set it aside in autoGainInputs if not, add it to the test below, then update the count.
+static_assert (fieldCount<BandSettings>() == 19, "a new BandSettings field: does Auto Gain read it? See autoGainInputs");
+
 TEST_CASE ("Auto Gain's inputs: the Bands, Detection aside, and Gain Scale; equal inputs give the same estimate")
 {
     Settings a;
