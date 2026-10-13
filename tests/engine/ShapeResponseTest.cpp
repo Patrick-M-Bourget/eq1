@@ -519,3 +519,44 @@ TEST_CASE ("A steep Band Pass's response moves smoothly as Frequency or Q crosse
                 REQUIRE (std::abs (last[0][i] - 2.0 * last[1][i] + last[2][i]) < 0.6);
     }
 }
+
+TEST_CASE ("High Cut and Band Pass at Q 40 and low Frequency match their analog targets at 96 and 192 kHz", "[response]")
+{
+    // Their poles sit so close to z = 1 here that a design whose arithmetic cancels there, scaled by the
+    // resonance's Q^2, is off by many dB. The response is read as the response test above reads it, and
+    // must move smoothly: a Frequency 1e-9 away sounds the same.
+    const double sampleRate = GENERATE (96000.0, 192000.0);
+    const Shape s = GENERATE (Shape::HighCut, Shape::BandPass);
+    const int order = GENERATE (range (1, 17));
+    const double q = 40.0;
+    const double twelfth = std::exp2 (1.0 / 12.0);
+    for (int i = 0; i <= 40; ++i)
+    {
+        const double frequency = 10.0 * std::exp2 (i / 20.0);
+        const auto tolerance = s == Shape::HighCut ? cutTolerance (s, sampleRate, frequency, q) : bandTolerance (s, sampleRate, frequency, order);
+        const auto target = [&] (double at) { return s == Shape::HighCut ? cutDb (at, frequency, order, q, false) : bandPassDb (at, frequency, order, q); };
+        auto at = test::frequenciesUpToNyquist (sampleRate, 64);
+        for (double multiple : { 0.5, 1.0, 2.0, 4.0 })
+            if (multiple * frequency >= 10.0)
+                at.push_back (multiple * frequency);
+
+        BandSettings band { .inUse = true, .shape = s, .frequency = frequency, .q = q, .slope = 6.0 * order };
+        std::vector<double> measured (at.size()), nudged (at.size());
+        bandResponseDb (band, at.data(), measured.data(), static_cast<int> (at.size()), sampleRate);
+        band.frequency = frequency * (1.0 + 1.0e-9);
+        bandResponseDb (band, at.data(), nudged.data(), static_cast<int> (at.size()), sampleRate);
+
+        for (size_t k = 0; k < at.size(); ++k)
+        {
+            const double f = at[k];
+            const double lowest = std::min ({ target (f / twelfth), target (f), target (f * twelfth) });
+            const double highest = std::max ({ target (f / twelfth), target (f), target (f * twelfth) });
+            CAPTURE (sampleRate, frequency, order, static_cast<int> (s), f, target (f), measured[k], nudged[k]);
+            REQUIRE (measured[k] <= std::max (highest, -60.0) + tolerance.above);
+            if (lowest > -24.0)
+                REQUIRE (measured[k] >= lowest - tolerance.below);
+            if (target (f) > -60.0)
+                REQUIRE (std::abs (nudged[k] - measured[k]) < 1.0e-3);
+        }
+    }
+}
