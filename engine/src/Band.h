@@ -27,10 +27,8 @@ class Band
 public:
     void prepare (double sampleRate, int numChannels);
 
-    // With snap, the new settings take effect at once instead of gliding. With highLimit, a Cut Band
-    // also cuts above highLimit Hz with a High Cut of the same Slope and Q, in the same cascade, which
-    // glides and crossfades as one: a Free Detection Range, in one pass over the signal.
-    void setSettings (const BandSettings& settings, bool snap, std::optional<double> highLimit = {});
+    // With snap, the new settings take effect at once instead of gliding.
+    void setSettings (const BandSettings& settings, bool snap);
 
     // Moves the Band's Live Gain away from its Gain by db, from the next run's start: its dynamics.
     void setDynamicOffset (double db) { dynamicOffset = db; }
@@ -58,7 +56,6 @@ private:
     {
         Structure structure;
         StereoPlacement placement = StereoPlacement::Stereo;
-        bool highLimit = false; // a High Cut of the same structure after the cascade (setSettings)
 
         bool operator== (const Setup&) const = default;
     };
@@ -135,7 +132,6 @@ private:
 
     double sampleRate = 44100.0;
     Smoother logFrequency, gain, logQ;
-    Smoother logHighLimit; // for a chain with a high limit
     Smoother mix;   // 0 = no effect, 1 = full effect
     Smoother shapeCrossfade; // 0 = previous chain, 1 = current chain
     Chain current, previous;

@@ -54,8 +54,7 @@ const double nothingToHearDb = levelOf (0.0);
 double coefficientFor (double seconds, double sampleRate) { return onePoleCoefficient (seconds * sampleRate); }
 
 double timingScale (double percent) { return std::pow (timingSpread, (std::clamp (percent, 0.0, 100.0) - 50.0) / 50.0); }
-// A Free Detection Range's limit: a Butterworth Cut at frequency. Its high limit is a High Cut of the
-// same Slope and Q in the Low Cut's cascade (Band::setSettings).
+// A Free Detection Range's limit: a Butterworth Cut at frequency.
 BandSettings freeLimit (Shape cut, double frequency)
 {
     return { .inUse = true, .shape = cut, .frequency = frequency, .q = butterworthQ, .slope = freeRangeSlope };
@@ -66,6 +65,7 @@ void Dynamics::prepare (double newSampleRate)
 {
     sampleRate = newSampleRate;
     rangeFilter.prepare (sampleRate, 2);
+    highLimit.prepare (sampleRate, 2);
     detection.assign (2, {});
     detectionChannels.clear();
     for (auto& channel : detection)
@@ -97,12 +97,12 @@ void Dynamics::setSettings (const BandSettings& settings, bool snap)
     if (settings.detectionRange == DetectionRange::Free)
     {
         rangeFilterSettings = freeLimit (Shape::LowCut, settings.detectionLow);
-        rangeHighLimit = settings.detectionHigh;
+        highLimitSettings = freeLimit (Shape::HighCut, settings.detectionHigh);
     }
     else
     {
         rangeFilterSettings = soloRegionOf (settings);
-        rangeHighLimit.reset();
+        highLimitSettings = {}; // not in use: passes everything
     }
     if (snap || (! wasRunning && activeTarget > 0.0))
     {
@@ -110,7 +110,8 @@ void Dynamics::setSettings (const BandSettings& settings, bool snap)
     }
     else
     {
-        rangeFilter.setSettings (rangeFilterSettings, false, rangeHighLimit);
+        rangeFilter.setSettings (rangeFilterSettings, false);
+        highLimit.setSettings (highLimitSettings, false);
     }
     if (snap)
     {
@@ -126,7 +127,8 @@ void Dynamics::setSettings (const BandSettings& settings, bool snap)
 
 void Dynamics::startAfresh()
 {
-    rangeFilter.setSettings (rangeFilterSettings, true, rangeHighLimit);
+    rangeFilter.setSettings (rangeFilterSettings, true);
+    highLimit.setSettings (highLimitSettings, true);
     power = {};
     runLevelCount = 0;
     movement = sustain = 0.0;
@@ -218,6 +220,7 @@ void Dynamics::hear (const float* const* input, int numChannels, const float* co
         return;
     }
     rangeFilter.process (detectionChannels.data(), detectionCount, run, position, numSamples);
+    highLimit.process (detectionChannels.data(), detectionCount, run, position, numSamples);
 
     // The level of each sample: the louder detection channel's power. Metered only, the detector
     // keeps the piece's loudest power and converts it once at the end: the level is monotonic in

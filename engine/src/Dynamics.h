@@ -7,7 +7,6 @@
 
 #include <array>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 namespace eq1
@@ -75,11 +74,10 @@ private:
     bool thresholdAuto = true;
     double attackScale = 1.0, releaseScale = 1.0; // times the Auto timing
 
-    // The Detection Range's filter: the Band's region, or the Free range's low limit with its high
-    // limit in the same cascade (Band::setSettings).
-    Band rangeFilter;
-    BandSettings rangeFilterSettings;
-    std::optional<double> rangeHighLimit;
+    // The Detection Range's filters: rangeFilter is the Band's region, or the Free range's low limit;
+    // highLimit is the Free range's high limit, not in use for a Band Detection Range.
+    Band rangeFilter, highLimit;
+    BandSettings rangeFilterSettings, highLimitSettings;
     bool auditioned = false;
     bool metered = false;
     double loudestLevel = nothingHeardDb;
