@@ -72,8 +72,6 @@ HoverCard::Value::Value (Kind k) : kind (k)
     setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
     setWantsKeyboardFocus (false);
     setMouseClickGrabsKeyboardFocus (false);
-    const char* names[] = { "Frequency", "Gain", "Q" };
-    setTooltip (juce::String (names[static_cast<int> (kind)]) + juce::String::fromUTF8 (" \xc2\xb7 drag up/down \xc2\xb7 double-click to type"));
     setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
 }
 
