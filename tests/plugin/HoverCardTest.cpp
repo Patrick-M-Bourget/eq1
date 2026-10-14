@@ -8,6 +8,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 using Catch::Matchers::WithinAbs;
+using harness::actionOf;
 using harness::OpenEditor;
 
 namespace
@@ -27,15 +28,6 @@ T& control (eq1::HoverCard& card, const juce::String& title)
     INFO ("No card control is titled " << title);
     REQUIRE (found != nullptr);
     return *found;
-}
-
-// The menu item with this text, at any depth.
-std::function<void()> actionOf (const juce::PopupMenu& menu, const juce::String& text)
-{
-    for (juce::PopupMenu::MenuItemIterator it (menu, true); it.next();)
-        if (it.getItem().text == text)
-            return it.getItem().action;
-    return {};
 }
 
 // The pointer comes to rest at position on the display.

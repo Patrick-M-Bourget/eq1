@@ -151,7 +151,7 @@ public:
     // What it reads: "12 dB/oct", "37.5 dB/oct", or "Brickwall".
     juce::String text();
     // The Slope list (BandMenu.h's slopeMenu), then "Type a value…", which opens the tooltip's type-in.
-    // Its items do nothing once the panel no longer shows the Band they were listed for, in use.
+    // Its items do nothing once the panel no longer shows that Band, or the Band is no longer in use.
     juce::PopupMenu list();
     // The list, as a click, Space or Return opens it, drawn with the editor's look (ShowMenu.h).
     void openList();
@@ -181,8 +181,8 @@ private:
     double startProportion = 0.0;
     std::optional<ScopedDragNotification> gesture;
     juce::RangedAudioParameter* brickwall = nullptr;
-    // What the open list is shown for, over the button: JUCE closes the list once it goes.
-    std::unique_ptr<juce::Component> listTarget;
+    // The list is open: from openList() until it closes, chosen or not.
+    bool listOpen = false;
 };
 
 } // namespace eq1

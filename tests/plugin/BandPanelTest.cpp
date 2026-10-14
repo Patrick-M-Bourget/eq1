@@ -473,6 +473,22 @@ TEST_CASE ("Slope list snapshot", "[.screens]")
     juce::PopupMenu::dismissAllActiveMenus();
 }
 
+TEST_CASE ("The open Slope list closes as the Band Panel moves to another Band")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    juce::PopupMenu::dismissAllActiveMenus();
+    host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope").openList();
+    REQUIRE (harness::openMenu() != nullptr);
+    // At once, with no timer run: JUCE's own menu timer closes any menu in a test process (not in the
+    // foreground), so a check after settle would pass whatever the panel did.
+    host.click (host.at (5000.0));
+    REQUIRE (host.panel().shownSlot() == 3);
+    CHECK (harness::openMenu() == nullptr);
+    juce::PopupMenu::dismissAllActiveMenus();
+}
+
 TEST_CASE ("The Slope list writes nothing once its Band Panel stops showing the Band it was listed for")
 {
     PanelEditor host;
@@ -481,12 +497,9 @@ TEST_CASE ("The Slope list writes nothing once its Band Panel stops showing the 
     host.set (2, "brickwall", 1.0f);
     host.settle (120);
     auto& history = host.processor.editHistory();
-    // A pick, as the open list makes it: its first item, 6 dB/oct.
-    const auto list = host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope").list();
-    juce::PopupMenu::MenuItemIterator first (list);
-    REQUIRE (first.next());
-    REQUIRE (first.getItem().text == "6 dB/oct");
-    const auto pick = first.getItem().action;
+    // A pick, as the open list makes it.
+    const auto pick = harness::actionOf (host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope").list(), "6 dB/oct");
+    REQUIRE (pick != nullptr);
 
     SECTION ("still shown: the pick sets the Slope, as one undo step")
     {

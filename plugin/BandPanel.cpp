@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace eq1
 {
@@ -166,6 +167,7 @@ juce::PopupMenu BandPanel::SlopeButton::list()
 {
     auto menu = slopeMenu (panel.editing, { panel.slot });
     menu.addSeparator();
+    // Its action keeps this: the guard below wraps it with a SafePointer, as it does every item's.
     menu.addItem (juce::String::fromUTF8 ("Type a value\xe2\x80\xa6"), isEnabled(), false, [this] {
         showTooltip();
         if (auto* tooltip = getKnobTooltip())
@@ -186,15 +188,21 @@ void BandPanel::SlopeButton::openList()
 {
     if (panel.slot == 0 || ! isShowing() || ! isEnabled())
         return;
-    listTarget = std::make_unique<juce::Component>();
-    listTarget->setInterceptsMouseClicks (false, false);
-    listTarget->setAccessible (false);
-    addAndMakeVisible (*listTarget);
-    listTarget->setBounds (getLocalBounds());
-    showMenu (list(), *listTarget, juce::PopupMenu::Options().withTargetComponent (listTarget.get()).withMinimumWidth (getWidth()));
+    listOpen = true;
+    showMenu (list(), *this, juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()),
+              [safe = juce::Component::SafePointer<SlopeButton> (this)] (int) {
+                  if (safe != nullptr)
+                      safe->listOpen = false;
+              });
 }
 
-void BandPanel::SlopeButton::closeList() { listTarget.reset(); }
+// JUCE closes a menu on no change of its target, so the list is closed here. A menu is modal: while
+// the list is open, it is the only menu open.
+void BandPanel::SlopeButton::closeList()
+{
+    if (std::exchange (listOpen, false))
+        juce::PopupMenu::dismissAllActiveMenus();
+}
 
 void BandPanel::SlopeButton::valueChanged()
 {
