@@ -4,6 +4,7 @@
 #include "AssumedSampleRate.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "ShowMenu.h"
 #include "UiScale.h"
 #include "ValueText.h"
 #include "staple/Fonts.h"
@@ -119,11 +120,10 @@ UiScaleMenu::UiScaleMenu() : staple::IconButton ("UI Scale", staple::Icon::uiSca
     setTooltip ("UI Scale");
     setIconSize (14.0f);
     onClick = [this] {
-        menu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withDeletionCheck (*this),
-                              [safe = juce::Component::SafePointer<UiScaleMenu> (this)] (int picked) {
-                                  if (safe != nullptr && picked > 0)
-                                      safe->pick (picked);
-                              });
+        showMenu (menu(), *this, juce::PopupMenu::Options().withTargetComponent (this), [safe = juce::Component::SafePointer<UiScaleMenu> (this)] (int picked) {
+            if (safe != nullptr && picked > 0)
+                safe->pick (picked);
+        });
     };
 }
 

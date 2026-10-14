@@ -5,6 +5,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "ShapeIcon.h"
+#include "ShowMenu.h"
 #include "staple/Fonts.h"
 #include "staple/Painting.h"
 #include "staple/Tokens.h"
@@ -165,13 +166,19 @@ juce::PopupMenu BandPanel::SlopeButton::list()
 {
     auto menu = slopeMenu (panel.editing, { panel.slot });
     menu.addSeparator();
-    menu.addItem (juce::String::fromUTF8 ("Type a value\xe2\x80\xa6"), isEnabled(), false, [safe = juce::Component::SafePointer<SlopeButton> (this)] {
-        if (safe == nullptr)
-            return;
-        safe->showTooltip();
-        if (auto* tooltip = safe->getKnobTooltip())
+    menu.addItem (juce::String::fromUTF8 ("Type a value\xe2\x80\xa6"), isEnabled(), false, [this] {
+        showTooltip();
+        if (auto* tooltip = getKnobTooltip())
             tooltip->startEditing();
     });
+    // A pick from a list left open as its Band went (removed, or automated out of use before the
+    // panel's next tick) or as the panel moved to another Band would edit a Band no longer shown.
+    for (juce::PopupMenu::MenuItemIterator it (menu); it.next();)
+        if (auto& action = it.getItem().action)
+            action = [safe = juce::Component::SafePointer<SlopeButton> (this), listed = panel.slot, pick = std::move (action)] {
+                if (safe != nullptr && safe->panel.slot == listed && safe->panel.editing.band (listed).inUse)
+                    pick();
+            };
     return menu;
 }
 
@@ -179,8 +186,15 @@ void BandPanel::SlopeButton::openList()
 {
     if (panel.slot == 0 || ! isShowing() || ! isEnabled())
         return;
-    list().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()));
+    listTarget = std::make_unique<juce::Component>();
+    listTarget->setInterceptsMouseClicks (false, false);
+    listTarget->setAccessible (false);
+    addAndMakeVisible (*listTarget);
+    listTarget->setBounds (getLocalBounds());
+    showMenu (list(), *listTarget, juce::PopupMenu::Options().withTargetComponent (listTarget.get()).withMinimumWidth (getWidth()));
 }
+
+void BandPanel::SlopeButton::closeList() { listTarget.reset(); }
 
 void BandPanel::SlopeButton::valueChanged()
 {
@@ -350,6 +364,8 @@ juce::Colour BandPanel::bandColour() const
 void BandPanel::show (int newSlot)
 {
     releaseSolo();
+    if (newSlot != slot)
+        slope->closeList();
     slot = newSlot;
     // Attachments are rebuilt for the new slot; the old ones go first so they let go of the controls.
     shapeAttachment.reset();
