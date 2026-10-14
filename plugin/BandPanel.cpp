@@ -280,10 +280,10 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e)
     addAndMakeVisible (*slope);
 
     gain.setBipolar (true);
-    const std::tuple<staple::Knob*, juce::Label*, const char*> labels[] = { { &frequency, &frequencyLabel, "Frequency" },
-                                                                             { &gain, &gainLabel, "Gain" },
-                                                                             { &q, &qLabel, "Q" } };
-    for (auto [knob, label, text] : labels)
+    const std::tuple<staple::Knob*, juce::Label*, const char*> knobLabels[] = { { &frequency, &frequencyLabel, "Frequency" },
+                                                                                 { &gain, &gainLabel, "Gain" },
+                                                                                 { &q, &qLabel, "Q" } };
+    for (auto [knob, label, text] : knobLabels)
     {
         knob->setLabel (label); // its Knob Readout covers it
         label->setText (text, juce::dontSendNotification);

@@ -225,7 +225,7 @@ TEST_CASE ("A Knob's tooltip shows its title and its value text with the unit wh
     CHECK_FALSE (knob.isTooltipShown());
 }
 
-TEST_CASE ("A Knob's tooltip sits above the knob where there is no room below")
+TEST_CASE ("A Knob Readout sits above its knob where there is no room below")
 {
     Kit kit;
     staple::Knob knob (staple::tokens::knob::small);
@@ -235,7 +235,7 @@ TEST_CASE ("A Knob's tooltip sits above the knob where there is no room below")
     CHECK (knob.getKnobTooltip()->getBottom() <= knob.getBounds().getCentreY() - 15);
 }
 
-TEST_CASE ("A Knob's tooltip covers its label, from the label's top, and stays put while the knob is dragged")
+TEST_CASE ("A Knob Readout covers its knob's label from the label's top, and stays put while the knob is dragged")
 {
     Kit kit;
     staple::Knob knob (staple::tokens::knob::frequency);

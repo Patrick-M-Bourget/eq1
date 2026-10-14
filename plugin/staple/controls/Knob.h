@@ -76,8 +76,8 @@ public:
     juce::String tooltipValue();
     bool isTooltipShown() const;
     KnobTooltip* getKnobTooltip() const { return tooltip.get(); }
-    // The label under the knob, which its tooltip covers from the label's top; without one the tooltip
-    // sits just under the face.
+    // The label under the knob, which its Knob Readout covers from the label's top; without one the
+    // Knob Readout sits just under the face.
     void setLabel (juce::Component* newLabel) { label = newLabel; }
     juce::Component* getLabel() const { return label.getComponent(); }
 

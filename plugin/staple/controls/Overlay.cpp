@@ -27,6 +27,15 @@ juce::Component& overlayLayerFor (juce::Component& component)
 
 void markOverlayLayer (juce::Component& layer) { layer.getProperties().set (overlayLayerProperty, true); }
 
+juce::Rectangle<int> placeCardBy (juce::Rectangle<int> control, juce::Point<int> size, juce::Rectangle<int> layer, std::optional<int> top)
+{
+    constexpr int gap = 6;
+    auto card = juce::Rectangle<int> (size.x, size.y).withCentre ({ control.getCentreX(), 0 }).withY (top.value_or (control.getBottom() + gap));
+    if (card.getBottom() > layer.getBottom())
+        card.setY (control.getY() - gap - size.y);
+    return card.constrainedWithin (layer);
+}
+
 juce::AffineTransform popInTransform (juce::Rectangle<float> card, float progress)
 {
     using namespace tokens::motion;
