@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 #include <utility>
 
 namespace eq1
@@ -279,9 +280,12 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e)
     addAndMakeVisible (*slope);
 
     gain.setBipolar (true);
-    const std::pair<juce::Label*, const char*> labels[] = { { &frequencyLabel, "Frequency" }, { &gainLabel, "Gain" }, { &qLabel, "Q" } };
-    for (auto [label, text] : labels)
+    const std::tuple<staple::Knob*, juce::Label*, const char*> labels[] = { { &frequency, &frequencyLabel, "Frequency" },
+                                                                             { &gain, &gainLabel, "Gain" },
+                                                                             { &q, &qLabel, "Q" } };
+    for (auto [knob, label, text] : labels)
     {
+        knob->setLabel (label); // its Knob Readout covers it
         label->setText (text, juce::dontSendNotification);
         label->setFont (staple::font (tokens::size::fs2));
         label->setColour (juce::Label::textColourId, colour::text3);

@@ -10,6 +10,7 @@
 #include "staple/controls/ParseValue.h"
 
 #include <cmath>
+#include <tuple>
 
 namespace eq1
 {
@@ -253,9 +254,10 @@ DynamicsSection::DynamicsSection (PluginProcessor& p)
     for (auto* button : std::initializer_list<juce::Component*> { &detectionSource, &audition, detectionRange.get() })
         addAndMakeVisible (*button);
 
-    const std::pair<juce::Label*, const char*> labels[] = { { &attackLabel, "A" }, { &releaseLabel, "R" } };
-    for (auto [label, text] : labels)
+    const std::tuple<staple::Knob*, juce::Label*, const char*> labels[] = { { &attack, &attackLabel, "A" }, { &release, &releaseLabel, "R" } };
+    for (auto [knob, label, text] : labels)
     {
+        knob->setLabel (label); // its Knob Readout covers it
         label->setText (text, juce::dontSendNotification);
         label->setFont (staple::font (tokens::size::fs1));
         label->setColour (juce::Label::textColourId, colour::text3);
