@@ -380,6 +380,30 @@ TEST_CASE ("The UI Scale menu, titled UI Scale, offers the five UI Scales, the c
     CHECK (items()[4] == std::pair<juce::String, bool> { "150%", true });
 }
 
+TEST_CASE ("The UI Scale menu is drawn with the editor's look")
+{
+    Footer host;
+    juce::PopupMenu::dismissAllActiveMenus();
+    host.titled<eq1::UiScaleMenu> ("UI Scale").onClick();
+    auto* menu = harness::openMenu();
+    REQUIRE (menu != nullptr);
+    CHECK (&menu->getLookAndFeel() == &host.editor->getLookAndFeel());
+    juce::PopupMenu::dismissAllActiveMenus();
+}
+
+// Renders the open UI Scale menu for checking by hand against the prototype (harness::writeSnapshot):
+// menu-ui-scale, at 2x.
+TEST_CASE ("UI Scale menu snapshot", "[.screens]")
+{
+    Footer host;
+    juce::PopupMenu::dismissAllActiveMenus();
+    host.titled<eq1::UiScaleMenu> ("UI Scale").onClick();
+    auto* menu = harness::openMenu();
+    REQUIRE (menu != nullptr);
+    harness::writeSnapshot (*menu, "menu-ui-scale");
+    juce::PopupMenu::dismissAllActiveMenus();
+}
+
 // Renders the footer for checking by hand against the prototype (harness::writeSnapshot):
 // footer-normal, footer-bypassed and footer-popover, each the window's bottom at 2x.
 TEST_CASE ("Footer snapshots: normal, under Global Bypass and with the output popover open", "[.screens]")

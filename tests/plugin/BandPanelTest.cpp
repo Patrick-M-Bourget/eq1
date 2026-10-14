@@ -445,6 +445,96 @@ TEST_CASE ("Dragging or typing a Slope is one undo step, and on a Brickwall Cut 
     CHECK_THAT (host.value (2, "slope"), WithinAbs (12.0, 1.0e-4));
 }
 
+TEST_CASE ("The Slope list is drawn with the editor's look")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    juce::PopupMenu::dismissAllActiveMenus();
+    host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope").openList();
+    auto* menu = harness::openMenu();
+    REQUIRE (menu != nullptr);
+    CHECK (&menu->getLookAndFeel() == &host.editor->getLookAndFeel());
+    juce::PopupMenu::dismissAllActiveMenus();
+}
+
+// Renders the open Slope list for checking by hand against the prototype (harness::writeSnapshot):
+// menu-slope-list, at 2x.
+TEST_CASE ("Slope list snapshot", "[.screens]")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    juce::PopupMenu::dismissAllActiveMenus();
+    host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope").openList();
+    auto* menu = harness::openMenu();
+    REQUIRE (menu != nullptr);
+    harness::writeSnapshot (*menu, "menu-slope-list");
+    juce::PopupMenu::dismissAllActiveMenus();
+}
+
+TEST_CASE ("The open Slope list closes as the Band Panel moves to another Band")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    juce::PopupMenu::dismissAllActiveMenus();
+    host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope").openList();
+    REQUIRE (harness::openMenu() != nullptr);
+    // At once, with no timer run: JUCE's own menu timer closes any menu in a test process (not in the
+    // foreground), so a check after settle would pass whatever the panel did.
+    host.click (host.at (5000.0));
+    REQUIRE (host.panel().shownSlot() == 3);
+    CHECK (harness::openMenu() == nullptr);
+    juce::PopupMenu::dismissAllActiveMenus();
+}
+
+TEST_CASE ("The Slope list writes nothing once its Band Panel stops showing the Band it was listed for")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    host.set (2, "brickwall", 1.0f);
+    host.settle (120);
+    auto& history = host.processor.editHistory();
+    // A pick, as the open list makes it.
+    const auto pick = harness::actionOf (host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope").list(), "6 dB/oct");
+    REQUIRE (pick != nullptr);
+
+    SECTION ("still shown: the pick sets the Slope, as one undo step")
+    {
+        const int steps = history.undoSteps();
+        pick();
+        CHECK_THAT (host.value (2, "slope"), WithinAbs (6.0, 1.0e-4));
+        CHECK (host.value (2, "brickwall") == 0.0f);
+        CHECK (history.undoSteps() == steps + 1);
+    }
+    const auto picksNothing = [&] {
+        host.settle (120);
+        const float slope = host.value (2, "slope"), brickwall = host.value (2, "brickwall");
+        const int steps = history.undoSteps();
+        pick();
+        CHECK (host.value (2, "slope") == slope);
+        CHECK (host.value (2, "brickwall") == brickwall);
+        CHECK (history.undoSteps() == steps);
+    };
+    SECTION ("the Band deleted from the panel")
+    {
+        host.control<staple::IconButton> ("Band 2 Delete").onClick();
+        picksNothing();
+    }
+    SECTION ("the Band taken out of use by automation")
+    {
+        host.set (2, "in_use", 0.0f);
+        picksNothing();
+    }
+    SECTION ("another Band selected")
+    {
+        host.click (host.at (5000.0));
+        picksNothing();
+    }
+}
+
 TEST_CASE ("The Edge selectors set Shape and Stereo Placement through their parameters")
 {
     PanelEditor host;

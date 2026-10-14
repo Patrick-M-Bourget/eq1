@@ -103,6 +103,25 @@ inline juce::MouseEvent mouseEvent (juce::Component& target, juce::Point<float> 
 // The key with Shift held.
 inline juce::KeyPress withShift (juce::KeyPress key) { return { key.getKeyCode(), juce::ModifierKeys::shiftModifier, 0 }; }
 
+// The menu item with this text, at any depth: its action, as a pick from the open menu runs it.
+inline std::function<void()> actionOf (const juce::PopupMenu& menu, const juce::String& text)
+{
+    for (juce::PopupMenu::MenuItemIterator it (menu, true); it.next();)
+        if (it.getItem().text == text)
+            return it.getItem().action;
+    return {};
+}
+
+// The open popup menu's window (a window of its own, which JUCE names "menu"), or nullptr.
+inline juce::Component* openMenu()
+{
+    auto& desktop = juce::Desktop::getInstance();
+    for (int i = desktop.getNumComponents(); --i >= 0;)
+        if (auto* window = desktop.getComponent (i); window->getName() == "menu" && window->isVisible())
+            return window;
+    return nullptr;
+}
+
 // A layout with the given main input and output, and Sidechain (disabled unless given).
 inline juce::AudioProcessor::BusesLayout layoutOf (const juce::AudioChannelSet& in,
                                                   const juce::AudioChannelSet& out,

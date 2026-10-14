@@ -5,6 +5,7 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 #include "ShapeIcon.h"
+#include "ShowMenu.h"
 #include "staple/Fonts.h"
 #include "staple/Painting.h"
 #include "staple/Tokens.h"
@@ -13,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace eq1
 {
@@ -165,13 +167,20 @@ juce::PopupMenu BandPanel::SlopeButton::list()
 {
     auto menu = slopeMenu (panel.editing, { panel.slot });
     menu.addSeparator();
-    menu.addItem (juce::String::fromUTF8 ("Type a value\xe2\x80\xa6"), isEnabled(), false, [safe = juce::Component::SafePointer<SlopeButton> (this)] {
-        if (safe == nullptr)
-            return;
-        safe->showTooltip();
-        if (auto* tooltip = safe->getKnobTooltip())
+    // Its action keeps this: the guard below wraps it with a SafePointer, as it does every item's.
+    menu.addItem (juce::String::fromUTF8 ("Type a value\xe2\x80\xa6"), isEnabled(), false, [this] {
+        showTooltip();
+        if (auto* tooltip = getKnobTooltip())
             tooltip->startEditing();
     });
+    // A pick from a list left open as its Band went (removed, or automated out of use before the
+    // panel's next tick) or as the panel moved to another Band would edit a Band no longer shown.
+    for (juce::PopupMenu::MenuItemIterator it (menu); it.next();)
+        if (auto& action = it.getItem().action)
+            action = [safe = juce::Component::SafePointer<SlopeButton> (this), listed = panel.slot, pick = std::move (action)] {
+                if (safe != nullptr && safe->panel.slot == listed && safe->panel.editing.band (listed).inUse)
+                    pick();
+            };
     return menu;
 }
 
@@ -179,7 +188,20 @@ void BandPanel::SlopeButton::openList()
 {
     if (panel.slot == 0 || ! isShowing() || ! isEnabled())
         return;
-    list().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()));
+    listOpen = true;
+    showMenu (list(), *this, juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()),
+              [safe = juce::Component::SafePointer<SlopeButton> (this)] (int) {
+                  if (safe != nullptr)
+                      safe->listOpen = false;
+              });
+}
+
+// JUCE closes a menu on no change of its target, so the list is closed here. A menu is modal: while
+// the list is open, it is the only menu open.
+void BandPanel::SlopeButton::closeList()
+{
+    if (std::exchange (listOpen, false))
+        juce::PopupMenu::dismissAllActiveMenus();
 }
 
 void BandPanel::SlopeButton::valueChanged()
@@ -350,6 +372,8 @@ juce::Colour BandPanel::bandColour() const
 void BandPanel::show (int newSlot)
 {
     releaseSolo();
+    if (newSlot != slot)
+        slope->closeList();
     slot = newSlot;
     // Attachments are rebuilt for the new slot; the old ones go first so they let go of the controls.
     shapeAttachment.reset();
