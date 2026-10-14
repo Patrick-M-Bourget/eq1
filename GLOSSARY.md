@@ -214,6 +214,14 @@ _Avoid_: Clip indicator, over light
 The display of the Output Level per channel, with a Clip Light; separate from the Analyzer.
 _Avoid_: Meter (unqualified), level meter, VU
 
+**Tooltip**:
+The help text a control shows while the pointer rests on it, centred below the control over its label (above it where there is no room below).
+_Avoid_: Hint, help bubble
+
+**Knob Readout**:
+The card showing a knob's title and value while it is hovered or dragged, placed as a Tooltip is; a double-click on it types a value.
+_Avoid_: Knob tooltip, value popup
+
 ## Licensing
 
 **Tier**:
