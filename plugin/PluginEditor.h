@@ -12,6 +12,7 @@
 #include "OutputMeter.h"
 #include "staple/CachedLayer.h"
 #include "staple/LookAndFeel.h"
+#include "staple/TooltipWindow.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -67,7 +68,7 @@ private:
     DetectionRangeBar detectionRange; // over the display, under the panel
     HeaderBar header;
     FooterBar footer;
-    juce::TooltipWindow tooltips { &content };
+    staple::TooltipWindow tooltips { &content };
     DisplayRangeChip displayRange;
     OutputMeter meter;
     // Sizes the window to the processor's logical size and UI Scale, kept within limits.

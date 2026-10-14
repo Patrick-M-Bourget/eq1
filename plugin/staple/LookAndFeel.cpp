@@ -441,10 +441,8 @@ juce::Rectangle<int> LookAndFeel::getTooltipBounds (const juce::String& text, ju
     layout.createLayout (string, 400.0f);
     const int width = static_cast<int> (std::ceil (layout.getWidth())) + 20;
     const int height = static_cast<int> (std::ceil (layout.getHeight())) + 12;
-    return juce::Rectangle<int> (screenPosition.x > parentArea.getCentreX() ? screenPosition.x - (width + 12) : screenPosition.x + 24,
-                                 screenPosition.y > parentArea.getCentreY() ? screenPosition.y - (height + 6) : screenPosition.y + 6,
-                                 width, height)
-        .constrainedWithin (parentArea);
+    // Centred on the pointer: staple::TooltipWindow places it by its control from there.
+    return juce::Rectangle<int> (width, height).withCentre (screenPosition).constrainedWithin (parentArea);
 }
 
 void LookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height)

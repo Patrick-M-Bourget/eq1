@@ -77,6 +77,7 @@ target_sources(eq1 PRIVATE
     staple/Painting.cpp
     staple/Icons.cpp
     staple/LookAndFeel.cpp
+    staple/TooltipWindow.cpp
     staple/WindowBackground.cpp
     Accessibility.cpp
     ValueText.cpp

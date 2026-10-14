@@ -62,6 +62,7 @@ public:
     void drawScrollbar (juce::Graphics& g, juce::ScrollBar& scrollbar, int x, int y, int width, int height, bool vertical,
                         int thumbStart, int thumbSize, bool isMouseOver, bool isMouseDown) override;
 
+    // A Tooltip's size, centred on the pointer; staple::TooltipWindow places it by its control.
     juce::Rectangle<int> getTooltipBounds (const juce::String& text, juce::Point<int> screenPosition,
                                            juce::Rectangle<int> parentArea) override;
     void drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height) override;
