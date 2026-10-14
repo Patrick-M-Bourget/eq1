@@ -35,9 +35,12 @@ void KnobTooltip::refresh()
         const auto face = juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (knob.getFaceCentre());
         const auto area = layer->getLocalArea (&knob, face).toNearestInt();
         auto bounds = juce::Rectangle<int> (width, height).withCentre ({ area.getCentreX(), 0 });
-        bounds.setY (area.getY() - gap - height);
-        if (bounds.getY() < 0)
-            bounds.setY (area.getBottom() + gap);
+        // Over the label, from its top; just under the face without one.
+        auto* label = knob.getLabel();
+        bounds.setY (label != nullptr && label->isShowing() ? layer->getLocalArea (label->getParentComponent(), label->getBounds()).getY()
+                                                            : area.getBottom() + gap);
+        if (bounds.getBottom() > layer->getHeight())
+            bounds.setY (area.getY() - gap - height);
         bounds.setX (juce::jlimit (0, std::max (0, layer->getWidth() - width), bounds.getX()));
         setBounds (bounds);
     }

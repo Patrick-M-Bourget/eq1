@@ -76,6 +76,10 @@ public:
     juce::String tooltipValue();
     bool isTooltipShown() const;
     KnobTooltip* getKnobTooltip() const { return tooltip.get(); }
+    // The label under the knob, which its tooltip covers from the label's top; without one the tooltip
+    // sits just under the face.
+    void setLabel (juce::Component* newLabel) { label = newLabel; }
+    juce::Component* getLabel() const { return label.getComponent(); }
 
     void paint (juce::Graphics& g) override;
     bool hitTest (int x, int y) override;
@@ -114,6 +118,7 @@ private:
     bool ringDragging = false;
 
     std::unique_ptr<KnobTooltip> tooltip;
+    juce::Component::SafePointer<juce::Component> label;
 };
 
 } // namespace staple

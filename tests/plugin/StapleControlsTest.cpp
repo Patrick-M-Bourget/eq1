@@ -211,7 +211,7 @@ TEST_CASE ("A Knob's tooltip shows its title and its value text with the unit wh
     CHECK (tooltip.getParentComponent() == &kit.window); // a child of the editor, not a window of its own
     CHECK (tooltip.titleText() == "Band 4 Gain");
     CHECK (tooltip.valueText() == "-11.42 dB");
-    CHECK (tooltip.getBottom() <= kit.window.getLocalArea (&knob, knob.getLocalBounds()).getCentreY() - 33); // above the face
+    CHECK (tooltip.getY() >= kit.window.getLocalArea (&knob, knob.getLocalBounds()).getCentreY() + 33); // below the face
 
     // It follows a drag, and stays while the drag goes on outside the knob.
     const auto left = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
@@ -225,14 +225,39 @@ TEST_CASE ("A Knob's tooltip shows its title and its value text with the unit wh
     CHECK_FALSE (knob.isTooltipShown());
 }
 
-TEST_CASE ("A Knob's tooltip sits below the knob where there is no room above")
+TEST_CASE ("A Knob's tooltip sits above the knob where there is no room below")
 {
     Kit kit;
     staple::Knob knob (staple::tokens::knob::small);
-    kit.add (knob, { 10, 0, knob.getIdealSize(), knob.getIdealSize() });
+    kit.add (knob, { 10, kit.window.getHeight() - knob.getIdealSize(), knob.getIdealSize(), knob.getIdealSize() });
     knob.mouseEnter (harness::mouseEvent (knob, centreOf (knob), {}, centreOf (knob)));
     REQUIRE (knob.isTooltipShown());
-    CHECK (knob.getKnobTooltip()->getY() >= knob.getBounds().getCentreY() + 15);
+    CHECK (knob.getKnobTooltip()->getBottom() <= knob.getBounds().getCentreY() - 15);
+}
+
+TEST_CASE ("A Knob's tooltip covers its label, from the label's top, and stays put while the knob is dragged")
+{
+    Kit kit;
+    staple::Knob knob (staple::tokens::knob::frequency);
+    kit.add (knob, { 150, 100, knob.getIdealSize(), knob.getIdealSize() });
+    juce::Label label ({}, "Frequency");
+    kit.add (label, { 140, knob.getBounds().getCentreY() + 40, knob.getWidth() + 20, 15 }); // lower than the face's bottom
+    knob.setLabel (&label);
+    knob.mouseEnter (harness::mouseEvent (knob, centreOf (knob), {}, centreOf (knob)));
+    REQUIRE (knob.isTooltipShown());
+    auto& tooltip = *knob.getKnobTooltip();
+    CHECK (tooltip.getY() == label.getY());
+    CHECK (tooltip.getBottom() >= label.getBottom());
+    CHECK (tooltip.getBounds().getCentreX() == knob.getBounds().getCentreX());
+
+    const auto shown = tooltip.getBounds();
+    const auto left = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+    const auto from = centreOf (knob);
+    knob.mouseDown (harness::mouseEvent (knob, from, left, from));
+    knob.mouseDrag (harness::mouseEvent (knob, from.translated (0.0f, -60.0f), left, from));
+    CHECK (tooltip.getY() == shown.getY());
+    CHECK (tooltip.getBounds().getCentreX() == shown.getCentreX());
+    knob.mouseUp (harness::mouseEvent (knob, from.translated (0.0f, -60.0f), {}, from));
 }
 
 TEST_CASE ("A value typed into a Knob's tooltip commits as one undo step on Enter, and Esc cancels it")
