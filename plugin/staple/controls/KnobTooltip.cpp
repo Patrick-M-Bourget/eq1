@@ -3,6 +3,7 @@
 #include "../Painting.h"
 #include "../Tokens.h"
 #include "Knob.h"
+#include "Overlay.h"
 #include "TypeIn.h"
 
 namespace staple
@@ -10,7 +11,7 @@ namespace staple
 
 namespace
 {
-constexpr int minimumWidth = 86, gap = 6;
+constexpr int minimumWidth = 86;
 constexpr int fieldWidth = 74, fieldHeight = 20;
 } // namespace
 
@@ -34,12 +35,11 @@ void KnobTooltip::refresh()
         const float r = knob.getFaceRadius();
         const auto face = juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (knob.getFaceCentre());
         const auto area = layer->getLocalArea (&knob, face).toNearestInt();
-        auto bounds = juce::Rectangle<int> (width, height).withCentre ({ area.getCentreX(), 0 });
-        bounds.setY (area.getY() - gap - height);
-        if (bounds.getY() < 0)
-            bounds.setY (area.getBottom() + gap);
-        bounds.setX (juce::jlimit (0, std::max (0, layer->getWidth() - width), bounds.getX()));
-        setBounds (bounds);
+        // Over the label, from its top; just under the face without one.
+        auto* label = knob.getLabel();
+        const auto top = label != nullptr && label->isShowing() ? std::optional<int> (layer->getLocalArea (label, label->getLocalBounds()).getY())
+                                                                : std::nullopt;
+        setBounds (placeCardBy (area, { width, height }, layer->getLocalBounds(), top));
     }
     repaint();
 }

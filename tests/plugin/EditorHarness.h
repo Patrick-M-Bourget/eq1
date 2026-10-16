@@ -328,6 +328,19 @@ struct OpenEditor
         display.mouseUp (mouseEvent (position, {}, position));
     }
 
+    // Where c is, in the editor's coordinates.
+    juce::Rectangle<int> inEditor (juce::Component& c) const { return editor->getLocalArea (&c, c.getLocalBounds()); }
+
+    // The first showing child of the editor that is a T titled title (any T without one).
+    template <typename T = juce::Component>
+    T& showing (const juce::String& title = {})
+    {
+        auto found = findAll<T> ([&title] (T& c) { return (title.isEmpty() || c.getTitle() == title) && c.isShowing(); });
+        INFO ("Nothing showing is titled " << title);
+        REQUIRE_FALSE (found.empty());
+        return *found.front();
+    }
+
     // Every child of the editor, at any depth, that is a T and passes test.
     template <typename T>
     std::vector<T*> findAll (std::function<bool (T&)> test = [] (T&) { return true; })

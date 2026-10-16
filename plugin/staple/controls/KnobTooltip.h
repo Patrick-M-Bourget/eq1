@@ -10,8 +10,9 @@ namespace staple
 class Knob;
 
 // The read-out over a Knob (HANDOFF.md §4 "Knob tooltip"): its title in fs2 text3 over its value in fs4
-// text1, on a menu-coloured card. It sits above the knob, or below it where there is no room above, in
-// the knob's overlay layer (Overlay.h), and fades in over dur1. It is never a focus stop. A double-click
+// text1, on a menu-coloured card (the Knob Readout). It sits centred below the knob's face, over the
+// knob's label from the label's top (Knob::setLabel), or above the face where there is no room below,
+// in the knob's overlay layer (Overlay.h), and fades in over dur1. It is never a focus stop. A double-click
 // on it opens a field for typing a value: Enter commits it as one undo step, Esc or leaving the field
 // cancels. The Knob owns it and shows and hides it.
 class KnobTooltip final : public juce::Component

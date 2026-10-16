@@ -313,7 +313,7 @@ TEST_CASE ("The Hover Card is a group named for its Band, its controls are named
     CHECK_FALSE (card.getWantsKeyboardFocus());
 }
 
-TEST_CASE ("The Hover Card's values read \"1.00 kHz\", \"+3.00 dB\" and \"Q 0.707\", and are named for the Band")
+TEST_CASE ("The Hover Card's values read \"1.00 kHz\", \"+3.00 dB\" and \"Q 0.707\", are named for the Band, and have no Tooltip")
 {
     OpenEditor host;
     host.addBand (4, 1000.0f, 3.0f);
@@ -330,7 +330,12 @@ TEST_CASE ("The Hover Card's values read \"1.00 kHz\", \"+3.00 dB\" and \"Q 0.70
     CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Frequency").text() == "85.0 Hz");
     CHECK (control<eq1::HoverCard::Value> (card, "Band 4 Gain").text() == juce::String::charToString (0x2212) + "2.50 dB");
     for (const juce::String title : { "Band 4 Frequency", "Band 4 Gain", "Band 4 Q" })
-        CHECK_FALSE (control (card, title).getWantsKeyboardFocus());
+    {
+        CAPTURE (title);
+        auto& value = control<eq1::HoverCard::Value> (card, title);
+        CHECK_FALSE (value.getWantsKeyboardFocus());
+        CHECK (value.getTooltip().isEmpty());
+    }
 }
 
 TEST_CASE ("Dragging a Hover Card value moves its Band alone as one undo step, over the Band panel's range and scaling, while the card stays put")

@@ -55,7 +55,8 @@ public:
     // Frequency, Gain or Q, as text attached to its parameter: a vertical drag moves it as a knob does
     // (staple::draggedAlongRange), one undo step, and a double-click opens a field to type it in
     // (staple/controls/TypeIn.h: Enter sets it as one undo step, Esc or a click away cancels). There is
-    // no reset gesture. Disabled, it shows readOnlyText dimmed.
+    // no reset gesture. Disabled, it shows readOnlyText dimmed. It has no Tooltip, so nothing pops up
+    // over the card's other rows; it is named for its Band and parameter ("Band 4 Frequency").
     class Value;
 
     // The strip of every Shape that its Shape opens, 32 x 28 px each, 6 px under the card or above it
