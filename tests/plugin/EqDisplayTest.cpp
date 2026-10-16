@@ -154,7 +154,16 @@ TEST_CASE ("The display paints no background: the window shows through it, with 
     OpenEditor host;
     host.processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = false });
     host.processor.setOutputMeterShown (true);
-    host.settle();
+    // However long the editor has run first: the resting ghost Bell fades in meanwhile, by as far as
+    // the editor's ticks went (up to 0.25 s a tick under load).
+    const auto settled = GENERATE (as<std::string> {}, "settle", "settle (1000)", "settleAnimations");
+    CAPTURE (settled);
+    if (settled == "settle")
+        host.settle();
+    else if (settled == "settle (1000)")
+        host.settle (1000);
+    else
+        host.settleAnimations();
 
     // On its own, with no Band in use, most of the display is left clear.
     const auto alone = host.display.createComponentSnapshot (host.display.getLocalBounds(), true, 2.0f);
@@ -165,16 +174,23 @@ TEST_CASE ("The display paints no background: the window shows through it, with 
     CHECK (clear > (alone.getWidth() / 3) * (alone.getHeight() / 3) / 2);
 
     // In the window, the display's first row and column match the window just outside them: above its
-    // top, and in the gap before the Output Meter's rail on its right.
-    const auto window = host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, 2.0f);
-    const auto display = host.editor->getLocalArea (host.display.getParentComponent(), host.display.getBounds()) * 2;
+    // top, and in the gap before the Output Meter's rail on its right. The top is compared beside the
+    // resting ghost Bell's line, which reaches the top row however far it has faded in (its curve and
+    // glow stay at least peakClearance below it).
+    constexpr float scale = 2.0f;
+    REQUIRE (host.display.ghost().has_value());
+    const auto ghostX = host.display.ghost()->x;
+    const auto onTheGhostLine = [ghostX, scale] (int xInDisplay) { return std::abs (static_cast<float> (xInDisplay) / scale - ghostX) <= 2.0f; };
+    const auto window = host.editor->createComponentSnapshot (host.editor->getLocalBounds(), true, scale);
+    const auto display = (host.editor->getLocalArea (host.display.getParentComponent(), host.display.getBounds()).toFloat() * scale).toNearestInt();
     const auto difference = [&window] (juce::Point<int> a, juce::Point<int> b) {
         const auto ca = window.getPixelAt (a.x, a.y), cb = window.getPixelAt (b.x, b.y);
         return std::max ({ std::abs (ca.getRed() - cb.getRed()), std::abs (ca.getGreen() - cb.getGreen()), std::abs (ca.getBlue() - cb.getBlue()) });
     };
     int top = 0, right = 0;
     for (int x = display.getX() + 80; x < display.getRight() - 120; x += 5)
-        top = std::max (top, difference ({ x, display.getY() }, { x, display.getY() - 1 }));
+        if (! onTheGhostLine (x - display.getX()))
+            top = std::max (top, difference ({ x, display.getY() }, { x, display.getY() - 1 }));
     for (int y = display.getY() + 40; y < display.getBottom() - 170; y += 5)
         right = std::max (right, difference ({ display.getRight() - 1, y }, { display.getRight(), y }));
     CHECK (top <= 2);
