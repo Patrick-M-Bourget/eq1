@@ -12,7 +12,19 @@ constexpr int gap = 6;
 constexpr int sidewaysHeightRatio = 4;
 } // namespace
 
-TooltipWindow::TooltipWindow (juce::Component* parent) : juce::TooltipWindow (parent) {}
+TooltipWindow::TooltipWindow (juce::Component* parent) : juce::TooltipWindow (parent)
+{
+    fading.setInterceptsMouseClicks (false, false);
+    fading.setAccessible (false);
+    fading.setAlwaysOnTop (true);
+    if (parent != nullptr)
+        parent->addChildComponent (fading);
+    fade.apply = [this] (float alpha) {
+        fading.setAlpha (alpha);
+        if (alpha <= 0.0f)
+            fading.setVisible (false);
+    };
+}
 
 juce::String TooltipWindow::getTipFor (juce::Component& c)
 {
@@ -23,6 +35,57 @@ juce::String TooltipWindow::getTipFor (juce::Component& c)
 void TooltipWindow::moved() { placeByControl(); }
 
 void TooltipWindow::resized() { placeByControl(); }
+
+void TooltipWindow::visibilityChanged()
+{
+    // JUCE asks for a control's tip just before showing it.
+    if (isVisible())
+        showingFor = control;
+}
+
+void TooltipWindow::mouseMove (const juce::MouseEvent& e) { pointerOver (e.eventComponent); }
+
+void TooltipWindow::mouseExit (const juce::MouseEvent& e)
+{
+    if (e.eventComponent == showingFor)
+        pointerOver (nullptr);
+}
+
+void TooltipWindow::mouseDown (const juce::MouseEvent&)
+{
+    endFade();
+    hideTip();
+}
+
+void TooltipWindow::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&)
+{
+    endFade();
+    hideTip();
+}
+
+void TooltipWindow::pointerOver (juce::Component* under)
+{
+    if (isVisible() && under != showingFor)
+        fadeOut();
+}
+
+void TooltipWindow::fadeOut()
+{
+    if (getParentComponent() != nullptr)
+    {
+        fading.picture = createComponentSnapshot (getLocalBounds(), true, juce::Component::getApproximateScaleFactorForComponent (this));
+        fading.setBounds (getBounds());
+        fading.setVisible (true);
+        fading.toFront (false);
+        fade.jump (1.0f);
+        fade.towards (0.0f);
+    }
+    hideTip();
+}
+
+void TooltipWindow::endFade() { fade.jump (0.0f); }
+
+void TooltipWindow::Fading::paint (juce::Graphics& g) { g.drawImage (picture, getLocalBounds().toFloat()); }
 
 void TooltipWindow::placeByControl()
 {
