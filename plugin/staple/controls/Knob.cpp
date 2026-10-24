@@ -283,9 +283,12 @@ void Knob::hideTooltipUnlessHovered (juce::Point<int> screenPosition)
 {
     if (tooltip == nullptr || tooltip->isEditing())
         return;
-    if (getScreenBounds().contains (screenPosition) && isEnabled())
+    // Over the face (or the ring), not the shadow margin round it: JUCE sends the exit as the pointer leaves the face,
+    // usually still inside the knob's bounds, and the knob hears nothing more. A hidden knob or parent sends one inside
+    // them too.
+    if (isShowing() && isEnabled() && contains (getLocalPoint (nullptr, screenPosition)))
         return;
-    if (tooltip->isVisible() && tooltip->getScreenBounds().contains (screenPosition))
+    if (tooltip->isShowing() && tooltip->contains (tooltip->getLocalPoint (nullptr, screenPosition)))
         return;
     hideTooltip();
 }

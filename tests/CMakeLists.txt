@@ -64,6 +64,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/HeaderTest.cpp
         plugin/HostSessionTest.cpp
         plugin/KeyboardControlTest.cpp
+        plugin/KnobReadoutTest.cpp
         plugin/OutputMeterTest.cpp
         plugin/PaintTimeTest.cpp
         plugin/PluginShellTest.cpp

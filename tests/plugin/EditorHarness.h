@@ -230,6 +230,94 @@ inline void checkPopInStart (const juce::Component& component, juce::Rectangle<f
     CHECK_THAT (drawn.getCentreY(), WithinAbs (endsAt.getCentreY() + 3.0f, 1.0e-3));
 }
 
+// A window's peer the OS never sees: its hit-test is its bounds, so a pointer event lands where the test puts it
+// whatever else is on screen. A real window's peer asks the OS which window is frontmost at the point, and a test's
+// window is behind the terminal's. It never paints, and has focus.
+struct FakePeer final : juce::ComponentPeer
+{
+    FakePeer (juce::Component& c, int flags) : ComponentPeer (c, flags), bounds (c.getBounds()) {}
+
+    void* getNativeHandle() const override { return nullptr; }
+    void setVisible (bool v) override { visible = v; }
+    void setTitle (const juce::String&) override {}
+    void setBounds (const juce::Rectangle<int>& b, bool) override { bounds = b; }
+    juce::Rectangle<int> getBounds() const override { return bounds; }
+    juce::Point<float> localToGlobal (juce::Point<float> p) override { return p + bounds.getPosition().toFloat(); }
+    juce::Point<float> globalToLocal (juce::Point<float> p) override { return p - bounds.getPosition().toFloat(); }
+    using ComponentPeer::globalToLocal;
+    using ComponentPeer::localToGlobal;
+    void setMinimised (bool m) override { minimised = m; }
+    bool isMinimised() const override { return minimised; }
+    bool isShowing() const override { return visible && ! minimised; }
+    void setFullScreen (bool) override {}
+    bool isFullScreen() const override { return false; }
+    void setIcon (const juce::Image&) override {}
+    bool contains (juce::Point<int> p, bool) const override { return isShowing() && bounds.withZeroOrigin().contains (p); }
+    OptionalBorderSize getFrameSizeIfPresent() const override { return {}; }
+    juce::BorderSize<int> getFrameSize() const override { return {}; }
+    bool setAlwaysOnTop (bool) override { return true; }
+    void toFront (bool) override {}
+    void toBehind (ComponentPeer*) override {}
+    bool isFocused() const override { return true; }
+    void grabFocus() override {}
+    void repaint (const juce::Rectangle<int>&) override {}
+    void performAnyPendingRepaintsNow() override {}
+    void setAlpha (float) override {}
+    juce::StringArray getAvailableRenderingEngines() override { return {}; }
+    void textInputRequired (juce::Point<int>, juce::TextInputTarget&) override {}
+
+    juce::Rectangle<int> bounds;
+    bool visible = false, minimised = false;
+};
+
+// The host's window holding content (an editor), as a plugin wrapper's window does, on a FakePeer. A test puts the
+// pointer on it as the OS does, through the window's peer, so JUCE's MouseInputSource decides which component is
+// under the pointer and sends the enters and exits, rather than the test calling a control's handlers.
+struct HostWindow final : juce::Component
+{
+    explicit HostWindow (juce::Component& content)
+    {
+        setBounds (content.getBounds().withPosition (80, 80));
+        addAndMakeVisible (content);
+        addToDesktop (0);
+        setVisible (true);
+    }
+
+    ~HostWindow() override
+    {
+        removeFromDesktop();
+        removeAllChildren();
+    }
+
+    HostWindow (const HostWindow&) = delete;
+    HostWindow& operator= (const HostWindow&) = delete;
+
+    juce::ComponentPeer* createNewPeer (int flags, void*) override { return new FakePeer (*this, flags); }
+
+    // The pointer at at, in c's coordinates: a move, or a drag while mods hold a button.
+    void pointerAt (juce::Component& c, juce::Point<float> at, juce::ModifierKeys mods = {})
+    {
+        pointerAtWindow (getLocalPoint (&c, at), mods);
+    }
+
+    // The pointer at at, in the window's coordinates, which may be outside it.
+    void pointerAtWindow (juce::Point<float> at, juce::ModifierKeys mods = {})
+    {
+        lastPointer = at;
+        lastMods = mods;
+        getPeer()->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse, at, mods, juce::MouseInputSource::defaultPressure,
+                                     juce::MouseInputSource::defaultOrientation, juce::Time::currentTimeMillis());
+    }
+
+    // The pointer again where it last was, as JUCE's fake move after a component is shown, hidden or moved sends it:
+    // that one comes through the message loop, which the harness doesn't run.
+    void pointerAgain() { pointerAtWindow (lastPointer, lastMods); }
+
+private:
+    juce::Point<float> lastPointer;
+    juce::ModifierKeys lastMods;
+};
+
 // The editor in a window of its own, as a host shows it, so it takes keyboard focus. Keys go through
 // the window, to the focused control and up through its parents, as the user's do; the mouse goes
 // straight to the EQ display.
