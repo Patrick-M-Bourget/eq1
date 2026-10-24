@@ -1,10 +1,14 @@
 #include "Knob.h"
 
 #include "../Painting.h"
+#include "../TipWatchdog.h"
 #include "KnobTooltip.h"
 #include "Overlay.h"
 
+#include <algorithm>
 #include <cmath>
+#include <tuple>
+#include <vector>
 
 namespace staple
 {
@@ -21,6 +25,61 @@ const juce::DropShadow& shadowFor (float diameter) { return isSmall (diameter) ?
 float angleOf (double proportion)
 {
     return juce::degreesToRadians (knobs::sweepDegrees * (static_cast<float> (proportion) - 0.5f));
+}
+
+// The convex hull of points, as a closed path (Andrew's monotone chain).
+juce::Path convexHull (std::vector<juce::Point<float>> points)
+{
+    std::sort (points.begin(), points.end(), [] (auto a, auto b) { return std::tie (a.x, a.y) < std::tie (b.x, b.y); });
+    const auto cross = [] (auto o, auto a, auto b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); };
+    std::vector<juce::Point<float>> hull;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const auto start = hull.size();
+        for (const auto p : points)
+        {
+            while (hull.size() >= start + 2 && cross (hull[hull.size() - 2], hull.back(), p) <= 0.0f)
+                hull.pop_back();
+            hull.push_back (p);
+        }
+        hull.pop_back(); // the next pass starts from it
+        std::reverse (points.begin(), points.end());
+    }
+    juce::Path path;
+    if (hull.size() < 3)
+        return path;
+    path.startNewSubPath (hull.front());
+    for (size_t i = 1; i < hull.size(); ++i)
+        path.lineTo (hull[i]);
+    path.closeSubPath();
+    return path;
+}
+
+// The way the pointer takes from a knob's hit area (the circle of its face, or of its ring's outer edge) to its
+// Readout (card), both in one component's coordinates: the convex hull of the circle and the card, so every straight
+// path from the circle onto the card stays on it. Beside the circle, it reaches out only between the points where the
+// lines from the card's corners touch the circle: when the card is wider than the circle, those are on the circle's
+// far side of its centre, and the way reaches out beside the circle level with its centre too.
+juce::Path wayToReadout (juce::Point<float> centre, float radius, juce::Rectangle<float> card)
+{
+    constexpr int samples = 64; // round the circle; the slivers this cuts off its edge are the knob's own
+    const auto onCircle = [&] (float angle) { return centre + juce::Point<float> (std::cos (angle), std::sin (angle)) * radius; };
+    std::vector<juce::Point<float>> points;
+    for (int i = 0; i < samples; ++i)
+        points.push_back (onCircle (juce::MathConstants<float>::twoPi * static_cast<float> (i) / static_cast<float> (samples)));
+    for (const auto corner : { card.getTopLeft(), card.getTopRight(), card.getBottomLeft(), card.getBottomRight() })
+    {
+        points.push_back (corner);
+        // Where the lines from the corner touch the circle, exactly.
+        const float distance = corner.getDistanceFrom (centre);
+        if (distance <= radius)
+            continue;
+        const float towardCorner = std::atan2 (corner.y - centre.y, corner.x - centre.x);
+        const float spread = std::acos (radius / distance);
+        points.push_back (onCircle (towardCorner - spread));
+        points.push_back (onCircle (towardCorner + spread));
+    }
+    return convexHull (std::move (points));
 }
 } // namespace
 
@@ -64,7 +123,7 @@ void Knob::setArcOrigin (double value)
 void Knob::setRing (RingHandler* handler, float width, float offset)
 {
     ring = handler;
-    ringHovered = ringDragging = false;
+    ringHovered = ringDragging = readoutOnRing = false;
     ringWidth = width;
     ringOffset = offset;
     repaint();
@@ -84,8 +143,12 @@ bool Knob::isOnRing (juce::Point<float> position) const
     if (ring == nullptr)
         return false;
     const float distance = position.getDistanceFrom (getFaceCentre());
-    return distance > getFaceRadius() + 1.0f && distance <= getFaceRadius() + ringOffset + ringWidth / 2.0f;
+    return distance > getFaceRadius() + 1.0f && distance <= hitRadius();
 }
+
+bool Knob::isOnRingAsHit (const juce::MouseEvent& e) const { return isOnRing (e.position.roundToInt().toFloat()); }
+
+float Knob::hitRadius() const { return getFaceRadius() + (ring != nullptr ? ringOffset + ringWidth / 2.0f : 0.0f); }
 
 float Knob::arcRadius() const
 {
@@ -147,18 +210,24 @@ bool Knob::hitTest (int x, int y)
 //==============================================================================
 void Knob::mouseEnter (const juce::MouseEvent& e)
 {
+    mouseMove (e); // first, so the Readout shows what is under the pointer
     if (isEnabled())
         showTooltip();
-    mouseMove (e);
 }
 
 void Knob::mouseMove (const juce::MouseEvent& e)
 {
-    const bool over = isEnabled() && isOnRing (e.position);
+    const bool over = isEnabled() && isOnRingAsHit (e);
     if (over != ringHovered)
     {
         ringHovered = over;
         ring->ringHover (*this, over);
+    }
+    // Only here, on the face or ring: off them, the Readout keeps the content (and so the size, and the way to it) it had
+    // as the pointer left.
+    if (over != readoutOnRing)
+    {
+        readoutOnRing = over;
         if (tooltip != nullptr)
             tooltip->refresh();
     }
@@ -180,7 +249,7 @@ void Knob::mouseDown (const juce::MouseEvent& e)
 {
     if (! isEnabled() || ! e.mods.isLeftButtonDown())
         return;
-    if (isOnRing (e.position))
+    if (isOnRingAsHit (e))
     {
         ringDragging = true;
         ring->ringMouseDown (*this, e);
@@ -277,21 +346,73 @@ void Knob::showTooltip()
     tooltip->refresh();
     if (! tooltip->isVisible())
         tooltip->appear();
+    // One Knob Readout at a time on the layer: another knob's, kept on the way to it across this knob, goes, unless a
+    // value is being typed into it.
+    for (auto* child : layer.getChildren())
+        if (auto* other = dynamic_cast<KnobTooltip*> (child); other != nullptr && other != tooltip.get() && other->isVisible() && ! other->isEditing())
+            other->disappear();
 }
 
 void Knob::hideTooltipUnlessHovered (juce::Point<int> screenPosition)
 {
     if (tooltip == nullptr || tooltip->isEditing())
         return;
-    if (getScreenBounds().contains (screenPosition) && isEnabled())
-        return;
-    if (tooltip->isVisible() && tooltip->getScreenBounds().contains (screenPosition))
+    // Over the face (or the ring), not the shadow margin round it: JUCE sends the exit as the pointer leaves the face,
+    // usually still inside the knob's bounds, and the knob hears nothing more. A hidden knob or parent sends one inside
+    // them too. On the way to the Readout, in the margin or over the label, the pointer is crossing to the Readout.
+    const auto pointer = screenPosition.toFloat();
+    if (isOverKnobOrReadout (pointer) || (isEnabled() && isOnWayToReadout (pointer)))
         return;
     hideTooltip();
 }
 
+bool Knob::isOverKnobOrReadout (juce::Point<float> screenPosition)
+{
+    return (isEnabled() && TipWatchdog::isPointerOver (*this, screenPosition))
+           || (tooltip != nullptr && TipWatchdog::isPointerOver (*tooltip, screenPosition));
+}
+
+void Knob::watchTooltip (juce::Point<float> pointer)
+{
+    if (isMouseButtonDown() || tooltip == nullptr || tooltip->isEditing())
+    {
+        wayRestAt.reset();
+        return;
+    }
+    // The way keeps the Readout while the pointer crosses it: once the pointer rests there, it isn't crossing.
+    const auto at = pointer.roundToInt();
+    if (! isOverKnobOrReadout (at.toFloat()) && isEnabled() && isOnWayToReadout (at.toFloat()))
+    {
+        wayRestChecks = wayRestAt == at ? wayRestChecks + 1 : 0;
+        wayRestAt = at;
+        if (wayRestChecks >= restOnWayChecks)
+            hideTooltip();
+        return;
+    }
+    wayRestAt.reset();
+    hideTooltipUnlessHovered (at);
+}
+
+juce::Rectangle<float> Knob::faceArea() const
+{
+    const float r = getFaceRadius();
+    return juce::Rectangle<float> (2.0f * r, 2.0f * r).withCentre (getFaceCentre());
+}
+
+bool Knob::isOnWayToReadout (juce::Point<float> screenPosition)
+{
+    auto* layer = tooltip != nullptr ? tooltip->getParentComponent() : nullptr;
+    if (layer == nullptr || ! tooltip->isVisible() || ! isShowing())
+        return false;
+    const auto centre = layer->getLocalPoint (this, getFaceCentre());
+    const float radius = layer->getLocalPoint (this, getFaceCentre().translated (hitRadius(), 0.0f)).getDistanceFrom (centre);
+    const auto way = wayToReadout (centre, radius, tooltip->getBounds().toFloat());
+    return TipWatchdog::isPointerWithin (*layer, way, screenPosition);
+}
+
 void Knob::hideTooltip()
 {
+    wayRestAt.reset();
     if (tooltip != nullptr)
         tooltip->disappear();
 }

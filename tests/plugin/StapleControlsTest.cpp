@@ -1,8 +1,10 @@
 #include "EditorHarness.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "TipControls.h"
 #include "staple/Fonts.h"
 #include "staple/LookAndFeel.h"
+#include "staple/TooltipWindow.h"
 #include "staple/controls/EdgeSelector.h"
 #include "staple/controls/IconButton.h"
 #include "staple/controls/Knob.h"
@@ -12,6 +14,7 @@
 #include "staple/controls/TextChip.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <memory>
@@ -809,7 +812,6 @@ TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
         kit.add (*k, { x, 150 - s / 2, s, s });
         x += s + 16;
     }
-    frequency->mouseEnter (harness::mouseEvent (*frequency, centreOf (*frequency), {}, centreOf (*frequency)));
     gain->mouseEnter (harness::mouseEvent (*gain, centreOf (*gain), {}, centreOf (*gain)));
     gain->getKnobTooltip()->startEditing();
 
@@ -897,6 +899,9 @@ TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
     item1.setState (juce::Button::buttonOver);
     popover.open (opener);
     harness::settleAnimations(); // its pop-in, played to the end
+    // A Readout shown after the settle: its watchdog would hide it meanwhile, since the machine's real pointer isn't on
+    // its knob. The typed-into one stays.
+    frequency->mouseEnter (harness::mouseEvent (*frequency, centreOf (*frequency), {}, centreOf (*frequency)));
 
     // The focus ring, as LookAndFeel's FocusOutline draws it after Tab (a window of its own, so drawn
     // here in its place).
@@ -940,4 +945,124 @@ TEST_CASE ("A Knob's tooltip and a Popover open inside the editor's scaled conte
     popover.setCardSize (100, 40);
     popover.open (opener);
     CHECK (popover.getParentComponent() == &content);
+}
+
+namespace
+{
+// The editor's Tooltip window over scaled content (as the editor's, drawn at the UI Scale through one
+// transform), holding the Tooltip tests' controls (TipControls). The pointer's events go to the window as
+// JUCE sends every one to it, a global mouse listener. A tip is shown for a control as JUCE shows it on
+// a rest: after asking the control for it.
+struct TooltipKit
+{
+    Kit kit;
+    juce::Component content;
+    eq1::test::TipControls controls;
+    juce::TextButton &gain = controls.gain, &mix = controls.mix;
+    juce::Component& bare = controls.bare;
+    staple::TooltipWindow tips { &content };
+
+    explicit TooltipKit (float scale = 1.0f)
+    {
+        kit.add (content, eq1::test::TipControls::contentArea());
+        content.setTransform (juce::AffineTransform::scale (scale));
+        controls.placeIn (content);
+    }
+
+    // (JUCE's getTipFor answers nothing to a process in the background, as a test's is.)
+    void show (juce::TextButton& control)
+    {
+        tips.getTipFor (control);
+        tips.displayTip (control.getScreenBounds().getCentre(), control.getTooltip());
+        REQUIRE (tips.isVisible());
+    }
+
+    // The pointer moved onto c, or pressed there, as the window hears of it.
+    void moveOnto (juce::Component& c) { listener().mouseMove (harness::mouseEvent (c, centreOf (c))); }
+    void pressOn (juce::Component& c)
+    {
+        listener().mouseDown (harness::mouseEvent (c, centreOf (c), juce::ModifierKeys::leftButtonModifier));
+    }
+    void turnWheelOn (juce::Component& c) { listener().mouseWheelMove (harness::mouseEvent (c, centreOf (c)), harness::wheelTurn()); }
+    juce::MouseListener& listener() { return tips; }
+};
+} // namespace
+
+TEST_CASE ("A Tooltip starts fading out the moment the pointer leaves its control, and is gone about 100 ms later")
+{
+    const float scale = GENERATE (1.0f, 1.5f);
+    TooltipKit t (scale);
+    t.show (t.gain);
+    const auto shownAt = t.tips.getBounds();
+    const auto& fading = t.tips.fadingOut();
+    CHECK_FALSE (fading.isVisible());
+
+    t.moveOnto (t.gain); // moving within its control keeps it
+    CHECK (t.tips.isVisible());
+    CHECK_FALSE (fading.isVisible());
+
+    const auto left = juce::Time::getMillisecondCounterHiRes();
+    t.moveOnto (t.bare);
+    CHECK_FALSE (t.tips.isVisible()); // at once, not on JUCE's next tick
+    REQUIRE (fading.isVisible());
+    CHECK (fading.getParentComponent() == &t.content);
+    CHECK (fading.getBounds() == shownAt);
+    CHECK (fading.getAlpha() == 1.0f);
+    CHECK (t.content.getComponentAt (shownAt.getCentre()) != &fading); // the pointer passes through it
+
+    REQUIRE (harness::settleUntil ([&] { return ! fading.isVisible(); }));
+    CHECK (juce::Time::getMillisecondCounterHiRes() - left >= staple::TooltipWindow::fadeOutMs);
+    CHECK (fading.getAlpha() == 0.0f);
+}
+
+TEST_CASE ("A Tooltip fades out the moment the pointer leaves the window from its control")
+{
+    TooltipKit t;
+    t.show (t.mix);
+    t.listener().mouseExit (harness::mouseEvent (t.gain, centreOf (t.gain))); // another control's exit
+    CHECK (t.tips.isVisible());
+    t.listener().mouseExit (harness::mouseEvent (t.mix, centreOf (t.mix)));
+    CHECK_FALSE (t.tips.isVisible());
+    CHECK (t.tips.fadingOut().isVisible());
+}
+
+TEST_CASE ("A Tooltip fading out finishes fading while the next control's tip shows")
+{
+    TooltipKit t;
+    t.show (t.gain);
+    const auto& fading = t.tips.fadingOut();
+    t.moveOnto (t.mix);
+    REQUIRE (fading.isVisible());
+    t.show (t.mix);
+    CHECK (fading.isVisible());
+    CHECK (t.tips.getAlpha() == 1.0f);
+    CHECK (harness::settleUntil ([&] { return ! fading.isVisible(); }));
+}
+
+TEST_CASE ("A click hides a Tooltip at once, and ends one fading out")
+{
+    TooltipKit t;
+    t.show (t.gain);
+    t.pressOn (t.gain);
+    CHECK_FALSE (t.tips.isVisible());
+
+    t.show (t.gain);
+    t.moveOnto (t.bare);
+    REQUIRE (t.tips.fadingOut().isVisible());
+    t.pressOn (t.bare);
+    CHECK_FALSE (t.tips.fadingOut().isVisible());
+}
+
+TEST_CASE ("A wheel turn hides a Tooltip at once, and ends one fading out")
+{
+    TooltipKit t;
+    t.show (t.gain);
+    t.turnWheelOn (t.gain);
+    CHECK_FALSE (t.tips.isVisible());
+
+    t.show (t.gain);
+    t.moveOnto (t.bare);
+    REQUIRE (t.tips.fadingOut().isVisible());
+    t.turnWheelOn (t.bare);
+    CHECK_FALSE (t.tips.fadingOut().isVisible());
 }
