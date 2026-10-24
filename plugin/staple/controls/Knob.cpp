@@ -123,7 +123,7 @@ void Knob::setArcOrigin (double value)
 void Knob::setRing (RingHandler* handler, float width, float offset)
 {
     ring = handler;
-    ringHovered = ringDragging = false;
+    ringHovered = ringDragging = readoutOnRing = false;
     ringWidth = width;
     ringOffset = offset;
     repaint();
@@ -145,6 +145,8 @@ bool Knob::isOnRing (juce::Point<float> position) const
     const float distance = position.getDistanceFrom (getFaceCentre());
     return distance > getFaceRadius() + 1.0f && distance <= hitRadius();
 }
+
+bool Knob::isOnRingAsHit (const juce::MouseEvent& e) const { return isOnRing (e.position.roundToInt().toFloat()); }
 
 float Knob::hitRadius() const { return getFaceRadius() + (ring != nullptr ? ringOffset + ringWidth / 2.0f : 0.0f); }
 
@@ -208,18 +210,24 @@ bool Knob::hitTest (int x, int y)
 //==============================================================================
 void Knob::mouseEnter (const juce::MouseEvent& e)
 {
+    mouseMove (e); // first, so the Readout shows what is under the pointer
     if (isEnabled())
         showTooltip();
-    mouseMove (e);
 }
 
 void Knob::mouseMove (const juce::MouseEvent& e)
 {
-    const bool over = isEnabled() && isOnRing (e.position);
+    const bool over = isEnabled() && isOnRingAsHit (e);
     if (over != ringHovered)
     {
         ringHovered = over;
         ring->ringHover (*this, over);
+    }
+    // Only here, on the face or ring: off them, the Readout keeps the content (and so the size, and the way to it) it had
+    // as the pointer left.
+    if (over != readoutOnRing)
+    {
+        readoutOnRing = over;
         if (tooltip != nullptr)
             tooltip->refresh();
     }
@@ -241,7 +249,7 @@ void Knob::mouseDown (const juce::MouseEvent& e)
 {
     if (! isEnabled() || ! e.mods.isLeftButtonDown())
         return;
-    if (isOnRing (e.position))
+    if (isOnRingAsHit (e))
     {
         ringDragging = true;
         ring->ringMouseDown (*this, e);
@@ -338,6 +346,11 @@ void Knob::showTooltip()
     tooltip->refresh();
     if (! tooltip->isVisible())
         tooltip->appear();
+    // One Knob Readout at a time on the layer: another knob's, kept on the way to it across this knob, goes, unless a
+    // value is being typed into it.
+    for (auto* child : layer.getChildren())
+        if (auto* other = dynamic_cast<KnobTooltip*> (child); other != nullptr && other != tooltip.get() && other->isVisible() && ! other->isEditing())
+            other->disappear();
 }
 
 void Knob::hideTooltipUnlessHovered (juce::Point<int> screenPosition)

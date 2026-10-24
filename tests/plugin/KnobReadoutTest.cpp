@@ -2,6 +2,7 @@
 // it (harness::HostWindow): JUCE's MouseInputSource decides which component is under the pointer and sends the enters
 // and exits, so the Readout hears of the pointer only when JUCE tells it, as in a host.
 
+#include "DynamicRangeRing.h"
 #include "EditorHarness.h"
 #include "staple/TipWatchdog.h"
 #include "staple/controls/Knob.h"
@@ -46,33 +47,34 @@ struct Hosted : harness::OpenEditor
             c->getParentComponent()->removeChildComponent (c);
     }
 
-    // The Frequency knob, which the Band panel gives its label, alone in the panel.
+    // The Frequency knob, which the Band panel gives its label, with the Gain knob beside it hidden: a move to the far
+    // corner of its Readout crosses Gain's face, which hands the Readout to Gain (one at a time on the layer).
     staple::Knob& labelFrequency()
     {
         auto& knob = frequency();
         REQUIRE (knob.getLabel() != nullptr);
-        return alone (knob);
-    }
-
-    // knob with the other knobs in its parent hidden: eq1's Band panel sets them close, so a move to a far corner of
-    // knob's Readout crosses one, whose own Readout then shows over knob's.
-    staple::Knob& alone (staple::Knob& knob)
-    {
-        for (auto* other : findAll<staple::Knob> ([&] (staple::Knob& k) { return &k != &knob && k.getParentComponent() == knob.getParentComponent(); }))
-            other->setVisible (false);
+        gain().setVisible (false);
         return knob;
     }
 
     staple::Knob& frequency() { return knobNamed ("Frequency"); }
     staple::Knob& gain() { return knobNamed ("Gain"); }
 
-    // The Gain knob, which a Bell's Band panel gives the Dynamic Range ring (its 12 px lane at r + 10), alone in the
-    // panel.
+    // The Gain knob, which a Bell's Band panel gives the Dynamic Range ring (its 12 px lane at r + 10), whose Readout
+    // content is its own and wider than the knob's.
     staple::Knob& ringedGain()
     {
         auto& knob = gain();
         REQUIRE (knob.isOnRing (knob.getFaceCentre().translated (knob.getFaceRadius() + staple::tokens::knob::ringOffset, 0.0f)));
-        return alone (knob);
+        return knob;
+    }
+
+    // The Gain knob's Dynamic Range ring.
+    eq1::DynamicRangeRing& dynamicRange()
+    {
+        auto found = findAll<eq1::DynamicRangeRing>();
+        REQUIRE (found.size() == 1);
+        return *found.front();
     }
 
     staple::Knob& knobNamed (const juce::String& name)
@@ -385,8 +387,8 @@ TEST_CASE ("A Knob Readout stays on every straight move from its knob's face or 
             e.window.pointerAtWindow (from);
             REQUIRE (Hosted::underPointer() == &knob);
             REQUIRE (knob.isTooltipShown());
-            // On eq1's Dynamic Range ring the Readout is the ring's, wider, until the pointer leaves the ring: then it
-            // is the face's again, card.
+            // On eq1's Dynamic Range ring the Readout is the ring's, wider than card and round it, and keeps that content
+            // on the way to it (the ring's case below).
             if (! knob.isOnRing (knob.getLocalPoint (&e.window, from)))
                 REQUIRE (e.window.getLocalArea (&readout, readout.getLocalBounds()).toFloat() == card);
             int lostAt = 0, step = 0;
@@ -499,4 +501,224 @@ TEST_CASE ("A Knob Readout wider than its knob's face hides on its watchdog's ne
     REQUIRE (Hosted::underPointer() != &knob);
     e.window.pointerAtWindow (onEdge.translated (side * 20.0f, 0.0f));
     CHECK (harness::settleUntil ([&] { return ! knob.isTooltipShown(); }));
+}
+
+namespace
+{
+// The shortest distance from p to the segment from a to b.
+float distanceToSegment (juce::Point<float> p, juce::Point<float> a, juce::Point<float> b)
+{
+    const auto ab = b - a;
+    const float t = juce::jlimit (0.0f, 1.0f, (p - a).getDotProduct (ab) / ab.getDotProduct (ab));
+    return p.getDistanceFrom (a + ab * t);
+}
+} // namespace
+
+// The ring's Readout (eq1's Dynamic Range one, 136 px) is wider than the knob's own (86 px), and the way to it is built
+// from it: the content that showed as the pointer left the ring stays until the pointer is back on the face or ring,
+// read again as the knob's value and the ring's move on the way (automation, eq1's Dynamic Range).
+TEST_CASE ("A ring's own Knob Readout keeps its content on every straight move from the ring, past the face, to its corners")
+{
+    Hosted e;
+    auto& knob = e.ringedGain();
+    auto& ring = e.dynamicRange();
+    const auto centre = e.window.getLocalPoint (&knob, knob.getFaceCentre());
+    const float r = knob.getFaceRadius();
+    e.hover (knob);
+    auto& readout = *knob.getKnobTooltip();
+    const auto ownCard = e.window.getLocalArea (&readout, readout.getLocalBounds()).toFloat();
+    const auto ownTitle = readout.titleText();
+    const auto ringTitle = ring.ringTitle();
+    REQUIRE (ownTitle != ringTitle);
+
+    int moves = 0;
+    for (const float degrees : { 0.0f, 30.0f, 60.0f, 90.0f, 120.0f, 150.0f, 180.0f })
+    {
+        const juce::Point<float> direction { std::cos (juce::degreesToRadians (degrees)), -std::sin (juce::degreesToRadians (degrees)) };
+        const auto from = centre + direction * (r + staple::tokens::knob::ringOffset);
+        e.window.pointerAtWindow (from);
+        REQUIRE (Hosted::underPointer() == &knob);
+        REQUIRE (knob.isTooltipShown());
+        REQUIRE (readout.titleText() == ringTitle);
+        const auto card = e.window.getLocalArea (&readout, readout.getLocalBounds()).toFloat();
+        REQUIRE (card.getWidth() > ownCard.getWidth());
+
+        const auto inside = card.reduced (1.0f);
+        for (const auto target : { inside.getTopLeft(), inside.getTopRight(), inside.getBottomLeft(), inside.getBottomRight() })
+        {
+            // Past the face, not over it: back on the face, the Readout is the knob's own again.
+            if (distanceToSegment (centre, from, target) <= r + 2.0f)
+                continue;
+            ++moves;
+            INFO ("From " << (from - centre).toString() << " off the face's centre to " << (target - centre).toString());
+            e.window.pointerAtWindow (from);
+            REQUIRE (readout.titleText() == ringTitle);
+            const auto gainBefore = knob.getValue(), rangeBefore = ring.getValue();
+            int lostAt = 0, changedAt = 0, step = 0;
+            walk (e.window, from, target, [&] {
+                ++step;
+                if (step == 4)
+                    knob.setValue (gainBefore + 1.0);
+                if (step == 6)
+                    ring.setValue (rangeBefore + (rangeBefore > 0.0 ? -3.0 : 3.0)); // calls knob.ringChanged
+                if (lostAt == 0 && ! knob.isTooltipShown())
+                    lostAt = step;
+                if (changedAt == 0 && e.window.getLocalArea (&readout, readout.getLocalBounds()).toFloat() != card)
+                    changedAt = step;
+            });
+            REQUIRE (step > 6);
+            CHECK (lostAt == 0);
+            CHECK (changedAt == 0);
+            CHECK (Hosted::underPointer() == &readout);
+            CHECK (readout.titleText() == ringTitle);
+            CHECK (ring.getValue() != rangeBefore);
+            CHECK (readout.valueText() == ring.ringValue());
+            knob.setValue (gainBefore);
+            ring.setValue (rangeBefore);
+        }
+    }
+    REQUIRE (moves >= 4);
+
+    // Back on the face: the knob's own.
+    e.window.pointerAtWindow (centre);
+    CHECK (readout.titleText() == ownTitle);
+    CHECK (e.window.getLocalArea (&readout, readout.getLocalBounds()).toFloat() == ownCard);
+}
+
+namespace
+{
+// Where the pointer lands round a ringed knob's outer edge, at fractional positions as the UI Scale gives them. JUCE
+// finds the component under the pointer at the whole pixel nearest it, so it can be on the knob at a position just
+// outside the edge, or off it at one just inside.
+enum class Edge
+{
+    exactly,
+    justInside,
+    justOutsideOnItsPixel,
+    justOutsideOffItsPixel
+};
+
+const char* describe (Edge edge)
+{
+    switch (edge)
+    {
+        case Edge::exactly: return "exactly on the ring's outer edge";
+        case Edge::justInside: return "just inside it";
+        case Edge::justOutsideOnItsPixel: return "just outside it, its nearest whole pixel on the ring";
+        case Edge::justOutsideOffItsPixel: return "just outside it, its nearest whole pixel off the ring";
+    }
+    return "";
+}
+
+// A point near 30 degrees above level, right of the face's centre, in the window's coordinates, edge's distance from
+// the ring's outer edge (radius) as JUCE sees it.
+std::optional<juce::Point<float>> pointByEdge (Hosted& e, staple::Knob& knob, float radius, Edge edge)
+{
+    const auto centre = knob.getFaceCentre();
+    for (float degrees = 30.0f; degrees < 40.0f; degrees += 0.25f)
+    {
+        const juce::Point<float> direction { std::cos (juce::degreesToRadians (degrees)), -std::sin (juce::degreesToRadians (degrees)) };
+        for (float off = 0.05f; off < 0.5f; off += 0.05f)
+        {
+            const float distance = edge == Edge::exactly ? radius : edge == Edge::justInside ? radius - off : radius + off;
+            const auto at = e.window.getLocalPoint (&knob, centre + direction * distance);
+            const bool onItsPixel = knob.getLocalPoint (&e.window, at).roundToInt().toFloat().getDistanceFrom (centre) <= radius;
+            if (edge != Edge::justOutsideOnItsPixel && edge != Edge::justOutsideOffItsPixel)
+                return at;
+            if (onItsPixel == (edge == Edge::justOutsideOnItsPixel))
+                return at;
+        }
+    }
+    return std::nullopt;
+}
+} // namespace
+
+TEST_CASE ("A ring's own Knob Readout keeps its content as the pointer leaves the ring across its outer edge")
+{
+    Hosted e;
+    auto& knob = e.ringedGain();
+    const auto ringTitle = e.dynamicRange().ringTitle();
+    const float radius = knob.getFaceRadius() + staple::tokens::knob::ringOffset + staple::tokens::knob::ringLane / 2.0f;
+    const auto edge = GENERATE (Edge::exactly, Edge::justInside, Edge::justOutsideOnItsPixel, Edge::justOutsideOffItsPixel);
+    INFO ("The pointer lands " << describe (edge));
+    const auto at = pointByEdge (e, knob, radius, edge);
+    REQUIRE (at.has_value());
+
+    // On the ring at 30 degrees, then out to the edge.
+    const juce::Point<float> direction { std::cos (juce::degreesToRadians (30.0f)), -std::sin (juce::degreesToRadians (30.0f)) };
+    e.window.pointerAt (knob, knob.getFaceCentre() + direction * (knob.getFaceRadius() + staple::tokens::knob::ringOffset));
+    REQUIRE (knob.isTooltipShown());
+    auto& readout = *knob.getKnobTooltip();
+    REQUIRE (readout.titleText() == ringTitle);
+    e.window.pointerAtWindow (*at);
+    CHECK (readout.titleText() == ringTitle);
+
+    // On toward the Readout's far bottom corner.
+    const auto card = e.window.getLocalArea (&readout, readout.getLocalBounds()).toFloat();
+    walk (e.window, *at, card.reduced (1.0f).getBottomRight(), [&] {
+        CHECK (knob.isTooltipShown());
+        CHECK (readout.titleText() == ringTitle);
+    });
+    CHECK (Hosted::underPointer() == &readout);
+}
+
+// A press where JUCE finds the knob under the pointer, just outside the ring's outer edge, goes to the ring, as the
+// pointer there is on it. On eq1's Dynamic Range ring, a press starts the ring's drag: the drag moves the Band's Dynamic
+// Range, not its Gain.
+TEST_CASE ("A press just outside a ring's outer edge, on its nearest whole pixel, goes to the ring")
+{
+    Hosted e;
+    auto& knob = e.ringedGain();
+    auto& ring = e.dynamicRange();
+    const float radius = knob.getFaceRadius() + staple::tokens::knob::ringOffset + staple::tokens::knob::ringLane / 2.0f;
+    const auto at = pointByEdge (e, knob, radius, Edge::justOutsideOnItsPixel);
+    REQUIRE (at.has_value());
+    e.window.pointerAtWindow (*at);
+    REQUIRE (Hosted::underPointer() == &knob);
+    const auto before = knob.getValue(), rangeBefore = ring.getValue();
+    {
+        harness::HostWindow::ButtonHeld held (e.window, knob, knob.getLocalPoint (&e.window, *at));
+        held.dragTo (knob, knob.getLocalPoint (&e.window, *at).translated (0.0f, -40.0f));
+    }
+    CHECK (ring.getValue() != rangeBefore);
+    CHECK (knob.getValue() == before);
+}
+
+// Closely packed knobs, as on eq1's Band panel: the way to one knob's Readout crosses its neighbour's face.
+TEST_CASE ("One Knob Readout shows at a time: a neighbour's hides it on the way to it, unless it is being typed into")
+{
+    Hosted e;
+    // The Band panel's Frequency knob and the Gain knob beside it.
+    auto& a = e.frequency();
+    auto& b = e.gain();
+    REQUIRE (a.getParentComponent() == b.getParentComponent());
+
+    const bool typing = GENERATE (false, true);
+    INFO ((typing ? "a's Readout is being typed into" : "a's Readout is not being typed into"));
+    e.hover (a);
+    auto& readoutA = *a.getKnobTooltip();
+    if (typing)
+    {
+        readoutA.startEditing();
+        REQUIRE (readoutA.isEditing());
+    }
+
+    const auto onB = e.window.getLocalPoint (&b, b.getFaceCentre());
+    int both = 0, step = 0;
+    walk (e.window, e.window.getLocalPoint (&a, a.getFaceCentre()), onB, [&] {
+        ++step;
+        if (! typing && both == 0 && a.isTooltipShown() && b.isTooltipShown())
+            both = step;
+    });
+    REQUIRE (Hosted::underPointer() == &b);
+    CHECK (b.isTooltipShown());
+    CHECK (both == 0);
+    CHECK (a.isTooltipShown() == typing);
+
+    // Through the watchdogs' checks.
+    harness::settle (3 * staple::TipWatchdog::periodMs);
+    CHECK (b.isTooltipShown());
+    CHECK (a.isTooltipShown() == typing);
+    if (typing)
+        CHECK (readoutA.isEditing());
 }
