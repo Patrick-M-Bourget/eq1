@@ -989,6 +989,12 @@ struct TooltipKit
     {
         listener().mouseDown (harness::mouseEvent (c, centreOf (c), juce::ModifierKeys::leftButtonModifier));
     }
+    void turnWheelOn (juce::Component& c)
+    {
+        juce::MouseWheelDetails wheel {};
+        wheel.deltaY = 0.1f;
+        listener().mouseWheelMove (harness::mouseEvent (c, centreOf (c)), wheel);
+    }
     juce::MouseListener& listener() { return tips; }
 };
 } // namespace
@@ -1056,4 +1062,36 @@ TEST_CASE ("A click hides a Tooltip at once, and ends one fading out")
     REQUIRE (t.tips.fadingOut().isVisible());
     t.pressOn (t.bare);
     CHECK_FALSE (t.tips.fadingOut().isVisible());
+}
+
+TEST_CASE ("A wheel turn hides a Tooltip at once, and ends one fading out")
+{
+    TooltipKit t;
+    t.show (t.gain);
+    t.turnWheelOn (t.gain);
+    CHECK_FALSE (t.tips.isVisible());
+
+    t.show (t.gain);
+    t.moveOnto (t.bare);
+    REQUIRE (t.tips.fadingOut().isVisible());
+    t.turnWheelOn (t.bare);
+    CHECK_FALSE (t.tips.fadingOut().isVisible());
+}
+
+// The fade's frames run on a timer, which a loaded machine can run late, so the bound is in frames, not
+// wall time: once fadeOutMs has passed since the fade began, its next frame ends it.
+TEST_CASE ("A Tooltip fading out is gone on its first frame after fadeOutMs")
+{
+    TooltipKit t;
+    t.show (t.gain);
+    const auto& fading = t.tips.fadingOut();
+    t.moveOnto (t.bare);
+    const auto began = juce::Time::getMillisecondCounterHiRes();
+    REQUIRE (fading.isVisible());
+
+    while (juce::Time::getMillisecondCounterHiRes() - began < staple::TooltipWindow::fadeOutMs)
+        harness::settle (1);
+    harness::settle (20); // past the next of the fade's 60 Hz frames
+    CHECK_FALSE (fading.isVisible());
+    CHECK (fading.getAlpha() == 0.0f);
 }
