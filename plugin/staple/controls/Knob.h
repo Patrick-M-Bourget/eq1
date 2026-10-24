@@ -110,8 +110,10 @@ private:
     void hideTooltip();
     // The face's square, in the knob's coordinates.
     juce::Rectangle<float> faceArea() const;
-    // Whether the pointer at screenPosition crosses between the face and the Readout showing: between the face's
-    // centre and the Readout's near edge, from the face's width to the Readout's, in the Readout's window.
+    // The radius round the face's centre that the hit area reaches: the face's, or the ring's outer edge.
+    float hitRadius() const;
+    // Whether the pointer at screenPosition crosses between the hit area and the Readout showing, in the Readout's
+    // window: in the convex hull of the hit area's circle and the Readout.
     bool isOnWayToReadout (juce::Point<float> screenPosition);
     float arcRadius() const;
     float arcStartProportion();

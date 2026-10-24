@@ -5,7 +5,10 @@
 #include "KnobTooltip.h"
 #include "Overlay.h"
 
+#include <algorithm>
 #include <cmath>
+#include <tuple>
+#include <vector>
 
 namespace staple
 {
@@ -24,24 +27,59 @@ float angleOf (double proportion)
     return juce::degreesToRadians (knobs::sweepDegrees * (static_cast<float> (proportion) - 0.5f));
 }
 
-// The way the pointer takes from a knob's face to its Readout (card), both in one component's coordinates: from the
-// face's width across its centre to the card's near edge, as wide there as the card. Every straight path from the
-// face's half nearer the card onto the card stays on it. Beside the face, level with its centre or further from the
-// card, is off it. Empty when the card's near edge is on the face's far side of its centre.
-juce::Path wayToReadout (juce::Rectangle<float> face, juce::Rectangle<float> card)
+// The convex hull of points, as a closed path (Andrew's monotone chain).
+juce::Path convexHull (std::vector<juce::Point<float>> points)
 {
-    const float centreY = face.getCentreY();
-    const bool below = card.getCentreY() > centreY;
-    const float nearY = below ? card.getY() : card.getBottom();
-    juce::Path way;
-    if (below ? nearY <= centreY : nearY >= centreY)
-        return way;
-    way.startNewSubPath (face.getX(), centreY);
-    way.lineTo (face.getRight(), centreY);
-    way.lineTo (card.getRight(), nearY);
-    way.lineTo (card.getX(), nearY);
-    way.closeSubPath();
-    return way;
+    std::sort (points.begin(), points.end(), [] (auto a, auto b) { return std::tie (a.x, a.y) < std::tie (b.x, b.y); });
+    const auto cross = [] (auto o, auto a, auto b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); };
+    std::vector<juce::Point<float>> hull;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const auto start = hull.size();
+        for (const auto p : points)
+        {
+            while (hull.size() >= start + 2 && cross (hull[hull.size() - 2], hull.back(), p) <= 0.0f)
+                hull.pop_back();
+            hull.push_back (p);
+        }
+        hull.pop_back(); // the next pass starts from it
+        std::reverse (points.begin(), points.end());
+    }
+    juce::Path path;
+    if (hull.size() < 3)
+        return path;
+    path.startNewSubPath (hull.front());
+    for (size_t i = 1; i < hull.size(); ++i)
+        path.lineTo (hull[i]);
+    path.closeSubPath();
+    return path;
+}
+
+// The way the pointer takes from a knob's hit area (the circle of its face, or of its ring's outer edge) to its
+// Readout (card), both in one component's coordinates: the convex hull of the circle and the card, so every straight
+// path from the circle onto the card stays on it. Beside the circle, it reaches out only between the points where the
+// lines from the card's corners touch the circle: when the card is wider than the circle, those are on the circle's
+// far side of its centre, and the way reaches out beside the circle level with its centre too.
+juce::Path wayToReadout (juce::Point<float> centre, float radius, juce::Rectangle<float> card)
+{
+    constexpr int samples = 64; // round the circle; the slivers this cuts off its edge are the knob's own
+    const auto onCircle = [&] (float angle) { return centre + juce::Point<float> (std::cos (angle), std::sin (angle)) * radius; };
+    std::vector<juce::Point<float>> points;
+    for (int i = 0; i < samples; ++i)
+        points.push_back (onCircle (juce::MathConstants<float>::twoPi * static_cast<float> (i) / static_cast<float> (samples)));
+    for (const auto corner : { card.getTopLeft(), card.getTopRight(), card.getBottomLeft(), card.getBottomRight() })
+    {
+        points.push_back (corner);
+        // Where the lines from the corner touch the circle, exactly.
+        const float distance = corner.getDistanceFrom (centre);
+        if (distance <= radius)
+            continue;
+        const float towardCorner = std::atan2 (corner.y - centre.y, corner.x - centre.x);
+        const float spread = std::acos (radius / distance);
+        points.push_back (onCircle (towardCorner - spread));
+        points.push_back (onCircle (towardCorner + spread));
+    }
+    return convexHull (std::move (points));
 }
 } // namespace
 
@@ -105,8 +143,10 @@ bool Knob::isOnRing (juce::Point<float> position) const
     if (ring == nullptr)
         return false;
     const float distance = position.getDistanceFrom (getFaceCentre());
-    return distance > getFaceRadius() + 1.0f && distance <= getFaceRadius() + ringOffset + ringWidth / 2.0f;
+    return distance > getFaceRadius() + 1.0f && distance <= hitRadius();
 }
+
+float Knob::hitRadius() const { return getFaceRadius() + (ring != nullptr ? ringOffset + ringWidth / 2.0f : 0.0f); }
 
 float Knob::arcRadius() const
 {
@@ -329,9 +369,11 @@ juce::Rectangle<float> Knob::faceArea() const
 bool Knob::isOnWayToReadout (juce::Point<float> screenPosition)
 {
     auto* layer = tooltip != nullptr ? tooltip->getParentComponent() : nullptr;
-    if (layer == nullptr || ! tooltip->isVisible())
+    if (layer == nullptr || ! tooltip->isVisible() || ! isShowing())
         return false;
-    const auto way = wayToReadout (layer->getLocalArea (this, faceArea()), tooltip->getBounds().toFloat());
+    const auto centre = layer->getLocalPoint (this, getFaceCentre());
+    const float radius = layer->getLocalPoint (this, getFaceCentre().translated (hitRadius(), 0.0f)).getDistanceFrom (centre);
+    const auto way = wayToReadout (centre, radius, tooltip->getBounds().toFloat());
     return TipWatchdog::isPointerWithin (*layer, way, screenPosition);
 }
 
