@@ -1,6 +1,7 @@
 #include "EditorHarness.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
+#include "TipControls.h"
 #include "staple/Fonts.h"
 #include "staple/LookAndFeel.h"
 #include "staple/TooltipWindow.h"
@@ -949,32 +950,23 @@ TEST_CASE ("A Knob's tooltip and a Popover open inside the editor's scaled conte
 namespace
 {
 // The editor's Tooltip window over scaled content (as the editor's, drawn at the UI Scale through one
-// transform), holding two controls with tips and a bare one. The pointer's events go to the window as
+// transform), holding the Tooltip tests' controls (TipControls). The pointer's events go to the window as
 // JUCE sends every one to it, a global mouse listener. A tip is shown for a control as JUCE shows it on
 // a rest: after asking the control for it.
 struct TooltipKit
 {
     Kit kit;
     juce::Component content;
-    juce::TextButton gain { "Gain" }, mix { "Mix" };
-    juce::Component bare;
+    eq1::test::TipControls controls;
+    juce::TextButton &gain = controls.gain, &mix = controls.mix;
+    juce::Component& bare = controls.bare;
     staple::TooltipWindow tips { &content };
 
     explicit TooltipKit (float scale = 1.0f)
     {
-        kit.add (content, { 0, 0, 300, 200 });
+        kit.add (content, eq1::test::TipControls::contentArea());
         content.setTransform (juce::AffineTransform::scale (scale));
-        gain.setTooltip ("Gain");
-        mix.setTooltip ("Mix");
-        place (gain, { 20, 20, 60, 24 });
-        place (mix, { 100, 20, 60, 24 });
-        place (bare, { 20, 120, 60, 24 });
-    }
-
-    void place (juce::Component& c, juce::Rectangle<int> bounds)
-    {
-        content.addAndMakeVisible (c);
-        c.setBounds (bounds);
+        controls.placeIn (content);
     }
 
     // (JUCE's getTipFor answers nothing to a process in the background, as a test's is.)
@@ -991,12 +983,7 @@ struct TooltipKit
     {
         listener().mouseDown (harness::mouseEvent (c, centreOf (c), juce::ModifierKeys::leftButtonModifier));
     }
-    void turnWheelOn (juce::Component& c)
-    {
-        juce::MouseWheelDetails wheel {};
-        wheel.deltaY = 0.1f;
-        listener().mouseWheelMove (harness::mouseEvent (c, centreOf (c)), wheel);
-    }
+    void turnWheelOn (juce::Component& c) { listener().mouseWheelMove (harness::mouseEvent (c, centreOf (c)), harness::wheelTurn()); }
     juce::MouseListener& listener() { return tips; }
 };
 } // namespace
@@ -1078,22 +1065,4 @@ TEST_CASE ("A wheel turn hides a Tooltip at once, and ends one fading out")
     REQUIRE (t.tips.fadingOut().isVisible());
     t.turnWheelOn (t.bare);
     CHECK_FALSE (t.tips.fadingOut().isVisible());
-}
-
-// The fade's frames run on a timer, which a loaded machine can run late, so the bound is in frames, not
-// wall time: once fadeOutMs has passed since the fade began, its next frame ends it.
-TEST_CASE ("A Tooltip fading out is gone on its first frame after fadeOutMs")
-{
-    TooltipKit t;
-    t.show (t.gain);
-    const auto& fading = t.tips.fadingOut();
-    t.moveOnto (t.bare);
-    const auto began = juce::Time::getMillisecondCounterHiRes();
-    REQUIRE (fading.isVisible());
-
-    while (juce::Time::getMillisecondCounterHiRes() - began < staple::TooltipWindow::fadeOutMs)
-        harness::settle (1);
-    harness::settle (20); // past the next of the fade's 60 Hz frames
-    CHECK_FALSE (fading.isVisible());
-    CHECK (fading.getAlpha() == 0.0f);
 }

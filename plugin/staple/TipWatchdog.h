@@ -30,21 +30,30 @@ public:
     // Whether the pointer at screenPosition is over c: c is showing, its hit area holds the point, and c's window is
     // the one under it, not hidden or covered there by another (ComponentPeer::contains asks the OS).
     static bool isPointerOver (juce::Component& c, juce::Point<float> screenPosition);
+    // Whether the pointer at screenPosition is in area, in c's coordinates: c is showing, area holds the point, and
+    // c's window is the one under it (the window's own Component::contains asks the OS).
+    static bool isPointerWithin (juce::Component& c, const juce::Path& area, juce::Point<float> screenPosition);
 
-    // The pointer as the OS has it now, unless a ScopedPointer stands in for it.
+    // The pointer as the OS has it now, unless a ScopedPointerSource stands in for it.
     static juce::Point<float> pointer();
 
-    // Stands in for the OS's pointer while it lives: a test moves a pointer of its own without sending an event.
-    class ScopedPointer
+    // Stands in for the OS's pointer, for the whole process, while it lives: a test moves a pointer of its own without
+    // sending an event. Stand-ins nest: the innermost one answers, and each goes before the one it was made inside (an
+    // assertion); one gone out of order is still taken out of the chain.
+    class ScopedPointerSource
     {
     public:
-        explicit ScopedPointer (PointerSource source);
-        ~ScopedPointer();
-        ScopedPointer (const ScopedPointer&) = delete;
-        ScopedPointer& operator= (const ScopedPointer&) = delete;
+        explicit ScopedPointerSource (PointerSource source);
+        ~ScopedPointerSource();
+        ScopedPointerSource (const ScopedPointerSource&) = delete;
+        ScopedPointerSource& operator= (const ScopedPointerSource&) = delete;
+
+        juce::Point<float> position() const { return source(); }
 
     private:
-        PointerSource previous;
+        PointerSource source;
+        // The stand-in this one was made inside, or nullptr.
+        ScopedPointerSource* outer;
     };
 
 private:

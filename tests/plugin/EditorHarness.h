@@ -101,6 +101,14 @@ inline juce::MouseEvent mouseEvent (juce::Component& target, juce::Point<float> 
              position != pressedAt };
 }
 
+// One notch of a mouse wheel turned down.
+inline juce::MouseWheelDetails wheelTurn()
+{
+    juce::MouseWheelDetails wheel {};
+    wheel.deltaY = 0.1f;
+    return wheel;
+}
+
 // The key with Shift held.
 inline juce::KeyPress withShift (juce::KeyPress key) { return { key.getKeyCode(), juce::ModifierKeys::shiftModifier, 0 }; }
 
@@ -194,6 +202,22 @@ inline void settleAnimations (int milliseconds = 60)
         FAIL ("settleAnimations gave up after 10 s with " << staple::Tween::numberEasing()
                                                          << " animation(s) still easing");
 }
+
+// Counts the times a component is shown and hidden while this lives. A check that something stays shown or hidden
+// through a wait counts what happened across it, so a hide and show again (or a show and hide again) in the middle
+// fails it, as a look at the wait's end alone would miss.
+struct VisibilityChanges final : juce::ComponentListener
+{
+    explicit VisibilityChanges (juce::Component& c) : component (c) { component.addComponentListener (this); }
+    ~VisibilityChanges() override { component.removeComponentListener (this); }
+    VisibilityChanges (const VisibilityChanges&) = delete;
+    VisibilityChanges& operator= (const VisibilityChanges&) = delete;
+
+    void componentVisibilityChanged (juce::Component& c) override { ++(c.isVisible() ? shows : hides); }
+
+    juce::Component& component;
+    int shows = 0, hides = 0;
+};
 
 // Counts the repaints asked of a component, standing in for its drawing (it draws nothing, children
 // included). Installed with countRepaintsOf, through setCachedComponentImage, which owns it: a test that
@@ -315,13 +339,27 @@ struct HostWindow final : juce::Component
                                      juce::MouseInputSource::defaultOrientation, juce::Time::currentTimeMillis());
     }
 
+    // The left button pressed at at, in c's coordinates, and held while this lives (dragTo moves it so); released where
+    // the pointer last was when it goes, so a failed check can't leave JUCE's button down for the tests after.
+    class ButtonHeld
+    {
+    public:
+        ButtonHeld (HostWindow& w, juce::Component& c, juce::Point<float> at) : window (w) { dragTo (c, at); }
+        ~ButtonHeld() { window.pointerAtWindow (window.lastPointer); }
+        ButtonHeld (const ButtonHeld&) = delete;
+        ButtonHeld& operator= (const ButtonHeld&) = delete;
+
+        void dragTo (juce::Component& c, juce::Point<float> at) { window.pointerAt (c, at, juce::ModifierKeys::leftButtonModifier); }
+
+    private:
+        HostWindow& window;
+    };
+
     // A wheel turn with the pointer at at, in c's coordinates.
     void wheelAt (juce::Component& c, juce::Point<float> at)
     {
         sent (getLocalPoint (&c, at), {});
-        juce::MouseWheelDetails wheel {};
-        wheel.deltaY = 0.1f;
-        getPeer()->handleMouseWheel (juce::MouseInputSource::InputSourceType::mouse, lastPointer, juce::Time::currentTimeMillis(), wheel);
+        getPeer()->handleMouseWheel (juce::MouseInputSource::InputSourceType::mouse, lastPointer, juce::Time::currentTimeMillis(), wheelTurn());
     }
 
     // The pointer again where it last was, as JUCE's fake move after a component is shown, hidden or moved sends it:
@@ -333,13 +371,44 @@ struct HostWindow final : juce::Component
     // other call above puts it too, rather than from the machine's real mouse.
     void pointerUnseen (juce::Component& c, juce::Point<float> at) { osPointer = getLocalPoint (&c, at); }
 
+    // How the OS can have the pointer leave a control without sending the window an event.
+    enum class UnseenExit
+    {
+        offTheControl,     // another window over this one took the pointer's events as it moved
+        overAnotherWindow, // another window came over the control, under the pointer
+        windowHidden,      // the host hid the window itself
+    };
+
+    static const char* describe (UnseenExit how)
+    {
+        switch (how)
+        {
+            case UnseenExit::offTheControl: return "off the control";
+            case UnseenExit::overAnotherWindow: return "over another window";
+            case UnseenExit::windowHidden: return "in a window the host hid";
+        }
+        return "";
+    }
+
+    // The pointer, on control, leaves it as how says, with no event: moved to to (in control's coordinates) unseen,
+    // another window over all of control, or the window hidden.
+    void pointerLeavesUnseen (UnseenExit how, juce::Component& control, juce::Point<float> to)
+    {
+        switch (how)
+        {
+            case UnseenExit::offTheControl: pointerUnseen (control, to); break;
+            case UnseenExit::overAnotherWindow: peer().covered = getLocalArea (&control, control.getLocalBounds()); break;
+            case UnseenExit::windowHidden: peer().visible = false; break;
+        }
+    }
+
     FakePeer& peer() { return dynamic_cast<FakePeer&> (*getPeer()); }
 
 private:
     juce::Point<float> lastPointer;
     juce::ModifierKeys lastMods;
     juce::Point<float> osPointer;
-    staple::TipWatchdog::ScopedPointer pointerStandIn { [this] { return localPointToGlobal (osPointer); } };
+    staple::TipWatchdog::ScopedPointerSource pointerStandIn { [this] { return localPointToGlobal (osPointer); } };
 
     void sent (juce::Point<float> at, juce::ModifierKeys mods)
     {

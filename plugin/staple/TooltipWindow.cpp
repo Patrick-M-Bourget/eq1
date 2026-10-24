@@ -10,7 +10,8 @@ namespace
 constexpr int gap = 6;
 // A control at least this many Tooltips tall has the Tooltip at its side.
 constexpr int sidewaysHeightRatio = 4;
-// For this long after hiding a tip, JUCE's timer shows the tip under the pointer at once, without a rest.
+// For this long after hiding a tip, JUCE's timer shows the tip under the pointer at once, without a rest: JUCE's
+// TooltipWindow::timerCallback, "if (isVisible() || now < lastHideTime + 500)" (juce_TooltipWindow.cpp).
 constexpr juce::uint32 reshowAtOnceMs = 500;
 } // namespace
 
