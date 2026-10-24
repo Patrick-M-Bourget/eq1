@@ -811,7 +811,6 @@ TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
         kit.add (*k, { x, 150 - s / 2, s, s });
         x += s + 16;
     }
-    frequency->mouseEnter (harness::mouseEvent (*frequency, centreOf (*frequency), {}, centreOf (*frequency)));
     gain->mouseEnter (harness::mouseEvent (*gain, centreOf (*gain), {}, centreOf (*gain)));
     gain->getKnobTooltip()->startEditing();
 
@@ -899,6 +898,9 @@ TEST_CASE ("The Staple controls kit's gallery", "[.screens]")
     item1.setState (juce::Button::buttonOver);
     popover.open (opener);
     harness::settleAnimations(); // its pop-in, played to the end
+    // A Readout shown after the settle: its watchdog would hide it meanwhile, since the machine's real pointer isn't on
+    // its knob. The typed-into one stays.
+    frequency->mouseEnter (harness::mouseEvent (*frequency, centreOf (*frequency), {}, centreOf (*frequency)));
 
     // The focus ring, as LookAndFeel's FocusOutline draws it after Tab (a window of its own, so drawn
     // here in its place).

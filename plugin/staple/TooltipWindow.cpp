@@ -10,9 +10,11 @@ namespace
 constexpr int gap = 6;
 // A control at least this many Tooltips tall has the Tooltip at its side.
 constexpr int sidewaysHeightRatio = 4;
+// For this long after hiding a tip, JUCE's timer shows the tip under the pointer at once, without a rest.
+constexpr juce::uint32 reshowAtOnceMs = 500;
 } // namespace
 
-TooltipWindow::TooltipWindow (juce::Component* parent) : juce::TooltipWindow (parent)
+TooltipWindow::TooltipWindow (juce::Component* parent, TipSource tipFor) : juce::TooltipWindow (parent), tipSource (std::move (tipFor))
 {
     fading.setInterceptsMouseClicks (false, false);
     fading.setAccessible (false);
@@ -29,7 +31,27 @@ TooltipWindow::TooltipWindow (juce::Component* parent) : juce::TooltipWindow (pa
 juce::String TooltipWindow::getTipFor (juce::Component& c)
 {
     control = &c;
-    return juce::TooltipWindow::getTipFor (c);
+    if (isDismissed (c) || ! TipWatchdog::isPointerOver (c, TipWatchdog::pointer()))
+        return {};
+    return tipSource != nullptr ? tipSource (c) : juce::TooltipWindow::getTipFor (c);
+}
+
+bool TooltipWindow::isDismissed (juce::Component& c)
+{
+    if (dismissed.control != &c)
+        return false;
+    if (! dismissed.moved || juce::Time::getApproximateMillisecondCounter() < dismissed.time + reshowAtOnceMs)
+        return true;
+    dismissed.control = nullptr;
+    return false;
+}
+
+void TooltipWindow::dismiss (const juce::MouseEvent& e)
+{
+    endFade();
+    hideTip();
+    // After hideTip, which starts JUCE's reshowAtOnceMs.
+    dismissed = { e.eventComponent, e.getScreenPosition(), juce::Time::getApproximateMillisecondCounter(), false };
 }
 
 void TooltipWindow::moved() { placeByControl(); }
@@ -40,10 +62,29 @@ void TooltipWindow::visibilityChanged()
 {
     // JUCE asks for a control's tip just before showing it.
     if (isVisible())
+    {
         showingFor = control;
+        watchdog.start();
+    }
+    else
+    {
+        watchdog.stop();
+    }
 }
 
-void TooltipWindow::mouseMove (const juce::MouseEvent& e) { pointerOver (e.eventComponent); }
+void TooltipWindow::watch (juce::Point<float> pointer)
+{
+    if (isVisible() && (showingFor == nullptr || ! TipWatchdog::isPointerOver (*showingFor, pointer)))
+        fadeOut();
+}
+
+void TooltipWindow::mouseMove (const juce::MouseEvent& e)
+{
+    if (dismissed.control != nullptr
+        && (e.eventComponent != dismissed.control || e.getScreenPosition().toFloat().getDistanceFrom (dismissed.at.toFloat()) > dismissalMovePx))
+        dismissed.moved = true;
+    pointerOver (e.eventComponent);
+}
 
 void TooltipWindow::mouseExit (const juce::MouseEvent& e)
 {
@@ -51,17 +92,9 @@ void TooltipWindow::mouseExit (const juce::MouseEvent& e)
         pointerOver (nullptr);
 }
 
-void TooltipWindow::mouseDown (const juce::MouseEvent&)
-{
-    endFade();
-    hideTip();
-}
+void TooltipWindow::mouseDown (const juce::MouseEvent& e) { dismiss (e); }
 
-void TooltipWindow::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&)
-{
-    endFade();
-    hideTip();
-}
+void TooltipWindow::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails&) { dismiss (e); }
 
 void TooltipWindow::pointerOver (juce::Component* under)
 {

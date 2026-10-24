@@ -4,6 +4,7 @@
 #include "EqDisplay.h"
 #include "display/DisplayGeometry.h"
 #include "PluginProcessor.h"
+#include "staple/TipWatchdog.h"
 #include "staple/controls/Tween.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -232,7 +233,8 @@ inline void checkPopInStart (const juce::Component& component, juce::Rectangle<f
 
 // A window's peer the OS never sees: its hit-test is its bounds, so a pointer event lands where the test puts it
 // whatever else is on screen. A real window's peer asks the OS which window is frontmost at the point, and a test's
-// window is behind the terminal's. It never paints, and has focus.
+// window is behind the terminal's. It never paints, and has focus. A test stands in for the OS with visible (false:
+// the host hid the window itself, which JUCE doesn't hear of) and covered (where another window is over it).
 struct FakePeer final : juce::ComponentPeer
 {
     FakePeer (juce::Component& c, int flags) : ComponentPeer (c, flags), bounds (c.getBounds()) {}
@@ -252,7 +254,10 @@ struct FakePeer final : juce::ComponentPeer
     void setFullScreen (bool) override {}
     bool isFullScreen() const override { return false; }
     void setIcon (const juce::Image&) override {}
-    bool contains (juce::Point<int> p, bool) const override { return isShowing() && bounds.withZeroOrigin().contains (p); }
+    bool contains (juce::Point<int> p, bool) const override
+    {
+        return isShowing() && bounds.withZeroOrigin().contains (p) && ! covered.contains (p);
+    }
     OptionalBorderSize getFrameSizeIfPresent() const override { return {}; }
     juce::BorderSize<int> getFrameSize() const override { return {}; }
     bool setAlwaysOnTop (bool) override { return true; }
@@ -267,6 +272,8 @@ struct FakePeer final : juce::ComponentPeer
     void textInputRequired (juce::Point<int>, juce::TextInputTarget&) override {}
 
     juce::Rectangle<int> bounds;
+    // The part of the window another window is over, in the window's coordinates.
+    juce::Rectangle<int> covered;
     bool visible = false, minimised = false;
 };
 
@@ -303,19 +310,42 @@ struct HostWindow final : juce::Component
     // The pointer at at, in the window's coordinates, which may be outside it.
     void pointerAtWindow (juce::Point<float> at, juce::ModifierKeys mods = {})
     {
-        lastPointer = at;
-        lastMods = mods;
+        sent (at, mods);
         getPeer()->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse, at, mods, juce::MouseInputSource::defaultPressure,
                                      juce::MouseInputSource::defaultOrientation, juce::Time::currentTimeMillis());
+    }
+
+    // A wheel turn with the pointer at at, in c's coordinates.
+    void wheelAt (juce::Component& c, juce::Point<float> at)
+    {
+        sent (getLocalPoint (&c, at), {});
+        juce::MouseWheelDetails wheel {};
+        wheel.deltaY = 0.1f;
+        getPeer()->handleMouseWheel (juce::MouseInputSource::InputSourceType::mouse, lastPointer, juce::Time::currentTimeMillis(), wheel);
     }
 
     // The pointer again where it last was, as JUCE's fake move after a component is shown, hidden or moved sends it:
     // that one comes through the message loop, which the harness doesn't run.
     void pointerAgain() { pointerAtWindow (lastPointer, lastMods); }
 
+    // The pointer moved to at, in c's coordinates, as the OS has it, with no event: as when another window over this
+    // one takes the pointer's events. A tip's watchdog (staple::TipWatchdog) reads the pointer from here, where every
+    // other call above puts it too, rather than from the machine's real mouse.
+    void pointerUnseen (juce::Component& c, juce::Point<float> at) { osPointer = getLocalPoint (&c, at); }
+
+    FakePeer& peer() { return dynamic_cast<FakePeer&> (*getPeer()); }
+
 private:
     juce::Point<float> lastPointer;
     juce::ModifierKeys lastMods;
+    juce::Point<float> osPointer;
+    staple::TipWatchdog::ScopedPointer pointerStandIn { [this] { return localPointToGlobal (osPointer); } };
+
+    void sent (juce::Point<float> at, juce::ModifierKeys mods)
+    {
+        lastPointer = osPointer = at;
+        lastMods = mods;
+    }
 };
 
 // The editor in a window of its own, as a host shows it, so it takes keyboard focus. Keys go through

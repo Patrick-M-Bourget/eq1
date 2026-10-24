@@ -1,6 +1,7 @@
 #include "Knob.h"
 
 #include "../Painting.h"
+#include "../TipWatchdog.h"
 #include "KnobTooltip.h"
 #include "Overlay.h"
 
@@ -286,9 +287,8 @@ void Knob::hideTooltipUnlessHovered (juce::Point<int> screenPosition)
     // Over the face (or the ring), not the shadow margin round it: JUCE sends the exit as the pointer leaves the face,
     // usually still inside the knob's bounds, and the knob hears nothing more. A hidden knob or parent sends one inside
     // them too.
-    if (isShowing() && isEnabled() && contains (getLocalPoint (nullptr, screenPosition)))
-        return;
-    if (tooltip->isShowing() && tooltip->contains (tooltip->getLocalPoint (nullptr, screenPosition)))
+    const auto pointer = screenPosition.toFloat();
+    if ((isEnabled() && TipWatchdog::isPointerOver (*this, pointer)) || TipWatchdog::isPointerOver (*tooltip, pointer))
         return;
     hideTooltip();
 }

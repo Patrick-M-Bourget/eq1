@@ -3,6 +3,7 @@
 // and exits, so the Readout hears of the pointer only when JUCE tells it, as in a host.
 
 #include "EditorHarness.h"
+#include "staple/TipWatchdog.h"
 #include "staple/controls/Knob.h"
 #include "staple/controls/KnobTooltip.h"
 
@@ -127,4 +128,48 @@ TEST_CASE ("A Knob Readout being typed into stays when the pointer leaves it and
     REQUIRE (Hosted::underPointer() != &readout);
     CHECK (knob.isTooltipShown());
     CHECK (readout.isEditing());
+}
+
+// The OS sends the window no event in each case, so JUCE still has the pointer on the knob: only the watchdog, which
+// reads the pointer from the OS, sees it has gone.
+TEST_CASE ("A Knob Readout hides within one watchdog period once the OS has the pointer off its knob")
+{
+    Hosted e;
+    auto& knob = e.frequency();
+    e.hover (knob);
+    const std::string where = GENERATE ("off the knob", "over another window", "in a window the host hid");
+    INFO ("The pointer is " << where);
+    if (where == "off the knob")
+        e.window.pointerUnseen (knob, rightOf (knob));
+    else if (where == "over another window")
+        e.window.peer().covered = e.window.getLocalArea (&knob, knob.getLocalBounds());
+    else
+        e.window.peer().visible = false;
+
+    harness::settle (staple::TipWatchdog::periodMs);
+    CHECK_FALSE (knob.isTooltipShown());
+}
+
+TEST_CASE ("A Knob Readout stays while the pointer rests on its knob, drags it out of the knob, or types into it")
+{
+    Hosted e;
+    auto& knob = e.frequency();
+    e.hover (knob);
+    const std::string doing = GENERATE ("rests", "drags", "types");
+    INFO ("The pointer " << doing);
+    if (doing == "drags")
+    {
+        const auto left = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+        e.window.pointerAt (knob, knob.getFaceCentre(), left);
+        e.window.pointerAt (knob, rightOf (knob), left);
+    }
+    else if (doing == "types")
+    {
+        knob.getKnobTooltip()->startEditing();
+        e.window.pointerUnseen (knob, rightOf (knob));
+    }
+    harness::settle (4 * staple::TipWatchdog::periodMs);
+    CHECK (knob.isTooltipShown());
+    if (doing == "drags")
+        e.window.pointerAt (knob, rightOf (knob));
 }

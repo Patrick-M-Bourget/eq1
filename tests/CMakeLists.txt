@@ -61,6 +61,7 @@ if(EQ1_BUILD_PLUGIN)
         plugin/HoverCardTest.cpp
         plugin/FooterTest.cpp
         plugin/TooltipTest.cpp
+        plugin/TooltipHostedTest.cpp
         plugin/HeaderTest.cpp
         plugin/HostSessionTest.cpp
         plugin/KeyboardControlTest.cpp
