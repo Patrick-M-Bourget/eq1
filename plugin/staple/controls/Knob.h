@@ -21,9 +21,9 @@ double draggedAlongRange (juce::Slider& slider, double from, float pixels, bool 
 // (setDoubleClickReturnValue: SliderAttachment sets the parameter's default), and a drag on its second
 // press carries on from there, as one gesture (KeyboardSlider::startMouseDrag). The arrow
 // keys step it as any KeyboardSlider. While the pointer is over it, or it is dragged, a KnobTooltip shows
-// its title and value text; a double-click on the tooltip types a value. Showing it hides any other knob's on
-// the same overlay layer, unless a value is being typed into that one. Disabled, it dims to 35 % and
-// ignores the mouse and keys.
+// its title and value text; a double-click on the tooltip types a value (the ring's, while it shows the
+// ring's). Showing it hides any other knob's on the same overlay layer, unless a value is being typed into that one.
+// Disabled, it dims to 35 % and ignores the mouse and keys.
 //
 // A knob can reserve a lane outside its face (the Gain knob's Dynamic Range ring): presses, drags and
 // hovers there go to its RingHandler, which also paints the lane.
@@ -57,6 +57,13 @@ public:
         // What the tooltip shows while the lane is hovered or dragged ("Band 4 Dynamic Range", "+6.0 dB").
         virtual juce::String ringTitle() { return {}; }
         virtual juce::String ringValue() { return {}; }
+        // Whether a double-click on the Readout, while it shows the ring's content, opens a field that types into the
+        // ring; without it the double-click does nothing there.
+        virtual bool ringAcceptsTypedText() const { return false; }
+        // What that field starts with: the ring's value as typed, without its unit.
+        virtual juce::String ringTextToType() { return {}; }
+        // The text typed into that field, on Enter: the ring sets its value from it, as one gesture.
+        virtual void ringCommitTypedText (const juce::String& text) { juce::ignoreUnused (text); }
     };
     // A lane width wide, centred offset outside the face's edge (the Gain knob's 12 px lane at r + 10).
     // nullptr removes it.
@@ -73,6 +80,10 @@ public:
     // reader reads it (KeyboardSlider::describe), else its text; the ring's while its lane is hovered or
     // dragged, and after, until the pointer is next on the face or ring (on the way to the Readout, its content stays).
     juce::String tooltipTitle() const;
+    // How long the Readout stays while the pointer rests on the way to it, off the face, ring and Readout: its
+    // watchdog's checks (TipWatchdog::periodMs, so 480 ms) after the one that finds the pointer there. The way keeps
+    // the Readout while the pointer crosses it, not while it rests there.
+    static constexpr int restOnWayChecks = 6;
     bool isTooltipOnRing() const { return ring != nullptr && (readoutOnRing || ringDragging); }
     juce::String tooltipValue();
     bool isTooltipShown() const;
@@ -106,8 +117,10 @@ private:
     // way from there to the Readout, or on the Readout.
     void hideTooltipUnlessHovered (juce::Point<int> screenPosition);
     // The Readout's watchdog's check, with the pointer as the OS has it: hides the Readout as the pointer leaving would,
-    // unless the knob is being dragged.
+    // or once the pointer has rested on the way to it (restOnWayChecks), unless the knob is being dragged.
     void watchTooltip (juce::Point<float> pointer);
+    // Whether the pointer at screenPosition is over the face (or ring) of the knob, enabled, or over the Readout.
+    bool isOverKnobOrReadout (juce::Point<float> screenPosition);
     void hideTooltip();
     // Whether e is on the ring as JUCE found the knob under it: at the whole pixel nearest its position (hitTest), so
     // the face and ring it reaches agree with the hit test at fractional positions (the UI Scale's).
@@ -134,6 +147,11 @@ private:
     bool readoutOnRing = false;
 
     bool ringDragging = false;
+
+    // Where the watchdog last found the pointer on the way to the Readout, and only there, and its checks since then
+    // with the pointer still at that whole pixel.
+    std::optional<juce::Point<int>> wayRestAt;
+    int wayRestChecks = 0;
 
     std::unique_ptr<KnobTooltip> tooltip;
     juce::Component::SafePointer<juce::Component> label;

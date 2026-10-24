@@ -27,8 +27,13 @@ KnobTooltip::~KnobTooltip() = default;
 
 void KnobTooltip::refresh()
 {
-    title = knob.tooltipTitle();
-    value = knob.tooltipValue();
+    // While a value is typed, the card keeps the content the field was opened on (the ring's or the knob's), wherever
+    // the pointer goes; it reads them again once the field closes (stopEditing).
+    if (! isEditing())
+    {
+        title = knob.tooltipTitle();
+        value = knob.tooltipValue();
+    }
     const int width = std::max (minimumWidth, static_cast<int> (readoutCardWidth (title, value)));
     const int height = readoutCard::height;
 
@@ -89,8 +94,15 @@ void KnobTooltip::startEditing()
 {
     if (isEditing())
         return;
+    // Into the ring while this shows the ring's content, if the ring takes typing, else nothing; into the knob
+    // otherwise. Which of them is kept until the field closes, wherever the pointer goes meanwhile.
+    auto* ring = knob.isTooltipOnRing() ? knob.ring : nullptr;
+    if (ring != nullptr && ! ring->ringAcceptsTypedText())
+        return;
+    typingIntoRing = ring != nullptr;
     // The value as typed: without its unit.
-    editor = makeTypeInField (title + " value", knob.textToType (value), [this] { stopEditing (true); }, [this] { stopEditing (false); });
+    const auto text = typingIntoRing ? ring->ringTextToType() : knob.textToType (value);
+    editor = makeTypeInField (title + " value", text, [this] { stopEditing (true); }, [this] { stopEditing (false); });
     addAndMakeVisible (*editor);
     resized();
     repaint();
@@ -102,8 +114,15 @@ void KnobTooltip::stopEditing (bool commit)
     if (editor == nullptr)
         return;
     const auto text = closeTypeInField (editor);
-    if (commit)
+    if (commit && typingIntoRing)
+    {
+        if (knob.ring != nullptr)
+            knob.ring->ringCommitTypedText (text);
+    }
+    else if (commit)
+    {
         knob.commitTypedText (text);
+    }
     refresh();
     juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<KnobTooltip> (this)] {
         if (safe != nullptr && ! safe->isEditing() && ! safe->isMouseOver (true))
