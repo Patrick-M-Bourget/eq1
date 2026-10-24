@@ -56,6 +56,11 @@ public:
     void ringMouseUp (staple::Knob&, const juce::MouseEvent& e) override;
     juce::String ringTitle() override;
     juce::String ringValue() override;
+    // Typed into through the Gain knob's Readout while it shows the ring's content: the value without " dB", set as
+    // one gesture on Enter.
+    bool ringAcceptsTypedText() const override { return true; }
+    juce::String ringTextToType() override;
+    void ringCommitTypedText (const juce::String& text) override;
 
 private:
     // Alt with an arrow on the Gain knob.

@@ -164,6 +164,15 @@ juce::String DynamicRangeRing::ringTitle() { return getTitle(); }
 
 juce::String DynamicRangeRing::ringValue() { return spokenValue != nullptr ? spokenValue (getValue()) : getTextFromValue (getValue()); }
 
+juce::String DynamicRangeRing::ringTextToType() { return ringValue().upToFirstOccurrenceOf (" dB", false, false); }
+
+void DynamicRangeRing::ringCommitTypedText (const juce::String& text)
+{
+    // KeyboardSlider's parse, set as one gesture (its begin and end change), as every typed value is.
+    if (slot != 0 && commitTypedText (text))
+        gain.ringChanged();
+}
+
 //==============================================================================
 bool DynamicRangeRing::keyPressed (const juce::KeyPress& key)
 {

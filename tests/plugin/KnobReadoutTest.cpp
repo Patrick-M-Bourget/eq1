@@ -14,6 +14,8 @@
 
 #include <optional>
 
+using Catch::Matchers::WithinAbs;
+
 namespace
 {
 
@@ -839,6 +841,66 @@ TEST_CASE ("A double-click on a ringed knob's own Knob Readout types into the kn
 
     CHECK (std::abs (knob.getValue() - 4.0) < 0.05);
     CHECK (ring.getValue() == rangeBefore);
+}
+
+TEST_CASE ("Typing +3 into the Gain knob's ring Readout sets the Band's Dynamic Range, and leaves its Gain")
+{
+    Hosted e;
+    auto& knob = e.ringedGain();
+    auto& ring = e.dynamicRange();
+    auto& readout = ontoRingsReadout (e, knob);
+    REQUIRE (readout.titleText() == ring.ringTitle());
+    const auto gainBefore = e.value (1, "gain");
+
+    e.doubleClick (readout, readout.getLocalBounds().toFloat().getCentre());
+    REQUIRE (readout.isEditing());
+    typeAndEnter (readout, "+3");
+
+    CHECK_THAT (e.value (1, "dynamic_range"), WithinAbs (3.0, 1.0e-4));
+    CHECK (e.value (1, "gain") == gainBefore);
+    CHECK (readout.valueText() == ring.ringValue());
+}
+
+TEST_CASE ("A double-click on a ring's own Knob Readout types into the ring, wherever the pointer goes while typing")
+{
+    Hosted e;
+    auto& knob = e.ringedGain();
+    auto& ring = e.dynamicRange();
+    auto& readout = ontoRingsReadout (e, knob);
+    const auto gainBefore = knob.getValue();
+
+    e.doubleClick (readout, readout.getLocalBounds().toFloat().getCentre());
+    REQUIRE (readout.isEditing());
+    CHECK (readout.getEditor()->getText() == ring.ringValue().upToFirstOccurrenceOf (" dB", false, false));
+    // Onto the face while typing, where the Readout shows the knob's own content.
+    e.window.pointerAt (knob, knob.getFaceCentre());
+    REQUIRE_FALSE (knob.isTooltipOnRing());
+    typeAndEnter (readout, "+3");
+
+    CHECK_THAT (ring.getValue(), WithinAbs (3.0, 1.0e-4));
+    CHECK (knob.getValue() == gainBefore);
+}
+
+TEST_CASE ("A Knob Readout keeps the ring's content while a value is typed into it, wherever the pointer goes")
+{
+    Hosted e;
+    auto& knob = e.ringedGain();
+    auto& ring = e.dynamicRange();
+    auto& readout = ontoRingsReadout (e, knob);
+    const auto ringTitle = ring.ringTitle(), ringValue = ring.ringValue();
+    e.doubleClick (readout, readout.getLocalBounds().toFloat().getCentre());
+    REQUIRE (readout.isEditing());
+
+    // Onto the face while typing: the field is still the ring's, and so is the card round it.
+    e.window.pointerAt (knob, knob.getFaceCentre());
+    REQUIRE_FALSE (knob.isTooltipOnRing());
+    CHECK (readout.titleText() == ringTitle);
+    CHECK (readout.valueText() == ringValue);
+
+    // Once the field closes, the card shows what is under the pointer: the knob's own.
+    typeAndEnter (readout, "+3");
+    CHECK (readout.titleText() != ringTitle);
+    CHECK (readout.titleText() == knob.tooltipTitle());
 }
 
 // Closely packed knobs, as on eq1's Band panel: the way to one knob's Readout crosses its neighbour's face.
