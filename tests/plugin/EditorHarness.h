@@ -133,7 +133,8 @@ inline juce::Component* openMenu()
 
 // A click on opener while the menu it opened is open, as JUCE delivers it in a host: the menu is modal,
 // so the press goes to the menu, not to opener, and the menu closes a moment later (JUCE posts the
-// close, so that the press can't open it again); the release, after that, reaches opener.
+// close, so that the press can't open it again). A release before that close JUCE drops; one after it,
+// as in a slower click, reaches opener: this sends that one.
 inline void clickOpenerOfOpenMenu (juce::Component& opener)
 {
     REQUIRE (openMenu() != nullptr);
