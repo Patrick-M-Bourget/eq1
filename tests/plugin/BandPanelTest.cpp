@@ -404,6 +404,22 @@ TEST_CASE ("A click on the Slope button with its list open closes the list uncho
     juce::PopupMenu::dismissAllActiveMenus();
 }
 
+TEST_CASE ("A click on the Shape or Stereo Placement selector with its list open closes the list")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    juce::PopupMenu::dismissAllActiveMenus();
+    for (const juce::String title : { "Band 2 Shape", "Band 2 Stereo Placement" })
+    {
+        CAPTURE (title);
+        auto& selector = host.control<juce::ComboBox> (title);
+        selector.showPopup();
+        harness::clickOpenerOfOpenMenu (selector);
+        CHECK (harness::openMenu() == nullptr);
+    }
+}
+
 TEST_CASE ("The Slope list's last item opens the type-in, and a typed Slope is one undo step")
 {
     PanelEditor host;

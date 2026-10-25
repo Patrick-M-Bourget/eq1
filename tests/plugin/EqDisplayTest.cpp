@@ -304,6 +304,18 @@ TEST_CASE ("Hovering a Band's handle lights its curve and fill, and they fade ba
     CHECK_THAT (blue(), Catch::Matchers::WithinAbs (resting, 0.01));
 }
 
+TEST_CASE ("A click on the Display Range chip with its menu open closes the menu, and picks nothing")
+{
+    OpenEditor host;
+    auto* chip = harness::findChild<eq1::DisplayRangeChip> (*host.editor);
+    REQUIRE (chip != nullptr);
+    juce::PopupMenu::dismissAllActiveMenus();
+    chip->clicked();
+    harness::clickOpenerOfOpenMenu (*chip);
+    CHECK (harness::openMenu() == nullptr);
+    CHECK (host.processor.displayRangeDb() == 12);
+}
+
 TEST_CASE ("The Display Range chip reads the range, sets it from its menu, follows auto-zoom, and is named Display Range")
 {
     OpenEditor host;

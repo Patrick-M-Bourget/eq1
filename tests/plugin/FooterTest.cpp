@@ -1,4 +1,5 @@
 #include "EditorHarness.h"
+#include "AnalyzerPopover.h"
 #include "FooterBar.h"
 #include "OutputMeter.h"
 #include "OutputPopover.h"
@@ -378,6 +379,38 @@ TEST_CASE ("The UI Scale menu, titled UI Scale, offers the five UI Scales, the c
     CHECK (host.processor.uiScalePercent() == 150);
     CHECK (host.editor->getWidth() == 1800);
     CHECK (items()[4] == std::pair<juce::String, bool> { "150%", true });
+}
+
+TEST_CASE ("A click on the UI Scale button with its menu open closes the menu, and picks nothing")
+{
+    Footer host;
+    juce::PopupMenu::dismissAllActiveMenus();
+    auto& button = host.titled<eq1::UiScaleMenu> ("UI Scale");
+    const int before = host.processor.uiScalePercent();
+    button.onClick();
+    harness::clickOpenerOfOpenMenu (button);
+    CHECK (harness::openMenu() == nullptr);
+    CHECK (host.processor.uiScalePercent() == before);
+}
+
+TEST_CASE ("A click on the Output readout or the Analyzer button with its popover open closes the popover")
+{
+    Footer host;
+    auto& analyzer = *harness::findChild<eq1::AnalyzerButton> (*host.editor);
+    auto& analyzerPopover = host.footer.getAnalyzerPopover();
+    const auto pressOn = [] (juce::Component& c) { return harness::mouseEvent (c, c.getLocalBounds().getCentre().toFloat(), juce::ModifierKeys::leftButtonModifier); };
+    for (auto [opener, popover] : { std::pair<juce::Button*, staple::Popover*> { &host.output, &host.popover }, { &analyzer, &analyzerPopover } })
+    {
+        CAPTURE (opener->getTitle());
+        opener->onClick();
+        REQUIRE (popover->isOpen());
+        // The press reaches the open popover (it listens to every click) before the opener: it leaves the
+        // opener to close it, so the click doesn't close it and open it again.
+        popover->mouseDown (pressOn (*opener));
+        CHECK (popover->isOpen());
+        opener->onClick();
+        CHECK_FALSE (popover->isOpen());
+    }
 }
 
 TEST_CASE ("The UI Scale menu is drawn with the editor's look")
