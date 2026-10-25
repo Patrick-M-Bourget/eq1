@@ -48,7 +48,7 @@ TEST_CASE ("The grid's Gain lines are a third of the Display Range apart, with t
     CHECK_THAT (lines.zeroY, WithinAbs (geometry.yOf (0.0), 0.01));
 }
 
-TEST_CASE ("At the ±6 dB Display Range the grid has faint Gain lines at the odd dB, between the 2 dB ones; none at ±12 or ±30")
+TEST_CASE ("At the 6 dB Display Range the grid has faint Gain lines at the odd dB, between the 2 dB ones; none at 12 or 30")
 {
     const DisplayGeometry six { .width = 1134, .height = 612, .rangeDb = 6 };
     const auto lines = eq1::display::gridLines (six);
@@ -297,7 +297,7 @@ TEST_CASE ("Under Global Bypass every curve is in its bypassed style at 45 % of 
     }
 }
 
-TEST_CASE ("Display Range screenshot: the editor at ±6 dB with one Bell", "[.screens]")
+TEST_CASE ("Display Range screenshot: the editor at 6 dB with one Bell", "[.screens]")
 {
     harness::OpenEditor host;
     host.editor->setSize (1200, 760);
