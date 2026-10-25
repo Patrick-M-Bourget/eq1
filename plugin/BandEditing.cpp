@@ -332,7 +332,7 @@ std::vector<int> BandEditing::split (const std::vector<int>& slotsToSplit)
     // Each Right half takes the next free slot, lowest first.
     const auto free = lowestFreeSlots();
     stereo.resize (std::min (stereo.size(), free.size()));
-    std::vector<int> halves;
+    std::vector<int> lefts;
     history.beginTransaction();
     for (size_t i = 0; i < stereo.size(); ++i)
     {
@@ -348,11 +348,11 @@ std::vector<int> BandEditing::split (const std::vector<int>& slotsToSplit)
         set (parameters::placementId (right), static_cast<double> (StereoPlacement::Right));
         set (parameters::placementId (slot), static_cast<double> (StereoPlacement::Left));
         set (parameters::inUseId (right), 1.0);
-        halves.insert (halves.end(), { slot, right });
+        lefts.push_back (slot);
     }
     history.endTransaction();
-    std::sort (halves.begin(), halves.end());
-    return halves;
+    std::sort (lefts.begin(), lefts.end());
+    return lefts;
 }
 
 std::vector<int> BandEditing::paste (const std::vector<BandSettings>& bands)

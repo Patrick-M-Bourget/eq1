@@ -580,7 +580,7 @@ TEST_CASE ("Split leaves a Left Band in each Stereo Band's slot and a Right Band
 
     const auto result = host.editing.split ({ 1, 2, 3 });
 
-    CHECK (result == std::vector<int> { 1, 3, 4, 5 });
+    CHECK (result == std::vector<int> { 1, 3 });
     auto left = stereo, right = stereo;
     left["placement"] = 1.0f;
     right["placement"] = 2.0f;
@@ -609,7 +609,8 @@ TEST_CASE ("Split with fewer free Band Slots than Stereo Bands splits the lowest
     host.set (2, "frequency", 200.0f);
     host.set (3, "frequency", 200.0f);
 
-    CHECK (host.editing.split ({ 3, 1, 2 }) == std::vector<int> { 2, 24 });
+    CHECK (host.editing.split ({ 3, 1, 2 }) == std::vector<int> { 2 });
+    CHECK (host.value (24, "placement") == 2.0f);
     CHECK (host.value (1, "placement") == 0.0f);
     CHECK (host.value (2, "placement") == 1.0f);
     CHECK (host.value (3, "placement") == 0.0f);
@@ -669,7 +670,8 @@ TEST_CASE ("Split doesn't change the output of a Band that isn't dynamic")
     const auto signal = [&] (int ch, int n) { return noise[static_cast<size_t> (ch)][static_cast<size_t> (n)]; };
     const auto before = play (host.editing.settings(), 8192 / splitSampleRate, signal);
 
-    REQUIRE (host.editing.split ({ 1 }) == std::vector<int> { 1, 3 });
+    REQUIRE (host.editing.split ({ 1 }) == std::vector<int> { 1 });
+    REQUIRE (host.value (3, "placement") == 2.0f);
     const auto after = play (host.editing.settings(), 8192 / splitSampleRate, signal);
 
     for (size_t ch = 0; ch < 2; ++ch)
@@ -687,7 +689,8 @@ TEST_CASE ("A split Dynamic Band's halves each move with their own channel only"
     host.set (1, "dynamic_range", -9.0f);
     host.set (1, "threshold_auto", 0.0f);
     host.set (1, "threshold", -30.0f);
-    REQUIRE (host.editing.split ({ 1 }) == std::vector<int> { 1, 2 });
+    REQUIRE (host.editing.split ({ 1 }) == std::vector<int> { 1 });
+    REQUIRE (host.value (2, "placement") == 2.0f);
 
     const auto toneOnLeft = [] (int ch, int n) {
         return ch == 0 ? static_cast<float> (0.5 * std::sin (2.0 * std::numbers::pi * 1000.0 * n / splitSampleRate)) : 0.0f;
