@@ -183,6 +183,8 @@ private:
     juce::RangedAudioParameter* brickwall = nullptr;
     // The list is open: from openList() until it closes, chosen or not.
     bool listOpen = false;
+    // The press being released reached the button. One the open list took instead closed it.
+    bool pressReached = false;
 };
 
 } // namespace eq1

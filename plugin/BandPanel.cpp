@@ -114,6 +114,7 @@ void BandPanel::SlopeButton::mouseExit (const juce::MouseEvent& e)
 void BandPanel::SlopeButton::mouseDown (const juce::MouseEvent& e)
 {
     dragging = false;
+    pressReached = true;
     if (! isEnabled() || ! e.mods.isLeftButtonDown())
         return;
     pressY = e.position.y;
@@ -145,14 +146,16 @@ void BandPanel::SlopeButton::mouseDrag (const juce::MouseEvent& e)
 
 void BandPanel::SlopeButton::mouseUp (const juce::MouseEvent& e)
 {
+    const bool reached = std::exchange (pressReached, false);
     if (dragging)
     {
         dragging = false;
         gesture.reset();
         return;
     }
-    // A double-click's second release leaves the list its first one opened.
-    if (isEnabled() && ! e.mods.isPopupMenu() && e.getNumberOfClicks() == 1 && ! e.mouseWasDraggedSinceMouseDown())
+    // A double-click's second release leaves the list its first one opened. A press the open list took
+    // (it is modal) closed the list, and its release leaves it closed.
+    if (reached && isEnabled() && ! e.mods.isPopupMenu() && e.getNumberOfClicks() == 1 && ! e.mouseWasDraggedSinceMouseDown())
         openList();
 }
 

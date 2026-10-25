@@ -131,6 +131,17 @@ inline juce::Component* openMenu()
     return nullptr;
 }
 
+// A click on opener while the menu it opened is open, as JUCE delivers it in a host: the menu is modal,
+// so the press goes to the menu, not to opener, and the menu closes a moment later (JUCE posts the
+// close, so that the press can't open it again); the release, after that, reaches opener.
+inline void clickOpenerOfOpenMenu (juce::Component& opener)
+{
+    REQUIRE (openMenu() != nullptr);
+    juce::PopupMenu::dismissAllActiveMenus();
+    const auto centre = opener.getLocalBounds().getCentre().toFloat();
+    opener.mouseUp (mouseEvent (opener, centre));
+}
+
 // A layout with the given main input and output, and Sidechain (disabled unless given).
 inline juce::AudioProcessor::BusesLayout layoutOf (const juce::AudioChannelSet& in,
                                                   const juce::AudioChannelSet& out,
