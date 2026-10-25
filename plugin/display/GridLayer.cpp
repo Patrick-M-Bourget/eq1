@@ -14,6 +14,8 @@ namespace size = staple::tokens::size;
 namespace layout = staple::tokens::layout;
 
 constexpr double majorFrequencies[] = { 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 };
+// At this Display Range the 2 dB Gain lines get faint ones at each odd dB between them.
+constexpr int fineGainLinesRangeDb = 6;
 constexpr double minorFrequencies[] = { 30.0,   40.0,   60.0,   70.0,   80.0,   90.0,   300.0,  400.0,  600.0,
                                         700.0,  800.0,  900.0,  3000.0, 4000.0, 6000.0, 7000.0, 8000.0, 9000.0 };
 
@@ -54,6 +56,9 @@ GridLines gridLines (const DisplayGeometry& geometry)
     for (int i = -3; i <= 3; ++i)
         if (i != 0)
             lines.gainY.push_back (geometry.yOf (i * step));
+    if (geometry.rangeDb == fineGainLinesRangeDb)
+        for (int db = -fineGainLinesRangeDb + 1; db < fineGainLinesRangeDb; db += 2)
+            lines.minorGainY.push_back (geometry.yOf (db));
     lines.zeroY = geometry.yOf (0.0);
     return lines;
 }
@@ -124,6 +129,8 @@ void paintGrid (juce::Graphics& g, const DisplayGeometry& geometry)
     g.setColour (colour::gridMinor);
     for (float x : lines.minorX)
         g.drawVerticalLine (juce::roundToInt (x), 0.0f, height);
+    for (float y : lines.minorGainY)
+        g.drawHorizontalLine (juce::roundToInt (y), 0.0f, width);
     g.setColour (colour::gridMajor);
     for (float x : lines.majorX)
         g.drawVerticalLine (juce::roundToInt (x), 0.0f, height);

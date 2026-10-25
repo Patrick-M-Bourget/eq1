@@ -48,6 +48,24 @@ TEST_CASE ("The grid's Gain lines are a third of the Display Range apart, with t
     CHECK_THAT (lines.zeroY, WithinAbs (geometry.yOf (0.0), 0.01));
 }
 
+TEST_CASE ("At the ±6 dB Display Range the grid has faint Gain lines at the odd dB, between the 2 dB ones; none at ±12 or ±30")
+{
+    const DisplayGeometry six { .width = 1134, .height = 612, .rangeDb = 6 };
+    const auto lines = eq1::display::gridLines (six);
+    std::vector<float> expected;
+    for (double db : { -5.0, -3.0, -1.0, 1.0, 3.0, 5.0 })
+        expected.push_back (six.yOf (db));
+    REQUIRE (lines.minorGainY.size() == expected.size());
+    for (size_t i = 0; i < expected.size(); ++i)
+        CHECK_THAT (lines.minorGainY[i], WithinAbs (expected[i], 0.01));
+
+    // Below the width that hides the minor Frequency lines too.
+    CHECK (eq1::display::gridLines ({ .width = 799, .height = 612, .rangeDb = 6 }).minorGainY.size() == 6);
+
+    const auto range = GENERATE (12, 30);
+    CHECK (eq1::display::gridLines ({ .width = 1134, .height = 612, .rangeDb = range }).minorGainY.empty());
+}
+
 TEST_CASE ("The grid's Frequency lines run 20 Hz to 20 kHz: majors at 20, 50, 100 ..., minors between, hidden below 800 px")
 {
     const DisplayGeometry wide { .width = 1134, .height = 612 };
@@ -277,4 +295,15 @@ TEST_CASE ("Under Global Bypass every curve is in its bypassed style at 45 % of 
         CHECK_THAT (bandCurveStyle ({ .slot = 5, .globalBypass = 0.5f }).lineAlpha, WithinAbs ((0.5 + 0.225) / 2.0, 1e-6));
         CHECK_THAT (eq1::display::sumCurveAlpha (0.5f), WithinAbs (0.65, 1e-6));
     }
+}
+
+TEST_CASE ("Display Range screenshot: the editor at ±6 dB with one Bell", "[.screens]")
+{
+    harness::OpenEditor host;
+    host.editor->setSize (1200, 760);
+    host.processor.setAnalyzerSettings ({ .showPreEq = false, .showPostEq = false });
+    host.processor.setDisplayRangeDb (6);
+    host.addBand (1, 1000.0f, 3.0f);
+    host.settleAnimations();
+    harness::writeSnapshot (*host.editor, "display-range-6");
 }

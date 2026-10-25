@@ -11,11 +11,12 @@ namespace eq1::display
 
 // The grid, behind the Analyzer, from 20 Hz to 20 kHz: major Frequency lines at 20, 50, 100 ... 20k,
 // minor ones between them (none below layout::narrowDisplayWidth), Gain lines a third of the Display
-// Range apart, and the 0 dB line.
+// Range apart, plus faint 1 dB lines at ±6 dB, and the 0 dB line.
 struct GridLines
 {
     std::vector<float> majorX, minorX;
-    std::vector<float> gainY; // from the bottom up, 0 dB left out
+    std::vector<float> gainY;      // from the bottom up, 0 dB left out
+    std::vector<float> minorGainY; // at ±6 dB only: the odd dB between gainY's 2 dB, from the bottom up
     float zeroY = 0.0f;
 };
 GridLines gridLines (const DisplayGeometry& geometry);
