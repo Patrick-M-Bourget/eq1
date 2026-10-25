@@ -839,10 +839,10 @@ void EqDisplay::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWhee
 void EqDisplay::showMenu (const juce::MouseEvent& e)
 {
     grabKeyboardFocus();
-    eq1::showMenu (menuAt (e.position), *this, juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
+    eq1::showMenu (rightClickAt (e.position), *this, juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
 }
 
-juce::PopupMenu EqDisplay::menuAt (juce::Point<float> position)
+juce::PopupMenu EqDisplay::rightClickAt (juce::Point<float> position)
 {
     const int slot = slotAt (position);
     if (slot != 0 && ! selected.contains (slot))

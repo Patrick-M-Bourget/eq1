@@ -398,7 +398,7 @@ TEST_CASE ("Right after Split, a drag from the split Band's handle moves one hal
     REQUIRE (host.processor.isStereoPlacementAvailable());
     // Both halves' handles sit where the Stereo Band's did; the drag takes whichever the display picks.
     const auto handle = host.at (1000.0, 3.0);
-    const auto split = harness::actionOf (host.display.menuAt (handle), "Split");
+    const auto split = harness::actionOf (host.display.rightClickAt (handle), "Split");
     REQUIRE (split != nullptr);
     split();
     REQUIRE (host.value (2, "in_use") == 1.0f);
@@ -407,10 +407,10 @@ TEST_CASE ("Right after Split, a drag from the split Band's handle moves one hal
     host.drag (handle, host.at (4000.0, 9.0), juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
     const auto moved = [&host] (int slot) { return std::abs (host.value (slot, "frequency") - 1000.0f) > 1.0f; };
     CHECK (moved (1) != moved (2));
-    const int stayed = moved (1) ? 2 : 1;
-    CHECK_THAT (host.value (stayed, "frequency"), WithinRel (1000.0f, 1.0e-4f));
-    CHECK_THAT (host.value (stayed, "gain"), WithinAbs (3.0f, 1.0e-4f));
-    CHECK (host.value (3 - stayed, "gain") > 6.0f);
+    const int movedHalf = moved (1) ? 1 : 2, stayedHalf = moved (1) ? 2 : 1;
+    CHECK_THAT (host.value (stayedHalf, "frequency"), WithinRel (1000.0f, 1.0e-4f));
+    CHECK_THAT (host.value (stayedHalf, "gain"), WithinAbs (3.0f, 1.0e-4f));
+    CHECK (host.value (movedHalf, "gain") > 6.0f);
 }
 
 TEST_CASE ("A marquee drag tells the Band panel about the selection only when the Band it shows changes")
