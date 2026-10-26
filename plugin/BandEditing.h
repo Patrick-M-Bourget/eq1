@@ -93,8 +93,9 @@ public:
     void setPlacement (const std::vector<int>& slots, StereoPlacement placement);
     // Turns each Stereo Band into two, every other setting kept: a Left Band in its slot and a Right
     // Band in the lowest free Band Slot. The other Bands are ignored. With too few free slots, the
-    // lowest-Frequency Stereo Bands are split, the lower slot first on a tie. Returns both halves of
-    // every split Band, in slot order: the selection after a split.
+    // lowest-Frequency Stereo Bands are split, the lower slot first on a tie. Returns the Left half of
+    // every split Band (the slot it kept), in slot order: the selection after a split, so a half can be
+    // dragged away at once.
     std::vector<int> split (const std::vector<int>& slots);
     // Adds Bands with every stored setting as given, In Use aside, into the lowest free Band Slots, as
     // one edit: Paste. Gain and Dynamic Range are stored ones, not heard. With too few free slots, the

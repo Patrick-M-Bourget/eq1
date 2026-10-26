@@ -225,16 +225,33 @@ TEST_CASE ("Band menu submenus tick a value only when every selected Band it app
     CHECK (ticked (submenu (host.menu ({ 1, 4 }), "Slope")).empty());
 }
 
-TEST_CASE ("Split splits the selected Stereo Bands and selects both halves of each, as one undo step")
+TEST_CASE ("Split splits the selected Stereo Bands and selects the Left half of each, as one undo step")
 {
     Host host;
     host.addBand (1, 100.0f, 3.0f);
     host.addBand (2, 1000.0f, 3.0f);
     host.set (2, "placement", 1.0f); // Left: ignored
 
-    item (host.menu ({ 1, 2 }), "Split").action();
+    item (host.menu ({ 1 }), "Split").action();
     CHECK (host.value (1, "placement") == 1.0f);
     CHECK (host.value (3, "placement") == 2.0f);
+    CHECK (host.selected == std::vector<int> { 1 });
+    CHECK (host.processor.editHistory().undoSteps() == 1);
+}
+
+TEST_CASE ("Split of several Stereo Bands selects the Left half of each")
+{
+    Host host;
+    host.addBand (1, 100.0f, 3.0f);
+    host.addBand (2, 1000.0f, 3.0f);
+    host.set (2, "placement", 1.0f); // Left: ignored
+    host.addBand (3, 5000.0f, 3.0f);
+
+    item (host.menu ({ 1, 2, 3 }), "Split").action();
+    CHECK (host.value (1, "placement") == 1.0f);
+    CHECK (host.value (3, "placement") == 1.0f);
+    CHECK (host.value (4, "placement") == 2.0f);
+    CHECK (host.value (5, "placement") == 2.0f);
     CHECK (host.selected == std::vector<int> { 1, 3 });
     CHECK (host.processor.editHistory().undoSteps() == 1);
 }
@@ -264,7 +281,7 @@ TEST_CASE ("With fewer free Band Slots than selected Stereo Bands, Split reads h
     const auto menu = host.menu ({ 1, 2, 3, 4 });
     CHECK (textsOf (menu)[11] == "Split (2 of 3)");
     item (menu, "Split (2 of 3)").action();
-    CHECK (host.selected == std::vector<int> { 1, 2, 23, 24 });
+    CHECK (host.selected == std::vector<int> { 1, 2 });
     CHECK (host.value (3, "placement") == 0.0f);
 }
 

@@ -138,7 +138,7 @@ juce::PopupMenu BandMenu::build() const
         menu.addItem (splits > 0 && splits < toSplit ? "Split (" + juce::String (splits) + " of " + juce::String (toSplit) + ")" : juce::String ("Split"),
                       stereoPlacementAvailable && splits > 0,
                       false,
-                      [&edit, slots, selectHalves = select] { selectHalves (edit.split (slots)); });
+                      [&edit, slots, selectLefts = select] { selectLefts (edit.split (slots)); });
         menu.addSeparator();
         menu.addItem ("Delete", deleteSelection);
     }

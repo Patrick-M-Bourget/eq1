@@ -70,6 +70,9 @@ public:
     // Selects one Band alone, as a click on its handle does (the Band panel's ‹ and ›).
     void selectBand (int slot) { select ({ slot }); }
     const std::set<int>& selection() const { return selected; }
+    // A right-click at position, short of showing its menu: a Band there outside the selection is selected
+    // alone first. Returns the Band menu for the selection, or Paste and Select All on empty space.
+    juce::PopupMenu rightClickAt (juce::Point<float> position);
     // A press anywhere in the editor, which hides the Hover Card unless it is on the card or its strip.
     void pressedInEditor (const juce::Component* pressed);
 
