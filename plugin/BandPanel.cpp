@@ -240,7 +240,8 @@ BandPanel::BandPanel (PluginProcessor& p, BandEditing& e)
     bypass.setOffLook (true);
     bypass.setRestColour (colour::text2);
     bypass.setIconSize (14.0f);
-    // Solo lasts while the button is held, by the mouse or by Space; it lights while it lasts.
+    // Solo lasts while the button is held, by the mouse or by Space. The button lights while its Band
+    // is Soloed, by it or by a held handle (tick).
     solo.setClickingTogglesState (false);
     solo.setToggleable (true);
     solo.setIconSize (13.0f);
@@ -569,6 +570,11 @@ void BandPanel::tick (double)
 {
     if (slot != 0 && followed() != shownBand)
         updateAvailability();
+    // The Solo button lights while its Band is Soloed, whatever holds the Solo: the button itself or a
+    // held handle on the display.
+    const bool soloed = slot != 0 && processor.soloSlot() == slot;
+    if (solo.getToggleState() != soloed)
+        solo.setToggleState (soloed, juce::dontSendNotification);
 }
 
 //==============================================================================
