@@ -9,6 +9,8 @@
 #include "ValueText.h"
 #include "staple/Fonts.h"
 #include "staple/Light.h"
+#include "staple/LookAndFeel.h"
+#include "staple/controls/Knob.h"
 
 #include "eq1/Response.h"
 
@@ -88,8 +90,68 @@ OutputReadout::OutputReadout() : staple::TextChip (outputReadoutText (0.0), Look
     setName ("Output");
     setTitle ("Output");
     setTextIsValue (true);
-    setTooltip ("Output: Output Gain, with Auto Gain's estimate while Auto Gain is on. Click for the output controls");
+    setTooltip ("Output: Output Gain, with Auto Gain's estimate while Auto Gain is on. Drag up or down; double-click for 0 dB; "
+                "click for the output controls");
     setInk (colour::text1);
+    setWantsKeyboardFocus (true);
+    setMouseCursor (juce::MouseCursor::UpDownResizeCursor);
+}
+
+OutputReadout::Gain::Gain() : KeyboardSlider ("Output Gain") {}
+
+double OutputReadout::Gain::valueDraggedBy (double from, float pixels, bool fine)
+{
+    return staple::draggedAlongRange (*this, from, pixels, fine);
+}
+
+void OutputReadout::mouseDown (const juce::MouseEvent& e)
+{
+    staple::TextChip::mouseDown (e);
+    // A double-click's second press sets 0 dB, and a drag from it carries on from there.
+    if (isEnabled() && e.mods.isLeftButtonDown() && e.getNumberOfClicks() >= 2)
+        gain.startMouseDrag (e);
+}
+
+void OutputReadout::mouseDrag (const juce::MouseEvent& e)
+{
+    staple::TextChip::mouseDrag (e);
+    if (! isEnabled() || ! e.mouseWasDraggedSinceMouseDown())
+        return;
+    // A drag counts from the press, once it has moved far enough not to be a click.
+    if (! gain.isMouseDragging())
+        gain.startMouseDrag (e.withNewPosition (e.mouseDownPosition));
+    gain.continueMouseDrag (e);
+}
+
+void OutputReadout::mouseUp (const juce::MouseEvent& e)
+{
+    gain.endMouseDrag();
+    // A drag isn't a click: released as not pressed, it leaves the popover as it was.
+    if (e.mouseWasDraggedSinceMouseDown())
+        setState (buttonNormal);
+    staple::TextChip::mouseUp (e);
+}
+
+bool OutputReadout::keyPressed (const juce::KeyPress& key)
+{
+    if (gain.keyPressed (key))
+    {
+        staple::LookAndFeel::keyUsed (*this);
+        return true;
+    }
+    return staple::TextChip::keyPressed (key);
+}
+
+bool OutputReadout::keyStateChanged (bool isKeyDown)
+{
+    gain.keyStateChanged (isKeyDown);
+    return staple::TextChip::keyStateChanged (isKeyDown);
+}
+
+void OutputReadout::focusLost (FocusChangeType cause)
+{
+    gain.focusLost (cause);
+    staple::TextChip::focusLost (cause);
 }
 
 void OutputReadout::setNotApplied (bool n)
@@ -186,6 +248,9 @@ FooterBar::FooterBar (PluginProcessor& p)
     gainScale.describe (parameters::lookUp (state, parameters::gainScaleId));
     addAndMakeVisible (gainScale);
 
+    outputGainAttachment = std::make_unique<SliderAttachment> (state, parameters::outputGainId, output.outputGain());
+    // The readout follows a drag at once, rather than at the next tick.
+    output.outputGain().onValueChange = [this] { showOutputLevel(); };
     output.onClick = [this] {
         if (outputPopover.isOpen())
             outputPopover.close();

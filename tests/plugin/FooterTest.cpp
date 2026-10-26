@@ -207,6 +207,79 @@ TEST_CASE ("The Output readout shows Output Gain, plus Auto Gain's estimate whil
     CHECK (eq1::outputReadoutText (2.25) == "+2.3 dB");
 }
 
+TEST_CASE ("A vertical drag on the Output readout moves Output Gain as the popover's knob does, one undo step, without opening the popover")
+{
+    Footer host;
+    const int steps = host.undoSteps();
+    // The whole range over 200 px, so 20 px up from the centre's 0 dB is 60% of it: +8.2 dB on the skewed range.
+    host.dragUp (host.output, 20.0f, false);
+    CHECK_THAT (host.value ("output_gain"), WithinAbs (8.2136, 1.0e-3));
+    CHECK (host.undoSteps() == steps + 1);
+    CHECK_FALSE (host.popover.isOpen());
+    // The readout follows at once, not at the next tick.
+    CHECK (host.output.getButtonText() == "+8.2 dB");
+
+    // With Shift, the whole range over 800 px: 20 px down from 0 dB is 47.5% of it, -2.2 dB.
+    host.set ("output_gain", 0.0f);
+    host.dragUp (host.output, -20.0f, true);
+    CHECK_THAT (host.value ("output_gain"), WithinAbs (-2.1697, 1.0e-3));
+    CHECK (host.undoSteps() == steps + 2);
+    CHECK_FALSE (host.popover.isOpen());
+}
+
+TEST_CASE ("A click on the Output readout without a drag opens and closes the output popover")
+{
+    Footer host;
+    const juce::Point<float> at { 10.0f, 10.0f };
+    juce::Component& output = host.output;
+    const auto click = [&] {
+        output.mouseDown (harness::mouseEvent (output, at, juce::ModifierKeys::leftButtonModifier, at));
+        output.mouseUp (harness::mouseEvent (output, at, {}, at));
+    };
+    const int steps = host.undoSteps();
+    click();
+    CHECK (host.popover.isOpen());
+    click();
+    CHECK_FALSE (host.popover.isOpen());
+    CHECK (host.value ("output_gain") == 0.0f);
+    CHECK (host.undoSteps() == steps);
+}
+
+TEST_CASE ("A double-click on the Output readout sets Output Gain to 0 dB, one undo step, and leaves the popover as it was")
+{
+    Footer host;
+    host.set ("output_gain", -6.0f);
+    const int steps = host.undoSteps();
+    // The first click opens the popover; the second, which sets 0 dB, closes it again.
+    juce::Component& output = host.output;
+    const juce::Point<float> at { 10.0f, 10.0f };
+    output.mouseDown (harness::mouseEvent (output, at, juce::ModifierKeys::leftButtonModifier, at));
+    output.mouseUp (harness::mouseEvent (output, at, {}, at));
+    CHECK (host.popover.isOpen());
+    host.doubleClick (host.output);
+    CHECK (host.value ("output_gain") == 0.0f);
+    CHECK (host.undoSteps() == steps + 1);
+    CHECK_FALSE (host.popover.isOpen());
+}
+
+TEST_CASE ("The Output readout steps Output Gain on up and down as the popover's knob does, each press one undo step, and opens the popover on Return")
+{
+    Footer host;
+    CHECK (host.output.getTooltip().contains ("Drag"));
+    host.output.grabKeyboardFocus();
+    REQUIRE (host.output.hasKeyboardFocus (false));
+    const int steps = host.undoSteps();
+    // 1% of the range, from its centre.
+    CHECK (host.press (up));
+    CHECK_THAT (host.value ("output_gain"), WithinAbs (0.8537, 1.0e-3));
+    CHECK (host.press (down));
+    CHECK (host.value ("output_gain") == 0.0f);
+    CHECK (host.undoSteps() == steps + 2);
+    CHECK_FALSE (host.popover.isOpen());
+    CHECK (host.press (juce::KeyPress (juce::KeyPress::returnKey)));
+    CHECK (host.settleUntil ([&] { return host.popover.isOpen(); }));
+}
+
 TEST_CASE ("The output popover opens above the Output readout, right-aligned to it, and closes on a second click, Escape or a click outside")
 {
     Footer host;

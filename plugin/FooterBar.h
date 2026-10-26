@@ -53,8 +53,12 @@ private:
     bool notApplied = false;
 };
 
-// The footer's Output readout: Output Gain plus Auto Gain's estimate while Auto Gain is on. A click
-// opens and closes the output popover; fill2 behind it while that is open.
+// The footer's Output readout: Output Gain plus Auto Gain's estimate while Auto Gain is on. A vertical
+// drag moves Output Gain as the output popover's knob does (the whole range over 200 px, 800 px with
+// Shift), as one gesture; the up and down keys step it as that knob's do; a double-click sets 0 dB,
+// as one gesture. A click without a drag, or Return, opens and closes the output popover;
+// fill2 behind it while that is open. The value moves through outputGain(), which the footer attaches
+// to Output Gain: a KeyboardSlider that is never shown, whose drags and keys the chip passes on.
 class OutputReadout final : public staple::TextChip
 {
 public:
@@ -63,10 +67,30 @@ public:
     void setNotApplied (bool notApplied);
     bool isNotApplied() const { return notApplied; }
     void setOpen (bool open);
+    KeyboardSlider& outputGain() { return gain; }
 
     void paintButton (juce::Graphics& g, bool highlighted, bool down) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+    bool keyPressed (const juce::KeyPress& key) override;
+    bool keyStateChanged (bool isKeyDown) override;
+    void focusLost (FocusChangeType cause) override;
 
 private:
+    class Gain final : public KeyboardSlider
+    {
+    public:
+        Gain();
+        using KeyboardSlider::continueMouseDrag;
+        using KeyboardSlider::endMouseDrag;
+        using KeyboardSlider::isMouseDragging;
+        using KeyboardSlider::startMouseDrag;
+
+    private:
+        double valueDraggedBy (double from, float pixels, bool fine) override;
+    };
+    Gain gain;
     bool notApplied = false, open = false;
 };
 
@@ -135,7 +159,7 @@ private:
     GainScaleReadout gainScale;
     OutputReadout output;
     UiScaleMenu uiScale;
-    std::unique_ptr<SliderAttachment> gainScaleAttachment;
+    std::unique_ptr<SliderAttachment> gainScaleAttachment, outputGainAttachment;
     std::unique_ptr<ButtonAttachment> globalBypassAttachment;
     bool bypassedShown = false;
     staple::Tween bypassedFade { staple::tokens::motion::dur2Ms, 0.0f }; // "Bypassed" fading in
