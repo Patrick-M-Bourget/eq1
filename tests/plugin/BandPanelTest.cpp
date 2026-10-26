@@ -373,6 +373,53 @@ TEST_CASE ("The Slope button reads the Slope or Brickwall, and opens the Slope l
     CHECK (juce::PopupMenu::dismissAllActiveMenus());
 }
 
+TEST_CASE ("A click on the Slope button with its list open closes the list unchosen, and it stays closed")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    host.set (2, "brickwall", 1.0f);
+    host.settle (120);
+    auto& slope = host.control<eq1::BandPanel::SlopeButton> ("Band 2 Slope");
+    const auto slopeBefore = host.value (2, "slope");
+    juce::PopupMenu::dismissAllActiveMenus();
+    const auto centre = slope.getLocalBounds().getCentre().toFloat();
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    const auto click = [&] {
+        slope.mouseDown (harness::mouseEvent (slope, centre, left));
+        slope.mouseUp (harness::mouseEvent (slope, centre));
+    };
+    click();
+    REQUIRE (harness::openMenu() != nullptr);
+
+    // At once, with no timer run: JUCE's own menu timer closes any menu in a test process.
+    harness::clickOpenerOfOpenMenu (slope);
+    CHECK (harness::openMenu() == nullptr);
+    CHECK (host.value (2, "slope") == slopeBefore);
+    CHECK (host.value (2, "brickwall") == 1.0f);
+
+    // The next click opens it again.
+    click();
+    CHECK (harness::openMenu() != nullptr);
+    juce::PopupMenu::dismissAllActiveMenus();
+}
+
+TEST_CASE ("A click on the Shape or Stereo Placement selector with its list open closes the list")
+{
+    PanelEditor host;
+    host.click (host.at (100.0)); // the Low Cut
+    host.settle();
+    juce::PopupMenu::dismissAllActiveMenus();
+    for (const juce::String title : { "Band 2 Shape", "Band 2 Stereo Placement" })
+    {
+        CAPTURE (title);
+        auto& selector = host.control<juce::ComboBox> (title);
+        selector.showPopup();
+        harness::clickOpenerOfOpenMenu (selector);
+        CHECK (harness::openMenu() == nullptr);
+    }
+}
+
 TEST_CASE ("The Slope list's last item opens the type-in, and a typed Slope is one undo step")
 {
     PanelEditor host;

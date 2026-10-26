@@ -297,6 +297,16 @@ TEST_CASE ("The Hover Card's menu has no Select All, deletes only its Band, and 
     CHECK (host.value (2, "in_use") >= 0.5f);
 }
 
+TEST_CASE ("A click on the Hover Card's menu button with its menu open closes the menu")
+{
+    CardOnBand4 f;
+    auto& more = control<juce::Button> (*f.card, "Band 4 menu");
+    juce::PopupMenu::dismissAllActiveMenus();
+    more.onClick();
+    harness::clickOpenerOfOpenMenu (more);
+    CHECK (harness::openMenu() == nullptr);
+}
+
 TEST_CASE ("The Hover Card is a group named for its Band, its controls are named in glossary terms, and none is a focus stop")
 {
     CardOnBand4 f;
