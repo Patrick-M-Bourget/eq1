@@ -306,6 +306,43 @@ TEST_CASE ("The Band panel's Solo and the display's held handle share one Solo: 
     CHECK (host.display.soloCueSlot() == 0);
 }
 
+TEST_CASE ("The Band panel's Solo button lights while its Band is Soloed by a held handle, and goes dark when it is let go")
+{
+    PanelEditor host; // Band 2 at 100 Hz, 1 at 1 kHz, 3 at 5 kHz
+    auto& solo = host.control<staple::IconButton> ("Band 1 Solo");
+    const juce::ModifierKeys left (juce::ModifierKeys::leftButtonModifier);
+    const auto handle = host.at (1000.0);
+
+    host.display.mouseDown (host.mouseEvent (handle, left, handle));
+    host.settle (450);
+    REQUIRE (host.processor.soloSlot() == 1);
+    REQUIRE (host.panel().shownSlot() == 1);
+    CHECK (solo.isLit());
+
+    host.display.mouseUp (host.mouseEvent (handle, {}, handle));
+    host.settle (200);
+    REQUIRE (host.processor.soloSlot() == 0);
+    CHECK_FALSE (solo.isLit());
+}
+
+TEST_CASE ("The Band panel's Solo button stays dark while another Band is Soloed")
+{
+    PanelEditor host; // Band 2 at 100 Hz, 1 at 1 kHz, 3 at 5 kHz
+    auto& solo = host.control<staple::IconButton> ("Band 1 Solo");
+    REQUIRE (host.panel().shownSlot() == 1);
+
+    host.processor.holdSolo (2, eq1::PluginProcessor::SoloHolder::display);
+    host.settle (200);
+    CHECK_FALSE (solo.isLit());
+
+    SECTION ("and lights once its own Band is")
+    {
+        host.processor.holdSolo (1, eq1::PluginProcessor::SoloHolder::display);
+        host.settle (200);
+        CHECK (solo.isLit());
+    }
+}
+
 TEST_CASE ("A selection update that keeps the Band panel's Band keeps the panel's Solo")
 {
     PanelEditor host; // Band 2 at 100 Hz, 1 at 1 kHz, 3 at 5 kHz

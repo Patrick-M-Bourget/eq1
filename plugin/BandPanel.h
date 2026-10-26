@@ -27,7 +27,8 @@ class BandEditing;
 
 // The selected Band's settings, on Staple's floating slab with a bell rising from its top edge
 // (HANDOFF.md §4 "Band panel"). The top row has Bypass, Solo (held: the Band is Soloed while the button
-// is down), the ‹ n › Band selector, which steps through the Bands in use in Frequency order, and Delete.
+// is down; lit while the Band is Soloed, by it or by a held handle), the ‹ n › Band selector, which
+// steps through the Bands in use in Frequency order, and Delete.
 // Shape and Stereo Placement are Edge selectors flush with its sides, Slope a text button under Shape
 // that opens its list on a click, Space or Return, drags continuously and takes a typed value from the list,
 // and Frequency, Gain and Q knobs sit between them, each attached to its host parameter. Controls a
