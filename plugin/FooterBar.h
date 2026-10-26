@@ -56,9 +56,10 @@ private:
 // The footer's Output readout: Output Gain plus Auto Gain's estimate while Auto Gain is on. A vertical
 // drag moves Output Gain as the output popover's knob does (the whole range over 200 px, 800 px with
 // Shift), as one gesture; the up and down keys step it as that knob's do; a double-click sets 0 dB,
-// as one gesture. A click without a drag, or Return, opens and closes the output popover;
-// fill2 behind it while that is open. The value moves through outputGain(), which the footer attaches
-// to Output Gain: a KeyboardSlider that is never shown, whose drags and keys the chip passes on.
+// as one gesture, and leaves open the popover its first click opened. A click without a drag, or
+// Return, opens and closes the output popover; fill2 behind it while that is open. The value moves
+// through outputGain(), which the footer attaches to Output Gain: a KeyboardSlider that is never shown,
+// whose drags and keys the chip passes on.
 class OutputReadout final : public staple::TextChip
 {
 public:

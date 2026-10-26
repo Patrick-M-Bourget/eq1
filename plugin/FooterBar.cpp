@@ -126,8 +126,9 @@ void OutputReadout::mouseDrag (const juce::MouseEvent& e)
 void OutputReadout::mouseUp (const juce::MouseEvent& e)
 {
     gain.endMouseDrag();
-    // A drag isn't a click: released as not pressed, it leaves the popover as it was.
-    if (e.mouseWasDraggedSinceMouseDown())
+    // A drag isn't a click, nor is a double-click's second one: released as not pressed, it leaves the
+    // popover as it was (open, from the double-click's first).
+    if (e.mouseWasDraggedSinceMouseDown() || e.getNumberOfClicks() >= 2)
         setState (buttonNormal);
     staple::TextChip::mouseUp (e);
 }

@@ -245,12 +245,12 @@ TEST_CASE ("A click on the Output readout without a drag opens and closes the ou
     CHECK (host.undoSteps() == steps);
 }
 
-TEST_CASE ("A double-click on the Output readout sets Output Gain to 0 dB, one undo step, and leaves the popover as it was")
+TEST_CASE ("A double-click on the Output readout sets Output Gain to 0 dB, one undo step, and leaves open the popover its first click opened")
 {
     Footer host;
     host.set ("output_gain", -6.0f);
     const int steps = host.undoSteps();
-    // The first click opens the popover; the second, which sets 0 dB, closes it again.
+    // The first click opens the popover; the second sets 0 dB and leaves it open, showing 0 dB.
     juce::Component& output = host.output;
     const juce::Point<float> at { 10.0f, 10.0f };
     output.mouseDown (harness::mouseEvent (output, at, juce::ModifierKeys::leftButtonModifier, at));
@@ -259,7 +259,7 @@ TEST_CASE ("A double-click on the Output readout sets Output Gain to 0 dB, one u
     host.doubleClick (host.output);
     CHECK (host.value ("output_gain") == 0.0f);
     CHECK (host.undoSteps() == steps + 1);
-    CHECK_FALSE (host.popover.isOpen());
+    CHECK (host.popover.isOpen());
 }
 
 TEST_CASE ("The Output readout steps Output Gain on up and down as the popover's knob does, each press one undo step, and opens the popover on Return")
